@@ -1,5 +1,5 @@
-// The files that ship: what git tracks, minus the private docs/superpowers/ folder (the public export
-// leaves it out).
+// The files that ship: what git tracks, minus the local docs/superpowers/ folder (git-ignored; publishable.test.mjs
+// fails if any of it is tracked).
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
