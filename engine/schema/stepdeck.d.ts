@@ -380,6 +380,13 @@ export interface ComponentContext {
   motion: MotionHelpers;
   /** Size of el in canvas pixels, measured at mount. */
   size: { w: number; h: number };
+  /**
+   * This element's resolved props at every step of its slide: index = step index, length = the slide's step
+   * count, bindings resolved as for `update`. Computed once before `mount`, frozen. An entry is `null` when that
+   * step does not fold or the element's bindings fail there (the step's own navigation reports the error), so
+   * skip `null` entries. The whole value is `null` for a child mounted with `ctx.mount`.
+   */
+  stepProps: ReadonlyArray<Props | null> | null;
 }
 
 // ---------------------------------------------------------------------------------------------

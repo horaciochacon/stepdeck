@@ -857,3 +857,108 @@ test("ctx.assetUrl is the data loader's url(): a deck-relative path resolved aga
   await c.mount();
   assert.equal(log[0].ctx.assetUrl("assets/a.svg"), "https://host/deck/assets/a.svg");
 });
+
+// ---------- ctx.stepProps ----------
+
+/** Mounts `slide` with a recorder for `rec` and returns the recorded ctx of the first element. */
+async function mountedCtx(slide, modules = {}) {
+  const log = [];
+  const { c } = makeController(slide, { rec: recorder(log), ...modules });
+  await c.mount();
+  return { c, log, ctx: log[0]?.ctx };
+}
+
+test("stepProps: one entry per step, with set and advance patches", async () => {
+  const slide = {
+    id: "sp",
+    elements: [
+      { id: "a", type: "rec", props: { v: 0, k: "x" } },
+      { id: "b", type: "rec", props: { w: 0 }, advance: { prop: "w", start: 2, values: [9] } },
+    ],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 1 } } }, { id: "s2" }],
+  };
+  const { c, log } = await mountedCtx(slide);
+  assert.deepEqual(c.errors, []);
+  assert.deepEqual(log[0].ctx.stepProps, [{ v: 0, k: "x" }, { v: 1, k: "x" }, { v: 1, k: "x" }]);
+  assert.deepEqual(log[1].ctx.stepProps, [{ w: 0 }, { w: 0 }, { w: 9 }]);
+});
+
+test("stepProps: a step's only applies to that index alone", async () => {
+  const slide = {
+    id: "sp",
+    elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+    steps: [{ id: "s0" }, { id: "s1", only: { a: { v: 5 } } }, { id: "s2" }],
+  };
+  const { ctx } = await mountedCtx(slide);
+  assert.deepEqual(ctx.stepProps, [{ v: 0 }, { v: 5 }, { v: 0 }]);
+});
+
+test("stepProps: a slide without steps has one entry", async () => {
+  const slide = { id: "sp", elements: [{ id: "a", type: "rec", props: { v: 0 } }] };
+  const { ctx } = await mountedCtx(slide);
+  assert.deepEqual(ctx.stepProps, [{ v: 0 }]);
+});
+
+test("stepProps: bindings are resolved", async () => {
+  const slide = {
+    id: "sp",
+    elements: [{ id: "a", type: "rec", props: { value: "{{data/s.json#/n | ,.1f}}" } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { other: 1 } } }],
+  };
+  const { ctx } = await mountedCtx(slide);
+  assert.deepEqual(ctx.stepProps, [{ value: "1,234.5" }, { value: "1,234.5", other: 1 }]);
+});
+
+test("stepProps: a step whose binding fails is null; the others resolve and the mount succeeds", async () => {
+  const slide = {
+    id: "sp",
+    elements: [{ id: "a", type: "rec", props: { v: 1 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: "{{data/s.json#/missing}}" } } }, { id: "s2", set: { a: { v: 3 } } }],
+  };
+  const { c, log, ctx } = await mountedCtx(slide);
+  assert.deepEqual(c.errors, []);
+  assert.equal(log.length, 1, "the element mounted");
+  assert.deepEqual(ctx.stepProps, [{ v: 1 }, null, { v: 3 }]);
+});
+
+test("stepProps: a step that does not fold is null, and so is every step after it", async () => {
+  const slide = {
+    id: "sp",
+    elements: [{ id: "a", type: "rec", props: { v: 1 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 2 } } }, { id: "s2", set: { ghost: { v: 3 } } }, { id: "s3" }],
+  };
+  const { c, ctx } = await mountedCtx(slide);
+  assert.deepEqual(c.errors, []);
+  assert.deepEqual(ctx.stepProps, [{ v: 1 }, { v: 2 }, null, null]);
+});
+
+test("stepProps: children mounted with ctx.mount get null", async () => {
+  const kidLog = [];
+  const slide = { id: "sp", elements: [{ id: "par", type: "parent", props: {} }], steps: [{ id: "a" }, { id: "b" }] };
+  const parentLog = [];
+  const parent = {
+    async mount(el, props, ctx) {
+      parentLog.push(ctx);
+      await ctx.mount("kid", { id: "child-el" }, {});
+      return {};
+    },
+  };
+  const { c } = makeController(slide, { kid: recorder(kidLog), parent });
+  await c.mount();
+  assert.deepEqual(c.errors, []);
+  assert.equal(parentLog[0].stepProps.length, 2, "the parent has its entries");
+  assert.equal(kidLog[0].ctx.stepProps, null);
+});
+
+test("stepProps: frozen, and equal across two mounts of the same slide", async () => {
+  const slide = {
+    id: "sp",
+    elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 1 } } }],
+  };
+  const one = await mountedCtx(slide);
+  const two = await mountedCtx(slide);
+  assert.equal(Object.isFrozen(one.ctx.stepProps), true);
+  assert.deepEqual(one.ctx.stepProps, two.ctx.stepProps);
+  assert.notEqual(one.ctx.stepProps, two.ctx.stepProps, "each mount computes its own");
+});

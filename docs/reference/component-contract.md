@@ -245,6 +245,7 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.palette(kind = "categorical")` | `Palette \| null` | `{ name, kind, colors, names, roles }` for `categorical`, `sequential` or `diverging`. `deck.palette` when its kind matches, else the theme default; `null` when there is none. `names` are in the deck language; `roles.accent` is the accent color. |
 | `ctx.size` | `{ w, h }` | `el`'s `offsetWidth` and `offsetHeight` in canvas pixels (unaffected by the shell's scaling), measured once when `ctx` is built at mount. It is `{ w: 0, h: 0 }` when the element has no layout. Read `el.offsetWidth` and `el.offsetHeight` again in `update` if you need the current size. |
 | `ctx.mount(type, el, props)` | `Promise<ChildHandle>` | Mounts a built-in or deck component inside yours. See below. |
+| `ctx.stepProps` | `ReadonlyArray<Props \| null> \| null` | This element's resolved props at every step of its slide. A frozen array, computed once before `mount`; `null` for a child mounted with `ctx.mount`. See [`ctx.stepProps`](#ctxstepprops). |
 
 ### `ctx.animate`
 
@@ -302,6 +303,18 @@ Semantics:
 - **Errors propagate.** An unknown type rejects with the registry's message. A child that throws in `mount` or `update` rejects the promise you await, so it fails the parent element unless you catch it.
 - `handle.update` after `destroy` throws `ctx.mount('<type>'): update called on a destroyed child`. A child destroyed while its props were resolving throws `ctx.mount('<type>'): child destroyed while its props resolved`.
 - There is no nesting depth limit.
+
+### `ctx.stepProps`
+
+`ctx.stepProps[k]` is what `update` would receive as `props` at step `k` (an index, not a step id): the element's props after the slide's patches up to and including step `k`, with the bindings resolved the same way. The array has one entry per step (a slide without `steps` has one), is frozen, and is computed once, before your `mount` runs. A component that draws against a scale can use it to keep that scale the same on every step.
+
+An entry is `null` when step `k` does not fold (for example a patch names an element that does not exist) or when the element's bindings fail at that step. The step's own navigation still reports the error, so skip `null` entries rather than treating them as an error. A child mounted with `ctx.mount` gets `ctx.stepProps === null`: use only its current props then.
+
+```js
+// A fixed y domain: the extent of `values` over every step, not only the current one.
+const all = (ctx.stepProps ?? [props]).flatMap((p) => p?.values ?? []);
+const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
+```
 
 ## Helpers inside the engine
 

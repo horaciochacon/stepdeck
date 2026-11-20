@@ -23,6 +23,12 @@
 //     d3                                   optional; defaults to core/d3.js
 //     onError(id, error)                   optional; called once when an element fails (the shell shows it)
 //
+// ctx.stepProps is the element's props at every step of its slide: a frozen array, index = step index, length =
+// the slide's step count. Entry k is stateAt(slide, k).elements[id].props resolved like update's props, or null when
+// step k does not fold or the element's bindings fail there (that step's own goTo reports the error). It is computed
+// once in mount(), before the element's mount, so a component can fix a scale across steps. A child mounted with
+// ctx.mount gets null.
+//
 // ctx.size is { w, h } in canvas pixels (offsetWidth/offsetHeight, unaffected by the shell's scaling).
 // ctx.motion is makeMotion(tokens) (core/motion.js): the named motions with the theme's defaults.
 //
@@ -90,7 +96,7 @@
 //             "<slide>/<element>: did not settle within 10s", aborts that element's signal and lets the
 //             slide go on (a component that never settles must not freeze the talk). A mount that
 //             settles after its watchdog fired is destroyed at once; a late update is ignored.
-import { initialElements, stateAt, stepIndex } from "./fold.js";
+import { initialElements, stateAt, stepCount, stepIndex } from "./fold.js";
 import { resolveElementProps } from "./bindings.js";
 import { animate as animateHelpers, wait } from "./animate.js";
 import { MOTION_NAMES, makeMotion, timing } from "./motion.js";
@@ -233,8 +239,11 @@ export class SlideController {
     return resolveElementProps(type, props, this.#ctxBase.load, this.#ctxBase.format);
   }
 
-  /** `holder` is the parent element's child list (see #mountChild); children destroy with it. */
-  #ctxFor(el, holder) {
+  /**
+   * `holder` is the parent element's child list (see #mountChild); children destroy with it.
+   * `stepProps` is the element's props at every step (see the header); null for a child.
+   */
+  #ctxFor(el, holder, stepProps = null) {
     const base = this.#ctxBase;
     return {
       d3: base.d3 ?? defaultD3,
@@ -248,6 +257,7 @@ export class SlideController {
       tokens: base.tokens,
       palette: base.palette,
       size: sizeOf(el),
+      stepProps,
       mount: (type, target, props) => this.#mountChild(holder, type, target, props),
     };
   }
@@ -306,8 +316,13 @@ export class SlideController {
     // Load modules and resolve bindings in parallel, then mount in element order (deterministic).
     const entries = Object.entries(elements);
     const types = [...new Set(entries.map(([, e]) => e.type))];
+    const folded = this.#foldEachStep();
     const [loaded] = await Promise.all([
-      Promise.allSettled(entries.map(async ([, e]) => Promise.all([this.#registry.get(e.type), this.#resolve(e.type, e.props)]))),
+      Promise.allSettled(
+        entries.map(async ([id, e]) =>
+          Promise.all([this.#registry.get(e.type), this.#resolve(e.type, e.props), this.#stepPropsOf(id, e.type, folded)]),
+        ),
+      ),
       Promise.all(types.map((type) => this.#readOwns(type))),
     ]);
     for (const [i, [id]] of entries.entries()) {
@@ -318,11 +333,11 @@ export class SlideController {
         continue;
       }
       try {
-        const [mod, props] = value;
+        const [mod, props, stepProps] = value;
         const el = this.#mountPoint(id);
         const holder = newHolder();
         let instance;
-        const call = Promise.resolve().then(() => mod.mount(el, props, this.#ctxFor(el, holder)));
+        const call = Promise.resolve().then(() => mod.mount(el, props, this.#ctxFor(el, holder, stepProps)));
         try {
           instance = await watchdog(call, this.#settleTimeout, () => {
             // Too late to use: whatever it mounts (children included) is destroyed when it settles.
@@ -343,6 +358,36 @@ export class SlideController {
         this.#fail(id, err);
       }
     }
+  }
+
+  /** The slide's state at every step, folded once; null for a step that does not fold. */
+  #foldEachStep() {
+    return Array.from({ length: stepCount(this.#slide) }, (_, k) => {
+      try {
+        return stateAt(this.#slide, k);
+      } catch {
+        return null; // that step's own goTo reports the error
+      }
+    });
+  }
+
+  /**
+   * ctx.stepProps for element `id`: its resolved props at every step, frozen. An entry is null when the step
+   * did not fold or the element's bindings fail there.
+   */
+  async #stepPropsOf(id, type, folded) {
+    const entries = await Promise.all(
+      folded.map(async (st) => {
+        const e = st?.elements[id];
+        if (!e) return null;
+        try {
+          return await this.#resolve(type, e.props);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return Object.freeze(entries);
   }
 
   /** Whether `type` owns its entrance; never throws (an unreadable schema counts as not owned). */
