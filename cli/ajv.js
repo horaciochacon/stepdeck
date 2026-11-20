@@ -5,7 +5,7 @@
 //   stepdeck schemas use (`x-transition`, and any other `x-*` found in a schema) are registered as
 //   no-op keywords, so strict mode still rejects real typos.
 // compile(ajv, schema) -> validate function; registers the schema's `x-*` keywords first.
-// readSchema(name) -> parsed schema/<name>.schema.json of this repo's engine ("deck", "slide", "layout").
+// readSchema(name) -> parsed engine/schema/<name>.schema.json ("deck", "slide", "layout").
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";

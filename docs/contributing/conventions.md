@@ -103,7 +103,7 @@ Before writing a small utility, look for it here. Several recent refactors (`ref
 | `core/inline.js` | `renderBlock(md)` and `renderInline(md)`: the one sanitizing Markdown renderer. Use it for any author text rendered as HTML; it escapes raw HTML and allows only http, https, mailto, relative and `#anchor` URLs. |
 | `core/registry.js` | `levenshtein` and `suggest(name, known)`, the did-you-mean helper used by the registry, `validate` and `catalog`. |
 | `core/fold.js` | `parseStepRef`, `initialElements` (the slide title and kicker sugar), `stepIndex`, `stepCount`. |
-| `cli/engine.js` | CLI only: `ENGINE`, `hasEngineCopy`, `engineFor(deckDir)`, `readBuiltins`, `listDirs`, `importDeck`, `isObject`, `readJSON`, and the theme lookup shared by `validate` and `--theme` (`THEME_NAME`, `findTheme`, `assertTheme`, `exactCase`). |
+| `cli/engine.js` | CLI only: `REPO` (the repository root), `ENGINE` (`<repo>/engine`), `copyEngine(dest)` and its `keepFile` filter, `hasEngineCopy`, `engineFor(deckDir)`, `readBuiltins`, `listDirs`, `importDeck`, `isObject`, `readJSON`, and the theme lookup shared by `validate` and `--theme` (`THEME_NAME`, `findTheme`, `assertTheme`, `exactCase`). |
 | `cli/problems.js` | CLI only: `problem(...)`, `componentProblem(...)`, `formatProblem`, `formatProblems`. |
 
 ## Word an error message

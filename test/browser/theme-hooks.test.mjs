@@ -16,11 +16,10 @@ import { formatProblem } from "../../cli/problems.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deckTarget, withPage } from "../../cli/browser.js";
+import { ENGINE, copyEngine } from "../../cli/engine.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const THEMES = ["academic-light", "modern"];
-const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const TITLE = "Response rises with dose";
 const CONTENT_LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "fourth"];
 
@@ -79,10 +78,10 @@ const slides = {
 };
 
 function makeDeck(dir, { themeRules = "", deckSlides = slides, theme = "academic-light", themes = {} } = {}) {
-  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
+  copyEngine(join(dir, "stepdeck"));
   // themes: { <new theme>: [<file of academic-light to leave out>] }
   for (const [name, omit] of Object.entries(themes)) {
-    cpSync(join(engine, "themes/academic-light"), join(dir, "stepdeck/themes", name), { recursive: true, filter: (src) => !omit.some((f) => src.endsWith(`/${f}`)) });
+    cpSync(join(ENGINE, "themes/academic-light"), join(dir, "stepdeck/themes", name), { recursive: true, filter: (src) => !omit.some((f) => src.endsWith(`/${f}`)) });
   }
   cpSync(join(repo, "test/fixtures/fourth-layout"), join(dir, "stepdeck/layouts/fourth"), { recursive: true });
   if (themeRules) for (const t of THEMES) appendFileSync(join(dir, "stepdeck/themes", t, "theme.css"), themeRules);

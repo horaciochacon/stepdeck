@@ -9,18 +9,17 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deckTarget, withPage } from "../../cli/browser.js";
+import { ENGINE, copyEngine, listDirs } from "../../cli/engine.js";
 import { runCheck } from "../../cli/check.js";
 import { withDeck } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const THEMES = ["modern", "academic-light"];
-const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const FAMILY = { modern: { body: "Geist", mono: "Geist Mono" }, "academic-light": { body: "Source Sans 3", mono: "IBM Plex Mono" } };
 const BUILTINS = ["big-number", "chart.bar", "chart.line", "chat", "diagram", "image", "list", "markdown", "terminal", "text", "timeline"];
 const ACCENT = { modern: "rgb(29, 78, 216)", "academic-light": "rgb(0, 114, 178)" };
@@ -30,7 +29,7 @@ const show = (problems) => problems.map(formatProblem).join("\n") || "(no proble
 const firstFamily = (list) => list.split(",")[0].trim().replace(/^"|"$/g, "");
 
 function engineDeck(dir, deck, slides) {
-  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
+  copyEngine(join(dir, "stepdeck"));
   mkdirSync(join(dir, "slides"), { recursive: true });
   for (const [id, spec] of Object.entries(slides)) writeFileSync(join(dir, "slides", `${id}.js`), `export default ${JSON.stringify(spec)};\n`);
   writeFileSync(join(dir, "deck.js"), `export default ${JSON.stringify({ ...deck, slides: Object.keys(slides) })};\n`);
@@ -67,12 +66,12 @@ let exampleIds;
 let bare;
 before(() => {
   tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-modern-")));
-  const layoutNames = readdirSync(join(engine, "layouts"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  const layoutNames = listDirs(join(ENGINE, "layouts")).sort();
   exampleIds = layoutNames.map((name) => `${name}-example`);
   const ex = join(tmp, "examples");
-  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(ex, "stepdeck", d), { recursive: true });
+  copyEngine(join(ex, "stepdeck"));
   mkdirSync(join(ex, "slides"), { recursive: true });
-  for (const name of layoutNames) cpSync(join(engine, "layouts", name, "example.js"), join(ex, "slides", `${name}-example.js`));
+  for (const name of layoutNames) cpSync(join(ENGINE, "layouts", name, "example.js"), join(ex, "slides", `${name}-example.js`));
   mkdirSync(join(ex, "data"));
   cpSync(join(repo, "examples/spike/data/dose-response.csv"), join(ex, "data", "dose-response.csv"));
   writeFileSync(join(ex, "deck.js"), `export default ${JSON.stringify({ title: "examples", lang: "en", theme: "academic-light", slides: exampleIds })};\n`);

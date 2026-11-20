@@ -11,15 +11,14 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deckTarget, withPage } from "../../cli/browser.js";
+import { copyEngine } from "../../cli/engine.js";
 import { runCheck } from "../../cli/check.js";
 import { dump, formatDump } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const spike = fileURLToPath(new URL("../../examples/spike/", import.meta.url));
 const THEMES = ["academic-light", "modern"];
-const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const TITLE = "Response by *dose and regimen*";
 const body = [{ id: "body", region: "main", type: "text", props: { text: "Body text." } }];
 
@@ -58,7 +57,7 @@ let deck;
 before(() => {
   tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-kicker-")));
   const dir = join(tmp, "deck");
-  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
+  copyEngine(join(dir, "stepdeck"));
   cpSync(join(repo, "test/fixtures/fourth-layout"), join(dir, "stepdeck/layouts/fourth"), { recursive: true });
   cpSync(join(repo, "test/fixtures/no-title-layout"), join(dir, "stepdeck/layouts/main-only"), { recursive: true });
   mkdirSync(join(dir, "slides"));

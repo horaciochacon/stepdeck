@@ -5,6 +5,7 @@
 //   Writes <outDir>/index.json (entries) and <outDir>/<name>.json (one detail each). outDir defaults
 //   to <last root>/catalog/. Stale *.json files in outDir are removed first; nothing else is touched.
 // catalogTarget(dir) -> { roots, outDir }   what `stepdeck catalog` reads and writes for a folder
+// isCatalogTarget(dir) -> boolean            whether catalogTarget accepts it
 //
 // rootDirs: an engine root first (components/index.json, layouts/, themes/), then optionally a deck
 // (deck.js `components: []`, folders components/<name>/). Built-ins are listed in
@@ -32,7 +33,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { problem } from "./problems.js";
-import { ENGINE, REPO, engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
+import { engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
 
 const TRANSITIONS = ["tween", "draw", "fade", "snap"];
 
@@ -203,20 +204,21 @@ export async function catalog(rootDirs, { outDir } = {}) {
   return { ...built, outDir: out };
 }
 
+/** Whether `stepdeck catalog` can read `dir`: a deck (deck.js), an engine root (components/index.json) or a stepdeck repository (engine/components/index.json). */
+export const isCatalogTarget = (dir) => ["deck.js", "components/index.json", "engine/components/index.json"].some((f) => existsSync(join(resolve(dir), f)));
+
 /**
- * What `stepdeck catalog` reads and writes for a folder: a deck (deck.js) reads its engine (the
- * copied one, <deck>/stepdeck/, else this repo's engine/) plus itself and writes <deck>/catalog/;
- * this repository's root reads its engine/ and writes <repo>/catalog/; an engine root
- * (components/index.json) reads itself and writes <root>/catalog/.
+ * What `stepdeck catalog` reads and writes for a folder: a deck reads its engine (the copied one,
+ * <deck>/stepdeck/, else this repo's engine/) plus itself; an engine root reads itself; a stepdeck
+ * repository reads its engine/. Each writes <folder>/catalog/.
  */
 export function catalogTarget(dir) {
   const root = resolve(dir);
-  if (existsSync(join(root, "deck.js"))) {
-    return { roots: [engineFor(root), root], outDir: join(root, "catalog") };
-  }
-  if (root === REPO) return { roots: [ENGINE], outDir: join(REPO, "catalog") };
-  if (existsSync(join(root, "components", "index.json"))) return { roots: [root], outDir: join(root, "catalog") };
-  throw new Error(`${root} is neither a deck (deck.js) nor the stepdeck engine (components/index.json); pass the deck folder`);
+  const out = join(root, "catalog");
+  if (existsSync(join(root, "deck.js"))) return { roots: [engineFor(root), root], outDir: out };
+  if (existsSync(join(root, "components", "index.json"))) return { roots: [root], outDir: out };
+  if (existsSync(join(root, "engine", "components", "index.json"))) return { roots: [join(root, "engine")], outDir: out };
+  throw new Error(`${root} is neither a deck (deck.js), an engine (components/index.json) nor a stepdeck repository (engine/); pass the deck folder`);
 }
 
 /** Human listing of one detail, for `stepdeck catalog <name>`. */

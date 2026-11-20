@@ -10,9 +10,8 @@
 // Every command accepts --json (machine output on stdout).
 // Only `validate` needs the repo's dependencies (Ajv). It is imported when that command runs, so
 // `--help`, `new` and the rest work before `npm install`; without Ajv, validate says to run it (exit 2).
-import { existsSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
-import { catalog, buildCatalog, catalogTarget, formatEntry } from "./catalog.js";
+import { relative, resolve } from "node:path";
+import { catalog, buildCatalog, catalogTarget, formatEntry, isCatalogTarget } from "./catalog.js";
 import { newDeck, newComponent, cli } from "./new.js";
 import { serve } from "./serve.js";
 import { deckTarget } from "./browser.js";
@@ -159,10 +158,8 @@ async function run(args) {
       return 0;
     }
     case "catalog": {
-      // Positionals: an optional entry name and an optional folder, in any order. A folder is one
-      // holding deck.js or components/index.json, or this repository's root (an entry name never is).
-      const isTarget = (p) => resolve(p) === REPO || existsSync(join(resolve(p), "deck.js")) || existsSync(join(resolve(p), "components", "index.json"));
-      const dirArg = args.positionals.find(isTarget);
+      // Positionals: an optional entry name and an optional folder (isCatalogTarget), in any order.
+      const dirArg = args.positionals.find(isCatalogTarget);
       const names = args.positionals.filter((p) => p !== dirArg);
       if (names.length > 1) throw new UsageError(`catalog takes one name (got ${names.join(", ")})`);
       const { roots, outDir } = catalogTarget(dirArg ?? process.cwd());

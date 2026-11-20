@@ -5,8 +5,8 @@
 //           LICENSE, THIRD_PARTY_NOTICES.md, templates/, docs/ and site/ live here.
 //   ENGINE  <repo>/engine: core/, components/, layouts/, themes/, vendor/ and schema/, the folders `stepdeck new`
 //           copies into a deck's stepdeck/ folder. Paths relative to it are also paths inside that folder.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { suggest } from "#engine/core/registry.js";
 import { THEME_NAME } from "#engine/core/constants.js";
@@ -16,6 +16,15 @@ export const REPO = resolve(fileURLToPath(new URL("../", import.meta.url)));
 
 /** This repository's engine root, <repo>/engine (no trailing separator). */
 export const ENGINE = join(REPO, "engine");
+
+/** Names never copied into a deck: OS litter and generated folders. */
+const JUNK = new Set([".DS_Store", "Thumbs.db", "shots", "catalog", "node_modules"]);
+
+/** A cpSync filter that skips JUNK. */
+export const keepFile = (src) => !JUNK.has(basename(src));
+
+/** Copies this repository's engine/ (core, components, layouts, themes, vendor, schema) to `dest`, skipping JUNK. */
+export const copyEngine = (dest) => cpSync(ENGINE, dest, { recursive: true, filter: keepFile });
 
 /** Whether `deck` holds a copied engine (<deck>/stepdeck/, as `stepdeck new` makes it). */
 export const hasEngineCopy = (deck) => existsSync(resolve(deck, "stepdeck", "core", "render.html"));

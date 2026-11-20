@@ -4,8 +4,11 @@
 // serve({ root, port = 0, host = "127.0.0.1" }) -> Promise<{ url, port, close(): Promise<void> }>
 //   port 0 picks a free port. `url` ends with "/". Requests resolve inside `root`; anything that
 //   escapes it is refused (403). Directories serve their index.html. Missing files are 404.
+// pagesLayout(repo) -> { dir, cleanup() }
+//   A temporary folder with <dir>/stepdeck -> repo, as GitHub Pages serves this project.
 import { createServer } from "node:http";
-import { createReadStream } from "node:fs";
+import { createReadStream, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { stat } from "node:fs/promises";
 import { resolve, sep, extname, join } from "node:path";
 
@@ -26,6 +29,17 @@ export const MIME = {
   ".jpeg": "image/jpeg",
   ".mp4": "video/mp4",
 };
+
+/**
+ * A temporary folder laid out as GitHub Pages serves this project: <dir>/stepdeck is a symlink to `repo`, so a
+ * root-relative URL is a 404 there, as on Pages. Serve `dir`; cleanup() removes it. Used by `npm run site` and the
+ * site browser test.
+ */
+export function pagesLayout(repo) {
+  const dir = mkdtempSync(join(tmpdir(), "stepdeck-site-"));
+  symlinkSync(repo, join(dir, "stepdeck"), "dir");
+  return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
 
 export async function serve({ root, port = 0, host = "127.0.0.1" } = {}) {
   const base = resolve(root ?? ".");

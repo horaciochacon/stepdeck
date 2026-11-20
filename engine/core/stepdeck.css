@@ -39,6 +39,11 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-region { display: flex; flex-direction: column; gap: var(--sd-region-gap); min-width: 0; min-height: 0; }
 .sd-el { position: relative; min-width: 0; }
 .sd-el[data-box] { position: absolute; }
+/* Figures fill the room their region leaves after the other elements take their own height: chart.line, chart.bar,
+   diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck component: it
+   fills only when it is the only element of a filling region, or when it is placed with `box`. */
+.sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="diagram"], [data-type="image"],
+  [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 
 /* Visibility (spec §6.2): hidden keeps its space; collapse removes it. State rules are !important: an
    important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
@@ -137,7 +142,6 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
    a top layer with a background backing. foreignObjects do not clip, so a label too long for its node shows (and `check` sees it) rather
    than being cut. Hidden parts keep their place (visibility). `highlight` fades the shapes and lines of the
    other parts and mutes their text; text itself never fades, so contrast holds. */
-.sd-region > .sd-el[data-type="diagram"] { flex: 1 1 0; min-height: 0; }
 .sd-diagram { display: block; overflow: visible; }
 .sd-diagram foreignObject { overflow: visible; }
 .sd-diagram [data-visible="false"] { visibility: hidden !important; }
@@ -164,10 +168,6 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-legend { padding: 0 var(--sd-grid); white-space: nowrap; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
 
 /* chart.line component: sizes and neutral colors from tokens; series colors come from the palette. */
-/* A chart fills the room its region leaves (as a diagram or image does), so a source line beside it in the same
-   region (full-bleed has no footer) does not shrink it to the default 150px. */
-.sd-region > .sd-el[data-type="chart.line"]:not(.sd-collapsed):not(.sd-failed),
-.sd-region > .sd-el[data-type="chart.bar"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 .sd-chart-line, .sd-chart-bar { display: block; overflow: visible; }
 .sd-chart-line text, .sd-chart-bar text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
 .sd-chart-line text:not(.sd-series-label) { fill: var(--sd-color-muted); }
@@ -193,7 +193,7 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the
    component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */
-.sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { display: flex; flex-direction: column; }
 .sd-terminal {
   flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
   border: 2px solid var(--sd-color-rule); border-radius: 12px; overflow: hidden;
@@ -254,7 +254,7 @@ html.capture *, html.capture *::before, html.capture *::after {
 
 /* image component: a figure that fills its element; the picture takes the room the caption leaves, and
    `fit` picks object-fit. The caption is the note size in the muted colour and wraps inside the box. */
-.sd-region > .sd-el[data-type="image"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.sd-region > .sd-el[data-type="image"]:not(.sd-collapsed):not(.sd-failed) { display: flex; flex-direction: column; }
 .sd-image { margin: 0; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sd-space); }
 .sd-image-img { display: block; flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; }
 .sd-image[data-fit="cover"] .sd-image-img { object-fit: cover; }

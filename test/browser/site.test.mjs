@@ -4,10 +4,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
-import { mkdtemp, symlink, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withPage, waitForDeck } from "../../cli/browser.js";
+import { pagesLayout } from "../../cli/serve.js";
 import { entries } from "../../site/gallery/deck.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -99,12 +98,11 @@ test("docs viewer: refused and missing paths show 'Page not found' and never fet
 // GitHub Pages serves the repository under /stepdeck/. Serve a temporary folder in which `stepdeck`
 // is a symlink to the repository root, so a root-relative URL ("/site/site.css") is a 404 here.
 async function underPrefix(fn) {
-  const dir = await mkdtemp(join(tmpdir(), "stepdeck-site-"));
+  const site = pagesLayout(root);
   try {
-    await symlink(root, join(dir, "stepdeck"), "dir");
-    return await fn(dir);
+    return await fn(site.dir);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    site.cleanup();
   }
 }
 const landingReady = (page, { timeout } = {}) => page.waitForSelector("#gallery-list a", { timeout });

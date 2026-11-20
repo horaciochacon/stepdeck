@@ -20,17 +20,14 @@
 //   deck.js again and reverted if the result is not exactly the old deck plus the name. Otherwise
 //   deck.js is left alone and `line` says what to add.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { ENGINE, REPO, engineFor, importDeck, readBuiltins } from "./engine.js";
+import { REPO, copyEngine, engineFor, importDeck, keepFile, readBuiltins } from "./engine.js";
 
-const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const ENGINE_FILES = ["LICENSE", "THIRD_PARTY_NOTICES.md"];
 const COMPONENT_FILES = ["index.js", "schema.json", "example.js", "README.md"];
-const JUNK = new Set([".DS_Store", "Thumbs.db", "shots", "catalog", "node_modules"]);
 const NAME = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
 
-const keep = (src) => !JUNK.has(basename(src));
 
 /** A path for a printed shell command: single-quoted when it holds anything but safe characters. */
 export const shellPath = (p) => (/^[\w./+-]+$/.test(p) ? p : `'${p.replaceAll("'", "'\\''")}'`);
@@ -60,9 +57,9 @@ export async function newDeck(dir, { template = "talk" } = {}) {
     if (readdirSync(target).length > 0) throw new Error(`${target} is not empty; pass a new or empty folder`);
   }
   mkdirSync(target, { recursive: true });
-  cpSync(join(REPO, "templates", template), target, { recursive: true, filter: keep });
+  cpSync(join(REPO, "templates", template), target, { recursive: true, filter: keepFile });
   const engine = join(target, "stepdeck");
-  for (const d of ENGINE_DIRS) cpSync(join(ENGINE, d), join(engine, d), { recursive: true, filter: keep });
+  copyEngine(engine);
   for (const f of ENGINE_FILES) cpSync(join(REPO, f), join(engine, f));
 
   const html = readFileSync(join(target, "index.html"), "utf8");

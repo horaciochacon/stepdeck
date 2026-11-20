@@ -7,17 +7,16 @@ All notable changes to stepdeck are recorded here. The format follows
 
 ### Changed
 
-- **The engine's runtime folders live under `engine/`.** `core/`, `components/`, `layouts/`, `themes/`,
-  `vendor/` and `schema/` moved from the repository root into `engine/`. Decks are unchanged: `stepdeck new`
-  copies the same folders into `<deck>/stepdeck/`, with `LICENSE` and `THIRD_PARTY_NOTICES.md`, and the deck's
-  import map stays `"stepdeck/": "./stepdeck/"`. The in-repo decks (`examples/`, the gallery, the test fixtures)
-  map `stepdeck/` to `engine/` instead of the repository root.
-- The TypeScript types moved from `types/stepdeck.d.ts` to `engine/schema/stepdeck.d.ts`, so every new deck
-  gets them in `stepdeck/schema/`.
-- `npm run site` runs `cli/serve-site.js` (it was `scripts/serve-site.mjs`).
+- **The engine lives in `engine/`.** `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/` moved
+  there from the repository root. Decks are unchanged: `stepdeck new` copies the same folders into
+  `<deck>/stepdeck/`.
+- The TypeScript types moved to `engine/schema/stepdeck.d.ts`, so new decks get them in `stepdeck/schema/`.
+- One CSS rule makes a chart, diagram, image or terminal fill the room its region leaves. A diagram that failed now
+  shows its error box at the box's own height instead of stretching it over the region.
+- `stepdeck catalog` recognises this repository by its `engine/` folder, so a symlinked or differently cased path
+  to it works.
 - `.nojekyll` is gone: Pages deploys from an Actions artifact, which never runs Jekyll.
-- Contributors import engine modules from Node as `#engine/...` (the `imports` field of `package.json`), for
-  example `import { stateAt } from "#engine/core/fold.js"`.
+- CI uploads the site while the fast gate runs, and splits the browser suite over six runners.
 
 ## [0.1.0] · 2026-11-19 · first public release
 
