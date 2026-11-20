@@ -16,6 +16,9 @@ since the last internal milestone.
 - **The examples are a synthetic dose–response study.** The spike deck and the engine's example slides chart
   participants responding by dose under two regimens (`data/dose-response.csv`: `dose_mg`, `regimen`,
   `responders`, `rate`).
+- **A `chart.line` or `chart.bar` fills the room its region leaves**, as a diagram or image does, so a source
+  line beside it in the same region (full-bleed has no footer) no longer shrinks it to the browser's default
+  150px.
 - `dump` (and so `check`) rounds an element box's half pixel the same way in every shell: a scaled shell's
   measurement is snapped to Chrome's 1/64 px layout unit before it is rounded to whole canvas pixels.
 
@@ -53,8 +56,10 @@ since the last internal milestone.
   the Markdown in `docs/` in the browser, and a gallery (`site/gallery/`), a stepdeck deck with a slide for
   every layout and every component. A test keeps the gallery in step with `components/index.json` and
   `layouts/`.
-- **CI and Pages deploy** (`.github/workflows/ci.yml`): the unit and browser tests, then a deploy of the
-  repository tree to GitHub Pages. CI runs on Node 22 because the test scripts need Node 22.15+
+- **CI and Pages deploy** (`.github/workflows/ci.yml`): the unit tests and a site smoke test gate a deploy of
+  the repository tree to GitHub Pages (about a minute from push to live), while the full browser suite runs
+  alongside on four parallel runners as the status check. `npm run site` previews the site locally under
+  `/stepdeck/`, as Pages serves it. CI runs on Node 22 because the test scripts need Node 22.15+
   (`module.registerHooks`); the CLI's own floor (`engines`) is still Node 20.
 - **The gallery deck is a test**: `test/unit/gallery.test.mjs` validates it, so every `example.js` now
   validates as a slide (the `chart.line` and `big-number` examples gained a source line, and the

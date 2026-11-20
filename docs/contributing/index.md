@@ -50,7 +50,8 @@ The engine is plain ES modules with no build step. `node cli/index.js new` copie
 | `site/` | The public site: `site.css` and `landing.js` for the landing page, `docs/` (the docs viewer, which renders the Markdown in `docs/` in the browser) and `gallery/` (a stepdeck deck with a slide for every layout and component). | no |
 | `index.html` | The landing page of the public site. | no |
 | `.nojekyll` | An empty file that makes GitHub Pages serve the repository as it is. | no |
-| `.github/workflows/` | `ci.yml`: the unit and browser tests, then the Pages deploy. | no |
+| `.github/workflows/` | `ci.yml`: a fast job (the unit tests and the site smoke test) that gates the Pages deploy, and the full browser suite on four parallel runners as the status check. | no |
+| `scripts/` | `serve-site.mjs` (`npm run site`): serves the repository under `/stepdeck/`, as GitHub Pages does, to preview the site locally. | no |
 
 `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied into every deck along with the engine folders.
 

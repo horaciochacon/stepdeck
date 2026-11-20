@@ -5,12 +5,15 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Read-only by default; the deploy job asks for the Pages permissions it needs.
+# Read-only by default; the Pages jobs ask for the permissions they need.
 permissions:
   contents: read
 
 jobs:
-  test:
+  # The fast gate (about half a minute): the unit tests, which include validate on the example and gallery
+  # decks, and the site smoke test (landing page, docs viewer and gallery served under /stepdeck/, as Pages
+  # serves them). The deploy waits for this job only.
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,15 +24,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Unit tests, including validate on the example and gallery decks.
       - run: npm test
       # Playwright is installed on the runner only; it is not a project dependency.
       # The runner's preinstalled Google Chrome is used through the default channel "chrome".
       - run: npm install --no-save --no-audit --no-fund playwright@1.58.0
-      # Browser tests, including check --played on examples/kit, examples/spike and site/gallery
-      # (the gallery under both shipped themes).
-      - name: Browser tests
-        run: npm run test:browser
+      - name: Site smoke test
+        run: node --test test/browser/site.test.mjs
+        env:
+          STEPDECK_PLAYWRIGHT: ${{ github.workspace }}/node_modules/playwright
+
+  # The full browser suite, including check --played on examples/kit, examples/spike and site/gallery (the
+  # gallery under both shipped themes), split over four runners; each runs its files one at a time. It is
+  # the commit's status check and does not hold up the deploy: a regression it finds after a deploy is
+  # fixed by the next push (or a revert), live again about a minute later.
+  browser:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --no-audit --no-fund playwright@1.58.0
+      - name: Browser tests (shard ${{ matrix.shard }} of 4)
+        run: node --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/4 'test/browser/**/*.test.mjs'
         env:
           STEPDECK_PLAYWRIGHT: ${{ github.workspace }}/node_modules/playwright
 
@@ -37,7 +60,7 @@ jobs:
   # GitHub's starter workflows: the job boundary gives the artifact time to register, and re-running a failed
   # deploy reuses the one artifact instead of uploading a second.
   pages:
-    needs: test
+    needs: unit
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
