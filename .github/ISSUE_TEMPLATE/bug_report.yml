@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in stepdeck does not work as the docs say.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Deck, slide and step
+      description: Where it shows up, for example `examples/kit`, slide `criteria`, step `a`.
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output
+      description: The command you ran and its full output, for example from `validate`, `check` or `dump`.
+      render: text
+  - type: input
+    id: stepdeck-version
+    attributes:
+      label: stepdeck version
+      description: The `version` in `package.json`, or the commit you are on.
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: The output of `node --version`.
+  - type: input
+    id: chrome-version
+    attributes:
+      label: Chrome version
+      description: From `chrome://version`, if the problem shows in the browser or in `check`, `dump` or `shoot`.

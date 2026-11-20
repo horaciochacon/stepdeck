@@ -110,7 +110,13 @@ La documentación y la skill coinciden. Para usar agentes con stepdeck, empieza 
 
 ## Estructura del repositorio
 
-El motor está en `engine/` (`core/`, `components/`, `layouts/`, `themes/`, `vendor/` y `schema/`, las carpetas que `new` copia en cada mazo); la línea de comandos, en `cli/`; la skill para agentes, en `skill/`; el mazo inicial y los ejemplos, en `templates/` y `examples/`; la documentación, en `docs/`; el sitio público (página de inicio, visor de documentación y galería), en `site/`. Las rutas entre comillas invertidas, como `core/fold.js` o `components/<name>/`, son relativas a `engine/`, que tiene la misma estructura que la carpeta `stepdeck/` de un mazo. El [recorrido por el repositorio](docs/contributing/index.md#repository-tour) describe cada carpeta, incluidas las generadas.
+- **Motor** (se copia en cada mazo): `engine/`, que contiene `core/`, `components/`, `layouts/`, `themes/`, `vendor/` y `schema/`.
+- **Herramientas:** `cli/` (la línea de comandos), `templates/` (el mazo inicial y el esqueleto de componente), `skill/` (la skill para agentes; `.claude-plugin/` la publica como plugin).
+- **Sitio y ejemplos:** `index.html` (la página de inicio), `site/` (el visor de documentación y la galería), `examples/` (dos mazos de ejemplo).
+- **Documentación:** `docs/`.
+- **Desarrollo:** `test/` (pruebas unitarias y de navegador, fixtures), `.github/` (CI, notas de contribución y de seguridad, plantillas de issues y de pull requests).
+
+Las rutas entre comillas invertidas, como `core/fold.js` o `components/<name>/`, son relativas a `engine/`, que tiene la misma estructura que la carpeta `stepdeck/` de un mazo. El [recorrido por el repositorio](docs/contributing/index.md#repository-tour) describe cada carpeta, incluidas las generadas.
 
 ## Contribuir
 

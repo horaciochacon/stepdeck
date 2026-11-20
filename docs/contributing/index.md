@@ -52,7 +52,7 @@ Node code outside the engine (`cli/`, `test/`) imports engine modules through th
 | `docs/` | Guides, reference, concepts, these contributing pages, and design history in `docs/design/`. | no |
 | `site/` | The public site: `site.css` and `landing.js` for the landing page, `docs/` (the docs viewer, which renders the Markdown in `docs/` in the browser) and `gallery/` (a stepdeck deck with a slide for every layout and component). | no |
 | `index.html` | The landing page of the public site. | no |
-| `.github/workflows/` | `ci.yml`: a fast job (the unit tests and the site smoke test) that gates the Pages deploy, and the full browser suite on four parallel runners as the status check. | no |
+| `.github/` | `workflows/ci.yml`: a fast job (the unit tests and the site smoke test) that gates the Pages deploy, and the full browser suite on four parallel runners as the status check. Also `CONTRIBUTING.md` and `SECURITY.md` (what GitHub shows contributors and security reporters), the bug report form in `ISSUE_TEMPLATE/` and `pull_request_template.md`. | no |
 
 `LICENSE` and `THIRD_PARTY_NOTICES.md`, at the repository root, are copied into every deck along with the engine folders.
 

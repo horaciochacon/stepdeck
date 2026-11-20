@@ -108,7 +108,13 @@ The docs and the skill agree. To run agents on stepdeck, start with [stepdeck fo
 
 ## Repository layout
 
-The engine lives in `engine/` (`core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/`, the folders `new` copies into every deck); the command line in `cli/`; the agent skill in `skill/`; the starter deck and examples in `templates/` and `examples/`; the documentation in `docs/`; the public site (landing page, docs viewer and gallery) in `site/`. Paths in backticks such as `core/fold.js` or `components/<name>/` are relative to `engine/`, which is also the layout of a deck's `stepdeck/` folder. The [repository tour](docs/contributing/index.md#repository-tour) describes every folder, including the generated ones.
+- **Engine** (copied into every deck): `engine/`, which holds `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/`.
+- **Tooling:** `cli/` (the command line), `templates/` (the starter deck and the component skeleton), `skill/` (the agent skill; `.claude-plugin/` publishes it as a plugin).
+- **Site and examples:** `index.html` (the landing page), `site/` (the docs viewer and the gallery), `examples/` (two example decks).
+- **Docs:** `docs/`.
+- **Development:** `test/` (unit and browser tests, fixtures), `.github/` (CI, contributing and security notes, issue and pull request templates).
+
+Paths in backticks such as `core/fold.js` or `components/<name>/` are relative to `engine/`, which is also the layout of a deck's `stepdeck/` folder. The [repository tour](docs/contributing/index.md#repository-tour) describes every folder, including the generated ones.
 
 ## Contributing
 
