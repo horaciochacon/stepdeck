@@ -209,6 +209,23 @@ export async function createRevealHost({ document: doc, engineRoot, env, api, mo
     if (win.parent !== win) {
       win.parent.postMessage(JSON.stringify({ namespace: "reveal", eventName: "ready", state: Reveal.getState() }), "*");
     }
+  } else if (preview && win.parent !== win) {
+    // The speaker view's other frame, the upcoming step, hears the talk's state only when the talk window
+    // pushes one, and that push does not wait for this frame: one that finishes booting after it would show
+    // step 0 of its slide until the talk moves. So it catches up once, before the engine reads where reveal is,
+    // with the two calls the speaker view sends it (setState without the preview overlays, then next). A later
+    // push lands on the same state. Out of reach (another origin, no talk window), it waits for the push.
+    let talk = null;
+    try {
+      talk = win.parent.opener?.Reveal?.getState?.() ?? null;
+    } catch {
+      talk = null;
+    }
+    if (talk) {
+      const { previewIframe, previewImage, previewVideo, ...state } = talk;
+      Reveal.setState(state);
+      Reveal.next();
+    }
   }
 
   // --- mounting ---

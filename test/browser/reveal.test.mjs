@@ -205,22 +205,26 @@ test("a failed slide shows its error on that slide only", async () => {
   });
 });
 
+// The presenter (speaker) view: the step's notes, and the step each preview frame shows (current, then upcoming).
+const notesOf = (popup) => popup.evaluate(() => {
+  const n = document.querySelector(".speaker-controls-notes");
+  return !n || n.classList.contains("hidden") ? null : n.querySelector(".value").textContent;
+});
+const previewsOf = (popup) => Promise.all(popup.frames().filter((f) => /receiver/.test(f.url())).map((f) =>
+  f.evaluate(() => { const s = window.STEPDECK?.state(); return s ? `${s.slide}/${s.stepId}` : null; }).catch(() => null)));
+const until = async (fn, want) => {
+  for (let i = 0; i < 100; i++) {
+    if (JSON.stringify(await fn()) === JSON.stringify(want)) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.deepEqual(await fn(), want);
+};
+
 test("presenter view: the step's notes, live previews, and opening it never moves the talk", async () => {
   await withPage({ root, url: deck("", "#/trend/focus") }, async (page, ctx) => {
     const [popup] = await Promise.all([page.context().waitForEvent("page"), page.keyboard.press("s")]);
-    const notes = () => popup.evaluate(() => {
-      const n = document.querySelector(".speaker-controls-notes");
-      return !n || n.classList.contains("hidden") ? null : n.querySelector(".value").textContent;
-    });
-    const previews = () => Promise.all(popup.frames().filter((f) => /receiver/.test(f.url())).map((f) =>
-      f.evaluate(() => { const s = window.STEPDECK?.state(); return s ? `${s.slide}/${s.stepId}` : null; }).catch(() => null)));
-    const until = async (fn, want) => {
-      for (let i = 0; i < 100; i++) {
-        if (JSON.stringify(await fn()) === JSON.stringify(want)) return;
-        await new Promise((r) => setTimeout(r, 100));
-      }
-      assert.deepEqual(await fn(), want);
-    };
+    const notes = () => notesOf(popup);
+    const previews = () => previewsOf(popup);
     await until(notes, "Pause here.");
     await until(previews, ["trend/focus", "trend/total"]);
     await new Promise((r) => setTimeout(r, 800)); // past the speaker view's 500 ms relay debounce
@@ -231,6 +235,26 @@ test("presenter view: the step's notes, live previews, and opening it never move
     await until(previews, ["trend/total", "terminal/open"]);
     await until(notes, null);
     assert.equal(await page.evaluate(() => location.hash), "#/trend/total");
+    assert.deepEqual(pageErrors(ctx), []);
+  });
+});
+
+test("presenter view: the upcoming preview catches up when it boots after the talk's state went by", async () => {
+  await withPage({ root, url: deck("", "#/trend/focus") }, async (page, ctx) => {
+    // Hold the upcoming frame (the speaker view loads it with controls=false) until the speaker view shows the
+    // step's notes: the talk's state, pushed with them, has gone by before that frame boots.
+    let release;
+    const pushed = new Promise((r) => (release = r));
+    await page.context().route(/[?&]controls=false/, async (route) => {
+      await pushed;
+      await route.continue();
+    });
+    const [popup] = await Promise.all([page.context().waitForEvent("page"), page.keyboard.press("s")]);
+    await until(() => notesOf(popup), "Pause here.");
+    release();
+    await until(() => previewsOf(popup), ["trend/focus", "trend/total"]);
+    await new Promise((r) => setTimeout(r, 800)); // past the speaker view's 500 ms relay debounce
+    assert.equal(await page.evaluate(() => location.hash), "#/trend/focus", "catching up never moves the talk");
     assert.deepEqual(pageErrors(ctx), []);
   });
 });
