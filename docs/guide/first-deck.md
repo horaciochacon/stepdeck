@@ -111,7 +111,7 @@ To see what a component accepts, run `catalog <name> my-talk`, for example `cata
 
 Grid variables and full descriptions are in [Layouts](../reference/layouts.md).
 
-> **Charts need a region that gives them height.** A `chart.line` or `chart.bar` takes its height from its region, and only three places give it one: the `main` region of `figure-notes`, one half of `halves`, and the `figure` region of `title`, and only when the chart is the **only element** in that region. Anywhere else, including `full-bleed` main (even alone) and a `figure-notes` main shared with a source line, the chart renders about 150px tall. No rule checks chart height, so this usually goes unreported. Put the chart alone in one of those regions and the source line in `footer`. See [Layouts and themes](layouts-and-themes.md).
+> **A chart fills the room its region leaves.** A `chart.line` or `chart.bar` takes the height the other elements in its region do not use, so a source line beside it is fine. The exception is `statement` `main`, which has no set height and leaves the chart none. No rule checks chart height, so look at a shot if a chart looks wrong. See [Layouts and themes](layouts-and-themes.md#give-figures-room).
 
 ## Add a figure with a source line
 

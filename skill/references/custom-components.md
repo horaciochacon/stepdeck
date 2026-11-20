@@ -110,6 +110,7 @@ export default {
 - **Colors:** `var(--sd-color-ink)`, `--sd-color-muted`, `--sd-color-rule`, and `ctx.palette()` for data colors. Never literal hex.
 - **Sizes:** `--sd-font-size-*` and `--sd-space`. Text stays at or above 28px (`--min-audience-font`).
 - **Contrast:** `check` measures your text like any other: font size, contrast, overlap, and staying inside the region.
+- **Room:** a deck's own component does not get core's fill rule, which is written per built-in type, so a figure-like custom component fills its region only when it is the only element in a filling region, or when it is placed with `box`.
 
 ## Types
 

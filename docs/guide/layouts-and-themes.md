@@ -17,7 +17,7 @@ A slide names its layout with `layout`. Without one it gets `full-bleed`.
 | Two things side by side: before and after, a prompt and its tasks | `halves` | `title`, `left`, `right`, `footer` |
 
 Rules of thumb:
-- A chart goes in `figure-notes` (or one half of `halves`), with its source line in `footer`. See [Give figures room](#give-figures-room).
+- A chart goes in `figure-notes` (or one half of `halves`), with its source line in `footer`. It also works in `full-bleed`, with the source line below it in `main`. See [Give figures room](#give-figures-room).
 - `full-bleed` has no `footer`. Anything you add, a source line included, stacks in `main`.
 - `statement` styles every `text` and `markdown` element in `main` at `--sd-font-size-statement`, centred (a list or chart there keeps its own type). Use `markdown` to make key words bold.
 
@@ -75,30 +75,13 @@ An element with `box: { x, y, w, h }` is placed at those canvas pixels, above th
 
 ## Give figures room
 
-`chart.line` and `chart.bar` take their height from the region they sit in, and they measure it once, at mount. A region only gives an element its full height through a layout rule that applies to the region's only child (`> .sd-el:only-child { flex: 1 1 0; min-height: 0 }`). Three regions have that rule:
+`chart.line`, `chart.bar`, `diagram`, `image` and `terminal` fill the room their region leaves, in every layout. A chart next to a source line in the same region takes the height the source line does not use. A chart alone in `figure-notes` `main` is 1096×790 (754 with a source line in `footer`). In `full-bleed` `main` a chart with a source line below it is 1728×730 at the 1920×1080 canvas.
 
-| Layout | Region where a chart fills the height |
-|---|---|
-| `figure-notes` | `main` |
-| `halves` | `left`, `right` |
-| `title` | `figure` |
+The one place a chart gets no room is `statement` `main`: that region has no set height, so the chart collapses to zero height there. Use `statement` for words. `timeline` does not fill; it is a horizontal strip sized by its labels.
 
-The rule needs the chart to be the **only** element in that region. Elsewhere the chart renders about 150px tall, and no `validate` or `check` rule flags it. Measured with `dump` on a scratch deck (`node cli/index.js dump <deck> --slide <id>`; browser commands need Playwright, see [Checking a deck](checking-a-deck.md#dump-what-is-on-screen-at-each-step-as-text)):
+The sizes for every layout, and the rule behind them, are in the [Fill rules](../reference/layouts.md#fill-rules) table. No `validate` or `check` rule flags a collapsed chart, so look at a shot (`node cli/index.js shoot <deck> --slide <id>`) or at the boxes in `dump` (browser commands need Playwright, see [Checking a deck](checking-a-deck.md#dump-what-is-on-screen-at-each-step-as-text)).
 
-| Placement | Chart box |
-|---|---|
-| Alone in `figure-notes` `main` | 1096×754 |
-| Alone in a `halves` half | 852×754 |
-| `figure-notes` `main`, sharing it with a source line | 1096×150 |
-| Alone in `full-bleed` `main` | 1728×150 |
-| In `statement` `main` | 1500×150 |
-
-So:
-- Put a chart alone in one of the regions in the first table.
-- Put its source line in `footer`. Every slide with a chart or a `big-number` needs a `text` element with `role: "source"`, or `validate` reports `figure-source`.
-- Do not put charts in `full-bleed` or `statement`.
-
-`diagram`, `image` and `terminal` are different: `core/stepdeck.css` makes them fill whatever region they are in, in every layout, shared or not. That is why `full-bleed` suits a terminal or a diagram.
+Every slide with a chart or a `big-number` needs a `text` element with `role: "source"`, or `validate` reports `figure-source`. Put it in `footer` when the layout has one. `full-bleed` has none, so the source line goes in `main`, under the chart.
 
 ## The title layout's figure column
 

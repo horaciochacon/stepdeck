@@ -106,17 +106,9 @@ A point with no previous position (a new x value) starts at its final position r
 
 ## Sizing
 
-The chart measures its element's width and height on every update and fills that box. It needs a region that gives it height. In the built-in layouts that happens only when the chart is the **only element** in one of these regions, which carry a `> .sd-el:only-child { flex: 1 1 0; min-height: 0 }` rule:
+The chart measures its element's width and height on every update and fills that box. It takes the height the other elements in its region leave (`core/stepdeck.css` gives it `flex: 1 1 0`), so a source line can share the region. Measured with `dump`: alone in `figure-notes` main with a source line in `footer` it is 1096 x 754; in `full-bleed` main, with a title and a source line below it, it is 1728 x 730. A region with no set height gives it none: in `statement` main it is 1500 x 0. No `validate` or `check` rule flags a collapsed chart, so check the `box` in `dump` output or a `shoot` image. See the [Fill rules](../layouts.md#fill-rules) table.
 
-| Layout | Region |
-| --- | --- |
-| `figure-notes` | `main` |
-| `halves` | `left`, `right` |
-| `title` | `figure` |
-
-Anywhere else, including `full-bleed` and `statement`, or when a source line shares `main` with the chart, the chart renders about 150px tall. Measured with `dump`: alone in `figure-notes` main it is 1096 x 754; in `full-bleed` main it is 1728 x 150. No `validate` or `check` rule flags a squashed chart, so check the `box` in `dump` output or a `shoot` image. Put the source line in `footer`.
-
-To place a chart outside these regions, give the element a `box` (`{ x, y, w, h }` in canvas pixels), which sizes it directly. See [Layouts](../layouts.md).
+To place a chart anywhere else, give the element a `box` (`{ x, y, w, h }` in canvas pixels), which sizes it directly.
 
 ## anchor(): series boxes for custom components
 
@@ -182,7 +174,7 @@ A CSV that does not parse is `data-invalid`; a missing file is `file-missing`. A
 
 **The y axis counts hidden series.** If one series is much larger than the rest, the others look flat even while the large one is hidden. Filter the CSV, or use a separate chart.
 
-**A source line in `main` squashes the chart.** See [Sizing](#sizing).
+**A chart in `statement` main has no height.** See [Sizing](#sizing).
 
 **`format` replaces the default precision.** With `format: { y: ",.0f" }` every y tick is rounded to an integer, even when the ticks step by 0.5.
 

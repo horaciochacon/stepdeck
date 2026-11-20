@@ -161,16 +161,18 @@ Errors: throw an `Error` whose message names the bad value and what is allowed, 
 
 A region is a column flexbox, and an element takes only the height of its content. A component that draws to the size of its box, such as an SVG that measures itself, needs a rule that stretches it. There are two mechanisms:
 
-- **By type, in any layout.** `core/stepdeck.css` stretches three types wherever they are:
+- **By type, in any layout.** `core/stepdeck.css` stretches five types wherever they are (`diagram`, `image`, `terminal`, `chart.line` and `chart.bar`):
 
   ```css
   .sd-region > .sd-el[data-type="diagram"] { flex: 1 1 0; min-height: 0; }
   .sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
   .sd-region > .sd-el[data-type="image"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .sd-region > .sd-el[data-type="chart.line"]:not(.sd-collapsed):not(.sd-failed),
+  .sd-region > .sd-el[data-type="chart.bar"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
   ```
 
-  If your rule sets `display`, add `:not(.sd-collapsed):not(.sd-failed)` as `terminal` and `image` do. A type rule is at least as specific as `.sd-el.sd-collapsed` (`display: none`) and comes later in the file. Without the `:not`, its `display` would win and a collapsed element would show again.
-- **By layout, only as the only child.** `figure-notes` (main), `halves` (both halves) and `title` (figure) stretch a region's only element (`> .sd-el:only-child { flex: 1 1 0; min-height: 0; }`). `chart.line` and `chart.bar` have no type rule and rely on this. In `full-bleed` or `statement`, or next to a source line in the same region, a chart renders 150 px tall. No rule names the squashed chart: in `statement` it shows up only indirectly, as `text-outside-region` from `check`.
+  If your rule sets `display`, add `:not(.sd-collapsed):not(.sd-failed)` as `terminal` and `image` do (the charts add it too). A type rule is at least as specific as `.sd-el.sd-collapsed` (`display: none`) and comes later in the file. Without the `:not`, its `display` would win and a collapsed element would show again.
+- **By layout, only as the only child.** `figure-notes` (main), `halves` (both halves) and `title` (figure) stretch a region's only element of any type (`> .sd-el:only-child { flex: 1 1 0; min-height: 0; }`). `statement` and `full-bleed` have no such rule.
 
 Add a type rule if the component should fill its region whatever the layout. Without one, it is sized by its content or depends on the layout's only-child rule. Say which in the README.
 

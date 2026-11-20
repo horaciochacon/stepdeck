@@ -93,14 +93,14 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - An edge's id is its `id`, else `"<from>-><to>"`. Its `label` sits beside the arrow.
 - A group's `contains` lists node and group ids, so groups nest. A group's box covers all its members, shown or not, so it never resizes between steps.
 - `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else.
-- A diagram takes the height left in its region. Give it a region of its own, or a `full-bleed` main with only a source line beside it.
+- A diagram takes the height the other elements in its region leave, so a source line can share the region.
 
 **`chart.bar`** (`catalog chart.bar`). Horizontal or vertical bars from a CSV, one row per category, each with its value at the end of the bar.
 - Switching `y` between columns grows or shrinks the bars. Set an explicit `domain: [min, max]` then, so the axis stays put and the change is visible.
 - `interval` adds a whisker from a lower to an upper column.
 - `shown` brings categories in one by one; hidden ones keep their band. `highlight` mutes the other bars.
 - It counts as a figure, so the slide needs a `role: "source"` line.
-- A chart takes its height from its region, so it must be the only element there. That works in the `main` of `figure-notes` (with something in `notes` from the first step) and in one half of `halves`, with the source line in `footer`. In `full-bleed` the source line has to share `main`, so the chart collapses to a short height.
+- A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
 
 **`chat`** (`catalog chat`). An exchange as bubbles, or a prompt or quote as a bordered card.
 - `style: "bubbles"` puts `user` on the right and `agent` and `note` on the left. `style: "card"` gives full-width cards with the label on top.

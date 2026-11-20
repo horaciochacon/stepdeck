@@ -207,11 +207,11 @@ Step ids in the hash are the ids from `STEPDECK.steps`. A step without an id is 
 
 These look wrong but produce no error line, and `validate` passes.
 
-### A chart is only 150px tall
+### A chart has no height
 
-A chart takes the height its region gives it. Only some layouts let a lone element fill its region: `figure-notes` main, both halves of `halves`, and the `figure` region of `title`, and only when the chart is the **only** element in that region. In `full-bleed` main and in `statement` main, a chart is 150px tall even on its own. It is also 150px tall in `figure-notes` main when a source line shares the region.
+A `chart.line` or `chart.bar` fills the room its region leaves, next to other elements or alone. The one place it gets none is `statement` `main`: that region has no set height, so the chart collapses to zero height there. (`diagram`, `image` and `terminal` do the same.)
 
-Fix: use `figure-notes` or `halves`, keep the chart alone in its region, and put the source line in `footer`. No rule catches this, so look at a shot (`node cli/index.js shoot my-talk --slide chart`). See [Give figures room](guide/layouts-and-themes.md#give-figures-room). `diagram`, `image` and `terminal` fill their region even when they share it; the two charts do not. The exception is `statement` main: that region has no set height, so these three collapse there too.
+Fix: move the chart to a region with a height, such as `main` of `figure-notes` or `full-bleed`, or either half of `halves`. If the chart is small in a region that should be larger, check what else is in the region: the chart takes only the height the other elements leave. No rule catches this, so look at a shot (`node cli/index.js shoot my-talk --slide chart`). The sizes are in the [Fill rules](reference/layouts.md#fill-rules) table; see also [Give figures room](guide/layouts-and-themes.md#give-figures-room).
 
 ### Nothing animates
 

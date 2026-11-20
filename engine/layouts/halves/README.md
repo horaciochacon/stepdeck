@@ -6,7 +6,7 @@ tasks, two options. The halves are equal by default and `--split` changes the ra
 | Region | Meaning |
 |---|---|
 | `title` | Title band across the canvas (the slide's `title` sugar goes here). |
-| `left` | The left half. A single element fills the half's full height, so a figure can measure it at mount. |
+| `left` | The left half. A single element fills the half's full height, so a figure can measure it at mount. A chart, diagram, image or terminal also fills the room the other elements leave (a source line below it, for example). |
 | `right` | The right half, same rules as `left`. |
 | `footer` | Footer line across the canvas, typically the source (`role: "source"`). |
 

@@ -25,7 +25,8 @@ While `figure` is empty the layout is the plain cover. When it holds an element,
 switches to two columns: the figure takes `--figure-width` on the right margin, in the rows above the
 footer (several elements are centered vertically there), and the title column takes the rest of the
 width (it no longer stops at `--title-width`), with a canvas-margin gap between them. A single figure
-element fills the region's height, so a chart can measure it at mount. With a figure the title uses
+element fills the region's height, so a chart can measure it at mount (a chart, diagram, image or
+terminal fills what the other elements leave). With a figure the title uses
 `--sd-font-size-cover-figure` instead of `--sd-font-size-cover`, so a title of about 40 characters stays
 within three lines at 1920×1080. The layout has `kind: "cover"`; core picks the smaller size only for a
 region named `figure`.

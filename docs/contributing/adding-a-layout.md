@@ -1,6 +1,6 @@
 # Adding a layout
 
-This page shows how to write a layout: the folder it lives in, the `layout.css` grid, the `schema.json` descriptor, the rule that lets a chart fill its region, the `footer` region, and the commands that check the result. It is for contributors who add a built-in layout to the repository, and for deck authors who add a layout to one deck's engine copy. To use the existing layouts, read [Using layouts and themes](../guide/layouts-and-themes.md); every built-in is listed in the [Layouts reference](../reference/layouts.md). Agents follow [skill/references/themes-layouts.md](../../skill/references/themes-layouts.md).
+This page shows how to write a layout: the folder it lives in, the `layout.css` grid, the `schema.json` descriptor, how a figure fills its region, the `footer` region, and the commands that check the result. It is for contributors who add a built-in layout to the repository, and for deck authors who add a layout to one deck's engine copy. To use the existing layouts, read [Using layouts and themes](../guide/layouts-and-themes.md); every built-in is listed in the [Layouts reference](../reference/layouts.md). Agents follow [skill/references/themes-layouts.md](../../skill/references/themes-layouts.md).
 
 The running example is `wide-figure`: one chart across the full width under a title band, with a footer line for its source. No built-in layout does this today. `full-bleed` has no footer, so its source line has to share `main` with the chart. Every command output on this page comes from running it on a scratch deck made with `new`.
 
@@ -68,8 +68,6 @@ Here is `wide-figure/layout.css` in full:
 .sd-canvas[data-layout="wide-figure"] > [data-region="title"] { padding-bottom: calc(var(--sd-region-gap) * 2); }
 .sd-canvas[data-layout="wide-figure"] > [data-region="main"] { padding: 0 var(--figure-inset, 0px); }
 .sd-canvas[data-layout="wide-figure"] > [data-region="footer"] { padding-top: var(--sd-region-gap); }
-/* A figure in `main` takes the region's full height, so a chart can measure it at mount. */
-.sd-canvas[data-layout="wide-figure"] > [data-region="main"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }
 ```
 
 ### Declare the grid
@@ -123,27 +121,25 @@ Add `"kind": "cover"` to `schema.json` if the layout is a cover slide; the defau
 
 ## Let a figure fill its region
 
-A region is a column flexbox, so by default each element is only as tall as its content. Charts are different: `chart.line` and `chart.bar` read their own height when they mount, and if nothing gives them height they render at about 150px. To let a lone element fill a region, add this rule for that region:
+A region is a column flexbox, so by default each element is only as tall as its content. Charts read their own height when they mount, so they need a region that gives them some. A layout does not have to do anything for this: `core/stepdeck.css` makes a `chart.line`, `chart.bar`, `diagram`, `image` or `terminal` take the height the other elements in its region leave, in any layout. What the layout must provide is a region with a height of its own: a grid row that is `1fr` or `minmax(0, 1fr)`, as `main` is in `wide-figure`. In a row that is `auto`, as `main` is in `statement`, a chart collapses to zero height. See the [Fill rules](../reference/layouts.md#fill-rules) table.
+
+`dump` on the scratch deck shows the result for `wide-figure` `main`, a 1728px-wide region, with and without a layout rule of its own:
+
+| Elements in `main` | `layout.css` | Chart box from `dump` |
+|---|---|---|
+| the chart, with the source line in `footer` | with the `:only-child` rule | `96,218 1728×754` |
+| the chart, with the source line in `footer` | without it | `96,218 1728×754` |
+| the chart and the source line | without it | `96,218 1728×730` |
+
+The `:only-child` rule is only for other components, such as a deck's own. To let one lone element of any type fill a region, add the rule for that region:
 
 ```css
 .sd-canvas[data-layout="<name>"] > [data-region="<region>"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }
 ```
 
-The built-ins use it for `figure-notes` `main`, both `halves` regions and the `title` `figure` region. `full-bleed` and `statement` do not have it, so a chart in their `main` stays short.
+The built-ins use it for `figure-notes` `main`, both `halves` regions and the `title` `figure` region. It counts every child, so an element hidden until a later step stops it from applying.
 
-`dump` on the scratch deck shows the difference for `wide-figure` `main`, a 1728px-wide region:
-
-| `layout.css` | Elements in `main` | Chart box from `dump` |
-|---|---|---|
-| With the `:only-child` rule | the chart alone | `96,218 1728×754` |
-| Without the rule | the chart alone | `96,218 1728×150` |
-| With the rule | the chart and a text element | `96,218 1728×150` |
-
-The rule applies only to an only child, so a region meant for a chart needs a separate region for the source line. That is why `wide-figure` has a footer. Elements that are hidden until a later step are still children, so they also stop the rule from applying.
-
-No `validate` or `check` rule reports a squashed chart. After adding the rule, check the chart's height with `dump` (see [Check it on a scratch deck](#check-it-on-a-scratch-deck)).
-
-`diagram`, `image` and `terminal` fill any region without this rule, through `[data-type]` rules in `core/stepdeck.css`. The `:only-child` rule is still needed for charts.
+No `validate` or `check` rule reports a collapsed chart. Check the chart's height with `dump` (see [Check it on a scratch deck](#check-it-on-a-scratch-deck)).
 
 ## Name the source region footer
 
@@ -183,7 +179,7 @@ No other keys are allowed at any level. Here is `wide-figure/schema.json`:
   "description": "One figure across the full width under a title band, with a footer line for its source.",
   "regions": [
     { "name": "title", "description": "Title band across the canvas (the slide's `title` sugar goes here)." },
-    { "name": "main", "description": "The figure. A single element fills the region's height." },
+    { "name": "main", "description": "The figure. A chart, diagram, image or terminal takes the height the other elements leave." },
     { "name": "footer", "description": "Footer line across the canvas, typically the source (`role: \"source\"`)." }
   ],
   "variables": [
@@ -273,7 +269,7 @@ One figure across the full width under a title band, with a footer line for its 
 
 regions:
   title  Title band across the canvas (the slide's `title` sugar goes here).
-  main  The figure. A single element fills the region's height.
+  main  The figure. A chart, diagram, image or terminal takes the height the other elements leave.
   footer  Footer line across the canvas, typically the source (`role: "source"`).
 
 variables (slide `regions`):
@@ -312,7 +308,7 @@ wide · step 0 (0)
 Read the `dump` boxes against what you meant:
 
 - The title starts at the margin (96,96).
-- The chart fills the width inside the margins (1728px) and has real height (754px, not 150px).
+- The chart fills the width inside the margins (1728px) and has real height (754px).
 - The footer ends inside the bottom half-margin (996 + 36 = 1032, 48px above 1080).
 
 Then look at the PNGs in `shots/960/`. Try the cases your layout has to handle: long titles, an empty optional region, and each variable overridden through the slide's `regions`.

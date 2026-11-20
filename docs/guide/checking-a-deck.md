@@ -271,7 +271,7 @@ These pass `validate` and `check`. Look for them in the shots or the dump.
 
 | Problem | What you see | What to do |
 | --- | --- | --- |
-| A chart that is not the only element in a region that fills, or any chart in `full-bleed` or `statement` `main` | The chart is squashed to about 150 px tall. In `dump` its box reads, for example, `1728×150`. | Put the chart alone in a region that fills: `main` of `figure-notes`, either half of `halves`, or the `figure` region of `title`. Move the source line to the `footer` region. |
+| A chart, diagram, image or terminal in `statement` `main` | The element collapses to zero height. In `dump` its box reads, for example, `1500×0`. | Move it to a region with a height of its own, such as `main` of `figure-notes` or `full-bleed`, or a `halves` half. See the [Fill rules](../reference/layouts.md#fill-rules) table. |
 | `chart.line` `series_shown` or `highlight` naming a series the data does not have | The unknown names are ignored: missing lines, or every series dimmed. | Check the names against the CSV. (`chart.bar` reports unknown categories as an error.) |
 | `list` `active` or `done` given as an integer out of range | Nothing is marked, or every item is done. | Use an index inside the list, or use item ids, which are checked. |
 | A `diagram` node whose `col`/`row` lies outside `cols`/`rows` | The node is drawn outside the diagram. `check` reports it only when its label lands outside the region or the canvas. | Keep every node, with its spans, inside the grid. |

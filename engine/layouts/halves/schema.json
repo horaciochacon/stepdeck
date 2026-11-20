@@ -3,8 +3,8 @@
   "description": "Two halves side by side under a title band, with a footer line: before and after, prompt and tasks.",
   "regions": [
     { "name": "title", "description": "Title band across the canvas (the slide's `title` sugar goes here)." },
-    { "name": "left", "description": "The left half. A single element fills the half's height." },
-    { "name": "right", "description": "The right half. A single element fills the half's height." },
+    { "name": "left", "description": "The left half. A single element fills the half's height; a chart, diagram, image or terminal fills the room the other elements leave." },
+    { "name": "right", "description": "The right half. A single element fills the half's height; a chart, diagram, image or terminal fills the room the other elements leave." },
     { "name": "footer", "description": "Footer line across the canvas, typically a source line." }
   ],
   "variables": [

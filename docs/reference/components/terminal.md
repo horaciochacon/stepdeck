@@ -118,7 +118,7 @@ So in the spike script, task 0 turns done at the 7th event (array index 6): it i
 
 ## Layout
 
-- **It fills its region.** `core/stepdeck.css` gives every terminal element `flex: 1 1 0`, so it takes the free height of its region in any layout, `full-bleed` included. Other elements in the same region (the source line above) keep their natural height. Charts do not do this; see [Layouts](../layouts.md).
+- **It fills its region.** `core/stepdeck.css` gives every terminal element `flex: 1 1 0`, so it takes the free height of its region in any layout, `full-bleed` included. Other elements in the same region (the source line above) keep their natural height. `chart.line`, `chart.bar`, `diagram` and `image` do the same; see the [Fill rules](../layouts.md#fill-rules) table.
 - **The log is a scroll window.** It shows the newest `min(shown, N)` events, where N is how many lines fit the log box. Older lines leave the DOM. N is measured in canvas pixels at mount and at every update, and written to `data-capacity` on `.sd-terminal`.
 - **One row per line.** Log lines and the command never wrap; long text is cut with an ellipsis. Keep event text short.
 - **Sizes.** All text in the window uses `--sd-font-size-label` (28px in `academic-light`). Log lines and the command use `--sd-font-mono`. The side panel is 520px wide. Colors come from theme tokens: the prompt and the `run`, `code` and `file` markers are accent, `error` lines are alert, `read`, `note` and `task` text is muted.

@@ -6,7 +6,7 @@ A figure with a column of notes beside it: a title band on top, the figure in `m
 | Region | Meaning |
 |---|---|
 | `title` | Title band across the canvas (the slide's `title` sugar goes here). |
-| `main` | The figure. A single element fills the region's full height, so a chart can measure it at mount. |
+| `main` | The figure. A single element fills the region's full height, so a chart can measure it at mount. A chart, diagram, image or terminal also fills the room the other elements leave (a source line below it, for example). |
 | `notes` | Notes column to the right of the figure. Elements stack vertically, centered on the figure. |
 | `footer` | Footer line across the canvas, typically the source (`role: "source"`). |
 

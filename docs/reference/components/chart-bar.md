@@ -149,27 +149,16 @@ Formats are localized by the deck language: in an `es` deck the decimal separato
 
 ## Sizing: give the chart a region that fills
 
-The chart reads its width and height from its element box at every update, so the element must be given a height by the layout. This is the same requirement as [`chart.line`](chart-line.md).
-
-A chart fills its region only when it is the only element in a region whose layout has an only-child fill rule:
-
-| Layout | Region where a lone chart fills |
-| --- | --- |
-| `figure-notes` | `main` |
-| `halves` | `left`, `right` |
-| `title` | `figure` |
-| `full-bleed`, `statement` | none |
-
-Anywhere else the chart gets the browser's default SVG height and renders 150px tall. Measured with `dump` on a scratch deck:
+The chart reads its width and height from its element box at every update. It takes the height the other elements in its region leave (`core/stepdeck.css` gives it `flex: 1 1 0`), so a source line can share the region. This is the same as [`chart.line`](chart-line.md). A region with no set height, such as `statement` `main`, gives it none. Measured with `dump` on a scratch deck:
 
 ```text
 speed · step 0 (before)                 (figure-notes, chart alone in main)
   visible  bars    chart.bar  96,218 1096×754  ...
-squash · step 0 (a)                     (full-bleed, chart alone in main)
-  visible  bars    chart.bar  96,194 1728×150  ...
+wide · step 0 (a)                       (full-bleed, chart alone in main)
+  visible  bars    chart.bar  96,194 1728×790  ...
 ```
 
-Neither `validate` nor `check` reports a squashed chart. Look at `dump` boxes or `shoot` images. Put the source line in the `footer` region, not next to the chart, or the chart is no longer an only child. See [Layouts](../layouts.md).
+Neither `validate` nor `check` reports a collapsed chart. Look at `dump` boxes or `shoot` images. See the [Fill rules](../layouts.md#fill-rules) table.
 
 ## Markup
 
@@ -240,7 +229,7 @@ squash/bars: `domain` must be [min, max] with min < max
 
 ## Gotchas
 
-**A chart next to another element is 150px tall.** See [Sizing](#sizing-give-the-chart-a-region-that-fills).
+**A chart in `statement` main has no height.** See [Sizing](#sizing-give-the-chart-a-region-that-fills).
 
 **Switching `y` without `domain` can hide the change.** The default axis rescales to the new column, so set `domain` when the point of the step is that bars got shorter or longer.
 

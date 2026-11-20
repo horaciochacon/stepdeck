@@ -83,7 +83,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="image"]`) the compone
 | Picture (`.sd-image-img`) | Full width, `flex: 1 1 0`, `object-fit` from `fit`. |
 | Caption (`.sd-image-caption`) | `--sd-font-size-note`, `--sd-line-height`, `--sd-color-muted`; wraps anywhere. Code is in `--sd-font-mono`, strong text in `--sd-font-weight-strong`, links in `--sd-color-accent`. |
 
-So an image fills any region of any layout, alone or next to other elements. This is unlike `chart.line` and `chart.bar`, which fill only in layouts that give an only child the full region (see [Layouts](../layouts.md)). A long caption makes the picture shorter; the picture never overflows the box. In the example above, the image in a `halves` half measures 852×790 canvas pixels. The fill rule does not apply to a collapsed or failed element.
+So an image fills any region of any layout, alone or next to other elements. `chart.line`, `chart.bar`, `diagram` and `terminal` do the same (see the [Fill rules](../layouts.md#fill-rules) table). A long caption makes the picture shorter; the picture never overflows the box. In the example above, the image in a `halves` half measures 852×790 canvas pixels. The fill rule does not apply to a collapsed or failed element.
 
 ## Motion
 
