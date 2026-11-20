@@ -33,14 +33,29 @@ jobs:
         env:
           STEPDECK_PLAYWRIGHT: ${{ github.workspace }}/node_modules/playwright
 
-  deploy:
+  # The site is the repository tree as it is (no build step). Uploading and deploying are separate jobs, as in
+  # GitHub's starter workflows: the job boundary gives the artifact time to register, and re-running a failed
+  # deploy reuses the one artifact instead of uploading a second.
+  pages:
     needs: test
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       pages: write
-      id-token: write
       contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: pages
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -48,10 +63,5 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
       - id: deployment
         uses: actions/deploy-pages@v4
