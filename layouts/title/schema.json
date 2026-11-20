@@ -1,0 +1,18 @@
+{
+  "name": "title",
+  "description": "A cover slide: title, subtitle and meta (authors, affiliation, date) on the left margin, an optional figure on the right, and a footer line at the bottom.",
+  "kind": "cover",
+  "hooks": { "subtitle": "subtitle", "meta": "meta" },
+  "regions": [
+    { "name": "title", "description": "The talk title, in the cover size (the slide's `title` sugar goes here), under the kicker from the slide's `section`; it fills the top rows and the title sits at the bottom of them." },
+    { "name": "subtitle", "description": "Subtitle below the title, in the heading size and the muted color." },
+    { "name": "meta", "description": "Authors, affiliation, venue and date, on the bottom margin above the footer; elements stack with a small gap, in the note size." },
+    { "name": "figure", "description": "Optional figure on the right margin, beside the title column. Empty: the cover is unchanged. With an element: two columns." },
+    { "name": "footer", "description": "Footer line on the bottom margin, typically a source, license or event line." }
+  ],
+  "variables": [
+    { "name": "--title-width", "default": "1400px", "description": "Measure (maximum width) of the title, subtitle and meta column." },
+    { "name": "--meta-gap", "default": "64px", "description": "The least space between the subtitle and the meta block." },
+    { "name": "--figure-width", "default": "720px", "description": "Width of the figure column when the figure region holds an element; the title column takes the rest." }
+  ]
+}

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stepdeck</title>
+<meta name="description" content="Step-by-step HTML presentations, written as data, that agents can build.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="site/site.css">
+</head>
+<body class="landing">
+<header class="site-header">
+  <nav class="site-nav" aria-label="Site">
+    <a class="brand" href="./">stepdeck</a>
+    <a href="site/docs/?p=docs/index.md">Docs</a>
+    <a href="site/gallery/">Gallery</a>
+    <a href="https://github.com/horaciochacon/stepdeck">GitHub</a>
+  </nav>
+</header>
+<main class="page">
+  <section class="hero">
+    <h1>stepdeck</h1>
+    <p class="tagline">Step-by-step HTML presentations, written as data, that agents can build.</p>
+  </section>
+
+  <figure class="live">
+    <div class="live-frame"><iframe src="examples/kit/" title="The stepdeck slide kit deck"></iframe></div>
+    <figcaption>The slide kit deck, live: click it, then use the arrow keys. <a href="examples/kit/">Open full screen</a></figcaption>
+  </figure>
+
+  <section class="cards" aria-label="Explore">
+    <a class="card" href="site/gallery/">
+      <h2>Gallery</h2>
+      <p>Every built-in layout and component, one slide each.</p>
+    </a>
+    <a class="card" href="site/docs/">
+      <h2>Docs</h2>
+      <p>Guides for authors and agent operators, and the reference.</p>
+    </a>
+    <a class="card" href="https://github.com/horaciochacon/stepdeck">
+      <h2>GitHub</h2>
+      <p>Source, issues and the changelog.</p>
+    </a>
+  </section>
+
+  <section id="quick-start">
+    <h2>Quick start</h2>
+    <p>You need Node 20 or later and Chrome. Clone the repository, then:</p>
+    <pre><code>git clone https://github.com/horaciochacon/stepdeck.git
+cd stepdeck
+npm install
+node cli/index.js new ../my-talk       # a working three-slide deck, engine copied into my-talk/stepdeck/
+node cli/index.js serve ../my-talk     # prints a URL; open it in Chrome</code></pre>
+    <p>The arrow keys or space step through, <kbd>S</kbd> opens the presenter view. The full walk-through is in the <a href="site/docs/?p=docs/guide/quickstart.md">quick start guide</a>.</p>
+  </section>
+
+  <section id="examples">
+    <h2>Example decks</h2>
+    <ul class="plain">
+      <li><a href="examples/kit/">examples/kit/</a> <span class="muted">The slide kit: every layout and component, building step by step.</span></li>
+      <li><a href="examples/spike/">examples/spike/</a> <span class="muted">The early spike: the hard cases that settled the component contract, with a custom component.</span></li>
+    </ul>
+  </section>
+
+  <section id="gallery">
+    <h2>Gallery</h2>
+    <p class="muted">Each item opens its slide in the gallery deck, and its reference page.</p>
+    <ul id="gallery-list" class="gallery-list"><li class="muted">Loading…</li></ul>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <span>MIT license</span>
+    <a href="https://github.com/horaciochacon/stepdeck/blob/main/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>
+    <span class="site-footer-version">Version 0.1.0</span>
+  </div>
+</footer>
+<script type="module" src="site/landing.js"></script>
+</body>
+</html>

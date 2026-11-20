@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "timeline",
+  "description": "A track between stops that fills. `progress` says how far the fill has gone (0 to 1) and each stop lights up as the fill passes it; `current` emphasises one stop. It also works as the progress connector between two parts of a story. Set `progress` and `current` per step with `advance` or `set` on the slide.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stops", "progress"],
+  "properties": {
+    "stops": {
+      "type": "array",
+      "minItems": 2,
+      "description": "The stops along the track, at least 2. They are evenly spaced unless a stop sets `at`. `label` and `sub` are inline Markdown and wrap under the stop. `id` names a stop for `current`; it defaults to the stop's index as a string, and ids must be unique.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label"],
+        "properties": {
+          "id": { "type": "string", "description": "Optional unique id, used by `current`." },
+          "label": { "type": "string", "description": "The stop's name, inline Markdown." },
+          "sub": { "type": "string", "description": "An optional second line under the label, inline Markdown." },
+          "at": { "type": "number", "minimum": 0, "maximum": 1, "description": "Where the stop sits on the track, 0 to 1. Defaults to the stop's even position (index / (stops - 1)); the values must increase from stop to stop." }
+        }
+      },
+      "examples": [[{ "id": "draft", "label": "First draft" }, { "id": "review", "label": "Review", "sub": "week 2" }, { "id": "final", "label": "Final" }]],
+      "x-transition": "snap"
+    },
+    "progress": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "How far the fill has gone, as a position on the track from 0 to 1, the same scale as a stop's `at`. With evenly spaced stops 0 is the first stop and 1 the last; when stops set `at`, compare `progress` with their `at` instead. A stop is lit once `progress >= at`. A forward step tweens the fill; going backward retracts it without motion.",
+      "examples": [0, 0.5, 1],
+      "x-transition": "tween"
+    },
+    "dashed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Draw the unfilled track dashed. The fill stays solid.",
+      "examples": [true],
+      "x-transition": "snap"
+    },
+    "orient": {
+      "type": "string",
+      "enum": ["horizontal"],
+      "default": "horizontal",
+      "description": "The track's direction. Only `horizontal` is supported for now, so this prop changes nothing; it is accepted so a slide may state it.",
+      "examples": ["horizontal"],
+      "x-transition": "snap"
+    },
+    "current": {
+      "type": "string",
+      "description": "The id of one stop to emphasise: a larger circle and a bold label. An unknown id is an error.",
+      "examples": ["review"],
+      "x-transition": "fade"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+/* full-bleed: one main region filling the whole canvas, with an optional title band on top.
+   Grid variable: --title-height (default auto: the band takes the title's height, 0 when absent). */
+.sd-canvas[data-layout="full-bleed"] {
+  grid-template-columns: 1fr;
+  grid-template-rows: var(--title-height, auto) 1fr;
+  grid-template-areas: "title" "main";
+}
+.sd-canvas[data-layout="full-bleed"] > [data-region="title"] {
+  padding: var(--sd-canvas-margin) var(--sd-canvas-margin) 0;
+}
+.sd-canvas[data-layout="full-bleed"] > [data-region="main"] {
+  padding: var(--sd-region-gap) var(--sd-canvas-margin) var(--sd-canvas-margin);
+}

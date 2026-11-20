@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "image",
+  "description": "A local image with required alt text, an optional caption and a fit mode: the cover figure, or a picture anywhere on a slide. The image finishes loading before the step settles, and a missing or undecodable file is an element error naming the path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["src", "alt"],
+  "properties": {
+    "src": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the image file, relative to the deck root (like a data path). Remote URLs, paths that leave the deck and paths containing `%` are not allowed. Changing it fades the new image in once it has loaded.",
+      "examples": ["assets/cover.svg"],
+      "x-transition": "fade"
+    },
+    "alt": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Alt text: what the image shows, for people who cannot see it. Required and not blank.",
+      "examples": ["A diagram of exposure leading to outcome"],
+      "x-transition": "snap"
+    },
+    "fit": {
+      "type": "string",
+      "enum": ["contain", "cover"],
+      "default": "contain",
+      "description": "`contain` shows the whole image inside the box; `cover` fills the box and crops the overflow.",
+      "examples": ["cover"],
+      "x-transition": "snap"
+    },
+    "caption": {
+      "type": "string",
+      "description": "An optional caption under the image, inline Markdown, in the note size and the muted colour.",
+      "examples": ["Synthetic figure made for this deck"],
+      "x-transition": "fade"
+    }
+  }
+}

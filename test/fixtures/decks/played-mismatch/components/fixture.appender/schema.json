@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.appender",
+  "description": "Test fixture: appends one line per update (not idempotent, on purpose).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["count"],
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "A number that changes every step, so update runs on every navigation.",
+      "examples": [0, 1],
+      "x-transition": "snap"
+    }
+  }
+}

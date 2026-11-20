@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="760" viewBox="0 0 720 760">
+  <!-- Synthetic cover figure for the kit deck: a chat prompt above a small bar chart. Colours follow the modern theme (the deck's own). -->
+  <rect x="0" y="0" width="720" height="760" rx="24" fill="#f4f4f5"/>
+  <rect x="48" y="56" width="440" height="96" rx="28" fill="#ffffff" stroke="#e4e4e7" stroke-width="2"/>
+  <rect x="80" y="88" width="280" height="14" rx="7" fill="#5f5f68"/>
+  <rect x="80" y="114" width="200" height="14" rx="7" fill="#e4e4e7"/>
+  <rect x="232" y="184" width="440" height="96" rx="28" fill="#1d4ed8"/>
+  <rect x="264" y="216" width="320" height="14" rx="7" fill="#ffffff"/>
+  <rect x="264" y="242" width="220" height="14" rx="7" fill="#ffffff" opacity="0.7"/>
+  <line x1="96" y1="680" x2="648" y2="680" stroke="#27272a" stroke-width="3"/>
+  <rect x="128" y="440" width="96" height="240" fill="#5f5f68"/>
+  <rect x="272" y="520" width="96" height="160" fill="#5f5f68"/>
+  <rect x="416" y="600" width="96" height="80" fill="#1d4ed8"/>
+  <rect x="560" y="632" width="64" height="48" fill="#1d4ed8"/>
+  <path d="M176 410 C 300 430, 420 560, 592 610" fill="none" stroke="#d81b45" stroke-width="5" stroke-dasharray="14 10"/>
+  <circle cx="592" cy="610" r="10" fill="#d81b45"/>
+</svg>

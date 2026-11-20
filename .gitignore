@@ -1,0 +1,6 @@
+node_modules/
+shots/
+catalog/
+# Agent working files, plans and specs (the superpowers skills write them here); never published.
+.superpowers/
+docs/superpowers/

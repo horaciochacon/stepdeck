@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chart.bar",
+  "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker. The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file, relative to the deck root. One row per category.",
+      "examples": ["data/durations.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "description": "Column holding the category of each row (its text labels the band). Each category appears in one row only.",
+      "examples": ["task"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "description": "Column holding the numeric value of each bar. Changing it tweens every bar to its new length; the value axis only moves when the domain does.",
+      "examples": ["weeks_days", "agent_days"],
+      "x-transition": "tween"
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": { "type": "string", "description": "Column with the lower bound.", "examples": ["days_lo"] },
+        "upper": { "type": "string", "description": "Column with the upper bound.", "examples": ["days_hi"] }
+      },
+      "description": "A whisker from the lower to the upper column at the end of each bar (e.g. an uncertainty interval). It is drawn after its bar and moves with it.",
+      "examples": [{ "lower": "days_lo", "upper": "days_hi" }],
+      "x-transition": "tween"
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "d3-format spec for category labels, applied when the category column is numeric (e.g. years).", "examples": ["d"] },
+        "y": { "type": "string", "description": "d3-format spec for value labels, ticks and the interval text.", "examples": [",.0f", ".1%"] }
+      },
+      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). Without `y`, ticks use a fixed precision from the tick step and value labels show the value as it is.",
+      "examples": [{ "y": ",.1f" }],
+      "x-transition": "snap"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "Title of the category axis.", "examples": ["Task"] },
+        "y": { "type": "string", "description": "Title of the value axis.", "examples": ["Days"] }
+      },
+      "description": "Axis titles: `x` names the category axis, `y` the value axis, whichever way the bars point.",
+      "examples": [{ "y": "Days" }],
+      "x-transition": "snap"
+    },
+    "orient": {
+      "enum": ["horizontal", "vertical"],
+      "default": "horizontal",
+      "description": "Bar direction: `horizontal` (categories down the left, the default) or `vertical` (categories along the bottom).",
+      "examples": ["horizontal", "vertical"],
+      "x-transition": "snap"
+    },
+    "shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Categories to show, by name. Omit to show every category. A category that appears grows from zero and then draws its whisker; one that leaves does the reverse. Hidden categories keep their band. An unknown category is an element error naming it.",
+      "examples": [["before"], ["before", "with an agent"]],
+      "x-transition": "draw"
+    },
+    "highlight": {
+      "type": "string",
+      "description": "Category to emphasize; the other bars turn a muted theme color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",
+      "examples": ["with an agent"],
+      "x-transition": "fade"
+    },
+    "domain": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Fixed value axis as [min, max], used as given. Set it when `y` changes between steps so the shrink or growth stays visible. Without it the axis spans every row of the current `y` (and the interval columns), shown or not, from zero, rounded outward to tick values.",
+      "examples": [[0, 30]],
+      "x-transition": "tween"
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": { "enum": ["string", "number", "date"] },
+      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one.",
+      "examples": [{ "task": "string", "weeks_days": "number" }],
+      "x-transition": "snap"
+    }
+  }
+}

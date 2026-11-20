@@ -1,0 +1,14 @@
+{
+  "name": "figure-notes",
+  "description": "A figure in the main region with a column of notes beside it, a title band on top and a footer for sources.",
+  "regions": [
+    { "name": "title", "description": "Title band across the canvas (the slide's `title` sugar goes here)." },
+    { "name": "main", "description": "The figure. A single element fills the region's height." },
+    { "name": "notes", "description": "Notes column to the right of the figure; elements stack vertically, centered." },
+    { "name": "footer", "description": "Footer line across the canvas, typically a source line." }
+  ],
+  "variables": [
+    { "name": "--notes-width", "default": "560px", "description": "Width of the notes column." },
+    { "name": "--notes-gap", "default": "72px", "description": "Space between the figure and the notes column." }
+  ]
+}

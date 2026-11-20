@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "layouts/<name>/schema.json",
+  "description": "A layout descriptor: its named regions, documented grid variables, styling hooks and kind (spec §7; default-theme spec §10.1). Not a props schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "regions", "variables"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "description": { "type": "string", "minLength": 1 },
+    "regions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "default", "description"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^--[a-z0-9-]+$" },
+          "default": { "type": "string" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Styling hooks: a declared region's name -> a region hook (core/constants.js REGION_HOOKS: subtitle, meta, statement; title, kicker and accent are core's own). Core adds the class sd-<hook> to that region and to its element wrappers; themes style the hook, the layout CSS never does.",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "enum": ["subtitle", "meta", "statement"] }
+    },
+    "kind": {
+      "enum": ["content", "cover"],
+      "default": "content",
+      "description": "content (default) or cover (core/constants.js LAYOUT_KINDS). Core sets it as data-kind on the canvas; a cover's title takes the cover size, and the cover-figure size when a region named `figure` holds an element."
+    }
+  }
+}

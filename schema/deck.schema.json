@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "deck.js",
+  "description": "The default export of a deck's deck.js (spec §6). Importable in plain Node: no DOM, no fetch, no top-level await.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "slides"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "description": "Deck title." },
+    "lang": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$", "description": "Deck language; engine strings and number formats follow it. Built in: en, es." },
+    "theme": { "type": "string", "minLength": 1, "description": "Theme folder name under the engine's themes/, e.g. academic-light." },
+    "palette": { "type": "string", "minLength": 1, "description": "Palette name; must belong to the theme's palettes.json." },
+    "sections": { "type": "boolean", "description": "Show the \"Section · n\" footer." },
+    "components": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+      "description": "Deck components, each in components/<name>/ (index.js + schema.json). Names must not equal a built-in; use a namespace such as my.chart."
+    },
+    "slides": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$" },
+      "description": "Slide ids in order; each is slides/<id>.js."
+    }
+  }
+}

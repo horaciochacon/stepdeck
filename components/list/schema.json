@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list",
+  "description": "Numbered, lettered, bulleted or checklist items revealed one by one. `shown` says how many items are visible (hidden ones keep their space), `done` ticks a checklist, `active` emphasises one item. Set the state props per step with `advance` or `set` on the slide.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items", "marker"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The items, in order. `text` and `sub` are inline Markdown (emphasis, code, links); raw HTML is shown as text. `id` names an item for `done` and `active`; it defaults to the item's index as a string, and ids must be unique.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "id": { "type": "string", "description": "Optional unique id, used by `done` and `active`." },
+          "text": { "type": "string", "description": "The item, inline Markdown." },
+          "sub": { "type": "string", "description": "An optional second line under the item, inline Markdown." }
+        }
+      },
+      "examples": [[{ "text": "Define the **question**" }, { "text": "Gather the data", "sub": "Sources in `data/`" }]],
+      "x-transition": "snap"
+    },
+    "marker": {
+      "enum": ["number", "letter", "bullet", "check"],
+      "description": "The marker before each item: `number` (1. 2. 3.), `letter` (a. b. c., always latin), `bullet`, or `check` (a box that ticks when the item is done).",
+      "examples": ["number", "check"],
+      "x-transition": "snap"
+    },
+    "shown": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many items are visible (items 0..shown-1); all when absent. Hidden items keep their space, so the list never reflows. New items rise and fade in, staggered, on a forward step.",
+      "examples": [0, 2],
+      "x-transition": "fade"
+    },
+    "done": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "For `check`: how many items from the top are done (a number), or the ids of the done items (a list). An unknown id is an error. A check mark draws when an item becomes done and comes off when it is not.",
+      "examples": [2, ["data", "report"]],
+      "x-transition": "draw"
+    },
+    "active": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "string" }
+      ],
+      "description": "One item emphasised: its index or its id. The others dim; the change fades. An unknown id is an error.",
+      "examples": [1, "model"],
+      "x-transition": "fade"
+    },
+    "rule": {
+      "type": "boolean",
+      "default": false,
+      "description": "Draw an accent rule on the left of the list.",
+      "examples": [true],
+      "x-transition": "snap"
+    }
+  }
+}

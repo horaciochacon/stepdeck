@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stepdeck · render</title>
+<link rel="icon" href="data:,">
+<!-- Bare shell (spec §9): render.html?deck=<deck dir>&slide=<id>&step=<id|n>&capture
+     deck defaults to ../../ (the deck folder when the engine is copied to <deck>/stepdeck/). -->
+<script>
+  if (new URLSearchParams(location.search).has("capture")) document.documentElement.classList.add("capture");
+</script>
+<script type="importmap">{ "imports": { "stepdeck/": "../" } }</script>
+<link rel="stylesheet" href="stepdeck.css">
+</head>
+<body>
+<script type="module">
+  import { boot } from "./stepdeck.js";
+  boot({ shell: "bare", deckUrl: new URLSearchParams(location.search).get("deck") ?? "../../" });
+</script>
+</body>
+</html>

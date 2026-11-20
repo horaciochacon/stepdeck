@@ -1,0 +1,390 @@
+# Writing a custom component
+
+This page walks you through writing a deck component: a component that lives in your deck's `components/` folder and that slides use like a built-in. It is for people who write decks by hand and for contributors who need something the 11 built-in components do not show.
+
+You will scaffold a component with `new-component`, describe its props in `schema.json`, write `mount` and `update` so that a played step ends exactly where a jumped step does, declare it in `deck.js`, and check it with the CLI. The worked example is a counter that counts up to a new value when a step plays.
+
+This page is a tutorial. For the exact signatures of `mount`, `update`, the `info` argument, `ctx` and child handles, see the [component contract](../reference/component-contract.md). Agents follow [skill/references/custom-components.md](../../skill/references/custom-components.md) instead.
+
+Commands run from the repository root as `node cli/index.js`, as on the other guide pages. The examples use a deck made with `node cli/index.js new ../my-talk`.
+
+## Decide whether you need one
+
+Write a component only when no built-in, and no mix of built-ins, shows what the slide needs. Typical reasons are a bespoke diagram or chart drawn with d3, an animated explanation with its own stages, or a drawing that places built-ins inside it. For small visual touches, use the slide's `style`; for region sizes, use `regions`; for text, use `text` or `markdown`. The full list is in [When to write one](../../skill/references/custom-components.md#when-to-write-one).
+
+Check the catalog before you start:
+
+```sh
+node cli/index.js catalog ../my-talk
+```
+
+## Scaffold the component
+
+```sh
+node cli/index.js new-component my.counter ../my-talk
+```
+
+The name comes first, then the deck folder. The deck folder defaults to the current folder.
+
+```text
+created ../my-talk/components/my.counter/ (index.js, schema.json, example.js, README.md)
+added "my.counter" to components in deck.js
+try it: copy ../my-talk/components/my.counter/example.js to slides/, add its id to slides in deck.js, then
+  node /…/stepdeck/cli/index.js validate /…/my-talk
+  node /…/stepdeck/cli/index.js check /…/my-talk --played
+```
+
+`new-component` copies the four files of `templates/component/` into `components/<name>/`. It replaces `__NAME__` with the name and `__ID__` with a slide id made from it (`my-counter-example`).
+
+| File | What it holds |
+|---|---|
+| `index.js` | The component: `mount(el, props, ctx)` returns an instance with `update(props, info)`. |
+| `schema.json` | The props, as JSON Schema 2020-12. Read by `validate` and `catalog`. |
+| `example.js` | A slide that uses the component. `catalog` points to it. |
+| `README.md` | Notes for whoever uses the component. `catalog <name> --json` includes it. |
+
+The starter draws a list and marks every item up to `stage`. It already passes `validate` and `check --played`, so you can try it before you change anything: copy `components/my.counter/example.js` to `slides/my-counter-example.js`, add `"my-counter-example"` to `slides` in `deck.js`, and run the two commands it printed. Replace all four files with your own content; the example and README must match your props. The sections below give the counter's `schema.json`, `index.js`, `example.js` and `README.md`.
+
+### Name rules
+
+| Rule | Error when broken (exit 2) |
+|---|---|
+| The name has a dot namespace, such as `my.counter`. | `'counter' needs a namespace, e.g. 'my.counter' (deck components are namespaced so they never collide with a built-in)` |
+| Lowercase letters, digits and dashes, in dot-separated parts. | `'My.Counter' is not a component name: use lowercase letters, digits and dashes in dot-separated parts, e.g. 'my.chart'` |
+| Not a built-in name. | `'chart.line' is a built-in component; pick another namespace, e.g. 'my.line'` |
+| `components/<name>/` does not exist yet. | `components/my.counter/ already exists` |
+| The deck folder holds `deck.js`. | `no deck.js in <dir>; run new-component in a deck folder (or pass it)` |
+
+### Declare it in `deck.js`
+
+Every deck component must be listed in `components` in `deck.js`. Nothing scans the folder: a slide that uses an unlisted component fails `validate` with `unknown-component`.
+
+`new-component` edits `deck.js` for you when the edit is safe: `components` is one literal array of strings, or there is no `components` key and exactly one `slides:` line to insert it before. It re-imports `deck.js` after the edit and reverts the file if the result is not the old deck plus the name. Otherwise it leaves `deck.js` alone and prints the line to add:
+
+```text
+deck.js not edited: add "my.counter" to components in deck.js: components: ["my.counter"]
+```
+
+After the edit, the starter deck reads:
+
+```js
+components: ["my.counter"],
+slides: ["title", "chart", "closing"],
+```
+
+## Describe the props in `schema.json`
+
+`schema.json` is JSON Schema 2020-12 with `"type": "object"` and `"additionalProperties": false`. Both `validate` and `catalog` read it; neither imports `index.js`.
+
+| Key | What it is for |
+|---|---|
+| `description` (top level) | The catalog entry. Its first sentence is the summary in `catalog/index.json`. |
+| `required` | Props a slide must set. |
+| `properties.<prop>.description` | What the prop means. Required on every prop. |
+| `properties.<prop>.examples` | A non-empty array of sample values. Required on every prop. |
+| `properties.<prop>.x-transition` | How a change of the prop animates: `tween` (numbers interpolate), `draw` (lines draw along their length), `fade` or `snap` (no motion). Required on every prop. |
+| `properties.<prop>.default` | Documentation only. `validate` does not fill it in, so `index.js` must apply the default itself. |
+
+`x-transition` is metadata: the catalog lists every prop that is not `snap` as one that animates, but the engine never reads it. Your `index.js` must implement the motion the annotation promises.
+
+The counter's schema:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "my.counter",
+  "description": "One large number with a label, counting from its previous value to the new one when a step plays. The number is formatted in the deck language.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["value"],
+  "properties": {
+    "value": {
+      "type": "number",
+      "description": "The number to show. Drive it with `advance` or `set` it in steps; a played step counts to it.",
+      "examples": [1250, 0.42],
+      "x-transition": "tween"
+    },
+    "label": {
+      "type": "string",
+      "description": "A short line under the number.",
+      "examples": ["people screened"],
+      "x-transition": "fade"
+    },
+    "format": {
+      "type": "string",
+      "minLength": 1,
+      "default": ",.0f",
+      "description": "A d3-format specifier for the number.",
+      "examples": [",.0f", ".0%"],
+      "x-transition": "snap"
+    }
+  }
+}
+```
+
+## Write `mount` and `update`
+
+A component is a renderer of props. Everything on screen is a function of the props it was last given, so a step reached by jumping looks exactly like the same step reached by playing. `check --played` tests this at every step: it compares what each element shows after a jump with what it shows after an animated arrival, and reports `played-mismatch` when they differ.
+
+The engine calls `update` after `mount` and then whenever the element's resolved props or its visibility change. It asks for motion only on a forward move of exactly one step with motion on; on a jump, a backward move or the first render, `info.animate` is false. See [Animation and motion](animation-and-motion.md) for when motion plays.
+
+### The shape of `update`
+
+Keep one `render(props)` that writes the whole state, and use it like this in every `update`:
+
+1. Remember where the drawing is now, if a tween needs a start value.
+2. Call `render(props)`, so the end state is written even if nothing animates.
+3. If `canAnimate(info)`, start the motion with `info.signal` and `info.transition?.duration`, and `await` it.
+4. Call `render(props)` again and clear any inline style the motion left, such as `opacity`.
+
+`canAnimate(info)` is `info.animate === true && !info.signal?.aborted`. The built-ins import it from `core/kit.js`; a deck component defines the same one-line test itself, as below.
+
+Awaiting the `ctx.animate` helpers with `info.signal` matters. When a newer step aborts this one, each helper jumps to its end state and resolves, and `STEPDECK.settled()` waits for your promise. An update that has not settled after 10 seconds fails the element (see the [contract](../reference/component-contract.md)).
+
+### The counter
+
+`components/my.counter/index.js`:
+
+```js
+// my.counter: one large number with a label. Everything on screen is a function of the props,
+// so a step reached by jumping looks exactly like the same step reached by playing.
+
+// The same test as canAnimate in the engine's core/kit.js: the engine asked for motion
+// and the step has not been aborted yet.
+const canAnimate = (info) => info.animate === true && !info.signal?.aborted;
+
+export default {
+  mount(el, props, ctx) {
+    const doc = el.ownerDocument;
+    const accent = ctx.palette("categorical")?.roles?.accent ?? "var(--sd-color-accent)";
+
+    const root = doc.createElement("div");
+    Object.assign(root.style, {
+      display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--sd-space)",
+    });
+    const number = doc.createElement("div");
+    Object.assign(number.style, {
+      fontSize: "var(--sd-font-size-display)", fontWeight: "var(--sd-font-weight-title)",
+      fontVariantNumeric: "tabular-nums", color: accent,
+    });
+    const label = doc.createElement("div");
+    Object.assign(label.style, { fontSize: "var(--sd-font-size-body)", color: "var(--sd-color-muted)" });
+    root.append(number, label);
+    el.appendChild(root);
+
+    let shown = 0; // the number drawn now; a count may stop half-way
+
+    /** Draws the number n with the props' format. */
+    function drawNumber(n, props) {
+      shown = n;
+      number.textContent = ctx.format(props.format ?? ",.0f")(n);
+    }
+
+    /** Writes the whole state for these props: the single source of truth. */
+    function render(props) {
+      const value = Number(props.value);
+      if (typeof props.value !== "number" || !Number.isFinite(value)) {
+        throw new Error(`my.counter needs a numeric \`value\`, got ${JSON.stringify(props.value)}`);
+      }
+      drawNumber(value, props);
+      root.dataset.value = String(value);
+      label.textContent = props.label ?? "";
+    }
+
+    render(props);
+
+    return {
+      async update(props, info) {
+        const from = info.entered ? 0 : shown;
+        render(props); // the end state first, so it is right even when nothing plays
+
+        if (canAnimate(info)) {
+          const opts = { signal: info.signal, duration: info.transition?.duration };
+          const runs = [];
+          if (info.entered || info.changed.includes("value")) {
+            runs.push(ctx.animate.tween(from, props.value, (n) => drawNumber(n, props), opts));
+          }
+          if (info.entered) runs.push(ctx.animate.fadeIn(root, opts));
+          else if (info.changed.includes("label")) runs.push(ctx.animate.fadeIn(label, opts));
+          await Promise.all(runs);
+        }
+
+        render(props); // the end state again, whether motion ran, was aborted or never started
+        root.style.opacity = "";
+        label.style.opacity = "";
+      },
+      destroy() {
+        root.remove();
+      },
+    };
+  },
+};
+```
+
+What each part does:
+
+| Part | Why |
+|---|---|
+| `el.ownerDocument` | Create nodes in the element's own document, not the global `document`. |
+| `ctx.palette(...)` and `var(--sd-...)` | Colors and sizes come from the theme, so the component follows the deck's theme. No literal colors or pixel sizes. |
+| `shown` | The tween starts from what is drawn now. If a step is interrupted half-way, the next update counts from there. |
+| `info.entered`, `info.changed` | Motion plays only for what changed: the count when `value` changed, a fade of the label when `label` changed, a fade of the whole block when the element just became visible. |
+| `props.format ?? ",.0f"` | The schema's `default` is documentation; the component applies it. |
+| `throw` in `render` | An error stays in this element: its box shows the message and `check` reports `render-error`. |
+| The second `render(props)` and the cleared `opacity` | The end state is identical however the update ended, so the markup after playing equals the markup after jumping. |
+
+### The example slide
+
+Rewrite `components/my.counter/example.js` so it uses your props. This one drives `value` with `advance` and changes the label with `set`:
+
+```js
+export default {
+  id: "my-counter-example",
+  layout: "statement",
+  title: "Screening so far",
+  elements: [
+    { id: "count", type: "my.counter",
+      props: { value: 120, label: "people screened in week 1" },
+      advance: { prop: "value", values: [120, 480, 1250] } },
+  ],
+  steps: [
+    { id: "week1" },
+    { id: "week2", set: { count: { label: "people screened by week 2" } } },
+    { id: "week3", set: { count: { label: "people screened by week 3" } } },
+  ],
+};
+```
+
+`set` patches the element's props directly: `set: { count: { label: "…" } }`. Writing `set: { count: { props: { label: "…" } } }` fails `validate` with `unknown-prop`. See [The step model](step-model.md).
+
+To try it, copy the file to `slides/my-counter-example.js` (replace the starter's copy if you made one) and add `"my-counter-example"` to `slides` in `deck.js`, if it is not there yet:
+
+```js
+components: ["my.counter"],
+slides: ["title", "chart", "closing", "my-counter-example"],
+```
+
+`check --played` only exercises the counter on a slide listed in `slides`.
+
+### The README
+
+`README.md` is for whoever uses the component, and `catalog my.counter --json` includes it. The starter's README describes the list and its `stage` prop, so rewrite it: say what the component shows, list its props, and say how to try it. For the counter:
+
+```markdown
+# my.counter
+
+One large number with a label. When a step plays, it counts from the number shown to the new `value`.
+
+| Prop | Type | Default | Transition | Meaning |
+|---|---|---|---|---|
+| `value` | number | (required) | tween | The number to show. |
+| `label` | string | `""` | fade | A short line under the number. |
+| `format` | string | `",.0f"` | snap | A d3-format specifier for the number. |
+
+Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter-example"` to `slides` in `deck.js`.
+```
+
+## Use `ctx`
+
+`mount` receives `ctx` as its third argument. The [contract](../reference/component-contract.md) lists every member with its signature; this table maps common jobs to members.
+
+| Job | Member |
+|---|---|
+| Load a deck data file (`.json`, `.geojson`, `.csv`) | `await ctx.data(path, { types })`. Paths are relative to the deck folder. Results are cached and shared, so copy before you sort or change them. |
+| Get a URL for an image or other file in the deck | `ctx.assetUrl(path)` |
+| Format a number in the deck language | `ctx.format(spec)` returns a d3-format function. The counter uses it. |
+| Get an engine string in the deck language | `ctx.t(key)`, for example `ctx.t("ci95")`. |
+| Get data colors | `ctx.palette(kind)` for `categorical`, `sequential` or `diverging`: `{ name, kind, colors, names, roles }`, or `null`. `roles.accent` is the accent color. |
+| Read a theme value in JavaScript | `ctx.tokens["--sd-font-size-note"]` |
+| Know the element's size | `ctx.size` is `{ w, h }` in canvas pixels, measured at mount. Read `el.offsetWidth` and `el.offsetHeight` yourself if you need the size later. |
+| Animate | `ctx.animate.fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. Each takes `{ duration, signal }` and resolves at the end state, also on abort. |
+| Know whether this is a screenshot render | `ctx.capture` |
+| Draw with d3 | `ctx.d3` |
+| Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. |
+
+## Verify it
+
+Run these after every change. All of them work on a deck made by `new`.
+
+```sh
+node cli/index.js validate ../my-talk
+node cli/index.js catalog my.counter ../my-talk
+node cli/index.js check ../my-talk --played
+```
+
+For the deck built on this page (the three slides of `new` plus `my-counter-example`) they print:
+
+```text
+validate: 4 slides, 0 errors, 0 warnings
+```
+
+```text
+my.counter · component (deck)
+One large number with a label, counting from its previous value to the new one when a step plays. The number is formatted in the deck language.
+
+props (name, transition, required, description):
+  value   tween  required  The number to show. Drive it with `advance` or `set` it in steps; a played step counts to it.
+          e.g. 1250, 0.42
+  label   fade   optional  A short line under the number.
+          e.g. "people screened"
+  format  snap   optional  A d3-format specifier for the number.
+          e.g. ",.0f", ".0%"
+
+example: components/my.counter/example.js
+```
+
+```text
+check: 4 slides, 9 steps, 10 played arrivals compared, 0 problems
+```
+
+`check` and `dump` need Chrome and Playwright; see the [quickstart](quickstart.md#requirements). `catalog` with a name prints one entry; without a name it rewrites `<deck>/catalog/`.
+
+### Problems you are likely to see
+
+| Rule | Command | What it means |
+|---|---|---|
+| `component-schema` | `validate` | `schema.json` does not compile as JSON Schema 2020-12, for example `"type": "numbr"`. Checked for every listed component, used or not. |
+| `prop-invalid` | `validate` | A slide's props break the schema at some step, after bindings are resolved. Example: `value = "480" vs must be number`. |
+| `unknown-prop` | `validate` | A slide sets a prop the schema does not have. A common cause is `set: { id: { props: … } }`. |
+| `unknown-component` | `validate` | A slide uses a type that is neither a built-in nor listed in `deck.js` `components`. |
+| `component-missing` | `validate` | `deck.js` lists a component with no `components/<name>/schema.json`. |
+| `component-collision` | `validate` | A deck component has a built-in's name. |
+| `catalog-schema` | `catalog` (warning) | A prop lacks `description`, `examples` or `x-transition`. `validate` does not report it. |
+| `render-error` | `check` | `mount` or `update` threw, rejected, or did not settle within 10 seconds. |
+| `played-mismatch` | `check --played` | The element looks different after an animated arrival than after a jump. Look for state kept across calls, or inline styles left after motion. |
+
+`check` also measures your component's text like any other: font size, contrast, overlap and staying inside the region. See [Checking a deck](checking-a-deck.md) and the [rules reference](../reference/rules.md).
+
+### Browser tests in the repository
+
+Contributors who add a component to a deck inside the repository, such as `examples/spike`, can test it with the helpers in `test/browser/helpers.mjs`. They build bare-shell URLs relative to the repository root, so they only work for decks inside the repo:
+
+| Helper | What it asserts |
+|---|---|
+| `expectJumpEqualsPlayed` | Playing forward step by step ends at the same `outerHTML` as jumping, at every step. |
+| `expectBackwardEqualsJump` | Moving back one step ends where a jump does. |
+| `expectInterruptEqualsJump` | Re-targeting mid-motion ends where a jump does, with no inline styles left. |
+| `expectAnimatedStepMoves` | A forward step really animates: a sample taken mid-motion differs from the end state. |
+
+Run them with `STEPDECK_PLAYWRIGHT=<playwright folder> npm run test:browser`. See [Testing](../contributing/testing.md).
+
+## A complete example in the repository
+
+`examples/spike` has a deck component, `demo.story`, that draws its own SVG and mounts the built-in `text` through `ctx.mount`:
+
+| File | What it shows |
+|---|---|
+| [`examples/spike/components/demo.story/index.js`](../../examples/spike/components/demo.story/index.js) | A tweened marker, a `render(stage, x)` that writes the whole drawing, and a nested `text` updated with the parent's `info` in one `Promise.all`. |
+| [`examples/spike/components/demo.story/schema.json`](../../examples/spike/components/demo.story/schema.json) | One `stage` prop with `x-transition: tween`. |
+| [`examples/spike/slides/story.js`](../../examples/spike/slides/story.js) | A slide that drives `stage` with `advance`. |
+| [`examples/spike/deck.js`](../../examples/spike/deck.js) | `components: ["demo.story"]`. |
+| [`test/browser/custom.test.mjs`](../../test/browser/custom.test.mjs) | Browser tests for it. |
+
+The cookbook recipe [A custom component driven by `stage`](../../skill/references/cookbook.md#a-custom-component-driven-by-stage) shows the starter's example slide.
+
+## See also
+
+- [Component contract](../reference/component-contract.md): exact signatures of `mount`, `update`, `info`, `ctx` and child handles.
+- [Animation and motion](animation-and-motion.md): when motion plays and why a jump and a played step end in the same state.
+- [skill/references/custom-components.md](../../skill/references/custom-components.md): the same workflow, for agents.
+- [Adding a component](../contributing/adding-a-component.md): adding a built-in component to the engine.

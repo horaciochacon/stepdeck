@@ -1,0 +1,16 @@
+/* figure-notes: a title band, a figure in `main` with a column of `notes` beside it, and a
+   `footer` line for sources.
+   Grid variables: --notes-width (default 560px), the width of the notes column;
+   --notes-gap (default 72px), the space between the figure and the notes. */
+.sd-canvas[data-layout="figure-notes"] {
+  grid-template-columns: minmax(0, 1fr) var(--notes-width, 560px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "title title" "main notes" "footer footer";
+  column-gap: var(--notes-gap, 72px);
+  padding: var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2);
+}
+.sd-canvas[data-layout="figure-notes"] > [data-region="title"] { padding-bottom: calc(var(--sd-region-gap) * 2); }
+.sd-canvas[data-layout="figure-notes"] > [data-region="notes"] { justify-content: center; gap: calc(var(--sd-region-gap) * 1.5); }
+.sd-canvas[data-layout="figure-notes"] > [data-region="footer"] { padding-top: var(--sd-region-gap); }
+/* A figure in `main` takes the region's full height, so components can measure it at mount. */
+.sd-canvas[data-layout="figure-notes"] > [data-region="main"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }

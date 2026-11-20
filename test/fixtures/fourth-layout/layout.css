@@ -1,0 +1,10 @@
+/* fourth: a test-only layout that knows nothing about any theme. Grid placement only: a title band
+   over one main region. It is copied into a temporary engine by test/browser/theme-hooks.test.mjs and
+   is never shipped under layouts/. */
+.sd-canvas[data-layout="fourth"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "title" "main";
+  padding: var(--sd-canvas-margin);
+  row-gap: var(--sd-region-gap);
+}

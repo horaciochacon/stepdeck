@@ -1,0 +1,31 @@
+{
+  "default": {
+    "categorical": "pale"
+  },
+  "palettes": {
+    "pale": {
+      "kind": "categorical",
+      "colors": [
+        {
+          "id": "blue",
+          "value": "#0072b2",
+          "names": {
+            "en": "blue",
+            "es": "azul"
+          }
+        },
+        {
+          "id": "green",
+          "value": "#049069",
+          "names": {
+            "en": "green",
+            "es": "verde"
+          }
+        }
+      ],
+      "roles": {
+        "accent": "blue"
+      }
+    }
+  }
+}

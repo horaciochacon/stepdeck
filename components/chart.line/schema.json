@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chart.line",
+  "description": "Line chart of one or more series over a numeric x, with direct series labels, a transient highlight, vertical annotations and an optional interval band. Changing `y` morphs the lines with a keyed join.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y", "axes"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file, relative to the deck root. One row per series and x value.",
+      "examples": ["data/dose-response.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "description": "Column holding the numeric x value.",
+      "examples": ["dose_mg"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "description": "Column holding the numeric y value. Changing it morphs each line point by point (keyed by series and x) while the y axis rescales.",
+      "examples": ["responders", "rate"],
+      "x-transition": "tween"
+    },
+    "series": {
+      "type": "string",
+      "description": "Column naming the series of each row. Omit for a single line (its key is 'all'). Series take palette colors in order of first appearance in the data.",
+      "examples": ["regimen"],
+      "x-transition": "snap"
+    },
+    "series_shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Series to draw, by name. Omit to draw every series. A series that appears is drawn along its length; one that leaves fades out.",
+      "examples": [["single"], ["single", "combined"]],
+      "x-transition": "draw"
+    },
+    "highlight": {
+      "type": "string",
+      "description": "Series to emphasize; every other series is dimmed. Usually set with `only` so it lasts one step.",
+      "examples": ["combined"],
+      "x-transition": "fade"
+    },
+    "annotate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["x"],
+        "properties": {
+          "x": { "type": "number", "description": "x value of the vertical rule.", "examples": [250] },
+          "label": { "type": "string", "description": "Short label next to the rule.", "examples": ["250 mg"] }
+        }
+      },
+      "description": "Vertical rules with a label at given x values.",
+      "examples": [[{ "x": 250, "label": "250 mg" }]],
+      "x-transition": "fade"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "x axis title, shown under the axis.", "examples": ["Dose (mg)"] },
+        "y": { "type": "string", "description": "y axis title, shown above the plot.", "examples": ["Participants responding"] }
+      },
+      "description": "Axis titles.",
+      "examples": [{ "x": "Dose (mg)", "y": "Participants responding" }],
+      "x-transition": "snap"
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "d3-format spec for x tick labels.", "examples": [",.0f"] },
+        "y": { "type": "string", "description": "d3-format spec for y tick labels.", "examples": [",.0f", ".1%"] }
+      },
+      "description": "Tick label formats (d3-format, localized by the deck language). Default: fixed precision from the tick step.",
+      "examples": [{ "y": ",.0f" }],
+      "x-transition": "snap"
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": { "enum": ["string", "number", "date"] },
+      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one.",
+      "examples": [{ "dose_mg": "number", "regimen": "string" }],
+      "x-transition": "snap"
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": { "type": "string", "description": "Column with the lower bound.", "examples": ["responders_lo"] },
+        "upper": { "type": "string", "description": "Column with the upper bound.", "examples": ["responders_hi"] }
+      },
+      "description": "Shaded band between two columns around each series (e.g. an uncertainty interval). Morphs with the lines.",
+      "examples": [{ "lower": "responders_lo", "upper": "responders_hi" }],
+      "x-transition": "tween"
+    }
+  }
+}

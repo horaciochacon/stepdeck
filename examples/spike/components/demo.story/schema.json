@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "demo.story",
+  "description": "A four-stage pipeline strip: a track with one node per stage, a marker on the current stage, and a caption (a built-in text mounted with ctx.mount) that changes with the stage. Spike component for the custom-component contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stage": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3,
+      "default": 0,
+      "description": "The current stage, 0 to 3. Nodes up to it are filled, the marker sits on it and the caption describes it. Drive it from the slide with `advance`.",
+      "examples": [0, 2],
+      "x-transition": "tween"
+    }
+  }
+}

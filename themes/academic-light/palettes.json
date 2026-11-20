@@ -1,0 +1,46 @@
+{
+  "$comment": "academic-light palettes. Shape: palettes by name, each with a kind (categorical | sequential | diverging), colors with localized names, and role mappings. The categorical palette passes `checkPalette` (cli/palettes.js) on the theme background #ffffff: at least 3:1 contrast per color and CIEDE2000 >= 8 between every pair under simulated protanopia, deuteranopia and tritanopia. See README.md.",
+  "default": { "categorical": "okabe-ito-dark", "sequential": "viridis", "diverging": "blue-red" },
+  "palettes": {
+    "okabe-ito-dark": {
+      "kind": "categorical",
+      "description": "Okabe-Ito, darkened for at least 3:1 contrast on a white background and re-separated for color-vision deficiency. Black (the ink) and yellow (olive once darkened, and confused with orange) are left out. Ordered so the first two series are the most distinct.",
+      "source": "Okabe, M. and Ito, K. (2008). Color Universal Design (CUD): how to make figures and presentations that are friendly to colorblind people. https://jfly.uni-koeln.de/color/ Darkened in OKLab (hue kept) by stepdeck.",
+      "colors": [
+        { "id": "blue", "value": "#0072b2", "names": { "en": "blue", "es": "azul" } },
+        { "id": "orange", "value": "#c38602", "names": { "en": "orange", "es": "naranja" } },
+        { "id": "green", "value": "#049069", "names": { "en": "bluish green", "es": "verde azulado" } },
+        { "id": "vermillion", "value": "#b75002", "names": { "en": "vermillion", "es": "bermellón" } },
+        { "id": "purple", "value": "#b56592", "names": { "en": "reddish purple", "es": "morado rojizo" } },
+        { "id": "sky", "value": "#3a9bce", "names": { "en": "sky blue", "es": "celeste" } }
+      ],
+      "roles": { "accent": "blue", "alert": "vermillion" }
+    },
+    "viridis": {
+      "kind": "sequential",
+      "description": "Viridis, perceptually uniform and readable in grey and with color-vision deficiency. A fill scale: its light end is not meant for thin marks on white.",
+      "source": "viridis, by Stéfan van der Walt and Nathaniel Smith (matplotlib), released under CC0.",
+      "colors": [
+        { "id": "v1", "value": "#440154", "names": { "en": "dark purple", "es": "morado oscuro" } },
+        { "id": "v2", "value": "#3b528b", "names": { "en": "blue", "es": "azul" } },
+        { "id": "v3", "value": "#21918c", "names": { "en": "teal", "es": "verde azulado" } },
+        { "id": "v4", "value": "#5ec962", "names": { "en": "green", "es": "verde" } },
+        { "id": "v5", "value": "#fde725", "names": { "en": "yellow", "es": "amarillo" } }
+      ],
+      "roles": { "low": "v1", "high": "v5" }
+    },
+    "blue-red": {
+      "kind": "diverging",
+      "description": "Blue to red through a light grey midpoint; the two arms stay distinct with color-vision deficiency. A fill scale: the midpoint is meant to sit near the background.",
+      "source": "ColorBrewer RdBu (5 classes), Cynthia Brewer, Mark Harrower and The Pennsylvania State University, Apache License 2.0.",
+      "colors": [
+        { "id": "blue", "value": "#2166ac", "names": { "en": "blue", "es": "azul" } },
+        { "id": "light-blue", "value": "#92c5de", "names": { "en": "light blue", "es": "azul claro" } },
+        { "id": "neutral", "value": "#f7f7f7", "names": { "en": "light grey", "es": "gris claro" } },
+        { "id": "light-red", "value": "#f4a582", "names": { "en": "light red", "es": "rojo claro" } },
+        { "id": "red", "value": "#b2182b", "names": { "en": "red", "es": "rojo" } }
+      ],
+      "roles": { "low": "blue", "mid": "neutral", "high": "red" }
+    }
+  }
+}

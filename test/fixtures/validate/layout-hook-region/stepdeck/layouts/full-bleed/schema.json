@@ -1,0 +1,10 @@
+{
+  "name": "full-bleed",
+  "description": "Fixture layout: hooks names a region it does not declare.",
+  "regions": [
+    { "name": "title", "description": "Title." },
+    { "name": "main", "description": "Main." }
+  ],
+  "variables": [],
+  "hooks": { "aside": "statement" }
+}

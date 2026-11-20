@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "terminal",
+  "description": "A terminal window showing a recorded agent session: a typed command, an activity log of the newest lines that fit, a task list and a file list. Driven by props only: `shown` says how many of the script's events are visible, and the task statuses and the file list are derived from those events. Usually set with `advance` on the slide.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "script",
+    "shown"
+  ],
+  "properties": {
+    "script": {
+      "type": "string",
+      "description": "Path to a JSON file, relative to the deck root: { title, command, tasks: string[], events: [...] }. Every event is one log line. Event types: note, read, run, result (shown as `out`), error, code (optional `lang`) with `text`; file with the path in `text` and optional `status` created|edited (listed under Files); task with `index` (0-based into `tasks`) and `status` pending|active|done (line `<task>: <status>`; the Tasks list shows the last shown status, and a task no shown event names stays pending). The README (catalog terminal --json, field readme) has a complete example script.",
+      "examples": [
+        "data/session.json"
+      ],
+      "x-transition": "snap"
+    },
+    "shown": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many events are visible (events 0..shown-1). The log shows the newest lines that fit its box; tasks and files are derived from the same events. 0 is an empty prompt; the command line appears once shown is above 0. Values above the event count are clamped. Moving forward by one step animates the new lines in; any other move renders directly. Set it per step with `advance` on the element.",
+      "examples": [
+        0,
+        9,
+        22
+      ],
+      "x-transition": "fade"
+    },
+    "typing": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the command is typed character by character the first time it appears in an animated step (shown goes from 0 to above 0). Otherwise it appears whole.",
+      "examples": [
+        true
+      ],
+      "x-transition": "draw"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "text",
+  "description": "One paragraph of plain text: body copy, a source line, a note or a label.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["text"],
+  "properties": {
+    "text": {
+      "type": "string",
+      "description": "The text to show. May be a data binding such as {{data/summary.json#/responders | ,.0f}}.",
+      "examples": ["Above 250 mg the curve steepens.", "{{data/summary.json#/responders | ,.0f}}"],
+      "x-transition": "fade"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["body", "source", "note", "label"],
+      "default": "body",
+      "description": "Typographic role: body copy, a source or citation line, a side note, or a short label.",
+      "examples": ["body", "source"],
+      "x-transition": "snap"
+    },
+    "accent": {
+      "type": "boolean",
+      "default": false,
+      "description": "Render `*phrase*` in the text as an accent phrase (<em class=\"sd-accent\">), in the theme's accent colour; `\\*` is a literal asterisk. The slide `title` sugar and a text element with id `title` set it to true unless their props say otherwise. Values from data bindings never create a phrase.",
+      "examples": [true, false],
+      "x-transition": "snap"
+    }
+  }
+}

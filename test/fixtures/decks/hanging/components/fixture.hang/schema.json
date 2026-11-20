@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.hang",
+  "description": "Test fixture: an update that never settles (on purpose).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

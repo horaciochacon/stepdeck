@@ -1,0 +1,21 @@
+{
+  "name": "stepdeck",
+  "version": "0.1.0",
+  "description": "Build, validate, check and screenshot step-by-step HTML presentations with stepdeck: declarative slide specs, data-bound components, layouts and themes.",
+  "author": {
+    "name": "horaciochacon"
+  },
+  "license": "MIT",
+  "homepage": "https://horaciochacon.github.io/stepdeck/",
+  "repository": "https://github.com/horaciochacon/stepdeck",
+  "keywords": [
+    "presentations",
+    "slides",
+    "html",
+    "data-visualization",
+    "d3"
+  ],
+  "skills": [
+    "./skill"
+  ]
+}

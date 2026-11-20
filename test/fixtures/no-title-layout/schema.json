@@ -1,0 +1,8 @@
+{
+  "name": "main-only",
+  "description": "Test-only layout: one main region and no title region.",
+  "regions": [
+    { "name": "main", "description": "Everything." }
+  ],
+  "variables": []
+}

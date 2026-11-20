@@ -1,0 +1,13 @@
+{
+  "name": "statement",
+  "description": "One large centred sentence or question, with an optional title on top and a footer line at the bottom.",
+  "hooks": { "main": "statement" },
+  "regions": [
+    { "name": "title", "description": "Optional title at the top of the canvas (the slide's `title` sugar goes here)." },
+    { "name": "main", "description": "The statement, centred both ways in the statement size. Key words can be bold via a markdown element." },
+    { "name": "footer", "description": "Footer line on the bottom margin, typically a source line." }
+  ],
+  "variables": [
+    { "name": "--statement-width", "default": "1500px", "description": "Measure (width) of the statement text." }
+  ]
+}

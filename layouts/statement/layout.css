@@ -1,0 +1,13 @@
+/* statement: one large centred sentence or question. `main` is centred both ways on the canvas
+   (inside the margins); an optional `title` sits at the top and a `footer` line on the bottom.
+   Grid variable: --statement-width (default 1500px), the measure of the main text.
+   Placement only: the statement size, centring and wrapping are the .sd-statement hook rules. */
+.sd-canvas[data-layout="statement"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--statement-width, 1500px)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "title title title" ". main ." "footer footer footer";
+  padding: var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2);
+}
+.sd-canvas[data-layout="statement"] > [data-region="title"] { align-self: start; }
+.sd-canvas[data-layout="statement"] > [data-region="footer"] { align-self: end; padding-top: var(--sd-region-gap); }
+.sd-canvas[data-layout="statement"] > [data-region="main"] { justify-content: center; }

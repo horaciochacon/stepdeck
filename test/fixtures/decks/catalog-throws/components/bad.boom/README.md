@@ -1,0 +1,3 @@
+# bad.boom
+
+Fixture only.

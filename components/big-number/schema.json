@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "big-number",
+  "description": "One large figure with an optional label and 95% interval. A change of `value` counts up when the step animates. Bind `value` to a data file so no figure is typed by hand.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["value", "format"],
+  "properties": {
+    "value": {
+      "anyOf": [
+        { "type": "number" },
+        { "type": "string", "pattern": "^\\{\\{[^{}|]+\\}\\}$" }
+      ],
+      "description": "The figure: a number, usually one data binding with no format, e.g. {{data/summary.json#/responders}} (a binding with a format gives text, which is an error here; put the format in `format`).",
+      "examples": ["{{data/summary.json#/responders}}", 2942],
+      "x-transition": "tween"
+    },
+    "format": {
+      "type": "string",
+      "minLength": 1,
+      "description": "d3-format specifier for the figure and the interval, localized by the deck language (decimal comma in `es`).",
+      "examples": [",.0f", ".1%", "~s"],
+      "x-transition": "snap"
+    },
+    "label": {
+      "type": "string",
+      "description": "Short caption under the figure.",
+      "examples": ["participants responding at 500 mg"],
+      "x-transition": "fade"
+    },
+    "ci": {
+      "anyOf": [
+        { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+        { "type": "string", "pattern": "^\\{\\{[^{}|]+\\}\\}$" }
+      ],
+      "description": "95% interval [lo, hi], shown as \"95% CI lo–hi\" (\"IC 95%\" in es) with the same format as the figure. May be one data binding that resolves to an array.",
+      "examples": [[48000, 58900]],
+      "x-transition": "fade"
+    },
+    "prefix": {
+      "type": "string",
+      "description": "Text before the figure, such as a currency sign. Not applied to the interval.",
+      "examples": ["~"],
+      "x-transition": "snap"
+    },
+    "suffix": {
+      "type": "string",
+      "description": "Text after the figure, such as a unit. Not applied to the interval.",
+      "examples": [" %", " people"],
+      "x-transition": "snap"
+    }
+  }
+}

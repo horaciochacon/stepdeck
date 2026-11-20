@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.remote-fetch",
+  "description": "Test fixture: fetches a remote URL (on purpose).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

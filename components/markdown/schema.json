@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "markdown",
+  "description": "Markdown text: paragraphs, headings, lists, emphasis, code and links. Raw HTML is shown as text, never run. {{color:<role>}} names a palette color in the deck language.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["md"],
+  "properties": {
+    "md": {
+      "type": "string",
+      "description": "The Markdown source. May contain data bindings such as {{data/summary.json#/responders | ,.0f}}, and color words such as {{color:accent}}, which become the palette's name for that color role in the deck language (blue, azul). An unknown role is an error.",
+      "examples": ["The **{{color:accent}}** line shows {{data/summary.json#/responders | ,.0f}} responders.", "- First point\n- Second point"],
+      "x-transition": "fade"
+    }
+  }
+}

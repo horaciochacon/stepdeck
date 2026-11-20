@@ -1,0 +1,31 @@
+# timeline
+
+A track between stops that fills. Each stop lights up as the fill passes it. It also works as the progress
+connector between two parts of a story ("agent's report -> our study"). Labels and subs are inline Markdown.
+
+| Prop | Type | Default | Transition | Meaning |
+|---|---|---|---|---|
+| `stops` | `[{ id?, label, sub?, at? }]` | (required) | snap | At least 2 stops. `label` and `sub` are inline Markdown (emphasis, code, links); raw HTML is shown as text. `id` is unique and defaults to the index as a string. `at` (0 to 1, increasing) places a stop; it defaults to the even position `index / (stops - 1)`. |
+| `progress` | number 0..1 | (required) | tween | How far the fill has gone, as a position on the track from 0 to 1, the same scale as a stop's `at` (not a count of stops). With evenly spaced stops 0 is the first stop and 1 the last. A stop is lit once `progress >= at`. |
+| `dashed` | boolean | `false` | snap | The unfilled track is dashed; the fill stays solid. |
+| `orient` | `"horizontal"` | `"horizontal"` | snap | The track's direction. Only `horizontal` is supported, so the prop changes nothing; it is accepted so a slide may state it. |
+| `current` | string | none | fade | The id of one stop to emphasise: a larger circle and a bold label. An unknown id is an element error naming it. |
+
+Behaviour:
+- **Driven by props only.** The component never reads the slide's step. Set `progress` and `current` per step with
+  `advance` (`advance: { prop: "progress", values: [0, 0.5, 1], start: "start" }`) or with `set` on a step.
+- **Motion** (forward by exactly one step only; any other move renders directly): the fill tweens from the previous
+  progress to the new one, and each stop fills in (or goes hollow) as the fill passes it; a new `current` grows its
+  circle and fades its label in. Going backward retracts the fill with no motion.
+- **Idempotent.** Every `update` writes the state straight from the props first and removes the inline styles the
+  motion used, so the markup after playing equals the markup after jumping.
+- **Look.** The track uses the theme's rule color and the fill its accent color. Stops are circles on the track: filled
+  with the accent once reached, hollow before. Labels sit under the track at the note size, subs at the label size,
+  both at least `--sd-min-audience-font`.
+- **Layout.** Each stop gets a label slot as wide as the closest pair of stops allows, and the track is inset by half a
+  slot at both ends, so the first and last labels stay inside the element. Long labels wrap inside their slot; the
+  element is as tall as its tallest label (measured bold, so nothing moves when `current` changes).
+- **Errors.** Fewer than 2 stops, a `progress` outside 0..1, a duplicate id, an `at` outside 0..1 or not increasing, and
+  an unknown `current` each raise an element error naming the problem.
+
+See `example.js` for a slide that uses it.

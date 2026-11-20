@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "diagram",
+  "description": "Nodes, arrows and nested groups on an explicit grid, appearing by step. Each node sits in a cell (`col`, `row`, optional spans); edges run between nodes or groups; groups draw a box around all their members. `shown` lists the ids visible at a step (hidden parts keep their place) and `highlight` dims everything else. Set the state props per step with `advance` or `set` on the slide.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cols", "rows", "nodes"],
+  "properties": {
+    "cols": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of grid columns. Cells share the element's width equally, with the theme's diagram gap between them.",
+      "examples": [3, 4],
+      "x-transition": "snap"
+    },
+    "rows": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of grid rows. Cells share the element's height equally, with the theme's diagram gap between them.",
+      "examples": [1, 2],
+      "x-transition": "snap"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The nodes, each in a grid cell (0-based `col` and `row`, optional `colspan` and `rowspan`). `label` and `sub` are inline Markdown and wrap inside the node. `shape` is `box`, `pill`, `circle` (sized to its label, capped by the cell) or `text` (no outline). Ids are unique across nodes, groups and edges.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "shape", "col", "row"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Unique id, used by edges, groups, `shown` and `highlight`." },
+          "label": { "type": "string", "description": "The node's text, inline Markdown." },
+          "sub": { "type": "string", "description": "An optional second line, inline Markdown, in the label size." },
+          "shape": { "enum": ["box", "pill", "circle", "text"], "description": "The outline drawn around the label." },
+          "col": { "type": "integer", "minimum": 0, "description": "0-based column of the node's first cell." },
+          "row": { "type": "integer", "minimum": 0, "description": "0-based row of the node's first cell." },
+          "colspan": { "type": "integer", "minimum": 1, "description": "Columns the node covers (default 1)." },
+          "rowspan": { "type": "integer", "minimum": 1, "description": "Rows the node covers (default 1)." }
+        }
+      },
+      "examples": [[{ "id": "data", "label": "Data", "shape": "box", "col": 0, "row": 0 }, { "id": "model", "label": "Model", "shape": "pill", "col": 1, "row": 0 }]],
+      "x-transition": "snap"
+    },
+    "edges": {
+      "type": "array",
+      "description": "Arrows from one node or group to another, along the line between their centres. An edge's id is its `id`, else \"<from>-><to>\"; `shown` and `highlight` name edges by that id. `label` is plain text placed beside the arrow's midpoint; `dashed` draws a dashed line.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Optional id; defaults to \"<from>-><to>\". Needed when two edges join the same pair." },
+          "from": { "type": "string", "description": "Id of the source node or group." },
+          "to": { "type": "string", "description": "Id of the target node or group (the arrowhead end)." },
+          "label": { "type": "string", "description": "Optional plain-text label beside the midpoint." },
+          "dashed": { "type": "boolean", "description": "Draw the line dashed." }
+        }
+      },
+      "examples": [[{ "from": "data", "to": "model" }, { "from": "model", "to": "result", "label": "predicts", "dashed": true }]],
+      "x-transition": "snap"
+    },
+    "groups": {
+      "type": "array",
+      "description": "Boxes drawn around their members. `contains` lists node and group ids, so groups nest; the box covers all members whether shown or not, so it never resizes. `label` (inline Markdown) is drawn inside the box's top padding, above its members. Sibling groups must not share cells.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "contains"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "description": "Unique id, used by edges, `shown` and `highlight`." },
+          "label": { "type": "string", "description": "Optional label drawn inside the box's top padding, inline Markdown." },
+          "contains": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Ids of the member nodes and groups." },
+          "dashed": { "type": "boolean", "description": "Draw the box dashed." }
+        }
+      },
+      "examples": [[{ "id": "pipeline", "label": "Pipeline", "contains": ["data", "model"] }]],
+      "x-transition": "snap"
+    },
+    "shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ids visible at this step: nodes, groups and edges (by edge id). All are visible when absent; when set, anything not listed is hidden but keeps its place. Newly shown nodes and groups fade and scale in and edges draw from source to target on a forward step. An unknown id is an error.",
+      "examples": [["data"], ["data", "model", "data->model"]],
+      "x-transition": "draw"
+    },
+    "highlight": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ids emphasised (nodes, groups, edges); everything else dims. The change fades. An unknown id is an error.",
+      "examples": [["model"], ["model", "model->result"]],
+      "x-transition": "fade"
+    }
+  }
+}

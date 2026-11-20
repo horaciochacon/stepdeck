@@ -1,0 +1,48 @@
+/* Reveal shell (spec §9): reveal.js hosts navigation, scaling, the presenter view and the overview.
+   Only reveal.css is loaded (no reveal theme); these rules undo what of it would reach the canvas,
+   so a slide looks exactly as in the bare shell. Colors come from theme tokens. */
+
+.reveal-viewport { background: var(--sd-color-letterbox, var(--sd-color-background)); color: var(--sd-color-ink); }
+.reveal { font-size: inherit; background: transparent; }
+.reveal .slides { text-align: start; }
+.reveal .slides > section {
+  padding: 0;
+  width: 1920px;
+  height: 1080px;
+  box-sizing: border-box;
+  line-height: normal;
+}
+.sd-host { position: absolute; inset: 0; }
+
+/* Until a slide is mounted (mount on approach, current ±1) its section shows only its title; this is
+   also what the overview shows for slides never visited. */
+.sd-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--sd-canvas-margin);
+  background: var(--sd-color-background);
+  color: var(--sd-color-ink);
+  font-family: var(--sd-font-body);
+}
+.sd-placeholder h2 { margin: 0; font-size: var(--sd-font-size-title); font-weight: var(--sd-font-weight-title); line-height: 1.15; }
+
+/* Step fragments carry state only; they take no space. */
+.reveal .slides section .fragment.sd-step { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Restrained chrome: a thin progress line in the muted ink. */
+.reveal .progress { height: 4px; color: var(--sd-color-muted); background: transparent; }
+
+/* Presenter preview frames: "motion off" when reduced motion is active without ?motion=full. */
+.sd-motion-off {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: var(--sd-color-alert);
+  color: var(--sd-color-background);
+  font: 600 14px/1.4 var(--sd-font-body);
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "slides/<id>.js",
+  "description": "The default export of a slide file (spec §6.1, §6.2). Props are validated separately, per step, against each component's schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "elements"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$", "description": "Slide id; equals the file name." },
+    "layout": { "type": "string", "minLength": 1, "description": "Layout name under the engine's layouts/ (default full-bleed)." },
+    "section": { "type": "string", "description": "Section name, shown as the kicker above the title: an element with the reserved id kicker (type text, region title). A layout without a title region drops it." },
+    "title": { "type": "string", "description": "Sugar for an element with the reserved id title (type text, region title, accent true): *phrase* is an accent phrase, \\* a literal asterisk." },
+    "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+    "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
+    "style": { "type": "string", "description": "Scoped CSS, prefixed with the slide id." },
+    "regions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^--[a-z0-9-]+$" },
+      "additionalProperties": { "type": "string" },
+      "description": "Layout grid variable overrides, e.g. { \"--notes-width\": \"700px\" }."
+    },
+    "notes": { "type": "string", "description": "Speaker notes for steps that have none." },
+    "seconds": { "type": "number", "exclusiveMinimum": 0, "description": "Planned speaking time." }
+  },
+  "$defs": {
+    "stepRef": {
+      "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "integer", "minimum": 0 }],
+      "description": "A step id (preferred) or a 0-based step number."
+    },
+    "elementIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "patches": {
+      "type": "object",
+      "description": "Element id -> patch. The folded result must keep props an object (checked per step)."
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1, "description": "text, markdown or a component name." },
+        "props": { "type": "object", "description": "JSON only; validated per step against the component schema." },
+        "region": { "type": "string", "minLength": 1, "description": "Layout region (default main)." },
+        "box": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y", "w", "h"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "w": { "type": "number", "exclusiveMinimum": 0 },
+            "h": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "enter": { "enum": ["fade", "rise", "wipe", "draw", "none"] },
+        "exit": { "enum": ["fade", "rise", "wipe", "draw", "none"] },
+        "collapse": { "type": "boolean" },
+        "from": { "$ref": "#/$defs/stepRef" },
+        "at": { "type": "array", "items": { "$ref": "#/$defs/stepRef" } },
+        "advance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prop", "values"],
+          "properties": {
+            "prop": { "type": "string", "minLength": 1 },
+            "values": { "type": "array", "minItems": 1 },
+            "start": { "$ref": "#/$defs/stepRef" }
+          }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Step id; must not be digits only (ambiguous with a step number)." },
+        "set": { "$ref": "#/$defs/patches" },
+        "replace": { "$ref": "#/$defs/patches" },
+        "show": { "$ref": "#/$defs/elementIds" },
+        "hide": { "$ref": "#/$defs/elementIds" },
+        "only": { "$ref": "#/$defs/patches" },
+        "notes": { "type": "string" },
+        "transition": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "stagger": { "type": "number", "minimum": 0 },
+            "duration": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

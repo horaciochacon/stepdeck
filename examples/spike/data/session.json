@@ -1,0 +1,29 @@
+{
+  "title": "Agent session",
+  "command": "assistant \"summarize survey.csv in a short report\"",
+  "tasks": ["Check the data", "Summarize responses", "Write the report"],
+  "events": [
+    { "type": "note", "text": "Goal: summarize the survey in a short report." },
+    { "type": "read", "text": "data/survey.csv" },
+    { "type": "read", "text": "docs/codebook.md" },
+    { "type": "run", "text": "wc -l data/survey.csv" },
+    { "type": "task", "index": 0, "status": "active" },
+    { "type": "result", "text": "1205 data/survey.csv (1,204 rows + header)" },
+    { "type": "task", "index": 0, "status": "done" },
+    { "type": "task", "index": 1, "status": "active" },
+    { "type": "file", "text": "src/summarize.py", "status": "created" },
+    { "type": "run", "text": "python src/summarize.py" },
+    { "type": "error", "text": "KeyError: 'region'" },
+    { "type": "note", "text": "The codebook names that column 'site'." },
+    { "type": "code", "lang": "python", "text": "counts = df.groupby(\"site\").size()" },
+    { "type": "file", "text": "src/summarize.py", "status": "edited" },
+    { "type": "run", "text": "python src/summarize.py" },
+    { "type": "result", "text": "3 tables written to out/tables/" },
+    { "type": "task", "index": 1, "status": "done" },
+    { "type": "task", "index": 2, "status": "active" },
+    { "type": "file", "text": "src/report.py", "status": "created" },
+    { "type": "run", "text": "python src/report.py" },
+    { "type": "file", "text": "out/report.md", "status": "created" },
+    { "type": "task", "index": 2, "status": "done" }
+  ]
+}

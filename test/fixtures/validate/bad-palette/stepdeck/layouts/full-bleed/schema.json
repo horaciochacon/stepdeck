@@ -1,0 +1,15 @@
+{
+  "name": "full-bleed",
+  "description": "Fixture layout.",
+  "regions": [
+    {
+      "name": "title",
+      "description": "Title."
+    },
+    {
+      "name": "main",
+      "description": "Main."
+    }
+  ],
+  "variables": []
+}

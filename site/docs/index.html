@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stepdeck docs</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../site.css">
+<link rel="modulepreload" href="viewer.js">
+<link rel="modulepreload" href="../../vendor/marked/marked.esm.js">
+</head>
+<body>
+<header class="site-header">
+  <nav class="site-nav" aria-label="Site">
+    <a class="brand" href="../../">stepdeck</a>
+    <a href="?p=docs/index.md">Docs</a>
+    <a href="../gallery/">Gallery</a>
+    <a href="https://github.com/horaciochacon/stepdeck">GitHub</a>
+  </nav>
+</header>
+<main class="page" data-state="loading">
+  <article class="prose" id="doc"><p class="muted">Loading…</p></article>
+</main>
+<script type="module">
+import { loadPage } from "./viewer.js";
+import { escapeHtml } from "../../core/kit.js";
+
+const main = document.querySelector("main");
+const doc = document.getElementById("doc");
+const page = await loadPage(location.search);
+if (page.state === "ready") {
+  doc.innerHTML = page.html;
+  document.title = `${page.title ?? page.path} · stepdeck docs`;
+  main.dataset.state = "ready";
+  if (location.hash.length > 1) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+} else {
+  doc.innerHTML = `<h1>Page not found</h1><p>Page not found: <code>${escapeHtml(page.requested ?? "")}</code></p><p><a href="?p=docs/index.md">Back to the docs home</a></p>`;
+  document.title = "Page not found · stepdeck docs";
+  main.dataset.state = "missing";
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+/* main-only: a test-only layout with one main region and no title region, so a slide's section has
+   nowhere to go. Copied into a temporary engine as layouts/main-only by the kicker tests; never shipped. */
+.sd-canvas[data-layout="main-only"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "main";
+  padding: var(--sd-canvas-margin);
+}

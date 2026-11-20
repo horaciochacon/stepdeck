@@ -1,0 +1,4 @@
+dose_mg,regimen,responders,rate
+0,single,0,0
+250,single,100,1
+500,single,300,3

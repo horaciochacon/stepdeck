@@ -1,0 +1,33 @@
+/* title: a cover slide, laid out like a printed cover. The `title` region spans the top rows: the kicker (the
+   slide's section) sits on the top margin and the title on the bottom of that band, so the title and the
+   subtitle land in the upper middle. The meta block (authors, affiliation, date) sits on the bottom margin,
+   with the footer line below it. The space between the subtitle and the meta block is the flexible row.
+   Grid variables: --title-width (default 1400px), the measure of the title and subtitle;
+   --meta-gap (default 64px), the least space between the subtitle and the meta block;
+   --figure-width (default 720px), the width of the optional figure column on the right.
+   The `figure` region spans the rows above the footer. While it is empty it takes no room and the
+   layout is the plain cover; once it holds an element the layout switches to two columns.
+   The title region sits in a stretched or sized column: core makes it an inline-size container.
+   Placement only: the cover title, subtitle and meta typography are hook rules (core and theme.css). */
+.sd-canvas[data-layout="title"] {
+  grid-template-columns: minmax(0, var(--title-width, 1400px)) minmax(0, 1fr);
+  grid-template-rows: minmax(min-content, 1fr) auto minmax(var(--meta-gap, 64px), 1fr) auto auto;
+  grid-template-areas: "title figure" "subtitle figure" ". figure" "meta figure" "footer footer";
+  padding: var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2);
+}
+/* The band holds the kicker and the title: the kicker takes the free space after it, so it stays on the top
+   margin and the title sits at the bottom of the band. A cover with no kicker has its title at the bottom. */
+.sd-canvas[data-layout="title"] > [data-region="title"] { justify-content: flex-end; }
+.sd-canvas[data-layout="title"] > [data-region="title"] > .sd-kicker { margin-block-end: auto; }
+.sd-canvas[data-layout="title"] > [data-region="subtitle"] { padding-top: calc(var(--sd-space) * 2); }
+.sd-canvas[data-layout="title"] > [data-region="meta"] { gap: calc(var(--sd-space) / 2); }
+.sd-canvas[data-layout="title"] > [data-region="footer"] { padding-top: var(--sd-region-gap); }
+/* A figure beside the title: the title column takes the rest of the width, the figure sits on the
+   right margin, centered on the rows above the footer. */
+.sd-canvas[data-layout="title"]:has(> [data-region="figure"] > .sd-el) {
+  grid-template-columns: minmax(0, 1fr) var(--figure-width, 720px);
+  column-gap: var(--sd-canvas-margin);
+}
+.sd-canvas[data-layout="title"] > [data-region="figure"] { justify-content: center; }
+/* A single element fills the region's height, so a chart can measure it at mount. */
+.sd-canvas[data-layout="title"] > [data-region="figure"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }

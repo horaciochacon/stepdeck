@@ -1,0 +1,9 @@
+{
+  "name": "fourth",
+  "description": "Test-only layout: a title band over one main region, grid placement only.",
+  "regions": [
+    { "name": "title", "description": "Title band (the slide's `title` sugar goes here)." },
+    { "name": "main", "description": "Everything else." }
+  ],
+  "variables": []
+}

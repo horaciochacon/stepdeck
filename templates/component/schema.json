@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "__NAME__",
+  "description": "A list of items with every item up to the current stage marked. Replace this description with what your component shows: its first sentence is the catalog summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["items"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "description": "The items, in order, one line each.",
+      "examples": [["Collect", "Clean", "Model", "Share"]],
+      "x-transition": "snap"
+    },
+    "stage": {
+      "type": "integer",
+      "minimum": -1,
+      "default": 0,
+      "description": "Index of the current item: items up to it are marked and it is shown in bold; -1 marks none. Drive it from the slide with `advance` or set it in steps. Newly reached items fade in when the step animates.",
+      "examples": [0, 2],
+      "x-transition": "fade"
+    }
+  }
+}

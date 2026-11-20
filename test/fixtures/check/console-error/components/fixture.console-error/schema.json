@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.console-error",
+  "description": "Test fixture for the check rule console-error.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

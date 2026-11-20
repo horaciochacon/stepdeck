@@ -1,0 +1,15 @@
+{
+  "name": "halves",
+  "description": "Two halves side by side under a title band, with a footer line: before and after, prompt and tasks.",
+  "regions": [
+    { "name": "title", "description": "Title band across the canvas (the slide's `title` sugar goes here)." },
+    { "name": "left", "description": "The left half. A single element fills the half's height." },
+    { "name": "right", "description": "The right half. A single element fills the half's height." },
+    { "name": "footer", "description": "Footer line across the canvas, typically a source line." }
+  ],
+  "variables": [
+    { "name": "--split", "default": "1fr 1fr", "description": "Column tracks of the two halves, for example `2fr 1fr`." },
+    { "name": "--gutter", "default": "var(--sd-region-gap)", "description": "Space between the two halves." },
+    { "name": "--align", "default": "start", "description": "Vertical alignment of each half's content: `start`, `center` or `end`. A single element still fills its half; its content moves inside it." }
+  ]
+}

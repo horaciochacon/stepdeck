@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bad.boom",
+  "description": "A fixture component whose code throws on import. Its schema is all the catalog needs.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "level": {
+      "type": "integer",
+      "description": "A level that animates.",
+      "examples": [1],
+      "x-transition": "tween"
+    },
+    "label": {
+      "type": "string",
+      "description": "A label that snaps.",
+      "examples": ["x"],
+      "x-transition": "snap"
+    }
+  }
+}

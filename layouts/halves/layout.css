@@ -1,0 +1,23 @@
+/* halves: a title band over two side-by-side halves (before/after, prompt/tasks) and a footer.
+   Grid variables: --split (default 1fr 1fr), the column tracks (e.g. "2fr 1fr");
+   --gutter (default var(--sd-region-gap)), the space between the halves;
+   --align (default start; start, center or end), the vertical alignment of each half's content. */
+.sd-canvas[data-layout="halves"] {
+  grid-template-columns: var(--split, 1fr 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "title title" "left right" "footer footer";
+  column-gap: var(--gutter, var(--sd-region-gap));
+  padding: var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2);
+}
+.sd-canvas[data-layout="halves"] > [data-region="title"] { padding-bottom: calc(var(--sd-region-gap) * 2); }
+.sd-canvas[data-layout="halves"] > [data-region="footer"] { padding-top: var(--sd-region-gap); }
+/* A single element fills its half's height, so a figure or terminal can measure it at mount. */
+.sd-canvas[data-layout="halves"] > [data-region="left"] > .sd-el:only-child,
+.sd-canvas[data-layout="halves"] > [data-region="right"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }
+/* --align moves each half's content vertically. Stacked elements move inside the region; a lone element
+   keeps filling the half (so a chart still measures the full height) and its own content moves inside it.
+   `safe` keeps content that overflows from being pushed above the half. */
+.sd-canvas[data-layout="halves"] > [data-region="left"],
+.sd-canvas[data-layout="halves"] > [data-region="right"] { justify-content: safe var(--align, start); }
+.sd-canvas[data-layout="halves"] > [data-region="left"] > .sd-el:only-child,
+.sd-canvas[data-layout="halves"] > [data-region="right"] > .sd-el:only-child { align-content: safe var(--align, start); }

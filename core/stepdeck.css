@@ -1,0 +1,313 @@
+/* stepdeck structural CSS. Only structure here: colors, fonts and sizes come from theme tokens.
+
+   Cascade layers (default-theme spec §5.1), lowest priority first: sd-core (this file: sd-core.components,
+   then sd-core.hooks), sd-layout (layout.css), sd-theme (the theme's theme.css), sd-deck (declared and empty,
+   reserved for per-deck overrides), sd-slide (a slide's own `style`). Every sheet the engine writes starts with the same order statement. Reveal's sheets
+   (vendor/reveal/reveal.css, core/shells/reveal.css) stay unlayered; they style the shell, not the canvas. */
+@layer sd-core, sd-layout, sd-theme, sd-deck, sd-slide;
+@layer sd-core.components, sd-core.hooks;
+
+@layer sd-core.components {
+/* (the rules of this layer are not indented, to keep them readable) */
+
+html, body { margin: 0; padding: 0; height: 100%; }
+body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-background)); }
+
+/* Bare shell stage: the canvas is scaled (transform) to fit and letterboxed. */
+.sd-stage { position: fixed; inset: 0; overflow: hidden; }
+
+.sd-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  box-sizing: border-box;
+  display: grid;
+  overflow: hidden;
+  transform-origin: 0 0;
+  background: var(--sd-color-background);
+  color: var(--sd-color-ink);
+  font-family: var(--sd-font-body);
+  font-size: var(--sd-font-size-body);
+  line-height: var(--sd-line-height);
+}
+.sd-canvas *, .sd-canvas *::before, .sd-canvas *::after { box-sizing: border-box; }
+/* Laid out (so components can measure) but not shown until the first step is applied. */
+.sd-canvas.sd-booting { visibility: hidden !important; }
+
+.sd-region { display: flex; flex-direction: column; gap: var(--sd-region-gap); min-width: 0; min-height: 0; }
+.sd-el { position: relative; min-width: 0; }
+.sd-el[data-box] { position: absolute; }
+
+/* Visibility (spec §6.2): hidden keeps its space; collapse removes it. State rules are !important: an
+   important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
+   rule can show a hidden element (or hide a failed one). */
+.sd-el.sd-hidden { visibility: hidden !important; }
+.sd-el.sd-collapsed { display: none !important; }
+
+/* Errors stay visible whatever the step says (after the rules above: same layer and specificity). */
+.sd-el.sd-failed { visibility: visible !important; display: block !important; }
+.sd-error {
+  visibility: visible;
+  margin: 0;
+  padding: var(--sd-space);
+  border: 4px solid var(--sd-color-alert);
+  color: var(--sd-color-alert);
+  background: var(--sd-color-background);
+  font-family: var(--sd-font-mono);
+  font-size: var(--sd-min-audience-font);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sd-slide-error { position: absolute; left: var(--sd-canvas-margin); right: var(--sd-canvas-margin); bottom: var(--sd-canvas-margin); z-index: 10; }
+
+/* text component. A body text has no size of its own: it inherits the body size from the canvas, or the
+   size of the hook it sits in (.sd-title, .sd-statement, .sd-subtitle, .sd-meta). */
+.sd-text { margin: 0; }
+.sd-text.sd-role-note { font-size: var(--sd-font-size-note); color: var(--sd-color-muted); }
+.sd-text.sd-role-label { font-size: var(--sd-font-size-label); color: var(--sd-color-muted); }
+.sd-text.sd-role-source { font-size: var(--sd-font-size-source); color: var(--sd-color-muted); }
+
+/* markdown: size and line height are inherited (body text from the canvas, or the hook it sits in); the
+   first and last blocks sit flush with the element box. */
+.sd-markdown > :first-child { margin-top: 0; }
+.sd-markdown > :last-child { margin-bottom: 0; }
+.sd-markdown p, .sd-markdown ul, .sd-markdown ol, .sd-markdown blockquote, .sd-markdown pre { margin: 0 0 var(--sd-space); }
+.sd-markdown h1, .sd-markdown h2, .sd-markdown h3, .sd-markdown h4 { margin: 0 0 var(--sd-space); font-weight: var(--sd-font-weight-title); line-height: 1.15; }
+.sd-markdown h1 { font-size: var(--sd-font-size-title); }
+.sd-markdown h2, .sd-markdown h3, .sd-markdown h4 { font-size: calc(var(--sd-font-size-body) * 1.2); }
+.sd-markdown ul, .sd-markdown ol { padding-left: 1.2em; }
+.sd-markdown li { margin-bottom: calc(var(--sd-space) / 2); }
+/* Inline Markdown (core/inline.js) in every component that shows author text. */
+.sd-markdown code, .sd-list-text code, .sd-list-sub code, .sd-chat-text code { font-family: var(--sd-font-mono); font-size: var(--sd-font-size-label); background: var(--sd-color-surface); padding: 0 0.2em; border-radius: 4px; }
+.sd-diagram code, .sd-timeline code, .sd-image-caption code { font-family: var(--sd-font-mono); }
+.sd-markdown strong, .sd-list-text strong, .sd-list-sub strong, .sd-chat-text strong, .sd-diagram strong, .sd-timeline strong, .sd-image-caption strong { font-weight: var(--sd-font-weight-strong, 600); }
+.sd-markdown a, .sd-list-text a, .sd-list-sub a, .sd-chat-text a, .sd-diagram a, .sd-timeline a, .sd-image-caption a { color: var(--sd-color-accent); }
+.sd-markdown pre { background: var(--sd-color-surface); padding: var(--sd-space); overflow: hidden; }
+.sd-markdown pre code { background: none; padding: 0; }
+.sd-markdown blockquote { padding-left: var(--sd-space); border-left: 4px solid var(--sd-color-rule); color: var(--sd-color-muted); }
+
+/* big-number: the figure in the display size, label and interval in the note size. */
+.sd-big-number-value { font-size: var(--sd-font-size-display); font-weight: var(--sd-font-weight-title); line-height: var(--sd-line-height-tight); font-variant-numeric: tabular-nums; color: var(--sd-color-accent); }
+.sd-big-number-suffix { font-size: 0.4em; font-weight: 500; }
+.sd-big-number-label, .sd-big-number-ci { margin: 0; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height); }
+.sd-big-number-label { margin-top: calc(var(--sd-space) / 2); color: var(--sd-color-ink); }
+.sd-big-number-ci { color: var(--sd-color-muted); }
+.sd-big-number-label:empty, .sd-big-number-ci:empty { display: none !important; }
+
+/* list component: items in a column. Hidden items keep their space (visibility); `active` mutes the text of the
+   others (a color, so the engine can tween it); a checklist box is an svg whose tick shows once the item is done.
+   Text is body size, subs note size; both are above --sd-min-audience-font in every theme. */
+.sd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sd-space); }
+.sd-list[data-rule="true"] { padding-left: calc(var(--sd-space) * 1.5); border-left: calc(var(--sd-rule-width) * 3) solid var(--sd-color-accent); }
+.sd-list-item { display: flex; gap: var(--sd-space); min-width: 0; font-size: var(--sd-font-size-body); line-height: var(--sd-line-height); }
+.sd-list-item[data-visible="false"] { visibility: hidden !important; }
+.sd-list[data-active="true"] .sd-list-item[data-active="false"] .sd-list-text { color: var(--sd-color-muted); }
+.sd-list-marker { flex: none; min-width: 1.4em; color: var(--sd-color-muted); font-variant-numeric: tabular-nums; }
+.sd-list-item[data-active="true"] .sd-list-marker { color: var(--sd-color-accent); }
+.sd-list-box { display: flex; align-items: center; height: calc(1em * var(--sd-line-height)); }
+.sd-list-box svg { display: block; width: 0.9em; height: 0.9em; overflow: visible; }
+.sd-list-box-frame { fill: none; stroke: currentColor; stroke-width: 2; }
+.sd-list-tick { fill: none; stroke: var(--sd-color-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.sd-list-item[data-done="false"] .sd-list-tick { visibility: hidden !important; }
+.sd-list-body { flex: 1 1 0; min-width: 0; }
+.sd-list-text { overflow-wrap: anywhere; }
+.sd-list-sub { overflow-wrap: anywhere; font-size: var(--sd-font-size-note); color: var(--sd-color-muted); }
+
+/* chat component: messages in a column. Hidden messages keep their space (visibility). `bubbles` aligns the user
+   on the right and the agent and notes on the left; `card` stacks full-width bordered cards with the label on
+   top (the prompt look). Surfaces and borders are theme tokens: a user bubble is the surface tinted with the
+   accent, an agent bubble the plain surface, both with ink text. Text is body size, labels label size (28px). */
+.sd-chat { display: flex; flex-direction: column; gap: var(--sd-space); }
+.sd-chat-msg { min-width: 0; font-size: var(--sd-font-size-body); line-height: var(--sd-line-height); color: var(--sd-color-ink); }
+.sd-chat-msg[data-visible="false"] { visibility: hidden !important; }
+.sd-chat-label { margin-bottom: calc(var(--sd-grid) / 2); font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
+.sd-chat-text { overflow-wrap: anywhere; }
+.sd-chat-ghost { visibility: hidden !important; }
+.sd-chat[data-style="bubbles"] .sd-chat-msg { max-width: 80%; padding: var(--sd-space) calc(var(--sd-space) * 1.5); border: var(--sd-rule-width) solid var(--sd-color-rule); border-radius: calc(var(--sd-space) * 1.5); background: var(--sd-color-surface); align-self: flex-start; }
+.sd-chat[data-style="bubbles"] .sd-chat-msg[data-role="user"] { align-self: flex-end; border-color: var(--sd-color-accent); background: color-mix(in srgb, var(--sd-color-accent) 14%, var(--sd-color-surface)); }
+.sd-chat[data-style="bubbles"] .sd-chat-msg[data-role="note"] { border-style: dashed; background: none; color: var(--sd-color-muted); }
+.sd-chat[data-style="bubbles"] .sd-chat-msg[data-role="user"] .sd-chat-label { text-align: right; }
+.sd-chat[data-style="card"] .sd-chat-msg { padding: var(--sd-space) calc(var(--sd-space) * 1.5); border: 2px solid var(--sd-color-accent); border-radius: calc(var(--sd-grid) / 2); background: var(--sd-color-background); }
+.sd-chat[data-style="card"] .sd-chat-msg[data-role="note"] { border-color: var(--sd-color-rule); }
+
+/* diagram component: one svg sized to the element; node, edge and group labels are html in foreignObjects so
+   they wrap. Node shapes are sized to their label (measured on .sd-diagram-label-content); edge labels sit in
+   a top layer with a background backing. foreignObjects do not clip, so a label too long for its node shows (and `check` sees it) rather
+   than being cut. Hidden parts keep their place (visibility). `highlight` fades the shapes and lines of the
+   other parts and mutes their text; text itself never fades, so contrast holds. */
+.sd-region > .sd-el[data-type="diagram"] { flex: 1 1 0; min-height: 0; }
+.sd-diagram { display: block; overflow: visible; }
+.sd-diagram foreignObject { overflow: visible; }
+.sd-diagram [data-visible="false"] { visibility: hidden !important; }
+.sd-diagram-node { transform-box: fill-box; transform-origin: center; }
+.sd-diagram-node .sd-diagram-shape { fill: var(--sd-color-surface); stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
+.sd-diagram-node[data-shape="text"] .sd-diagram-shape { fill: none; stroke: none; }
+.sd-diagram-group .sd-diagram-shape { fill: none; stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
+.sd-diagram-group[data-dashed="true"] .sd-diagram-shape,
+.sd-diagram-edge[data-dashed="true"] .sd-diagram-line { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
+.sd-diagram-line { fill: none; stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
+.sd-diagram-arrowhead { fill: var(--sd-color-ink); stroke: none; }
+.sd-diagram-node[data-dim="true"] .sd-diagram-shape,
+.sd-diagram-group[data-dim="true"] .sd-diagram-shape,
+.sd-diagram-edge[data-dim="true"] .sd-diagram-line { opacity: 0.3; }
+.sd-diagram-node[data-dim="true"] .sd-diagram-text { color: var(--sd-color-muted); }
+.sd-diagram-label { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+.sd-diagram-label-content { max-width: 100%; display: flex; flex-direction: column; align-items: center; gap: calc(var(--sd-grid) / 2); }
+.sd-diagram-text, .sd-timeline-text { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height-tight); color: var(--sd-color-ink); }
+.sd-diagram-sub, .sd-timeline-sub { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
+.sd-diagram-edge-label-row { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; }
+.sd-diagram-edge-label-row[data-side="right"] { justify-content: center; align-items: flex-start; text-align: left; }
+.sd-diagram-edge-label { max-width: 100%; padding: 0 var(--sd-grid); overflow-wrap: anywhere; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
+.sd-diagram-legend-row { height: 100%; display: flex; align-items: center; }
+.sd-diagram-legend { padding: 0 var(--sd-grid); white-space: nowrap; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
+
+/* chart.line component: sizes and neutral colors from tokens; series colors come from the palette. */
+.sd-chart-line, .sd-chart-bar { display: block; overflow: visible; }
+.sd-chart-line text, .sd-chart-bar text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
+.sd-chart-line text:not(.sd-series-label) { fill: var(--sd-color-muted); }
+.sd-chart-line .sd-axis-y text { text-anchor: end; }
+.sd-chart-line .sd-axis-x text { text-anchor: middle; }
+.sd-chart-line .sd-grid-line, .sd-chart-bar .sd-grid-line { stroke: var(--sd-color-grid, var(--sd-color-rule)); stroke-width: 1.5; }
+.sd-chart-line .sd-axis-line, .sd-chart-bar .sd-axis-line { stroke: var(--sd-color-muted); stroke-width: 2; }
+.sd-chart-line text.sd-axis-title, .sd-chart-bar text.sd-axis-title { fill: var(--sd-color-ink); }
+.sd-chart-line .sd-axis-title-y { text-anchor: start; }
+.sd-chart-line .sd-axis-title-x { text-anchor: middle; }
+.sd-chart-line .sd-line { fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.sd-chart-line .sd-band { stroke: none; fill-opacity: 0.15; }
+.sd-chart-line .sd-series-label { font-weight: 600; }
+.sd-chart-line .sd-annotation-rule { stroke: var(--sd-color-muted); stroke-width: 2; stroke-dasharray: 8 8; }
+.sd-chart-line text.sd-annotation-label { fill: var(--sd-color-ink); }
+
+.sd-chart-bar .sd-axis-value text { fill: var(--sd-color-muted); }
+.sd-chart-bar .sd-band-label { fill: var(--sd-color-ink); }
+.sd-chart-bar .sd-bar-label { font-weight: 600; }
+.sd-chart-bar .sd-whisker-line, .sd-chart-bar .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
+.sd-chart-bar .sd-bar-group[data-visible="false"], .sd-chart-bar .sd-band-label[data-visible="false"] { visibility: hidden !important; }
+
+/* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
+   The element fills its region; the log has a definite height (it never grows with its lines), so the
+   component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */
+.sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.sd-terminal {
+  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+  border: 2px solid var(--sd-color-rule); border-radius: 12px; overflow: hidden;
+  background: var(--sd-color-background); color: var(--sd-color-ink);
+  font-size: var(--sd-font-size-label);
+}
+.sd-terminal-bar { flex: none; padding: calc(var(--sd-space) / 2) var(--sd-space); border-bottom: 2px solid var(--sd-color-rule); background: var(--sd-color-surface); }
+.sd-terminal-title { color: var(--sd-color-muted); font-size: var(--sd-font-size-label); }
+.sd-terminal-body { flex: 1 1 0; min-height: 0; display: flex; }
+.sd-terminal-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; padding: var(--sd-space) calc(var(--sd-space) * 1.5); background: var(--sd-color-surface); }
+.sd-terminal-commandline, .sd-terminal-line {
+  flex: none; display: flex; gap: var(--sd-space); white-space: nowrap;
+  font-family: var(--sd-font-mono); font-size: var(--sd-font-size-label); line-height: var(--sd-line-height);
+}
+.sd-terminal-line { height: calc(var(--sd-font-size-label) * var(--sd-line-height)); }
+.sd-terminal-commandline { min-height: calc(var(--sd-font-size-label) * var(--sd-line-height)); margin-bottom: var(--sd-space); padding-bottom: var(--sd-space); border-bottom: 2px solid var(--sd-color-rule); box-sizing: content-box; }
+.sd-terminal-prompt { color: var(--sd-color-accent); }
+.sd-terminal-command { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sd-terminal-log { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.sd-terminal-marker { flex: 0 0 6ch; color: var(--sd-color-muted); }
+.sd-terminal-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sd-terminal-line[data-type="read"] .sd-terminal-text, .sd-terminal-line[data-type="note"] .sd-terminal-text, .sd-terminal-line[data-type="task"] .sd-terminal-text { color: var(--sd-color-muted); }
+.sd-terminal-line[data-type="run"] .sd-terminal-marker, .sd-terminal-line[data-type="code"] .sd-terminal-marker, .sd-terminal-line[data-type="file"] .sd-terminal-marker { color: var(--sd-color-accent); }
+.sd-terminal-line[data-type="error"] .sd-terminal-marker, .sd-terminal-line[data-type="error"] .sd-terminal-text { color: var(--sd-color-alert); }
+.sd-terminal-side { flex: none; width: 520px; padding: var(--sd-space) calc(var(--sd-space) * 1.5); border-left: 2px solid var(--sd-color-rule); overflow: hidden; }
+.sd-terminal-heading { margin: 0 0 calc(var(--sd-space) / 2); font-size: var(--sd-font-size-label); font-weight: 600; color: var(--sd-color-muted); }
+.sd-terminal-tasks, .sd-terminal-files { list-style: none; margin: 0 0 calc(var(--sd-space) * 2); padding: 0; }
+.sd-terminal-task { display: flex; gap: var(--sd-space); line-height: var(--sd-line-height); margin-bottom: calc(var(--sd-space) / 2); }
+.sd-terminal-task-mark { flex: none; font-family: var(--sd-font-mono); color: var(--sd-color-muted); }
+.sd-terminal-task[data-status="active"] .sd-terminal-task-mark { color: var(--sd-color-accent); }
+.sd-terminal-task[data-status="done"] .sd-terminal-task-mark { color: var(--sd-color-ink); }
+.sd-terminal-task[data-status="pending"] .sd-terminal-task-text { color: var(--sd-color-muted); }
+.sd-terminal-file { display: flex; flex-direction: column; line-height: var(--sd-line-height); margin-bottom: calc(var(--sd-space) / 2); }
+.sd-terminal-file-path { font-family: var(--sd-font-mono); overflow-wrap: anywhere; }
+.sd-terminal-file-status { color: var(--sd-color-muted); }
+.sd-terminal-file[data-status="created"] .sd-terminal-file-status { color: var(--sd-color-accent); }
+
+/* Capture mode: no CSS motion at all. */
+html.capture *, html.capture *::before, html.capture *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* timeline component: one svg sized to the element holds the track, the fill and the stops; the stop labels
+   are html in foreignObjects under the track so they wrap. The track is a rule-colored line (dashed on
+   request), the fill an accent line over it. A reached stop is filled with the accent, an unreached one is
+   hollow (background fill); the current stop is larger (r attribute) and its label bold. */
+.sd-timeline { display: block; overflow: visible; }
+.sd-timeline foreignObject { overflow: visible; }
+.sd-timeline-track, .sd-timeline-fill { fill: none; stroke-width: calc(var(--sd-rule-width) * 2); stroke-linecap: butt; }
+.sd-timeline-track { stroke: var(--sd-color-rule); }
+.sd-timeline[data-dashed="true"] .sd-timeline-track { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
+.sd-timeline-fill { stroke: var(--sd-color-accent); }
+.sd-timeline-stop { fill: var(--sd-color-background); stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
+.sd-timeline-stop[data-reached="true"] { fill: var(--sd-color-accent); stroke: var(--sd-color-accent); }
+.sd-timeline-label { width: 100%; display: flex; flex-direction: column; align-items: center; text-align: center; gap: calc(var(--sd-grid) / 2); }
+.sd-timeline-label[data-current="true"] .sd-timeline-text { font-weight: var(--sd-font-weight-strong, 600); }
+
+/* image component: a figure that fills its element; the picture takes the room the caption leaves, and
+   `fit` picks object-fit. The caption is the note size in the muted colour and wraps inside the box. */
+.sd-region > .sd-el[data-type="image"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.sd-image { margin: 0; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: var(--sd-space); }
+.sd-image-img { display: block; flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; }
+.sd-image[data-fit="cover"] .sd-image-img { object-fit: cover; }
+.sd-image-caption { overflow-wrap: anywhere; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height); color: var(--sd-color-muted); }
+
+} /* @layer sd-core.components */
+
+/* Hook defaults (default-theme spec §5.2, §10.2): token-driven, so a theme with only tokens.css, and a layout
+   that knows nothing about themes, still get a styled title, kicker, accent, subtitle, meta and statement.
+   A theme's theme.css (layer sd-theme) overrides these whatever their specificity. Core puts a hook class
+   on a region and on every element wrapper in it, so these rules set inherited properties only (font,
+   colour, tracking, line height, alignment, wrapping), never boxes, which would be drawn twice.
+   Optional tokens fall back: title colour to ink, kicker colour to muted, kicker size to the label size,
+   title tracking to normal, cover tracking to the title's, cover-with-figure size to the cover size. */
+@layer sd-core.hooks {
+  .sd-title {
+    font-size: var(--sd-font-size-title);
+    font-weight: var(--sd-font-weight-title);
+    line-height: var(--sd-line-height-tight);
+    letter-spacing: var(--sd-letter-spacing-title, normal);
+    color: var(--sd-color-title, var(--sd-color-ink));
+  }
+  .sd-kicker {
+    font-size: var(--sd-font-size-kicker, var(--sd-font-size-label));
+    font-weight: var(--sd-font-weight-strong, 600);
+    line-height: var(--sd-line-height-tight);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--sd-color-kicker, var(--sd-color-muted));
+  }
+  /* An <em>, but not italic by default: the theme decides the accent's look (colour here). */
+  .sd-accent { color: var(--sd-color-accent); font-style: normal; }
+  .sd-subtitle {
+    font-size: var(--sd-font-size-heading);
+    line-height: var(--sd-line-height-tight);
+    color: var(--sd-color-muted);
+    text-wrap: balance;
+  }
+  .sd-meta { font-size: var(--sd-font-size-note); }
+  /* The statement size reaches text and markdown only: a list, chart or other component in a statement
+     region keeps its own type. The region carries .sd-statement too, for themes, but gets no defaults. */
+  .sd-el.sd-statement:is([data-type="text"], [data-type="markdown"]) {
+    font-size: var(--sd-font-size-statement);
+    line-height: var(--sd-line-height-tight);
+    text-align: center;
+    text-wrap: balance;
+  }
+  /* The cover title (a layout of kind "cover"). A cover whose `figure` region holds an element has a narrow title
+     column, so its title drops to the cover-figure size. The trigger is the figure's presence (the same test the
+     title layout uses to make two columns), not a measured width, so it does not depend on a pixel threshold
+     and does not move with --title-width or --figure-width. */
+  [data-kind="cover"] .sd-title {
+    font-size: var(--sd-font-size-cover);
+    letter-spacing: var(--sd-letter-spacing-cover, var(--sd-letter-spacing-title, normal));
+    text-wrap: balance;
+  }
+  [data-kind="cover"]:has(> [data-region="figure"] > .sd-el) .sd-title {
+    font-size: var(--sd-font-size-cover-figure, var(--sd-font-size-cover));
+  }
+}

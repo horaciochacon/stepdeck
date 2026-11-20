@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chat",
+  "description": "An exchange as bubbles, or a single prompt or quote as a bordered card. `shown` says how many messages are visible (hidden ones keep their space), and `typing` types the newest message on a forward step. Set `shown` per step with `advance` or `set` on the slide.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["messages"],
+  "properties": {
+    "messages": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The messages, in order. `role` is `user` (right in bubbles), `agent` or `note` (left). `label` is an optional line above the text, shown at the label size. `text` is inline Markdown (emphasis, code, links); raw HTML is shown as text.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "text"],
+        "properties": {
+          "role": { "enum": ["user", "agent", "note"], "description": "Who speaks: `user`, `agent` or `note`." },
+          "label": { "type": "string", "description": "Optional line above the text, for example a name or `The brief`." },
+          "text": { "type": "string", "description": "The message, inline Markdown." }
+        }
+      },
+      "examples": [[{ "role": "user", "label": "You", "text": "Can we **validate** this?" }, { "role": "agent", "text": "Yes, on held-out data." }]],
+      "x-transition": "snap"
+    },
+    "style": {
+      "enum": ["bubbles", "card"],
+      "default": "bubbles",
+      "description": "`bubbles`: rounded bubbles, `user` on the right and the rest on the left. `card`: full-width bordered cards with the label at the top, for a prompt or a quote.",
+      "examples": ["bubbles", "card"],
+      "x-transition": "snap"
+    },
+    "shown": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many messages are visible (messages 0..shown-1); all when absent. Hidden messages keep their space, so nothing reflows. New messages rise and fade in, staggered, on a forward step.",
+      "examples": [0, 2],
+      "x-transition": "fade"
+    },
+    "typing": {
+      "type": "boolean",
+      "default": false,
+      "description": "Type the text of the newest message, character by character, when it appears on a forward step. Jumping or going backward shows the full text at once.",
+      "examples": [true],
+      "x-transition": "draw"
+    }
+  }
+}

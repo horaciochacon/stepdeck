@@ -1,0 +1,37 @@
+{
+  "name": "stepdeck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Declarative step-by-step HTML presentation engine",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/horaciochacon/stepdeck.git"
+  },
+  "homepage": "https://horaciochacon.github.io/stepdeck/",
+  "bugs": {
+    "url": "https://github.com/horaciochacon/stepdeck/issues"
+  },
+  "keywords": [
+    "presentations",
+    "slides",
+    "html",
+    "data-visualization",
+    "d3"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "stepdeck": "cli/index.js"
+  },
+  "scripts": {
+    "test": "node --test 'test/unit/**/*.test.mjs'",
+    "test:browser": "node --test --test-concurrency=1 'test/browser/**/*.test.mjs'"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "marked": "^18.2.1"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "A stepdeck deck. deck.js and slides/*.js are ES modules; this file says so to Node (stepdeck validate imports them)."
+}
