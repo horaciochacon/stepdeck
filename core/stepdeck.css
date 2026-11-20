@@ -164,6 +164,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-legend { padding: 0 var(--sd-grid); white-space: nowrap; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
 
 /* chart.line component: sizes and neutral colors from tokens; series colors come from the palette. */
+/* A chart fills the room its region leaves (as a diagram or image does), so a source line beside it in the same
+   region (full-bleed has no footer) does not shrink it to the default 150px. */
+.sd-region > .sd-el[data-type="chart.line"]:not(.sd-collapsed):not(.sd-failed),
+.sd-region > .sd-el[data-type="chart.bar"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 .sd-chart-line, .sd-chart-bar { display: block; overflow: visible; }
 .sd-chart-line text, .sd-chart-bar text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
 .sd-chart-line text:not(.sd-series-label) { fill: var(--sd-color-muted); }
