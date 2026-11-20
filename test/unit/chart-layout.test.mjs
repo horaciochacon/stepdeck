@@ -12,6 +12,12 @@ test("extentOf: every column across rows, missing skipped", () => {
   assert.deepEqual(extentOf(rows, ["a", undefined, "c"]), [3, 4]);
 });
 
+test("extentOf: blank cells are missing, not zero", () => {
+  assert.deepEqual(extentOf([{ a: " " }, { a: 5 }, { a: "\t\n" }], ["a"]), [5, 6]);
+  assert.deepEqual(extentOf([{ a: "  " }, { a: 5 }, { a: 8 }], ["a"]), [5, 8]);
+  assert.deepEqual(extentOf([{ a: " " }], ["a"]), [0, 1]);
+});
+
 test("extentOf: zero, single value and empty", () => {
   assert.deepEqual(extentOf([], ["a"]), [0, 1]);
   assert.deepEqual(extentOf([{ a: null }, { a: "" }], ["a"]), [0, 1]);
@@ -156,6 +162,12 @@ test("drawOrder: prefixes grow", () => {
   const order = drawOrder(ids);
   assert.deepEqual(order.slice(0, 50).slice(0, 10), order.slice(0, 10));
   assert.equal(new Set(order.slice(0, 50)).size, 50);
+});
+
+test("drawOrder: golden vectors (the order decks already paint must not change)", () => {
+  assert.deepEqual(drawOrder(["a", "b", "c", "d", "e"], 1), ["b", "c", "a", "d", "e"]);
+  assert.deepEqual(drawOrder(["a", "b", "c", "d", "e"], 2), ["e", "d", "a", "c", "b"]);
+  assert.deepEqual(drawOrder(["x", "é", "😀", "10"]), ["10", "x", "é", "😀"]);
 });
 
 test("drawOrder: duplicates and numbers", () => {

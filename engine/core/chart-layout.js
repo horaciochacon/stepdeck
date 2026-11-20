@@ -21,7 +21,7 @@ function byCodePoint(a, b) {
 }
 
 /**
- * The [min, max] of every finite number in `columns` across `rows`. `null`, `""`, non-numbers and non-finite
+ * The [min, max] of every finite number in `columns` across `rows`. `null`, blank strings, non-numbers and non-finite
  * values are missing; numeric strings count as numbers; undefined entries in `columns` are skipped. With
  * `zero`, 0 is included. No values: [0, 1]; a single value v: [v, v + 1]. The result is not niced: callers nice.
  * @param {Array<Record<string, unknown>>} rows
@@ -37,7 +37,7 @@ export function extentOf(rows, columns, { zero = false } = {}) {
     for (const col of columns ?? []) {
       if (col === undefined) continue;
       const raw = row?.[col];
-      if (missing(raw) || (typeof raw !== "number" && typeof raw !== "string")) continue;
+      if (missing(raw) || (typeof raw !== "number" && typeof raw !== "string") || (typeof raw === "string" && raw.trim() === "")) continue;
       const v = Number(raw);
       if (!Number.isFinite(v)) continue;
       if (v < lo) lo = v;
