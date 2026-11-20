@@ -30,6 +30,7 @@
 // Colors come from ctx.palette("categorical") (the first color) and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, opacityAttr } from "../../core/chart.js";
+import { wrapLabel } from "../../core/chart-layout.js";
 import { SVG_NS, num, lerp, clamp01, measureWidth, measureHeight, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
@@ -63,32 +64,6 @@ async function loadRows(props, ctx) {
 
 const validDomain = (d) => Array.isArray(d) && d.length === 2 && d.every((v) => Number.isFinite(v)) && d[0] < d[1];
 const categoriesOf = (rows, props) => rows.filter((r) => r[props.x] != null && r[props.x] !== "");
-
-/** Word-wraps `text` to lines of at most `maxChars` characters (long words are cut) and at most `maxLines` lines. */
-export function wrapLabel(text, maxChars, maxLines) {
-  const lines = [];
-  let line = "";
-  for (let word of String(text).split(/\s+/).filter(Boolean)) {
-    while (word.length > maxChars) {
-      if (line) lines.push(line);
-      line = "";
-      lines.push(word.slice(0, maxChars));
-      word = word.slice(maxChars);
-    }
-    if (!line) line = word;
-    else if (line.length + 1 + word.length <= maxChars) line += ` ${word}`;
-    else {
-      lines.push(line);
-      line = word;
-    }
-  }
-  if (line) lines.push(line);
-  if (lines.length > maxLines) {
-    lines.length = maxLines;
-    lines[maxLines - 1] = `${lines[maxLines - 1].slice(0, Math.max(1, maxChars - 1))}…`;
-  }
-  return lines.length ? lines : [""];
-}
 
 /** The target state, from props and rows alone. Pixel positions are derived from it by `geometry`. */
 function buildModel(props, rows, ctx, el) {
