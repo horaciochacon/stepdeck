@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { createAjv, compile } from "../../cli/ajv.js";
 
-const root = new URL("../../layouts/", import.meta.url);
+const root = new URL("../../engine/layouts/", import.meta.url);
 const folders = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 
 test("built-in layouts: full-bleed, figure-notes, halves, statement and title", () => {
@@ -44,7 +44,7 @@ for (const name of folders) {
     // Every example element's props validate against its component's schema, so a broken example fails here.
     const ajv = createAjv();
     for (const el of example.elements ?? []) {
-      const schemaUrl = new URL(`../../components/${el.type}/schema.json`, import.meta.url);
+      const schemaUrl = new URL(`../../engine/components/${el.type}/schema.json`, import.meta.url);
       assert.ok(existsSync(schemaUrl), `${el.id}: component ${el.type} exists`);
       const validate = compile(ajv, JSON.parse(readFileSync(schemaUrl, "utf8")));
       assert.ok(validate(el.props ?? {}), `${name}/${el.id} (${el.type}) props: ${ajv.errorsText(validate.errors)}`);
@@ -53,7 +53,7 @@ for (const name of folders) {
 }
 
 test("theme tokens: relative font URLs are rebased onto the tokens.css URL; others are kept", async () => {
-  const { rebaseCssUrls } = await import("../../core/stepdeck.js");
+  const { rebaseCssUrls } = await import("#engine/core/stepdeck.js");
   const base = "http://127.0.0.1:8000/themes/academic-light/tokens.css";
   const css = `a{src:url("fonts/a.woff2")} b{src:url(fonts/b.woff2)} c{src:url('../x/c.woff2')} d{background:url(data:image/png;base64,AA)} e{src:url(/root.woff2)} f{filter:url(#f)}`;
   assert.equal(
@@ -61,19 +61,19 @@ test("theme tokens: relative font URLs are rebased onto the tokens.css URL; othe
     `a{src:url("http://127.0.0.1:8000/themes/academic-light/fonts/a.woff2")} b{src:url("http://127.0.0.1:8000/themes/academic-light/fonts/b.woff2")} c{src:url("http://127.0.0.1:8000/themes/x/c.woff2")} d{background:url(data:image/png;base64,AA)} e{src:url(/root.woff2)} f{filter:url(#f)}`,
   );
   // The shipped theme declares its faces with relative URLs that exist on disk.
-  const tokens = readFileSync(new URL("../../themes/academic-light/tokens.css", import.meta.url), "utf8");
+  const tokens = readFileSync(new URL("../../engine/themes/academic-light/tokens.css", import.meta.url), "utf8");
   const urls = [...tokens.matchAll(/url\("([^"]+)"\)/g)].map((m) => m[1]);
   assert.ok(urls.length >= 12);
   for (const u of urls) {
     assert.match(u, /^fonts\/(source-sans-3|ibm-plex-mono)\/[\w-]+\.woff2$/);
-    assert.ok(existsSync(new URL(`../../themes/academic-light/${u}`, import.meta.url)), u);
+    assert.ok(existsSync(new URL(`../../engine/themes/academic-light/${u}`, import.meta.url)), u);
   }
   const copyright = {
     "source-sans-3": "Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'.",
     "ibm-plex-mono": "Copyright © 2017 IBM Corp. with Reserved Font Name 'Plex'.",
   };
   for (const [f, line] of Object.entries(copyright)) {
-    const ofl = readFileSync(new URL(`../../themes/academic-light/fonts/${f}/OFL.txt`, import.meta.url), "utf8");
+    const ofl = readFileSync(new URL(`../../engine/themes/academic-light/fonts/${f}/OFL.txt`, import.meta.url), "utf8");
     assert.equal(ofl.split("\n")[0], line, `${f}: upstream copyright line first`);
     assert.doesNotMatch(ofl, /^Google Inc\.$/m);
     assert.match(ofl, /SIL OPEN FONT LICENSE Version 1\.1/);
@@ -83,7 +83,7 @@ test("theme tokens: relative font URLs are rebased onto the tokens.css URL; othe
 });
 
 test("loadFonts: a face that fails to load is reported with its family and declared URLs", async () => {
-  const { loadFonts } = await import("../../core/stepdeck.js");
+  const { loadFonts } = await import("#engine/core/stepdeck.js");
   const face = (family, weight, ok) => ({
     family: `"${family}"`, weight, style: "normal", status: "unloaded",
     load: () => (ok ? Promise.resolve() : Promise.reject(new Error("NetworkError"))),

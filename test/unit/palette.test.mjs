@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { checkPalette, contrast, simulateCvd, deltaE } from "../../cli/palettes.js";
 import { formatProblem } from "../../cli/problems.js";
 
-const theme = new URL("../../themes/academic-light/", import.meta.url);
+const theme = new URL("../../engine/themes/academic-light/", import.meta.url);
 const palettes = JSON.parse(readFileSync(new URL("palettes.json", theme), "utf8"));
 const tokens = readFileSync(new URL("tokens.css", theme), "utf8");
 const token = (name) => new RegExp(`${name}:\\s*([^;]+);`).exec(tokens)?.[1].trim();

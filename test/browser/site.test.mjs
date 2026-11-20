@@ -47,7 +47,7 @@ test("docs viewer renders the docs home and follows a link", async () => {
   });
 });
 
-test("docs viewer: links across the docs resolve (anchor, skill page, folder)", async () => {
+test("docs viewer: links across the docs resolve (anchor, skill page, folder, engine README)", async () => {
   await withPage({ root, url: "site/docs/", waitFor }, async (page, ctx) => {
     const hrefs = await page.locator("main a").evaluateAll((as) => as.map((a) => a.getAttribute("href")));
     assert.ok(hrefs.includes("#reference"), "a pure anchor is unchanged");
@@ -56,6 +56,10 @@ test("docs viewer: links across the docs resolve (anchor, skill page, folder)", 
     assert.equal(await page.locator("main #reference").count(), 1, "the anchor has a target");
     await ctx.open("site/docs/?p=skill/SKILL.md");
     assert.equal(await state(page), "ready");
+    // A layout's README lives in engine/layouts/ (the gallery and the landing page link to it).
+    await ctx.open("site/docs/?p=engine/layouts/halves/README.md");
+    assert.equal(await state(page), "ready");
+    assert.match(await page.locator("main h1").first().innerText(), /halves/);
     assert.deepEqual(ctx.errors, []);
     assert.deepEqual(ctx.failed, []);
   });

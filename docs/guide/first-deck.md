@@ -277,6 +277,6 @@ Two decks in the repo are clean baselines: both pass `validate`, `check` and `ch
 - [`examples/kit`](../../examples/kit/) uses all five layouts and the slide-kit components (`chart.bar`, `list`, `diagram`, `chat`, `timeline`, `image`). Most build step by step; `image` sits on the step-less cover. `slides/estimate.js` is a `chart.bar` with interval whiskers; `slides/question.js` is a `statement` slide.
 - [`examples/spike`](../../examples/spike/) covers the first components (`chart.line`, `big-number`, `terminal`) and a deck component, `demo.story`.
 
-Their `index.html` maps the engine to the repo root (`"stepdeck/": "../../"`) instead of a copied `./stepdeck/`, so they run from inside the repo; copy slide files from them, not the whole folder. The [cookbook](../../skill/references/cookbook.md) has more complete slides.
+Their `index.html` maps the engine to the repo's `engine/` folder (`"stepdeck/": "../../engine/"`) instead of a copied `./stepdeck/`, so they run from inside the repo; copy slide files from them, not the whole folder. The [cookbook](../../skill/references/cookbook.md) has more complete slides.
 
 Do not copy a component's `example.js` (for example `components/chart.line/example.js`) as a slide unchanged. Those files show one component's props and are not complete, valid slides: some have no source line, and some point to data files that are not in your deck.

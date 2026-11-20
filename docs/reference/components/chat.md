@@ -2,7 +2,7 @@
 
 `chat` shows an exchange as bubbles, or a single prompt or quote as a bordered card. Messages appear one per step when you drive `shown`, and the newest one can be typed out. This page lists every prop, the markup, the motion and the error messages. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chat/schema.json`](../../../components/chat/schema.json), [`components/chat/index.js`](../../../components/chat/index.js), [`components/chat/derive.js`](../../../components/chat/derive.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chat/schema.json`](../../../engine/components/chat/schema.json), [`components/chat/index.js`](../../../engine/components/chat/index.js), [`components/chat/derive.js`](../../../engine/components/chat/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

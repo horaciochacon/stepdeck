@@ -8,7 +8,7 @@ const COMPONENTS = ["text", "chart.line", "chart.bar", "terminal", "markdown", "
 const dashed = (name) => name.replaceAll(".", "-");
 
 export const entries = [
-  ...LAYOUTS.map((name) => ({ slide: `${name}-example`, kind: "layout", name, doc: `layouts/${name}/README.md` })),
+  ...LAYOUTS.map((name) => ({ slide: `${name}-example`, kind: "layout", name, doc: `engine/layouts/${name}/README.md` })),
   ...COMPONENTS.map((name) => ({ slide: `${dashed(name)}-example`, kind: "component", name, doc: `docs/reference/components/${dashed(name)}.md` })),
 ];
 

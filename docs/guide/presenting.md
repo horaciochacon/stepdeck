@@ -215,7 +215,7 @@ http://127.0.0.1:8000/stepdeck/core/render.html?slide=chart&step=mark
 | `capture` | Screenshot mode, as above. |
 | `lang`, `theme`, `motion` | As in the reveal shell. |
 
-For a deck inside this repository served from the repository root, pass the deck: `http://127.0.0.1:8000/core/render.html?deck=../examples/kit/&slide=speed`.
+For a deck inside this repository served from the repository root, pass the deck: `http://127.0.0.1:8000/engine/core/render.html?deck=../../examples/kit/&slide=speed`.
 
 In the bare shell, an unknown `?slide=` is fatal and shown on the canvas. Drive it from the console with `STEPDECK.goTo(slide, step)`. See the [Runtime API](../reference/runtime-api.md).
 

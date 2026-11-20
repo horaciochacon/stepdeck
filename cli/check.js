@@ -69,8 +69,8 @@
 import { withDeck, jsonEqual, slidePlan, assertStepScope, CANVAS_W, BARE_CANVAS } from "./dump.js";
 import { OPTIONAL_THEME_CSS } from "./engine.js";
 import { problem } from "./problems.js";
-import { CANVAS } from "../core/constants.js";
-import { luminance as relativeLuminance, contrast as ratio } from "../core/color.js";
+import { CANVAS } from "#engine/core/constants.js";
+import { luminance as relativeLuminance, contrast as ratio } from "#engine/core/color.js";
 
 const CANVAS_H = CANVAS.h;
 const OVERLAP_PX = 4;

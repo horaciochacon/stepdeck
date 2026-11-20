@@ -233,7 +233,7 @@ test("validate: the deck reports only the missing file; alt is required and non-
   }
 
   // Whitespace only is not alt text either.
-  const schema = JSON.parse(readFileSync(new URL("../../components/image/schema.json", import.meta.url), "utf8"));
+  const schema = JSON.parse(readFileSync(new URL("../../engine/components/image/schema.json", import.meta.url), "utf8"));
   const ok = createAjv().compile(schema);
   assert.equal(ok({ src: "a.svg", alt: "A circle" }), true);
   assert.equal(ok({ src: "a.svg", alt: "   " }), false);

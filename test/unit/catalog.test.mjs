@@ -7,9 +7,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalog, buildCatalog } from "../../cli/catalog.js";
+import { catalog, buildCatalog, catalogTarget } from "../../cli/catalog.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
+const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const throws = fileURLToPath(new URL("../fixtures/decks/catalog-throws/", import.meta.url));
 const cli = (args, cwd = repo) => spawnSync(process.execPath, [join(repo, "cli/index.js"), ...args], { cwd, encoding: "utf8", env: process.env });
 const temp = () => realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-catalog-")));
@@ -17,7 +18,7 @@ const temp = () => realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-catalog-"))
 test("catalog index lists chart.line with animates including y", async () => {
   const out = temp();
   try {
-    const { entries, problems } = await catalog([repo], { outDir: out });
+    const { entries, problems } = await catalog([engine], { outDir: out });
     assert.deepEqual(problems, []);
     const index = JSON.parse(readFileSync(join(out, "index.json"), "utf8"));
     assert.deepEqual(index, entries);
@@ -30,7 +31,7 @@ test("catalog index lists chart.line with animates including y", async () => {
     for (const e of index) assert.deepEqual(Object.keys(e), ["kind", "name", "summary", "animates"]);
 
     // Every built-in component, layout and theme is listed, each with its detail file.
-    const builtins = JSON.parse(readFileSync(join(repo, "components/index.json"), "utf8"));
+    const builtins = JSON.parse(readFileSync(join(engine, "components/index.json"), "utf8"));
     const names = (kind) => index.filter((e) => e.kind === kind).map((e) => e.name).sort();
     assert.deepEqual(names("component"), [...builtins].sort());
     assert.deepEqual(names("layout"), ["figure-notes", "full-bleed", "halves", "statement", "title"]);
@@ -43,7 +44,7 @@ test("catalog index lists chart.line with animates including y", async () => {
 });
 
 test("catalog detail: props with description, examples and transition; layout regions; theme tokens and palettes", async () => {
-  const { details } = await buildCatalog([repo]);
+  const { details } = await buildCatalog([engine]);
   const line = details.get("chart.line");
   assert.equal(line.origin, "built-in");
   assert.match(line.description, /morphs the lines/);
@@ -71,7 +72,7 @@ test("catalog detail: props with description, examples and transition; layout re
 test("catalog reads schema.json only: a component whose index.js throws on import still appears", async () => {
   const out = temp();
   try {
-    const { entries } = await catalog([repo, throws], { outDir: out });
+    const { entries } = await catalog([engine, throws], { outDir: out });
     assert.equal(globalThis.__stepdeckCatalogImportedBoom, undefined, "index.js was imported");
     const boom = entries.find((e) => e.name === "bad.boom");
     assert.deepEqual(boom, { kind: "component", name: "bad.boom", summary: "A fixture component whose code throws on import.", animates: ["level"] });
@@ -85,13 +86,13 @@ test("catalog reads schema.json only: a component whose index.js throws on impor
 });
 
 test("catalog lint: built-ins are complete, and a prop without description, examples or x-transition is a problem", async () => {
-  assert.deepEqual((await buildCatalog([repo])).problems, [], "every built-in schema is complete");
+  assert.deepEqual((await buildCatalog([engine])).problems, [], "every built-in schema is complete");
   const deck = temp();
   try {
     mkdirSync(join(deck, "components/my.thin"), { recursive: true });
     writeFileSync(join(deck, "deck.js"), 'export default { title: "t", components: ["my.thin"], slides: ["s"] };\n');
     writeFileSync(join(deck, "components/my.thin/schema.json"), JSON.stringify({ type: "object", properties: { a: { type: "string" } } }));
-    const { problems, entries } = await buildCatalog([repo, deck]);
+    const { problems, entries } = await buildCatalog([engine, deck]);
     assert.ok(entries.some((e) => e.name === "my.thin"));
     const rules = problems.map((p) => `${p.element} ${p.rule} ${p.measured}`);
     assert.ok(rules.some((r) => /^my\.thin catalog-schema .*description/.test(r)), rules.join("\n"));
@@ -99,6 +100,11 @@ test("catalog lint: built-ins are complete, and a prop without description, exam
   } finally {
     rmSync(deck, { recursive: true, force: true });
   }
+});
+
+test("catalogTarget: the repository root reads engine/ and writes <repo>/catalog/; engine/ itself is an engine root", () => {
+  assert.deepEqual(catalogTarget(repo), { roots: [join(repo, "engine")], outDir: join(repo, "catalog") });
+  assert.deepEqual(catalogTarget(engine), { roots: [join(repo, "engine")], outDir: join(repo, "engine", "catalog") });
 });
 
 test("cli: catalog <name> prints one entry; --json gives its detail; an unknown name suggests one", () => {

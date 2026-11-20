@@ -2,7 +2,7 @@
 
 `image` shows one local picture with required alt text, an optional caption and a fit mode. Use it for the figure on a cover or for a picture anywhere on a slide. This page lists every prop, the markup, how the picture fills its region, when it moves, and the errors it raises. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/image/schema.json`](../../../components/image/schema.json), [`components/image/index.js`](../../../components/image/index.js), [`core/data.js`](../../../core/data.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/image/schema.json`](../../../engine/components/image/schema.json), [`components/image/index.js`](../../../engine/components/image/index.js), [`core/data.js`](../../../engine/core/data.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

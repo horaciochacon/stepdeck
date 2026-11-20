@@ -17,8 +17,8 @@ const rawStatus = (base, path) =>
   });
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const spike = (q) => `core/render.html?deck=../examples/spike/&${q}`;
-const fixture = (deck, q) => `core/render.html?deck=../test/fixtures/decks/${deck}/&${q}`;
+const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&${q}`;
+const fixture = (deck, q) => `engine/core/render.html?deck=../../test/fixtures/decks/${deck}/&${q}`;
 
 const box = (page, id) =>
   page.evaluate((id) => {
@@ -108,7 +108,7 @@ test("a slide that throws while building its frame still shows its error on the 
 });
 
 test("a cross-origin deck is refused on the canvas and never fetched", async () => {
-  await withPage({ root, url: "core/render.html?deck=https://deck.example.invalid/" }, async (page, ctx) => {
+  await withPage({ root, url: "engine/core/render.html?deck=https://deck.example.invalid/" }, async (page, ctx) => {
     const errors = await page.evaluate(() => window.STEPDECK.errors);
     assert.equal(errors.length, 1);
     assert.match(errors[0], /deck must be same-origin/);
@@ -122,11 +122,11 @@ test("a cross-origin deck is refused on the canvas and never fetched", async () 
 test("serve sends no-store", async () => {
   const server = await serve({ root, port: 0 });
   try {
-    const ok = await fetch(new URL("core/render.html", server.url));
+    const ok = await fetch(new URL("engine/core/render.html", server.url));
     assert.equal(ok.status, 200);
     assert.equal(ok.headers.get("cache-control"), "no-store");
     assert.match(ok.headers.get("content-type"), /^text\/html/);
-    const js = await fetch(new URL("core/stepdeck.js", server.url));
+    const js = await fetch(new URL("engine/core/stepdeck.js", server.url));
     assert.match(js.headers.get("content-type"), /^text\/javascript/);
     assert.equal(js.headers.get("cache-control"), "no-store");
     assert.equal((await fetch(new URL("no/such/file.js", server.url))).status, 404);

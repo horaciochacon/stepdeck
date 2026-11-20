@@ -2,7 +2,7 @@
 
 `terminal` replays a recorded agent session in a terminal window: a command line, an activity log, a task list and a file list. The session lives in a JSON script; the slide only says how many of its events are visible at each step. This page lists every prop, the script format, what each event shows, how the component animates, and the errors it reports. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/terminal/schema.json`](../../../components/terminal/schema.json), [`components/terminal/index.js`](../../../components/terminal/index.js), [`components/terminal/derive.js`](../../../components/terminal/derive.js), [`core/animate.js`](../../../core/animate.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/terminal/schema.json`](../../../engine/components/terminal/schema.json), [`components/terminal/index.js`](../../../engine/components/terminal/index.js), [`components/terminal/derive.js`](../../../engine/components/terminal/derive.js), [`core/animate.js`](../../../engine/core/animate.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

@@ -1,2 +1,2 @@
-import ex from "../../../layouts/full-bleed/example.js";
+import ex from "../../../engine/layouts/full-bleed/example.js";
 export default { ...ex, notes: "Reference: layouts/full-bleed/README.md" };

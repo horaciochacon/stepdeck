@@ -125,7 +125,7 @@ node cli/index.js catalog chart.line my-talk --json  # the full entry, README in
 node cli/index.js catalog my-talk                    # writes my-talk/catalog/index.json and one <name>.json per entry
 ```
 
-A named entry is printed and nothing is written. Without a name, `catalog` rewrites the `catalog/` folder of the deck, or of the engine when it is run in the repository root. Here is the readable output for `text`:
+A named entry is printed and nothing is written. Without a name, `catalog` rewrites the `catalog/` folder of the deck, or `<repo>/catalog/` (built from `engine/`) when it is run in the repository root. Here is the readable output for `text`:
 
 ```text
 text · component (built-in)

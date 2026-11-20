@@ -2,12 +2,12 @@
 // core/accent.js, the fold's title and kicker defaults, and bindings that cannot create an accent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stateAt, initialElements, stepCount } from "../../core/fold.js";
-import { placedSlide } from "../../core/layout.js";
+import { stateAt, initialElements, stepCount } from "#engine/core/fold.js";
+import { placedSlide } from "#engine/core/layout.js";
 
 // Dynamic import: before core/accent.js exists each test fails on its own instead of the whole file.
-const accent = await import("../../core/accent.js").catch(() => ({}));
-const bindings = await import("../../core/bindings.js");
+const accent = await import("#engine/core/accent.js").catch(() => ({}));
+const bindings = await import("#engine/core/bindings.js");
 const call = (name, ...args) => {
   assert.equal(typeof accent[name], "function", `core/accent.js exports ${name}`);
   return accent[name](...args);

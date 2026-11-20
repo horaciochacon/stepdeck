@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { deckTarget, withPage } from "../../cli/browser.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
+const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const THEMES = ["academic-light", "modern"];
 const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const TITLE = "Response rises with dose";
@@ -78,10 +79,10 @@ const slides = {
 };
 
 function makeDeck(dir, { themeRules = "", deckSlides = slides, theme = "academic-light", themes = {} } = {}) {
-  for (const d of ENGINE_DIRS) cpSync(join(repo, d), join(dir, "stepdeck", d), { recursive: true });
+  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
   // themes: { <new theme>: [<file of academic-light to leave out>] }
   for (const [name, omit] of Object.entries(themes)) {
-    cpSync(join(repo, "themes/academic-light"), join(dir, "stepdeck/themes", name), { recursive: true, filter: (src) => !omit.some((f) => src.endsWith(`/${f}`)) });
+    cpSync(join(engine, "themes/academic-light"), join(dir, "stepdeck/themes", name), { recursive: true, filter: (src) => !omit.some((f) => src.endsWith(`/${f}`)) });
   }
   cpSync(join(repo, "test/fixtures/fourth-layout"), join(dir, "stepdeck/layouts/fourth"), { recursive: true });
   if (themeRules) for (const t of THEMES) appendFileSync(join(dir, "stepdeck/themes", t, "theme.css"), themeRules);
@@ -267,7 +268,7 @@ test("cover title: the cover size, and the cover-figure size once the figure reg
 });
 
 test("academic-light unchanged on content slides: the spike trend title matches HEAD", async () => {
-  await withPage({ root: repo, url: "core/render.html?deck=../examples/spike/&slide=trend" }, async (page, ctx) => {
+  await withPage({ root: repo, url: "engine/core/render.html?deck=../../examples/spike/&slide=trend" }, async (page, ctx) => {
     const t = await page.evaluate(() => {
       const cs = getComputedStyle(document.querySelector('[data-el="title"] .sd-text'));
       return { size: cs.fontSize, weight: cs.fontWeight, color: cs.color, lineHeight: cs.lineHeight, letterSpacing: cs.letterSpacing };
@@ -280,7 +281,7 @@ test("academic-light unchanged on content slides: the spike trend title matches 
     await clean(page, ctx);
 
     // A list on the statement layout keeps its own type: start-aligned, body size, the bold word in place.
-    await ctx.open("core/render.html?deck=../examples/kit/&slide=criteria&step=a&theme=academic-light"); // kit is on modern now
+    await ctx.open("engine/core/render.html?deck=../../examples/kit/&slide=criteria&step=a&theme=academic-light"); // kit is on modern now
     const list = await page.evaluate(() => {
       const c = document.querySelector(".sd-canvas").getBoundingClientRect();
       const li = getComputedStyle(document.querySelector(".sd-list-item"));
@@ -291,7 +292,7 @@ test("academic-light unchanged on content slides: the spike trend title matches 
     await clean(page, ctx);
 
     // The statement markdown on kit/question.
-    await ctx.open("core/render.html?deck=../examples/kit/&slide=question&theme=academic-light");
+    await ctx.open("engine/core/render.html?deck=../../examples/kit/&slide=question&theme=academic-light");
     const statement = await page.evaluate(() => {
       const md = document.querySelector('[data-el="claim"] .sd-markdown');
       const cs = getComputedStyle(md);
@@ -318,11 +319,11 @@ test("academic-light unchanged where there is no kicker or accent: element boxes
     "spike/cover": { title: [96, 368, 1400, 101], subtitle: [96, 501, 1400, 55], meta: [96, 930, 1400, 42], src: [96, 996, 1728, 36] },
   };
   const TITLE_TYPE = { content: ["64px", "600", "rgb(28, 28, 30)", "73.6px", "normal", "normal"], cover: ["88px", "600", "rgb(28, 28, 30)", "101.2px", "normal", "normal"] };
-  await withPage({ root: repo, url: "core/render.html?deck=../examples/spike/&slide=hello" }, async (page, ctx) => {
+  await withPage({ root: repo, url: "engine/core/render.html?deck=../../examples/spike/&slide=hello" }, async (page, ctx) => {
     for (const [key, boxes] of Object.entries(HEAD)) {
       const [deck, slide] = key.split("/");
       // kit is on modern now: its academic-light baseline is taken with ?theme=academic-light (spike stays on it).
-      await ctx.open(`core/render.html?deck=../examples/${deck}/&slide=${slide}${slide === "criteria" ? "&step=a" : ""}${deck === "kit" ? "&theme=academic-light" : ""}`);
+      await ctx.open(`engine/core/render.html?deck=../../examples/${deck}/&slide=${slide}${slide === "criteria" ? "&step=a" : ""}${deck === "kit" ? "&theme=academic-light" : ""}`);
       const got = await page.evaluate(() => {
         const c = document.querySelector(".sd-canvas").getBoundingClientRect();
         const res = {};

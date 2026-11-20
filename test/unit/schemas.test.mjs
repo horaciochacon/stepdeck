@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { createAjv, readSchema } from "../../cli/ajv.js";
 
-const root = new URL("../../", import.meta.url);
+const root = new URL("../../engine/", import.meta.url);
 const folders = (dir) =>
   readdirSync(new URL(dir, root), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 

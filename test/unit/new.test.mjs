@@ -28,10 +28,10 @@ test("new: copies the template and the engine (no cli, test, docs, examples or n
     }
     for (const f of ["core/render.html", "core/stepdeck.js", "components/index.json", "components/chart.line/schema.json", "layouts/figure-notes/layout.css",
       "themes/academic-light/tokens.css", "themes/academic-light/fonts/source-sans-3/OFL.txt", "themes/academic-light/fonts/source-sans-3/source-sans-3-latin-400-normal.woff2",
-      "vendor/d3/LICENSE", "vendor/reveal/LICENSE", "vendor/marked/LICENSE", "schema/slide.schema.json", "LICENSE", "THIRD_PARTY_NOTICES.md"]) {
+      "vendor/d3/LICENSE", "vendor/reveal/LICENSE", "vendor/marked/LICENSE", "schema/slide.schema.json", "schema/stepdeck.d.ts", "LICENSE", "THIRD_PARTY_NOTICES.md"]) {
       assert.ok(existsSync(join(dir, "stepdeck", f)), `stepdeck/${f}`);
     }
-    for (const f of ["cli", "test", "docs", "examples", "node_modules", "templates", "types", "package.json"]) {
+    for (const f of ["cli", "test", "docs", "examples", "node_modules", "templates", "engine", "types", "package.json"]) {
       assert.ok(!existsSync(join(dir, "stepdeck", f)), `stepdeck/${f} must not be copied`);
     }
     const html = readFileSync(join(dir, "index.html"), "utf8");

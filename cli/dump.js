@@ -25,8 +25,8 @@
 //     changed: chart
 import { withPage, deckTarget, withTimeout, describePageUrl, PAGE_TIMEOUT_MS } from "./browser.js";
 import { assertTheme, OPTIONAL_THEME_CSS } from "./engine.js";
-import { CANVAS } from "../core/constants.js";
-import { stripAccent } from "../core/accent.js";
+import { CANVAS } from "#engine/core/constants.js";
+import { stripAccent } from "#engine/core/accent.js";
 
 export const CANVAS_W = CANVAS.w;
 

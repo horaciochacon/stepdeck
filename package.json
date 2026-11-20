@@ -26,10 +26,13 @@
   "bin": {
     "stepdeck": "cli/index.js"
   },
+  "imports": {
+    "#engine/*": "./engine/*"
+  },
   "scripts": {
     "test": "node --test 'test/unit/**/*.test.mjs'",
     "test:browser": "node --test --test-concurrency=1 'test/browser/**/*.test.mjs'",
-    "site": "node scripts/serve-site.mjs"
+    "site": "node cli/serve-site.js"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

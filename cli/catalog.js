@@ -32,7 +32,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { problem } from "./problems.js";
-import { engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
+import { ENGINE, REPO, engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
 
 const TRANSITIONS = ["tween", "draw", "fade", "snap"];
 
@@ -205,14 +205,16 @@ export async function catalog(rootDirs, { outDir } = {}) {
 
 /**
  * What `stepdeck catalog` reads and writes for a folder: a deck (deck.js) reads its engine (the
- * copied one, <deck>/stepdeck/, else this repo) plus itself and writes <deck>/catalog/; an engine
- * root (components/index.json) reads itself and writes <root>/catalog/.
+ * copied one, <deck>/stepdeck/, else this repo's engine/) plus itself and writes <deck>/catalog/;
+ * this repository's root reads its engine/ and writes <repo>/catalog/; an engine root
+ * (components/index.json) reads itself and writes <root>/catalog/.
  */
 export function catalogTarget(dir) {
   const root = resolve(dir);
   if (existsSync(join(root, "deck.js"))) {
     return { roots: [engineFor(root), root], outDir: join(root, "catalog") };
   }
+  if (root === REPO) return { roots: [ENGINE], outDir: join(REPO, "catalog") };
   if (existsSync(join(root, "components", "index.json"))) return { roots: [root], outDir: join(root, "catalog") };
   throw new Error(`${root} is neither a deck (deck.js) nor the stepdeck engine (components/index.json); pass the deck folder`);
 }

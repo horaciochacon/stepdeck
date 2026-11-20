@@ -1,7 +1,7 @@
 // diagram: grid placement, group bounds, edge ends and problems (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placeDiagram, diagramProblems, edgeId } from "../../components/diagram/place.js";
+import { placeDiagram, diagramProblems, edgeId } from "#engine/components/diagram/place.js";
 
 const OPTS = { width: 1600, height: 600, gap: 48, pad: 16 };
 const contains = (outer, inner, margin) =>

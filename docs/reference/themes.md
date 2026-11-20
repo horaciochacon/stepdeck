@@ -4,7 +4,7 @@ This page is the reference for themes: the files a theme is made of, how the eng
 
 For the tasks (choosing a theme, a palette and a language for a deck) read [Using layouts and themes](../guide/layouts-and-themes.md) first. Agents use [skill/references/themes-layouts.md](../../skill/references/themes-layouts.md).
 
-Two themes ship with the engine: `modern` (the default, `DEFAULT_THEME` in [`core/constants.js`](../../core/constants.js)) and `academic-light`, the plain alternative. A deck with no `theme` uses `modern`. The two declare the same token names, so a deck's content works under either; `examples/spike` stays on `academic-light`.
+Two themes ship with the engine: `modern` (the default, `DEFAULT_THEME` in [`core/constants.js`](../../engine/core/constants.js)) and `academic-light`, the plain alternative. A deck with no `theme` uses `modern`. The two declare the same token names, so a deck's content works under either; `examples/spike` stays on `academic-light`.
 
 ## Theme folder
 
@@ -35,7 +35,7 @@ In a deck made by `stepdeck new`, the engine is copied into `<deck>/stepdeck/`, 
 
 ## How a theme is loaded
 
-The runtime ([`core/stepdeck.js`](../../core/stepdeck.js)) picks the theme once per page:
+The runtime ([`core/stepdeck.js`](../../engine/core/stepdeck.js)) picks the theme once per page:
 
 ```
 theme = ?theme=<name>  ??  deck.theme  ??  "modern"
@@ -76,7 +76,7 @@ Later layers beat earlier ones whatever the selectors' specificity.
 
 | Layer | What is in it |
 |---|---|
-| `sd-core` | [`core/stepdeck.css`](../../core/stepdeck.css). Two sub-layers, `sd-core.components` (structure, the stage, components, capture mode) then `sd-core.hooks` (the token-driven default rule of every hook, so a theme with only `tokens.css` still works). |
+| `sd-core` | [`core/stepdeck.css`](../../engine/core/stepdeck.css). Two sub-layers, `sd-core.components` (structure, the stage, components, capture mode) then `sd-core.hooks` (the token-driven default rule of every hook, so a theme with only `tokens.css` still works). |
 | `sd-layout` | The slide's `layout.css`. Placement only. |
 | `sd-theme` | The theme's `theme.css`. It overrides core and the layouts. |
 | `sd-deck` | Declared and empty, reserved for per-deck overrides (for example a deck's brand rules). It is in the order statement, so it already sits between the theme and the slide; nothing uses it yet. |
@@ -88,7 +88,7 @@ Engine state rules use `!important` inside `sd-core`: `.sd-el.sd-hidden`, `.sd-e
 
 ## Styling hooks
 
-A hook is a class that core puts on the elements that play a role, so a theme can restyle that role without knowing which layout shows it. The published hooks are `HOOKS` in [`core/constants.js`](../../core/constants.js); layouts map their regions to them with the `hooks` key of `schema.json` (see [Layouts](layouts.md#layout-descriptor)).
+A hook is a class that core puts on the elements that play a role, so a theme can restyle that role without knowing which layout shows it. The published hooks are `HOOKS` in [`core/constants.js`](../../engine/core/constants.js); layouts map their regions to them with the `hooks` key of `schema.json` (see [Layouts](layouts.md#layout-descriptor)).
 
 | Hook | Class on | Core default (`sd-core.hooks`) |
 |---|---|---|
@@ -113,7 +113,7 @@ The title region is an inline-size container named `sd-title`, so a slide's `sty
 
 ## Tokens
 
-Every token is a CSS custom property on `:root` in `themes/<theme>/tokens.css`: [`modern`](../../themes/modern/tokens.css) and [`academic-light`](../../themes/academic-light/tokens.css). They are prefixed `--sd-`, except `--min-audience-font`, which keeps its spec name. Components, layouts and `core/stepdeck.css` read tokens instead of raw values, with the exceptions listed in [Values not taken from tokens](#values-not-taken-from-tokens). Both themes declare the same names (the contributing guide's `diff` of the names is empty); the tables give both values, with `=` where they are the same.
+Every token is a CSS custom property on `:root` in `themes/<theme>/tokens.css`: [`modern`](../../engine/themes/modern/tokens.css) and [`academic-light`](../../engine/themes/academic-light/tokens.css). They are prefixed `--sd-`, except `--min-audience-font`, which keeps its spec name. Components, layouts and `core/stepdeck.css` read tokens instead of raw values, with the exceptions listed in [Values not taken from tokens](#values-not-taken-from-tokens). Both themes declare the same names (the contributing guide's `diff` of the names is empty); the tables give both values, with `=` where they are the same.
 
 Seven tokens are **optional**: a theme that does not declare them still works, because core's hook rules fall back as shown. They are marked *optional* below.
 
@@ -216,11 +216,11 @@ Keep the gap at least twice the pad, or neighbouring group boxes touch; `validat
 | `--sd-duration-fast` | `200ms` | Meant for small changes such as highlights. | **Unused** |
 | `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | Meant as the easing curve. | **Unused** |
 
-Components read `--sd-duration` through `motionMs(info, ctx, factor)`: the step's `transition.duration` if it has one, else `factor` x `--sd-duration` (400 when the token is missing). The charts use a factor of 2, so they move for 800ms by default. JavaScript motion eases with `easeCubicInOut` from [`core/animate.js`](../../core/animate.js), not with `--sd-easing`. See [Animation and motion](../guide/animation-and-motion.md).
+Components read `--sd-duration` through `motionMs(info, ctx, factor)`: the step's `transition.duration` if it has one, else `factor` x `--sd-duration` (400 when the token is missing). The charts use a factor of 2, so they move for 800ms by default. JavaScript motion eases with `easeCubicInOut` from [`core/animate.js`](../../engine/core/animate.js), not with `--sd-easing`. See [Animation and motion](../guide/animation-and-motion.md).
 
 ### Values not taken from tokens
 
-[`core/stepdeck.css`](../../core/stepdeck.css) hard-codes some values that look like token values. A theme that changes the token does not change these:
+[`core/stepdeck.css`](../../engine/core/stepdeck.css) hard-codes some values that look like token values. A theme that changes the token does not change these:
 
 | Where | Hard-coded | Related token |
 | --- | --- | --- |
@@ -301,7 +301,7 @@ The `modern` palette is stepdeck's own; its README gives each color's contrast a
 | `viridis` | sequential | yes | `v1` `#440154`, `v2` `#3b528b`, `v3` `#21918c`, `v4` `#5ec962`, `v5` `#fde725` | `low` = `v1`, `high` = `v5` (no `mid`) |
 | `blue-red` | diverging | yes | `blue` `#2166ac`, `light-blue` `#92c5de`, `neutral` `#f7f7f7`, `light-red` `#f4a582`, `red` `#b2182b` | `low` = `blue`, `mid` = `neutral`, `high` = `red` |
 
-`okabe-ito-dark` is Okabe-Ito darkened in OKLab (hue kept) to at least 3:1 on white, with black and yellow left out. The first two colors are the most distinct, because charts assign colors in series order. The theme [README](../../themes/academic-light/README.md) gives each color's original value and contrast. Each built-in theme has one palette per kind, so `deck.palette` can only name a default today.
+`okabe-ito-dark` is Okabe-Ito darkened in OKLab (hue kept) to at least 3:1 on white, with black and yellow left out. The first two colors are the most distinct, because charts assign colors in series order. The theme [README](../../engine/themes/academic-light/README.md) gives each color's original value and contrast. Each built-in theme has one palette per kind, so `deck.palette` can only name a default today.
 
 ## ctx.palette(kind)
 
@@ -369,5 +369,5 @@ A theme and a layout with the same name are reported as `catalog-name`. See [CLI
 
 - [Using layouts and themes](../guide/layouts-and-themes.md): choosing a theme, palette and language.
 - [Layouts](layouts.md): the regions and variables that use these tokens.
-- [themes/modern/README.md](../../themes/modern/README.md): the default theme's tokens, tuned colors, hook rules and fonts.
-- [themes/academic-light/README.md](../../themes/academic-light/README.md): the plain theme's own notes on its design and palette derivation.
+- [themes/modern/README.md](../../engine/themes/modern/README.md): the default theme's tokens, tuned colors, hook rules and fonts.
+- [themes/academic-light/README.md](../../engine/themes/academic-light/README.md): the plain theme's own notes on its design and palette derivation.

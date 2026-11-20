@@ -313,10 +313,11 @@ test("reserved-id: an author element with the id kicker is an error", async () =
 
 test("kicker-no-region: section on a layout without a title region is a warning, not unknown-region", async () => {
   const repoDir = fileURLToPath(new URL("../../", import.meta.url));
+  const engineDir = fileURLToPath(new URL("../../engine/", import.meta.url));
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-kicker-")));
   try {
     cpSync(fixture("kicker-no-region"), tmp, { recursive: true });
-    for (const d of ["core", "components", "layouts", "themes", "schema"]) cpSync(join(repoDir, d), join(tmp, "stepdeck", d), { recursive: true });
+    for (const d of ["core", "components", "layouts", "themes", "schema"]) cpSync(join(engineDir, d), join(tmp, "stepdeck", d), { recursive: true });
     cpSync(join(repoDir, "test/fixtures/no-title-layout"), join(tmp, "stepdeck/layouts/main-only"), { recursive: true });
     const problems = await validate(tmp);
     assert.deepEqual(rules(problems), ["kicker-no-region"], show(problems));

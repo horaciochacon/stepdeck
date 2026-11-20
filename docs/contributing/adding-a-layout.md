@@ -10,10 +10,10 @@ A layout is a folder named after the layout, in the `layouts/` folder of the eng
 
 | You are adding | Folder | Who gets it |
 |---|---|---|
-| A built-in layout | `layouts/<name>/` in this repository | The example decks right away (they use the repo root as their engine), and every deck made afterwards by `new`, which copies `layouts/` into `<deck>/stepdeck/`. |
+| A built-in layout | `engine/layouts/<name>/` in this repository | The example decks right away (they use `engine/` as their engine), and every deck made afterwards by `new`, which copies `layouts/` into `<deck>/stepdeck/`. |
 | A layout for one deck | `<deck>/stepdeck/layouts/<name>/` | Only that deck. |
 
-The CLI uses the engine copy at `<deck>/stepdeck/` when that folder holds `core/render.html`, and the repository otherwise (`engineFor` in [`cli/engine.js`](../../cli/engine.js)). The runtime loads `layouts/<name>/layout.css` and `layouts/<name>/schema.json` from the same engine root. A layout folder placed directly in the deck (`<deck>/layouts/`) is never read.
+The CLI uses the engine copy at `<deck>/stepdeck/` when that folder holds `core/render.html`, and the repository's `engine/` otherwise (`engineFor` in [`cli/engine.js`](../../cli/engine.js)). The runtime loads `layouts/<name>/layout.css` and `layouts/<name>/schema.json` from the same engine root. A layout folder placed directly in the deck (`<deck>/layouts/`) is never read.
 
 The folder holds these files:
 
@@ -30,9 +30,9 @@ Name the folder with lowercase letters, digits and hyphens (the descriptor's `na
 
 ## Know what the runtime builds
 
-You write only the grid. [`core/layout.js`](../../core/layout.js) builds the rest of the canvas for every slide:
+You write only the grid. [`core/layout.js`](../../engine/core/layout.js) builds the rest of the canvas for every slide:
 
-- The canvas is `div.sd-canvas[data-slide][data-layout="<name>"][data-kind]`, 1920×1080, with `display: grid` and `overflow: hidden` ([`core/stepdeck.css`](../../core/stepdeck.css)).
+- The canvas is `div.sd-canvas[data-slide][data-layout="<name>"][data-kind]`, 1920×1080, with `display: grid` and `overflow: hidden` ([`core/stepdeck.css`](../../engine/core/stepdeck.css)).
 - Each region listed in `schema.json` becomes a `div.sd-region[data-region="<region>"]`, in the order the descriptor lists them, with `grid-area: <region>` set inline. The region exists even when no element uses it.
 - A region is a column flexbox with `gap: var(--sd-region-gap)`, `min-width: 0` and `min-height: 0`. Elements are `div.sd-el[data-el][data-type]` and stack in the order the slide lists them.
 - An element without `region` goes to `main`. An element with a `box` is placed absolutely on the canvas, above every region.
@@ -111,7 +111,7 @@ A default can be another token: `halves` declares `--gutter` with the default `v
 
 ### Map regions to hooks
 
-A hook is a class core puts on a region and on every element wrapper in it, and a theme styles it. Declare the map in `schema.json` as `hooks`: the name of a region the layout declares, to one of `subtitle`, `meta` or `statement` (`REGION_HOOKS` in [`core/constants.js`](../../core/constants.js)). `title`, `kicker` and `accent` are core's own hooks (on the title element, the kicker and the accent phrase) and cannot be mapped; `validate` reports a `layout-schema` problem for those, and for a key that is not a declared region. `title` maps `subtitle` and `meta`; `statement` maps `main` to `statement`. Core's defaults then give the region its type (for `statement`: the statement size, centred, balanced, on text and markdown only).
+A hook is a class core puts on a region and on every element wrapper in it, and a theme styles it. Declare the map in `schema.json` as `hooks`: the name of a region the layout declares, to one of `subtitle`, `meta` or `statement` (`REGION_HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). `title`, `kicker` and `accent` are core's own hooks (on the title element, the kicker and the accent phrase) and cannot be mapped; `validate` reports a `layout-schema` problem for those, and for a key that is not a declared region. `title` maps `subtitle` and `meta`; `statement` maps `main` to `statement`. Core's defaults then give the region its type (for `statement`: the statement size, centred, balanced, on text and markdown only).
 
 The element with id `title` always gets `sd-title`, and the `kicker` element `sd-kicker`; no mapping is needed for them.
 
@@ -164,7 +164,7 @@ check: 1 slide, 1 step, 1 problem
 
 ## Write schema.json
 
-`schema.json` is a descriptor of the layout, not a JSON Schema for props. `validate` checks it against [`schema/layout.schema.json`](../../schema/layout.schema.json):
+`schema.json` is a descriptor of the layout, not a JSON Schema for props. `validate` checks it against [`schema/layout.schema.json`](../../engine/schema/layout.schema.json):
 
 | Key | Required | Shape |
 |---|---|---|
@@ -204,7 +204,7 @@ For built-ins, the unit test is stricter than the JSON Schema: variable names mu
 
 ## Write the README and example
 
-For a built-in, write `README.md` in the shape of the existing ones (see [`layouts/figure-notes/README.md`](../../layouts/figure-notes/README.md)):
+For a built-in, write `README.md` in the shape of the existing ones (see [`layouts/figure-notes/README.md`](../../engine/layouts/figure-notes/README.md)):
 
 - A heading with the layout name, then one paragraph on what the layout is for.
 - A table of regions (`| Region | Meaning |`) naming each region in backticks.

@@ -5,6 +5,20 @@ All notable changes to stepdeck are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The engine's runtime folders live under `engine/`.** `core/`, `components/`, `layouts/`, `themes/`,
+  `vendor/` and `schema/` moved from the repository root into `engine/`. Decks are unchanged: `stepdeck new`
+  copies the same folders into `<deck>/stepdeck/`, with `LICENSE` and `THIRD_PARTY_NOTICES.md`, and the deck's
+  import map stays `"stepdeck/": "./stepdeck/"`. The in-repo decks (`examples/`, the gallery, the test fixtures)
+  map `stepdeck/` to `engine/` instead of the repository root.
+- The TypeScript types moved from `types/stepdeck.d.ts` to `engine/schema/stepdeck.d.ts`, so every new deck
+  gets them in `stepdeck/schema/`.
+- `npm run site` runs `cli/serve-site.js` (it was `scripts/serve-site.mjs`).
+- `.nojekyll` is gone: Pages deploys from an Actions artifact, which never runs Jekyll.
+- Contributors import engine modules from Node as `#engine/...` (the `imports` field of `package.json`), for
+  example `import { stateAt } from "#engine/core/fold.js"`.
+
 ## [0.1.0] · 2026-11-19 · first public release
 
 The first public release: the step-fold engine, 11 components, 5 layouts, 2 themes (`modern` and

@@ -2,10 +2,11 @@
 //
 // newDeck(dir, { template = "talk" }) -> Promise<{ dir, template, engine, next: string[] }>
 //   Refuses a folder that exists and is not empty. Copies templates/<template>/ into dir, then the
-//   engine into dir/stepdeck/: core, components, layouts, themes (fonts and OFL files included),
-//   vendor (with LICENSE files), schema, LICENSE and THIRD_PARTY_NOTICES.md. Not cli, test, docs,
-//   examples or node_modules: the deck is self-contained at presentation time (spec §3) and the CLI
-//   serves it from its own folder (ruling R15). The template's index.html maps "stepdeck/" to
+//   engine (the folders of <repo>/engine/) into dir/stepdeck/: core, components, layouts, themes (fonts
+//   and OFL files included), vendor (with LICENSE files) and schema (stepdeck.d.ts included), plus
+//   LICENSE and THIRD_PARTY_NOTICES.md from the repository root. Not cli, test, docs, examples or
+//   node_modules: the deck is self-contained at presentation time (spec §3) and the CLI serves it from
+//   its own folder (ruling R15). The template's index.html maps "stepdeck/" to
 //   "./stepdeck/" (one import map). `next` says the deck works as made and lists the commands to run next, with the real CLI path
 //   (cli()), since `stepdeck` is usually not on PATH.
 //
@@ -21,7 +22,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { ENGINE as REPO, engineFor, importDeck, readBuiltins } from "./engine.js";
+import { ENGINE, REPO, engineFor, importDeck, readBuiltins } from "./engine.js";
 
 const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const ENGINE_FILES = ["LICENSE", "THIRD_PARTY_NOTICES.md"];
@@ -61,7 +62,7 @@ export async function newDeck(dir, { template = "talk" } = {}) {
   mkdirSync(target, { recursive: true });
   cpSync(join(REPO, "templates", template), target, { recursive: true, filter: keep });
   const engine = join(target, "stepdeck");
-  for (const d of ENGINE_DIRS) cpSync(join(REPO, d), join(engine, d), { recursive: true, filter: keep });
+  for (const d of ENGINE_DIRS) cpSync(join(ENGINE, d), join(engine, d), { recursive: true, filter: keep });
   for (const f of ENGINE_FILES) cpSync(join(REPO, f), join(engine, f));
 
   const html = readFileSync(join(target, "index.html"), "utf8");

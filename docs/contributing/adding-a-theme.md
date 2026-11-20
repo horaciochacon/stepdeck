@@ -10,7 +10,7 @@ A theme is a folder named after the theme, placed under the `themes/` folder of 
 
 | You are adding | Folder | Who gets it |
 | --- | --- | --- |
-| A built-in theme | `themes/<name>/` in this repository | Every deck made by `stepdeck new` afterwards (it copies `themes/` into `<deck>/stepdeck/`), and the two example decks, which use the repository as their engine. |
+| A built-in theme | `engine/themes/<name>/` in this repository | Every deck made by `stepdeck new` afterwards (it copies `themes/` into `<deck>/stepdeck/`), and the two example decks, which use `engine/` as their engine. |
 | A theme for one deck | `<deck>/stepdeck/themes/<name>/` | That deck only. |
 
 The runtime fetches `themes/<name>/tokens.css` and `themes/<name>/palettes.json` from the engine root, and `validate` looks under the engine's `themes/` only. Do not put a deck theme in `<deck>/themes/<name>/`: `catalog` lists it there (it scans the deck folder too), but `validate` rejects the deck and the page does not load the theme:
@@ -188,7 +188,7 @@ Darken a color in steps until both rules pass. The `academic-light` README expla
 
 ## Write theme.css
 
-`theme.css` is optional. It is loaded after `tokens.css` and sits in the `sd-theme` cascade layer, so its rules beat core's hook defaults and every layout, and lose to a slide's own `style`. Start from the rules in [`themes/modern/theme.css`](../../themes/modern/theme.css). The published hooks and the rules for writing them are in [Themes: styling hooks](../reference/themes.md#styling-hooks). The ones that trip people up:
+`theme.css` is optional. It is loaded after `tokens.css` and sits in the `sd-theme` cascade layer, so its rules beat core's hook defaults and every layout, and lose to a slide's own `style`. Start from the rules in [`themes/modern/theme.css`](../../engine/themes/modern/theme.css). The published hooks and the rules for writing them are in [Themes: styling hooks](../reference/themes.md#styling-hooks). The ones that trip people up:
 
 - Target hook classes (`.sd-title`, `.sd-kicker`, `.sd-accent`, `.sd-subtitle`, `.sd-meta`, `.sd-statement`), `[data-kind="cover"]` and component part classes. Never `[data-layout]`, a region name or `!important`.
 - A hook class sits on its region and on every element wrapper inside it. A box property (padding, margin, border, background, outline, box-shadow) on a bare hook class is drawn once per wrapper. Put it on the region only: `.sd-region.sd-meta`.
@@ -270,7 +270,7 @@ The browser commands need Chrome and Playwright; see [Set up](index.md#set-up).
 - **Licences.** Add the fonts (family, weights, files, licence file) and any palette sources to `THIRD_PARTY_NOTICES.md`, which `new` copies into every deck.
 - **Docs.** Update the [themes reference](../reference/themes.md), [Using layouts and themes](../guide/layouts-and-themes.md) and `skill/references/themes-layouts.md`, which list the built-in themes. See [Keep the docs in sync](index.md#keep-the-docs-in-sync).
 
-Adding a theme does not change the default. Decks without `theme` use `DEFAULT_THEME` in [`core/constants.js`](../../core/constants.js), which is `modern`. Changing it also changes `templates/talk/deck.js`, `examples/kit/deck.js` and the tests that expect the default theme's font paths (`test/unit/new.test.mjs`, `test/browser/new.test.mjs`). `examples/spike` names `academic-light` on purpose, so the plain theme stays exercised.
+Adding a theme does not change the default. Decks without `theme` use `DEFAULT_THEME` in [`core/constants.js`](../../engine/core/constants.js), which is `modern`. Changing it also changes `templates/talk/deck.js`, `examples/kit/deck.js` and the tests that expect the default theme's font paths (`test/unit/new.test.mjs`, `test/browser/new.test.mjs`). `examples/spike` names `academic-light` on purpose, so the plain theme stays exercised.
 
 ## Checklist
 

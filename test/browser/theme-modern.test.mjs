@@ -18,6 +18,7 @@ import { withDeck } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
+const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const THEMES = ["modern", "academic-light"];
 const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
 const FAMILY = { modern: { body: "Geist", mono: "Geist Mono" }, "academic-light": { body: "Source Sans 3", mono: "IBM Plex Mono" } };
@@ -29,7 +30,7 @@ const show = (problems) => problems.map(formatProblem).join("\n") || "(no proble
 const firstFamily = (list) => list.split(",")[0].trim().replace(/^"|"$/g, "");
 
 function engineDeck(dir, deck, slides) {
-  for (const d of ENGINE_DIRS) cpSync(join(repo, d), join(dir, "stepdeck", d), { recursive: true });
+  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
   mkdirSync(join(dir, "slides"), { recursive: true });
   for (const [id, spec] of Object.entries(slides)) writeFileSync(join(dir, "slides", `${id}.js`), `export default ${JSON.stringify(spec)};\n`);
   writeFileSync(join(dir, "deck.js"), `export default ${JSON.stringify({ ...deck, slides: Object.keys(slides) })};\n`);
@@ -66,12 +67,12 @@ let exampleIds;
 let bare;
 before(() => {
   tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-modern-")));
-  const layoutNames = readdirSync(join(repo, "layouts"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  const layoutNames = readdirSync(join(engine, "layouts"), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
   exampleIds = layoutNames.map((name) => `${name}-example`);
   const ex = join(tmp, "examples");
-  for (const d of ENGINE_DIRS) cpSync(join(repo, d), join(ex, "stepdeck", d), { recursive: true });
+  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(ex, "stepdeck", d), { recursive: true });
   mkdirSync(join(ex, "slides"), { recursive: true });
-  for (const name of layoutNames) cpSync(join(repo, "layouts", name, "example.js"), join(ex, "slides", `${name}-example.js`));
+  for (const name of layoutNames) cpSync(join(engine, "layouts", name, "example.js"), join(ex, "slides", `${name}-example.js`));
   mkdirSync(join(ex, "data"));
   cpSync(join(repo, "examples/spike/data/dose-response.csv"), join(ex, "data", "dose-response.csv"));
   writeFileSync(join(ex, "deck.js"), `export default ${JSON.stringify({ title: "examples", lang: "en", theme: "academic-light", slides: exampleIds })};\n`);
@@ -87,11 +88,11 @@ const clean = async (page, ctx, what = "") => {
 };
 const lastStep = (page, slide) => page.evaluate((s) => window.STEPDECK.steps[s].at(-1), slide);
 const repoUrl = (deck, slide, { theme, step, lang } = {}) => {
-  const q = new URLSearchParams({ deck: `../${deck}/`, slide });
+  const q = new URLSearchParams({ deck: `../../${deck}/`, slide });
   if (step !== undefined) q.set("step", step);
   if (theme) q.set("theme", theme);
   if (lang) q.set("lang", lang);
-  return `core/render.html?${q}`;
+  return `engine/core/render.html?${q}`;
 };
 
 /** Every visible, non-blank text node in the canvas (or in `scope`): its text, the first family, and whether it is code. */

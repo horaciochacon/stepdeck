@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeFormat } from "../../core/format.js";
-import { parseCSV, createDataLoader } from "../../core/data.js";
-import { t, messages } from "../../core/i18n.js";
+import { makeFormat } from "#engine/core/format.js";
+import { parseCSV, createDataLoader } from "#engine/core/data.js";
+import { t, messages } from "#engine/core/i18n.js";
 
 // ---------- makeFormat ----------
 

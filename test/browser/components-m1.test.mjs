@@ -8,8 +8,8 @@ import { checkPlayed } from "../../cli/check.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = fileURLToPath(new URL("../fixtures/decks/components-m1/", import.meta.url));
-const url = (slide, q = "") => `core/render.html?deck=../test/fixtures/decks/components-m1/&slide=${slide}&${q}`;
-const spike = (q) => `core/render.html?deck=../examples/spike/&slide=trend&${q}`;
+const url = (slide, q = "") => `engine/core/render.html?deck=../../test/fixtures/decks/components-m1/&slide=${slide}&${q}`;
+const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&slide=trend&${q}`;
 
 const goTo = async (page, slide, step) => {
   await page.evaluate(([sl, st]) => window.STEPDECK.goTo(sl, st), [slide, step]);
@@ -173,7 +173,7 @@ test("count-up does not rerun on unchanged step", async () => {
 
     // Component level: an update whose value did not change never tweens, even when animate is true.
     const result = await page.evaluate(async () => {
-      const mod = (await import("/components/big-number/index.js")).default;
+      const mod = (await import("../components/big-number/index.js")).default;
       const el = document.createElement("div");
       document.body.append(el);
       let tweens = 0;

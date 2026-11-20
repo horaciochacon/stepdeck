@@ -4,11 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { ENGINE } from "../../cli/engine.js";
+import { REPO } from "../../cli/engine.js";
 import { check } from "../../cli/check.js";
 import { formatProblem } from "../../cli/problems.js";
 
-const gallery = join(ENGINE, "site", "gallery");
+const gallery = join(REPO, "site", "gallery");
 
 for (const theme of ["modern", "academic-light"]) {
   test(`gallery deck checks clean with --played under ${theme}`, async () => {

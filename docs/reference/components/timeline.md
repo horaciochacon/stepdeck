@@ -2,7 +2,7 @@
 
 `timeline` draws a horizontal track between labelled stops and fills it from the left. `progress` says how far the fill has gone; each stop lights up once the fill reaches it, and `current` emphasises one stop. It also works as the progress connector between two parts of a story. This page lists every prop, which stops are lit, the markup, how it moves and the errors it raises. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/timeline/schema.json`](../../../components/timeline/schema.json), [`components/timeline/index.js`](../../../components/timeline/index.js), [`components/timeline/stops.js`](../../../components/timeline/stops.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/timeline/schema.json`](../../../engine/components/timeline/schema.json), [`components/timeline/index.js`](../../../engine/components/timeline/index.js), [`components/timeline/stops.js`](../../../engine/components/timeline/stops.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

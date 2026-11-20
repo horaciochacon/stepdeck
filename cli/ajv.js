@@ -5,9 +5,11 @@
 //   stepdeck schemas use (`x-transition`, and any other `x-*` found in a schema) are registered as
 //   no-op keywords, so strict mode still rejects real typos.
 // compile(ajv, schema) -> validate function; registers the schema's `x-*` keywords first.
-// readSchema(name) -> parsed schema/<name>.schema.json ("deck", "slide", "layout").
+// readSchema(name) -> parsed schema/<name>.schema.json of this repo's engine ("deck", "slide", "layout").
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
+import { ENGINE } from "./engine.js";
 
 const ANNOTATIONS = ["x-transition"];
 const registered = new WeakMap(); // ajv -> Set of annotation keywords added
@@ -43,5 +45,5 @@ export function compile(ajv, schema) {
 }
 
 export function readSchema(name) {
-  return JSON.parse(readFileSync(new URL(`../schema/${name}.schema.json`, import.meta.url), "utf8"));
+  return JSON.parse(readFileSync(join(ENGINE, "schema", `${name}.schema.json`), "utf8"));
 }

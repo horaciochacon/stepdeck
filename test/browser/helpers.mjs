@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 /** Urls for a deck folder under the repo root (the browser tests serve the repo root). */
 export function deckPages(deckDir) {
   const dir = deckDir.endsWith("/") ? deckDir : `${deckDir}/`;
-  return { url: (slide, query = "") => `core/render.html?deck=../${dir}&slide=${slide}${query ? `&${query}` : ""}` };
+  return { url: (slide, query = "") => `engine/core/render.html?deck=../../${dir}&slide=${slide}${query ? `&${query}` : ""}` };
 }
 
 export const settled = (page) => page.evaluate(() => window.STEPDECK.settled());

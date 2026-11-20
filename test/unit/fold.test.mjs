@@ -6,7 +6,7 @@ import {
   stepIndex,
   stepCount,
   stateAt,
-} from "../../core/fold.js";
+} from "#engine/core/fold.js";
 
 test("mergePatch merges objects, replaces arrays, deletes on null", () => {
   const target = { a: { b: 1, c: 2 }, l: [1] };

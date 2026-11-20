@@ -110,7 +110,7 @@ La documentación y la skill coinciden. Para usar agentes con stepdeck, empieza 
 
 ## Estructura del repositorio
 
-El motor está en `core/`, `components/`, `layouts/` y `themes/`; la línea de comandos, en `cli/`; la skill para agentes, en `skill/`; el mazo inicial y los ejemplos, en `templates/` y `examples/`; la documentación, en `docs/`; el sitio público (página de inicio, visor de documentación y galería), en `site/`. El [recorrido por el repositorio](docs/contributing/index.md#repository-tour) describe cada carpeta, incluidas las generadas.
+El motor está en `engine/` (`core/`, `components/`, `layouts/`, `themes/`, `vendor/` y `schema/`, las carpetas que `new` copia en cada mazo); la línea de comandos, en `cli/`; la skill para agentes, en `skill/`; el mazo inicial y los ejemplos, en `templates/` y `examples/`; la documentación, en `docs/`; el sitio público (página de inicio, visor de documentación y galería), en `site/`. Las rutas entre comillas invertidas, como `core/fold.js` o `components/<name>/`, son relativas a `engine/`, que tiene la misma estructura que la carpeta `stepdeck/` de un mazo. El [recorrido por el repositorio](docs/contributing/index.md#repository-tour) describe cada carpeta, incluidas las generadas.
 
 ## Contribuir
 

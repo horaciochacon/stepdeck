@@ -1,7 +1,7 @@
 // chat: everything shown is derived from the props (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveChat } from "../../components/chat/derive.js";
+import { deriveChat } from "#engine/components/chat/derive.js";
 
 const three = [{ role: "user", text: "a" }, { role: "agent", text: "b" }, { role: "note", text: "c" }];
 

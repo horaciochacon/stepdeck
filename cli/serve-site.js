@@ -6,12 +6,12 @@
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serve } from "../cli/serve.js";
-import { ENGINE } from "../cli/engine.js";
+import { serve } from "./serve.js";
+import { REPO } from "./engine.js";
 
 const port = Number(process.argv[2] ?? 8000);
 const dir = mkdtempSync(join(tmpdir(), "stepdeck-site-"));
-symlinkSync(ENGINE, join(dir, "stepdeck"), "dir");
+symlinkSync(REPO, join(dir, "stepdeck"), "dir");
 const server = await serve({ root: dir, port });
 console.log(`stepdeck site: ${server.url}stepdeck/`);
 

@@ -7,13 +7,13 @@ test("resolveDocPath: default, normalization, allowed roots", () => {
   assert.equal(resolveDocPath(""), "docs/index.md");
   assert.equal(resolveDocPath("docs/guide/quickstart.md"), "docs/guide/quickstart.md");
   assert.equal(resolveDocPath("docs/guide/../index.md"), "docs/index.md");
-  for (const ok of ["skill/SKILL.md", "components/chat/README.md", "layouts/x/README.md", "themes/modern/README.md", "templates/a.md", "README.md", "README.es.md", "CHANGELOG.md"]) {
+  for (const ok of ["skill/SKILL.md", "engine/components/chat/README.md", "engine/layouts/x/README.md", "engine/themes/modern/README.md", "templates/a.md", "README.md", "README.es.md", "CHANGELOG.md"]) {
     assert.equal(resolveDocPath(ok), ok, ok);
   }
 });
 
 test("resolveDocPath: refuses everything else", () => {
-  for (const bad of ["../../etc/passwd", "https://x/a.md", "/docs/index.md", "docs/guide/quickstart.js", "docs/superpowers/plans/x.md", "docs/../docs/superpowers/x.md", "cli/index.md", "THIRD_PARTY_NOTICES.md", "docs/../../x.md", "javascript:alert(1).md", "docs\\a.md", "docs/%2e%2e/%2e%2e/x.md", "docs/%2e%2e/docs/superpowers/plans/x.md", "themes/modern/tokens.css#.md", "docs/a?.md", "docs/a#b.md", "docs/a b.md"]) {
+  for (const bad of ["../../etc/passwd", "https://x/a.md", "/docs/index.md", "docs/guide/quickstart.js", "docs/superpowers/plans/x.md", "docs/../docs/superpowers/x.md", "cli/index.md", "THIRD_PARTY_NOTICES.md", "docs/../../x.md", "javascript:alert(1).md", "docs\\a.md", "docs/%2e%2e/%2e%2e/x.md", "docs/%2e%2e/docs/superpowers/plans/x.md", "engine/themes/modern/tokens.css#.md", "docs/a?.md", "docs/a#b.md", "docs/a b.md", "components/chat/README.md", "engine/core/x.md", "engine/x.md"]) {
     assert.equal(resolveDocPath(bad), null, bad);
   }
 });
@@ -22,6 +22,8 @@ test("rewriteHref", () => {
   assert.equal(rewriteHref("guide/quickstart.md", "docs/index.md"), "?p=docs/guide/quickstart.md");
   assert.equal(rewriteHref("../skill/SKILL.md#rules", "docs/index.md"), "?p=skill/SKILL.md#rules");
   assert.equal(rewriteHref("../skill/references/", "docs/index.md"), REPO_URL + "/tree/main/skill/references/");
+  assert.equal(rewriteHref("../../engine/layouts/halves/README.md", "docs/reference/layouts.md"), "?p=engine/layouts/halves/README.md");
+  assert.equal(rewriteHref("../../engine/core/layout.js", "docs/reference/layouts.md"), REPO_URL + "/blob/main/engine/core/layout.js");
   assert.equal(rewriteHref("../../cli/index.js", "docs/reference/cli.md"), REPO_URL + "/blob/main/cli/index.js");
   assert.equal(rewriteHref("#reference", "docs/index.md"), "#reference");
   assert.equal(rewriteHref("https://marked.js.org/", "docs/x.md"), "https://marked.js.org/");
@@ -35,7 +37,7 @@ test("rewriteHref", () => {
 
 test("rewriteSrc points an image at the repository root", () => {
   assert.equal(rewriteSrc("img/a.png", "docs/guide/x.md"), "../../docs/guide/img/a.png");
-  assert.equal(rewriteSrc("../../themes/modern/preview.png", "docs/guide/x.md"), "../../themes/modern/preview.png");
+  assert.equal(rewriteSrc("../../engine/themes/modern/preview.png", "docs/guide/x.md"), "../../engine/themes/modern/preview.png");
   assert.equal(rewriteSrc("https://x/a.png", "docs/x.md"), "https://x/a.png");
 });
 

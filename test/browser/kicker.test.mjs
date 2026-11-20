@@ -16,6 +16,7 @@ import { dump, formatDump } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
+const engine = fileURLToPath(new URL("../../engine/", import.meta.url));
 const spike = fileURLToPath(new URL("../../examples/spike/", import.meta.url));
 const THEMES = ["academic-light", "modern"];
 const ENGINE_DIRS = ["core", "components", "layouts", "themes", "vendor", "schema"];
@@ -57,7 +58,7 @@ let deck;
 before(() => {
   tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-kicker-")));
   const dir = join(tmp, "deck");
-  for (const d of ENGINE_DIRS) cpSync(join(repo, d), join(dir, "stepdeck", d), { recursive: true });
+  for (const d of ENGINE_DIRS) cpSync(join(engine, d), join(dir, "stepdeck", d), { recursive: true });
   cpSync(join(repo, "test/fixtures/fourth-layout"), join(dir, "stepdeck/layouts/fourth"), { recursive: true });
   cpSync(join(repo, "test/fixtures/no-title-layout"), join(dir, "stepdeck/layouts/main-only"), { recursive: true });
   mkdirSync(join(dir, "slides"));

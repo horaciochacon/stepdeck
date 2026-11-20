@@ -1,2 +1,2 @@
-import ex from "../../../components/list/example.js";
+import ex from "../../../engine/components/list/example.js";
 export default { ...ex, notes: "Reference: docs/reference/components/list.md" };

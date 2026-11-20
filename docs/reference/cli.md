@@ -13,7 +13,7 @@ node cli/index.js <command> [deckDir] [options]
 `cli/index.js` is also the package's `stepdeck` bin, so `stepdeck <command>` does the same thing when that bin is on your `PATH`. Node 20 or later is required (`engines` in `package.json`).
 
 - **`deckDir`** is the deck folder (the one holding `deck.js`). It defaults to the current folder.
-- **Engine lookup.** A deck made by `new` holds its own engine copy in `<deck>/stepdeck/` (detected by `stepdeck/core/render.html`). Commands use that copy when it exists, and the engine in this repository otherwise.
+- **Engine lookup.** A deck made by `new` holds its own engine copy in `<deck>/stepdeck/` (detected by `stepdeck/core/render.html`). Commands use that copy when it exists, and the engine in this repository (`engine/`) otherwise.
 - **Browser commands** (`serve`, `dump`, `check`, `shoot`) serve the deck over HTTP. A deck with an engine copy is served from its own folder. A deck without one must be inside this repository (the examples and test fixtures are), and is served from the repository root. Anything else is refused, so no folder above the deck is ever served:
 
   ```
@@ -214,14 +214,15 @@ Lists the components, layouts and themes a deck can use. Agents read the catalog
 node cli/index.js catalog [name] [folder]
 ```
 
-Both positionals are optional and may come in either order. An argument is taken as the folder when it holds `deck.js` or `components/index.json`; the other one is the entry name. Without a folder, the current folder is used.
+Both positionals are optional and may come in either order. An argument is taken as the folder when it holds `deck.js` or `components/index.json`, or is the repository root; the other one is the entry name. Without a folder, the current folder is used.
 
 **What is read and written:**
 
 | Folder | Reads | Writes |
 | --- | --- | --- |
-| A deck (`deck.js`) | The deck's engine (its `stepdeck/` copy, else this repository), then the deck's own `components` | `<deck>/catalog/` |
-| The engine (`components/index.json`) | The engine | `<engine>/catalog/` |
+| A deck (`deck.js`) | The deck's engine (its `stepdeck/` copy, else this repository's `engine/`), then the deck's own `components` | `<deck>/catalog/` |
+| The repository root | The repository's `engine/` | `<repo>/catalog/` |
+| An engine (`components/index.json`), such as `engine/` | The engine | `<engine>/catalog/` |
 | Anything else | | Exits 2: `<dir> is neither a deck (deck.js) nor the stepdeck engine (components/index.json); pass the deck folder` |
 
 So running `catalog` with no folder from the repository root writes `<repo>/catalog/`. That folder is git-ignored.

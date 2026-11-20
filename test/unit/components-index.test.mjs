@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 
-const root = new URL("../../components/", import.meta.url);
+const root = new URL("../../engine/components/", import.meta.url);
 
 test("components/index.json lists exactly the built-in component folders", () => {
   const listed = JSON.parse(readFileSync(new URL("index.json", root), "utf8"));

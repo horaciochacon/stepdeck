@@ -1,12 +1,12 @@
 // Docs viewer logic (GitHub Pages site). A pure module: no DOM access, nothing runs at import time.
 // site/docs/index.html?p=<repo path>.md fetches that file, renders it with the vendored marked and
 // rewrites its links so that every link lands on a page that renders, or on the file on GitHub.
-import { Marked } from "../../vendor/marked/marked.esm.js";
+import { Marked } from "../../engine/vendor/marked/marked.esm.js";
 
 export const REPO_URL = "https://github.com/horaciochacon/stepdeck";
 const HOME = "docs/index.md";
 
-const ROOTS = ["docs/", "skill/", "components/", "layouts/", "themes/", "templates/"];
+const ROOTS = ["docs/", "skill/", "engine/components/", "engine/layouts/", "engine/themes/", "templates/"];
 const FILES = ["README.md", "README.es.md", "CHANGELOG.md"];
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SAFE_PATH = /^[A-Za-z0-9._\/-]+$/;
@@ -29,8 +29,8 @@ function normalize(path) {
 
 /**
  * The repository path a `?p=` value may show, normalized, or null when it is not allowed. Null or
- * empty gives the docs home page. Allowed: *.md under docs/, skill/, components/, layouts/, themes/,
- * templates/ (never docs/superpowers/), and README.md, README.es.md, CHANGELOG.md.
+ * empty gives the docs home page. Allowed: *.md under docs/, skill/, engine/components/, engine/layouts/,
+ * engine/themes/, templates/ (never docs/superpowers/), and README.md, README.es.md, CHANGELOG.md.
  */
 export function resolveDocPath(p) {
   if (!p) return HOME;

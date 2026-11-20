@@ -9,10 +9,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliDecompressSync } from "node:zlib";
 import { checkPalette, contrast } from "../../cli/palettes.js";
-import { parseHex, luminance, contrast as ratio } from "../../core/color.js";
+import { parseHex, luminance, contrast as ratio } from "#engine/core/color.js";
 
-const modernUrl = new URL("../../themes/modern/", import.meta.url);
-const academicUrl = new URL("../../themes/academic-light/", import.meta.url);
+const modernUrl = new URL("../../engine/themes/modern/", import.meta.url);
+const academicUrl = new URL("../../engine/themes/academic-light/", import.meta.url);
 // A missing file reads as "" so each test fails on its own assertion instead of the whole file failing to load.
 const read = (base, f) => (existsSync(new URL(f, base)) ? readFileSync(new URL(f, base), "utf8") : "");
 const modernCss = read(modernUrl, "tokens.css");
@@ -207,7 +207,7 @@ test("the shipped (unsubsetted) Geist files carry the tnum feature in GSUB", () 
 });
 
 test("modern is the default theme: DEFAULT_THEME, the talk template and the kit; spike stays on academic-light", async () => {
-  const { DEFAULT_THEME } = await import("../../core/constants.js");
+  const { DEFAULT_THEME } = await import("#engine/core/constants.js");
   assert.equal(DEFAULT_THEME, "modern");
   const deck = async (p) => (await import(new URL(`../../${p}/deck.js`, import.meta.url).href)).default;
   assert.equal((await deck("templates/talk")).theme, "modern");
@@ -271,7 +271,7 @@ test("boxOnHook (self-test): flags a box on a hook class that reaches the wrappe
 });
 
 test("every shipped theme.css: no box property on a hook class that reaches the wrappers", () => {
-  const themes = new URL("../../themes/", import.meta.url);
+  const themes = new URL("../../engine/themes/", import.meta.url);
   for (const t of readdirSync(themes, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
     const css = read(new URL(`${t}/`, themes), "theme.css");
     assert.deepEqual(boxOnHook(css), [], `${t}/theme.css`);

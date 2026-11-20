@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="../site.css">
 <link rel="modulepreload" href="viewer.js">
-<link rel="modulepreload" href="../../vendor/marked/marked.esm.js">
+<link rel="modulepreload" href="../../engine/vendor/marked/marked.esm.js">
 </head>
 <body>
 <header class="site-header">
@@ -23,7 +23,7 @@
 </main>
 <script type="module">
 import { loadPage } from "./viewer.js";
-import { escapeHtml } from "../../core/kit.js";
+import { escapeHtml } from "../../engine/core/kit.js";
 
 const main = document.querySelector("main");
 const doc = document.getElementById("doc");

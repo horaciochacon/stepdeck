@@ -2,7 +2,7 @@
 
 `text` shows one paragraph of plain text: body copy, a note, a short label or a source line. This page lists every prop, how each role looks in the built-in theme, the markup the component renders, when it animates, and the mistakes that are easy to make. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/text/schema.json`](../../../components/text/schema.json), [`components/text/index.js`](../../../components/text/index.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/text/schema.json`](../../../engine/components/text/schema.json), [`components/text/index.js`](../../../engine/components/text/index.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

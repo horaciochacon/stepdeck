@@ -113,7 +113,7 @@ export default {
 
 ## Types
 
-`types/stepdeck.d.ts` is in the stepdeck repo, at `$STEPDECK/types/stepdeck.d.ts`; it is not copied into decks. It types:
+`schema/stepdeck.d.ts` is copied into every deck by `new`, at `my-talk/stepdeck/schema/stepdeck.d.ts` (in the stepdeck repo: `$STEPDECK/engine/schema/stepdeck.d.ts`). Nothing imports it at run time. It types:
 - the specs;
 - `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext` and `ChildHandle`;
 - the CLI's `--json` output.

@@ -2,7 +2,7 @@
 
 `big-number` shows one large figure, with an optional caption and an optional 95% interval under it. When a forward step changes the figure, it counts up to the new value. This page lists every prop, the markup, when and how it moves, the errors it raises, and the rule that makes it count as a figure. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/big-number/schema.json`](../../../components/big-number/schema.json), [`components/big-number/index.js`](../../../components/big-number/index.js), [`core/format.js`](../../../core/format.js), [`core/i18n.js`](../../../core/i18n.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/big-number/schema.json`](../../../engine/components/big-number/schema.json), [`components/big-number/index.js`](../../../engine/components/big-number/index.js), [`core/format.js`](../../../engine/core/format.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

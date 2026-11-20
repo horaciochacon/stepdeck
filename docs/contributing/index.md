@@ -30,30 +30,31 @@ All tests should pass in a few seconds (about 290 at the time of writing). In th
 
 ## Repository tour
 
-The engine is plain ES modules with no build step. `node cli/index.js new` copies the runtime folders into each deck as `<deck>/stepdeck/`; the rest is development tooling and never ships with a deck.
+The engine is plain ES modules with no build step. Its runtime folders live in `engine/`, and `node cli/index.js new` copies them into each deck as `<deck>/stepdeck/`; the rest is development tooling and never ships with a deck.
+
+Paths in backticks such as `core/fold.js` or `components/<name>/`, here and in the rest of the docs, are relative to `engine/`. That is also the layout of a deck's `stepdeck/` folder, so the same path works in both places. Markdown links point at the files in `engine/`.
+
+Node code outside the engine (`cli/`, `test/`) imports engine modules through the `imports` field of `package.json`, as `import { stateAt } from "#engine/core/fold.js"`, and finds engine files with `ENGINE` (`<repo>/engine`) and `REPO` (the repository root) from [`cli/engine.js`](../../cli/engine.js). Browser code outside the engine (`site/`, the example decks) uses relative paths such as `../../engine/core/kit.js`.
 
 | Folder | What it owns | Copied into decks by `new` |
 | --- | --- | --- |
-| `core/` | The runtime: the fold engine (`fold.js`), the per-slide controller (`controller.js`), the layout renderer (`layout.js`), `boot()` and `window.STEPDECK` (`stepdeck.js`), the shells (`shells/bare.js`, `shells/reveal.js` with `shells/reveal.css`, plus `core/render.html` for the bare shell), the data loader, bindings, formats, i18n, the component registry and shared component helpers (`animate.js`, `kit.js`, `chart.js`, `color.js`, `inline.js`, `d3.js`), constants and `stepdeck.css`. | yes |
-| `components/` | The 11 built-in components, one folder each with `schema.json`, `index.js`, `README.md` and `example.js`. `components/index.json` lists them and sets their order. | yes |
-| `layouts/` | The 5 built-in layouts, one folder each with `layout.css`, `schema.json`, `README.md` and `example.js`. | yes |
-| `themes/` | The built-in themes: `modern` (the default) and `academic-light`. Each has `tokens.css`, an optional `theme.css`, `palettes.json`, `README.md` and vendored fonts with their licences. | yes |
-| `schema/` | JSON schemas for the deck (`deck.schema.json`), slides (`slide.schema.json`) and layout descriptors (`layout.schema.json`). | yes |
-| `vendor/` | Vendored reveal.js, d3 and marked, each with its licence file. | yes |
-| `cli/` | The command line (`index.js` is the `stepdeck` bin): `validate`, `check`, `dump`, `shoot`, `catalog`, `new`, `new-component`, `serve`, and their shared helpers (`engine.js`, `browser.js`, `problems.js`, `palettes.js`, `ajv.js`). | no |
+| `engine/core/` | The runtime: the fold engine (`fold.js`), the per-slide controller (`controller.js`), the layout renderer (`layout.js`), `boot()` and `window.STEPDECK` (`stepdeck.js`), the shells (`shells/bare.js`, `shells/reveal.js` with `shells/reveal.css`, plus `core/render.html` for the bare shell), the data loader, bindings, formats, i18n, the component registry and shared component helpers (`animate.js`, `kit.js`, `chart.js`, `color.js`, `inline.js`, `d3.js`), constants and `stepdeck.css`. | yes |
+| `engine/components/` | The 11 built-in components, one folder each with `schema.json`, `index.js`, `README.md` and `example.js`. `components/index.json` lists them and sets their order. | yes |
+| `engine/layouts/` | The 5 built-in layouts, one folder each with `layout.css`, `schema.json`, `README.md` and `example.js`. | yes |
+| `engine/themes/` | The built-in themes: `modern` (the default) and `academic-light`. Each has `tokens.css`, an optional `theme.css`, `palettes.json`, `README.md` and vendored fonts with their licences. | yes |
+| `engine/schema/` | JSON schemas for the deck (`deck.schema.json`), slides (`slide.schema.json`) and layout descriptors (`layout.schema.json`), and `stepdeck.d.ts`: the deck spec and the component contract as TypeScript types. | yes |
+| `engine/vendor/` | Vendored reveal.js, d3 and marked, each with its licence file. | yes |
+| `cli/` | The command line (`index.js` is the `stepdeck` bin): `validate`, `check`, `dump`, `shoot`, `catalog`, `new`, `new-component`, `serve`, and their shared helpers (`engine.js`, `browser.js`, `problems.js`, `palettes.js`, `ajv.js`). Also `serve-site.js` (`npm run site`), which serves the repository under `/stepdeck/`, as GitHub Pages does, to preview the site locally. | no |
 | `templates/` | `talk`, the starter deck that `new` copies, and `component`, the skeleton that `new-component` copies. | no (`talk` becomes the deck itself) |
-| `examples/` | Two decks that use the repo root as their engine: `spike` (line-chart morph, terminal with `advance`, the custom component `demo.story`) and `kit` (every layout and component of slide kit 1). | no |
+| `examples/` | Two decks that use `engine/` as their engine, with no copy: `spike` (line-chart morph, terminal with `advance`, the custom component `demo.story`) and `kit` (every layout and component of slide kit 1). | no |
 | `skill/` | The agent skill: `SKILL.md` and `references/`. `.claude-plugin/plugin.json` publishes it as a plugin. | no |
-| `types/` | `stepdeck.d.ts`: the deck spec and the component contract as TypeScript types. | no |
 | `test/` | `unit/` (plain `node:test`, no browser), `browser/` (Playwright) and `fixtures/` (`validate/`, `check/`, `decks/`). | no |
 | `docs/` | Guides, reference, concepts, these contributing pages, and design history in `docs/design/`. | no |
 | `site/` | The public site: `site.css` and `landing.js` for the landing page, `docs/` (the docs viewer, which renders the Markdown in `docs/` in the browser) and `gallery/` (a stepdeck deck with a slide for every layout and component). | no |
 | `index.html` | The landing page of the public site. | no |
-| `.nojekyll` | An empty file that makes GitHub Pages serve the repository as it is. | no |
 | `.github/workflows/` | `ci.yml`: a fast job (the unit tests and the site smoke test) that gates the Pages deploy, and the full browser suite on four parallel runners as the status check. | no |
-| `scripts/` | `serve-site.mjs` (`npm run site`): serves the repository under `/stepdeck/`, as GitHub Pages does, to preview the site locally. | no |
 
-`LICENSE` and `THIRD_PARTY_NOTICES.md` are copied into every deck along with the engine folders.
+`LICENSE` and `THIRD_PARTY_NOTICES.md`, at the repository root, are copied into every deck along with the engine folders.
 
 ### Generated folders
 
@@ -68,13 +69,13 @@ These are written by the CLI or by tools and are listed in `.gitignore`. Never c
 
 ## Development loop
 
-The two example decks are your baselines. Their `index.html` maps the engine to the repository root instead of to a copy:
+The two example decks are your baselines. Their `index.html` maps the engine to the repository's `engine/` folder instead of to a copy:
 
 ```html
-<script type="importmap">{ "imports": { "stepdeck/": "../../" } }</script>
+<script type="importmap">{ "imports": { "stepdeck/": "../../engine/" } }</script>
 ```
 
-A deck made by `new` has `"./stepdeck/"` there; that line is the only functional difference (apart from the `<title>` and a comment). So any change you make in `core/`, `components/`, `layouts/` or `themes/` shows up in the examples with no copy step.
+A deck made by `new` has `"./stepdeck/"` there; that line is the only functional difference (apart from the `<title>` and a comment). So any change you make in `engine/` (`core/`, `components/`, `layouts/` or `themes/`) shows up in the examples with no copy step.
 
 Run both examples while you work. Each `serve` needs its own port (the default is 8000), so give the second one `--port 0`:
 
@@ -140,6 +141,6 @@ The same facts are written down for three readers, and a change is not done unti
 | `skill/SKILL.md` and `skill/references/` | Agents building decks | The same changes. Agents are told not to read engine code, so the skill must be complete on its own. |
 | `components/*/README.md`, `layouts/*/README.md`, `themes/*/README.md`, and each `schema.json` description | Both, through `catalog` | The piece itself changes. `catalog` serves these files to agents, so a stale README is a wrong answer. |
 
-Also update `types/stepdeck.d.ts` when the spec or the component contract changes, and `README.md` together with `README.es.md` when the front page changes (the two mirror each other section for section).
+Also update `schema/stepdeck.d.ts` when the spec or the component contract changes, and `README.md` together with `README.es.md` when the front page changes (the two mirror each other section for section).
 
 Do not update design history retroactively. `docs/design/` records what was planned and decided at the time. When the code moves on, change the user docs and leave those files as they are; the [docs index](../index.md#design-history) already says the code and the user docs win where they disagree.

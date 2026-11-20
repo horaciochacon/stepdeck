@@ -117,17 +117,17 @@ Motion runs only when `info.animate` is true. "Enter" means the element became v
 
 | Component | Enter | Change |
 |---|---|---|
-| [text](../../components/text/README.md) | Fades in | Fades in again when `text` changes |
-| [markdown](../../components/markdown/README.md) | Fades in | Fades in again when `md` changes |
-| [big-number](../../components/big-number/README.md) | Whole number fades in; value counts up from 0 | Counts from the previous value; a changed `label`, `ci`, `prefix`, `suffix` or `format` fades that part |
-| [image](../../components/image/README.md) | Figure fades in | New `src` fades the picture in; a new caption fades the caption in |
-| [chart.line](../../components/chart.line/README.md) | Every line draws in | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` fades opacity; annotations fade |
-| [chart.bar](../../components/chart.bar/README.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `highlight` tweens colors |
-| [terminal](../../components/terminal/README.md) | Nothing (see note) | When `shown` grows: with `typing`, the command is typed first if the session was at 0; then new lines fade in, staggered |
-| [list](../../components/list/README.md) | Nothing (see note) | Newly shown items rise and fade in, staggered; a newly done check mark draws; `active` tweens text color |
-| [chat](../../components/chat/README.md) | Nothing (see note) | Newly shown messages rise and fade in, staggered; with `typing`, the newest message is then typed |
-| [diagram](../../components/diagram/README.md) | Nothing (see note) | New groups fade in; new nodes fade and scale in, staggered; then new edges draw (dashed ones fade) and their labels fade in; `highlight` tweens opacity and text color |
-| [timeline](../../components/timeline/README.md) | Nothing (see note) | `progress` fill tweens from the previous value; a new `current` stop grows and its label fades in |
+| [text](../../engine/components/text/README.md) | Fades in | Fades in again when `text` changes |
+| [markdown](../../engine/components/markdown/README.md) | Fades in | Fades in again when `md` changes |
+| [big-number](../../engine/components/big-number/README.md) | Whole number fades in; value counts up from 0 | Counts from the previous value; a changed `label`, `ci`, `prefix`, `suffix` or `format` fades that part |
+| [image](../../engine/components/image/README.md) | Figure fades in | New `src` fades the picture in; a new caption fades the caption in |
+| [chart.line](../../engine/components/chart.line/README.md) | Every line draws in | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` fades opacity; annotations fade |
+| [chart.bar](../../engine/components/chart.bar/README.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `highlight` tweens colors |
+| [terminal](../../engine/components/terminal/README.md) | Nothing (see note) | When `shown` grows: with `typing`, the command is typed first if the session was at 0; then new lines fade in, staggered |
+| [list](../../engine/components/list/README.md) | Nothing (see note) | Newly shown items rise and fade in, staggered; a newly done check mark draws; `active` tweens text color |
+| [chat](../../engine/components/chat/README.md) | Nothing (see note) | Newly shown messages rise and fade in, staggered; with `typing`, the newest message is then typed |
+| [diagram](../../engine/components/diagram/README.md) | Nothing (see note) | New groups fade in; new nodes fade and scale in, staggered; then new edges draw (dashed ones fade) and their labels fade in; `highlight` tweens opacity and text color |
+| [timeline](../../engine/components/timeline/README.md) | Nothing (see note) | `progress` fill tweens from the previous value; a new `current` stop grows and its label fades in |
 
 Notes:
 

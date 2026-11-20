@@ -1,7 +1,9 @@
 # Third-party notices
 
 stepdeck is MIT licensed (see `LICENSE`). It vendors the libraries below under
-`vendor/`; each keeps its own license file next to the code.
+`vendor/`; each keeps its own license file next to the code. Paths here are
+relative to the engine folder: `engine/` in the stepdeck repository, and the
+`stepdeck/` folder of a deck, where `stepdeck new` copies this file.
 
 | Library | Version | License | Files | License file |
 | --- | --- | --- | --- | --- |

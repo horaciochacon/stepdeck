@@ -5,12 +5,12 @@
 // the system Chrome).
 //
 // withPage({ root, size, url, timeout = PAGE_TIMEOUT_MS, waitFor = waitForDeck }, async (page, ctx) => …)
-//   Serves `root` (cli/serve.js), launches Chromium with a viewport of `size` (default 1920×1080;
-//   a number n means n × round(n·9/16)), opens `url` (relative to root) if given, and waits for
-//   it with waitFor(page, { timeout, errors }). The default waits for the deck: STEPDECK.ready,
-//   document.fonts.ready, STEPDECK.settled() (waitForDeck: on timeout the error names the page URL and
-//   its slide and step); a page that is not a deck (the docs site) passes its own. ctx.open waits the
-//   same way. Then runs fn(page, ctx):
+//   Serves `root` (cli/serve.js; default: the repository root, REPO), launches Chromium with a viewport
+//   of `size` (default 1920×1080; a number n means n × round(n·9/16)), opens `url` (relative to root)
+//   if given, and waits for it with waitFor(page, { timeout, errors }). The default waits for the deck:
+//   STEPDECK.ready, document.fonts.ready, STEPDECK.settled() (waitForDeck: on timeout the error names
+//   the page URL and its slide and step); a page that is not a deck (the docs site) passes its own.
+//   ctx.open waits the same way. Then runs fn(page, ctx):
 //     ctx.base     server URL (ends with "/")
 //     ctx.requests every request URL the page made, live array
 //     ctx.errors   console errors ("console: …") and page errors ("pageerror: …"), live array
@@ -28,13 +28,14 @@
 // deckTarget(deckDir) -> { root, url({ slide, step, capture, query }) }
 //   Where to serve a deck from and how to address the bare shell for it. A deck with a copied
 //   engine (deckDir/stepdeck/core/render.html) is served from deckDir. A deck without one must be
-//   inside this engine repo (examples, fixtures) and is served from the repo root; anything else
-//   throws, so no folder above the deck is ever served (ruling R15).
+//   inside this repository (examples, the gallery, fixtures): it is served from the repository root
+//   (REPO) and uses this repo's engine (ENGINE, <repo>/engine/); anything else throws, so no folder
+//   above the deck is ever served (ruling R15).
 import { createRequire } from "node:module";
 import { resolve, relative, sep, isAbsolute } from "node:path";
 import { serve } from "./serve.js";
-import { CANVAS } from "../core/constants.js";
-import { ENGINE, hasEngineCopy } from "./engine.js";
+import { CANVAS } from "#engine/core/constants.js";
+import { ENGINE, REPO, hasEngineCopy } from "./engine.js";
 
 export function loadPlaywright() {
   const require = createRequire(import.meta.url);
@@ -120,7 +121,7 @@ export async function waitForDeck(page, { timeout = PAGE_TIMEOUT_MS, errors = []
 }
 
 export async function withPage({ root, size, url, timeout = PAGE_TIMEOUT_MS, waitFor = waitForDeck } = {}, fn) {
-  const server = await serve({ root: root ?? ENGINE, port: 0 });
+  const server = await serve({ root: root ?? REPO, port: 0 });
   let browser;
   try {
     browser = await launchBrowser();
@@ -195,14 +196,14 @@ export function deckTarget(deckDir) {
   const copied = resolve(deck, "stepdeck");
   const hasCopy = hasEngineCopy(deck);
   if (!hasCopy) {
-    // Ruling R15: never serve a folder above the deck, except this engine repo's own root.
-    const rel = relative(ENGINE, deck);
+    // Ruling R15: never serve a folder above the deck, except this repository's own root.
+    const rel = relative(REPO, deck);
     if (rel.startsWith("..") || isAbsolute(rel)) {
       throw new Error(`deck at ${deck} has no engine copy; run \`stepdeck new\` or copy the engine to ${copied}/`);
     }
   }
   const engine = hasCopy ? copied : ENGINE;
-  const root = hasCopy ? deck : ENGINE;
+  const root = hasCopy ? deck : REPO;
   const render = toUrlPath(relative(root, resolve(engine, "core", "render.html")));
   const deckParam = `${toUrlPath(relative(resolve(engine, "core"), deck)) || "."}/`;
   return {

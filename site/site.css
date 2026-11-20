@@ -1,10 +1,10 @@
 /* stepdeck site: shared by the landing page and the docs viewer.
    Neutral, no decorative shapes. Geist and the accent come from the modern theme. */
-@font-face { font-family: "Geist"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../themes/modern/fonts/geist/geist-variable.woff2") format("woff2"); }
-@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../themes/modern/fonts/geist-mono/geist-mono-variable.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../engine/themes/modern/fonts/geist/geist-variable.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../engine/themes/modern/fonts/geist-mono/geist-mono-variable.woff2") format("woff2"); }
 
 :root {
-  --accent: #1d4ed8; /* the modern theme's accent (themes/modern/tokens.css) */
+  --accent: #1d4ed8; /* the modern theme's accent (engine/themes/modern/tokens.css) */
   --title: #09090b;
   --ink: #27272a;
   --muted: #5f5f68;

@@ -21,7 +21,7 @@
 //   simulateCvd(hex, type)              hex as seen with protanopia | deuteranopia | tritanopia
 //   deltaE(a, b)                        CIEDE2000 color difference between two hex colors
 import { problem } from "./problems.js";
-import { parseHex, toLinear, luminance as relativeLuminance, contrast as ratio } from "../core/color.js";
+import { parseHex, toLinear, luminance as relativeLuminance, contrast as ratio } from "#engine/core/color.js";
 
 export { parseHex };
 

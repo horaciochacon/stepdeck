@@ -6,10 +6,10 @@ import { deckTarget } from "../../cli/browser.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 
-test("deckTarget: a deck inside the engine repo is served from the repo root", () => {
+test("deckTarget: a deck inside the repo is served from the repo root, with the engine in engine/", () => {
   const t = deckTarget(resolve(repo, "examples/spike"));
   assert.equal(resolve(t.root), resolve(repo));
-  assert.equal(t.url({ slide: "hello", step: "two" }), "core/render.html?deck=..%2Fexamples%2Fspike%2F&slide=hello&step=two");
+  assert.equal(t.url({ slide: "hello", step: "two" }), "engine/core/render.html?deck=..%2F..%2Fexamples%2Fspike%2F&slide=hello&step=two");
 });
 
 test("deckTarget: a deck with a copied engine is served from the deck itself", () => {

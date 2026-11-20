@@ -1,7 +1,7 @@
 // timeline: stop states are derived from the props (pure function, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stopStates } from "../../components/timeline/stops.js";
+import { stopStates } from "#engine/components/timeline/stops.js";
 
 const three = [{ id: "a", label: "A" }, { id: "b", label: "B", sub: "s" }, { id: "c", label: "C" }];
 
@@ -45,7 +45,7 @@ test("bad progress, duplicate ids and bad `at` throw, naming the problem", () =>
 test("schema: `orient` accepts only \"horizontal\" (spec §5.2), so a timeline may name it", async () => {
   const { readFileSync } = await import("node:fs");
   const { createAjv } = await import("../../cli/ajv.js");
-  const schema = JSON.parse(readFileSync(new URL("../../components/timeline/schema.json", import.meta.url), "utf8"));
+  const schema = JSON.parse(readFileSync(new URL("../../engine/components/timeline/schema.json", import.meta.url), "utf8"));
   const valid = createAjv().compile(schema);
   const stops = [{ label: "A" }, { label: "B" }];
   assert.ok(valid({ stops, progress: 0, orient: "horizontal" }), JSON.stringify(valid.errors));

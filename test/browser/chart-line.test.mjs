@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const spike = (q) => `core/render.html?deck=../examples/spike/&${q}`;
+const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&${q}`;
 const STEPS = ["base", "regimens", "annotate", "focus", "total"];
 
 // Everything that must not depend on how a state was reached.
@@ -120,7 +120,7 @@ test("an animated step really moves: mid-flight the path differs from its end st
 });
 
 test("missing column shows error naming the column", async () => {
-  const url = "core/render.html?deck=../test/fixtures/decks/chart-broken/&slide=missing-column";
+  const url = "engine/core/render.html?deck=../../test/fixtures/decks/chart-broken/&slide=missing-column";
   await withPage({ root, url }, async (page, ctx) => {
     const errors = await page.evaluate(() => window.STEPDECK.errors);
     assert.equal(errors.length, 1);
@@ -169,7 +169,7 @@ test("annotation, series colors from the palette, legible text, anchor", async (
 });
 
 test("anchor('series:<name>') returns a canvas-pixel box", async () => {
-  await withPage({ root, url: "core/render.html?deck=../examples/spike/&slide=hello", size: 960 }, async (page) => {
+  await withPage({ root, url: "engine/core/render.html?deck=../../examples/spike/&slide=hello", size: 960 }, async (page) => {
     const box = await page.evaluate(async () => {
       const { default: chart } = await import("../components/chart.line/index.js");
       const { d3 } = await import("../core/d3.js");

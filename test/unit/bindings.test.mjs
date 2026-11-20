@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseBinding, resolveBindings, lookupPointer } from "../../core/bindings.js";
-import { makeFormat } from "../../core/format.js";
+import { parseBinding, resolveBindings, lookupPointer } from "#engine/core/bindings.js";
+import { makeFormat } from "#engine/core/format.js";
 
 const docs = {
   "data/x.json": { a: { b: [10, 20, { c: "deep" }] }, "k/l": 1, "m~n": 2, n: 12000, name: "Springfield", ok: true, nil: null },

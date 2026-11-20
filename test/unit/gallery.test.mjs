@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ENGINE, listDirs, readBuiltins } from "../../cli/engine.js";
+import { ENGINE, REPO, listDirs, readBuiltins } from "../../cli/engine.js";
 import { validate } from "../../cli/validate.js";
 import { formatProblem } from "../../cli/problems.js";
 
-const gallery = join(ENGINE, "site", "gallery");
+const gallery = join(REPO, "site", "gallery");
 const { default: deck, entries } = await import(pathToFileURL(join(gallery, "deck.js")).href);
 
 const components = readBuiltins(ENGINE);
@@ -45,7 +45,7 @@ test("every gallery slide file exists and its id equals its file name", async ()
 });
 
 test("every entry's reference page exists", () => {
-  for (const e of entries) assert.ok(existsSync(join(ENGINE, e.doc)), `${e.doc} exists`);
+  for (const e of entries) assert.ok(existsSync(join(REPO, e.doc)), `${e.doc} exists`);
 });
 
 test("the gallery deck validates clean: every example.js, as a slide, with its data", async () => {

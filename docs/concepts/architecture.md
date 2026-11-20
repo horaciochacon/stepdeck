@@ -96,7 +96,7 @@ Dev tooling. Nothing here is needed to present.
 | `serve.js` | Static server with `Cache-Control: no-store`. |
 | `catalog.js` | `catalog`: the index of components, layouts and themes that agents read. |
 | `new.js` | `new` (copy a template and the engine) and `new-component`. |
-| `engine.js` | Finds the engine a deck uses (`<deck>/stepdeck/` or this repo) and shared file helpers. |
+| `engine.js` | The two roots, `ENGINE` (`<repo>/engine`) and `REPO` (the repository root); finds the engine a deck uses (`<deck>/stepdeck/` or `ENGINE`); shared file helpers. |
 | `problems.js` | The `Problem` shape and the one-line formatter every command uses. |
 | `palettes.js` | Palette contrast and color-vision checks. |
 | `ajv.js` | The one Ajv setup (draft 2020-12, strict). Only `validate` loads it. |
@@ -187,7 +187,7 @@ These parts of the design doc are stale:
 | §8 milestone table | `chart.bar`, `chat`, `image` and `list` in M2; `diagram` and `timeline` in M3. | All six shipped early, with the slide kit 1 work package (see the [changelog](../../CHANGELOG.md)), along with the `statement` and `halves` layouts. |
 | §6.3, §6.4 marks and callouts | `mark` and `callout` elements placed with a component's `anchor()`. | Not built. Only `chart.line` implements `anchor()`, and nothing calls it yet. |
 
-`m0-findings.md` B4 also lists `ctx` without `assetUrl`, which was added in M1. The full `ctx` is in [`core/controller.js`](../../core/controller.js) (`#ctxFor`) and in [`types/stepdeck.d.ts`](../../types/stepdeck.d.ts).
+`m0-findings.md` B4 also lists `ctx` without `assetUrl`, which was added in M1. The full `ctx` is in [`core/controller.js`](../../engine/core/controller.js) (`#ctxFor`) and in [`schema/stepdeck.d.ts`](../../engine/schema/stepdeck.d.ts).
 
 ## Related pages
 

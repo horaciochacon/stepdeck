@@ -2,7 +2,7 @@
 
 This page is the exact reference for the browser side of stepdeck: `boot()`, the `window.STEPDECK` object it sets, the query flags, the URL hash of the reveal shell, the two shells and the helpers that `core/stepdeck.js` exports. It is for people who embed a deck in a page, for tool builders who drive a deck from a script (the CLI does this through the bare shell), and for contributors who change the runtime.
 
-Everything here comes from `core/stepdeck.js`, `core/shells/bare.js`, `core/shells/reveal.js`, `core/render.html`, `core/controller.js` and `core/fold.js`. Where `types/stepdeck.d.ts` or the design doc (`docs/design/2026-11-18-engine-design.md` §9) say something else, the code is what is described here, and the differences are listed at the end.
+Everything here comes from `core/stepdeck.js`, `core/shells/bare.js`, `core/shells/reveal.js`, `core/render.html`, `core/controller.js` and `core/fold.js`. Where `schema/stepdeck.d.ts` or the design doc (`docs/design/2026-11-18-engine-design.md` §9) say something else, the code is what is described here, and the differences are listed at the end.
 
 If you only present a deck, [Presenting](../guide/presenting.md) covers the keys, the hash and the flags from the presenter's side. Agents should work through the [skill](../../skill/SKILL.md) and the CLI, not this API.
 
@@ -23,7 +23,7 @@ A deck's `index.html` calls `boot()` once. This is the page that `stepdeck new` 
 </script>
 ```
 
-The import map points `stepdeck/` at the engine copied into the deck (`<deck>/stepdeck/`). The example decks in the repo (`examples/kit/index.html`, `examples/spike/index.html`) are the same page with `"stepdeck/": "../../"`, the repo root. That is the only functional difference (the `<title>` and the HTML comment also differ). The inline script adds the `capture` class to `<html>` before anything loads; `boot()` adds it too, but only once the module runs.
+The import map points `stepdeck/` at the engine copied into the deck (`<deck>/stepdeck/`). The example decks in the repo (`examples/kit/index.html`, `examples/spike/index.html`) are the same page with `"stepdeck/": "../../engine/"`, the repository's `engine/` folder. That is the only functional difference (the `<title>` and the HTML comment also differ). The inline script adds the `capture` class to `<html>` before anything loads; `boot()` adds it too, but only once the module runs.
 
 ### `boot(options)`
 
@@ -388,7 +388,7 @@ It renders the slide's layout, loads every font face before any component measur
 
 ## Types and known differences
 
-`types/stepdeck.d.ts` types `window.STEPDECK` (`Stepdeck`, `SlideState`, `ElementState`, `StepdeckFlags`), the component contract and the CLI output. Nothing imports it at run time. It mostly matches the code. The known differences:
+`schema/stepdeck.d.ts` types `window.STEPDECK` (`Stepdeck`, `SlideState`, `ElementState`, `StepdeckFlags`), the component contract and the CLI output. Nothing imports it at run time. It mostly matches the code. The known differences:
 
 | Type | The d.ts says | The code does |
 |---|---|---|

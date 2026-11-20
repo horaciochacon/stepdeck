@@ -2,7 +2,7 @@
 
 This page lists every prop and behaviour of the built-in `list` component: numbered, lettered, bulleted or checklist items that you reveal, tick or emphasise one step at a time. It is for anyone who writes slides, by hand or through an agent. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog list <deck>`.
 
-Sources: [`components/list/schema.json`](../../../components/list/schema.json), [`components/list/index.js`](../../../components/list/index.js), [`components/list/derive.js`](../../../components/list/derive.js), [`core/stepdeck.css`](../../../core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/list/schema.json`](../../../engine/components/list/schema.json), [`components/list/index.js`](../../../engine/components/list/index.js), [`components/list/derive.js`](../../../engine/components/list/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 

@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const spike = (q) => `core/render.html?deck=../examples/spike/&slide=terminal&${q}`;
+const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&slide=terminal&${q}`;
 const session = JSON.parse(readFileSync(new URL("../../examples/spike/data/session.json", import.meta.url), "utf8"));
 const STEPS = ["open", "inspect", "summarize", "fix", "report", "done"];
 const SHOWN = [0, 4, 9, 14, 18, 22];

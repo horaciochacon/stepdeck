@@ -2,7 +2,7 @@
 
 This page is the exact contract between the engine and a component. It covers the folder a component lives in, how the engine finds it, every call the engine makes (`mount`, `update`, `anchor`, `pause`, `destroy`), the `info` argument, the `ctx` object, the watchdog and the rules every component must follow. It is for people who write deck components and for contributors who change the built-ins or the controller.
 
-For a step-by-step tutorial, read [Writing a custom component](../guide/custom-components.md) first. Agents follow [skill/references/custom-components.md](../../skill/references/custom-components.md). The source of truth is the code: `core/controller.js` (the caller), `core/registry.js` (the lookup) and `types/stepdeck.d.ts` (the types).
+For a step-by-step tutorial, read [Writing a custom component](../guide/custom-components.md) first. Agents follow [skill/references/custom-components.md](../../skill/references/custom-components.md). The source of truth is the code: `core/controller.js` (the caller), `core/registry.js` (the lookup) and `schema/stepdeck.d.ts` (the types).
 
 ## Where a component lives
 
@@ -144,7 +144,7 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 | `changed` | `string[]` | Top-level keys whose values differ from `prev`, added and removed keys included. All keys on the first update; `[]` when only visibility changed. |
 | `entered` | `boolean` | The element just became visible. On the first update: it is visible. |
 
-`types/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
+`schema/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
 
 When does `animate` come true? The shell requests motion only when the page is not in capture mode (`?capture`), not a presenter preview frame (`?receiver`), and motion is on (no `prefers-reduced-motion`, or `?motion=full`). Both shells render slide changes with `animate: false`; only a step change within the current slide passes the shell's motion request. The controller then narrows it to a forward move of exactly one step. A jump, a backward move and the first render never animate. See [Animation and motion](../guide/animation-and-motion.md).
 
@@ -306,4 +306,4 @@ The starter's schema:
 - [Deck and slide spec](deck-and-slide.md): elements, steps, `advance` and `transition`.
 - [Built-in components](components/index.md): what the 11 built-ins render.
 - [skill/references/custom-components.md](../../skill/references/custom-components.md): the agent version.
-- `types/stepdeck.d.ts`: `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext`, `ChildHandle`.
+- `schema/stepdeck.d.ts`: `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext`, `ChildHandle`.

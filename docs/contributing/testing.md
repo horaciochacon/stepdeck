@@ -168,7 +168,7 @@ Shared decks that several tests open. Most belong to one component or feature:
 
 `terminal.test.mjs` uses no fixture deck: it opens the `terminal` slide of `examples/spike`.
 
-Browser tests open a fixture deck in the bare shell with a URL relative to the repository root, such as `core/render.html?deck=../test/fixtures/decks/list/&slide=reveal&step=none`. `deckPages()` builds these URLs for you.
+Browser tests open a fixture deck in the bare shell with a URL relative to the repository root, such as `engine/core/render.html?deck=../../test/fixtures/decks/list/&slide=reveal&step=none`. `deckPages()` builds these URLs for you.
 
 ## Browser helpers
 

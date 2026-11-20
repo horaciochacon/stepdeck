@@ -108,7 +108,7 @@ The docs and the skill agree. To run agents on stepdeck, start with [stepdeck fo
 
 ## Repository layout
 
-The engine lives in `core/`, `components/`, `layouts/` and `themes/`; the command line in `cli/`; the agent skill in `skill/`; the starter deck and examples in `templates/` and `examples/`; the documentation in `docs/`; the public site (landing page, docs viewer and gallery) in `site/`. The [repository tour](docs/contributing/index.md#repository-tour) describes every folder, including the generated ones.
+The engine lives in `engine/` (`core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/`, the folders `new` copies into every deck); the command line in `cli/`; the agent skill in `skill/`; the starter deck and examples in `templates/` and `examples/`; the documentation in `docs/`; the public site (landing page, docs viewer and gallery) in `site/`. Paths in backticks such as `core/fold.js` or `components/<name>/` are relative to `engine/`, which is also the layout of a deck's `stepdeck/` folder. The [repository tour](docs/contributing/index.md#repository-tour) describes every folder, including the generated ones.
 
 ## Contributing
 

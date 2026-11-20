@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { Marked } from "../../vendor/marked/marked.esm.js";
+import { Marked } from "#engine/vendor/marked/marked.esm.js";
 import { isExternal } from "../../site/docs/viewer.js";
 import { ROOT, publicFiles } from "./helpers/tracked.mjs";
 

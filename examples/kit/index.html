@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stepdeck slide kit</title>
 <link rel="icon" href="data:,">
-<!-- Reveal shell (spec §9). The import map points "stepdeck/" at the engine: here the repo root
-     (../../); in a deck made by `stepdeck new` it is the copied engine (./stepdeck/), as in
-     templates/talk/index.html. That line is the only difference. -->
+<!-- Reveal shell (spec §9). The import map points "stepdeck/" at the engine: here the repository's
+     engine/ folder (../../engine/); in a deck made by `stepdeck new` it is the copied engine
+     (./stepdeck/), as in templates/talk/index.html. That line is the only difference. -->
 <script>
   if (new URLSearchParams(location.search).has("capture")) document.documentElement.classList.add("capture");
 </script>
-<script type="importmap">{ "imports": { "stepdeck/": "../../" } }</script>
+<script type="importmap">{ "imports": { "stepdeck/": "../../engine/" } }</script>
 </head>
 <body>
 <script type="module">

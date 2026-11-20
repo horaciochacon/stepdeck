@@ -1,8 +1,8 @@
 // list: everything shown is derived from the props (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deriveList } from "../../components/list/derive.js";
-import { renderInline, renderBlock } from "../../core/inline.js";
+import { deriveList } from "#engine/components/list/derive.js";
+import { renderInline, renderBlock } from "#engine/core/inline.js";
 
 const three = [{ text: "x" }, { text: "y" }, { text: "z" }];
 const idsABC = [{ id: "a", text: "x" }, { id: "b", text: "y" }, { id: "c", text: "z" }];

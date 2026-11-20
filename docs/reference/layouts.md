@@ -15,13 +15,13 @@ A layout is a folder `layouts/<name>/` of the engine:
 | `README.md` | no | Human notes; the catalog serves it. |
 | `example.js` | no | An example slide; the catalog points to it. |
 
-When a slide is mounted, the runtime fetches `layouts/<layout>/layout.css` and `schema.json` from the engine root, then [`core/layout.js`](../../core/layout.js) builds the canvas:
+When a slide is mounted, the runtime fetches `layouts/<layout>/layout.css` and `schema.json` from the engine root, then [`core/layout.js`](../../engine/core/layout.js) builds the canvas:
 
-- The canvas is `div.sd-canvas[data-slide][data-layout][data-kind]`, 1920×1080, `display: grid` ([`core/stepdeck.css`](../../core/stepdeck.css)). `data-kind` is the layout's `kind` (`content` unless the descriptor says `cover`).
+- The canvas is `div.sd-canvas[data-slide][data-layout][data-kind]`, 1920×1080, `display: grid` ([`core/stepdeck.css`](../../engine/core/stepdeck.css)). `data-kind` is the layout's `kind` (`content` unless the descriptor says `cover`).
 - Each region named in `schema.json` becomes one `div.sd-region[data-region="<name>"]`, in schema order, with `grid-area: <name>` set inline. The layout CSS only declares the grid; it never has to assign areas. A region is created even when no element uses it.
 - A region is a column flexbox with `gap: var(--sd-region-gap)` (24px), `min-width: 0` and `min-height: 0`. Elements stack top to bottom in the order the slide lists them.
 - An element without `region` goes to `main`. An element with a `box` is positioned absolutely on the canvas instead and floats above every region.
-- A slide without `layout` uses `full-bleed` (`DEFAULT_LAYOUT` in [`core/constants.js`](../../core/constants.js)).
+- A slide without `layout` uses `full-bleed` (`DEFAULT_LAYOUT` in [`core/constants.js`](../../engine/core/constants.js)).
 - The slide's `title` string is shorthand for a `text` element with id `title` in the `title` region. Every built-in layout has a `title` region.
 - The `title` region is an inline-size container named `sd-title` (`container: sd-title / inline-size`, set inline by core). Its width therefore never comes from its content: see [Layout CSS is placement only](#layout-css-is-placement-only).
 - The layout's `layout.css` is injected in the `sd-layout` cascade layer, between core and the theme (see [Cascade layers](themes.md#cascade-layers)). A region and the element wrappers in it get a hook class `sd-<hook>` when the descriptor maps the region to a hook, and the reserved `title` element gets `sd-title`. Styling a hook is the theme's job, not the layout's.
@@ -216,7 +216,7 @@ There are two kinds of fill rule:
 | Rule | Where | Applies to |
 |---|---|---|
 | `> .sd-el:only-child { flex: 1 1 0; min-height: 0; }` | Each layout's `layout.css`, per region | Any component, including `chart.line` and `chart.bar`, when it is the **only** element in that region |
-| `[data-type="diagram"]`, `[data-type="image"]`, `[data-type="terminal"]` rules | [`core/stepdeck.css`](../../core/stepdeck.css) | These three types, in **any** region of any layout, alone or not (`image` and `terminal` only while not collapsed or failed) |
+| `[data-type="diagram"]`, `[data-type="image"]`, `[data-type="terminal"]` rules | [`core/stepdeck.css`](../../engine/core/stepdeck.css) | These three types, in **any** region of any layout, alone or not (`image` and `terminal` only while not collapsed or failed) |
 
 Which regions have the only-child rule:
 
@@ -258,7 +258,7 @@ The names are **not** checked against the layout's declared variables. A typo su
 
 ## Layout descriptor
 
-Every `layouts/<name>/schema.json` is a layout descriptor, validated against [`schema/layout.schema.json`](../../schema/layout.schema.json) (JSON Schema draft 2020-12). It is not a props schema: it declares names and documents variables.
+Every `layouts/<name>/schema.json` is a layout descriptor, validated against [`schema/layout.schema.json`](../../engine/schema/layout.schema.json) (JSON Schema draft 2020-12). It is not a props schema: it declares names and documents variables.
 
 | Key | Type | Required | Rule |
 |---|---|---|---|
@@ -271,7 +271,7 @@ Every `layouts/<name>/schema.json` is a layout descriptor, validated against [`s
 | `variables[].name` | string | yes | Pattern `^--[a-z0-9-]+$`. |
 | `variables[].default` | string | yes | The fallback used in `layout.css`, as text. |
 | `variables[].description` | string | yes | Non-empty. |
-| `hooks` | object | no | Region name to a published hook: one of `title`, `kicker`, `accent`, `subtitle`, `meta`, `statement` (`HOOKS` in [`core/constants.js`](../../core/constants.js)). Core adds the class `sd-<hook>` to that region and to every element wrapper in it. |
+| `hooks` | object | no | Region name to a published hook: one of `title`, `kicker`, `accent`, `subtitle`, `meta`, `statement` (`HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). Core adds the class `sd-<hook>` to that region and to every element wrapper in it. |
 | `kind` | string | no | `content` (default) or `cover` (`LAYOUT_KINDS` in `core/constants.js`). Core sets it as `data-kind` on the canvas. A `cover` title takes `--sd-font-size-cover`, and `--sd-font-size-cover-figure` while a region named `figure` holds an element. |
 
 No other keys are allowed at any level (`additionalProperties: false`).
@@ -281,7 +281,7 @@ What the engine uses:
 - **validate** ([`cli/validate.js`](../../cli/validate.js)): region names, and the rules below.
 - **catalog** ([`cli/catalog.js`](../../cli/catalog.js)): a layout entry is `{ kind: "layout", name, summary, animates: [] }`, and `catalog <name>` adds `description`, `regions`, `variables`, `readme` (the README text) and `example` (`layouts/<name>/example.js`, or `null`). Layouts are found as the folders of `layouts/` that hold a `schema.json`; an unreadable one gives a `catalog-schema` warning, and a layout with the same name as a theme gives `catalog-name`.
 
-The `title` descriptor, from [`layouts/title/schema.json`](../../layouts/title/schema.json) (long descriptions shortened with `…`):
+The `title` descriptor, from [`layouts/title/schema.json`](../../engine/layouts/title/schema.json) (long descriptions shortened with `…`):
 
 ```json
 {
@@ -327,7 +327,7 @@ Because of inline-size containment, the `title` region must sit in a stretched o
 
 ### Adding a layout
 
-The runtime and `validate` read layouts from the engine root only: the repo, or a deck's `stepdeck/` copy made by `stepdeck new`. `catalog` run on a deck also lists any `<deck>/layouts/` folder, but the runtime does not use it: such a layout is listed, then fails as `unknown-layout` or `layout '<name>' not found`. So a new layout for one deck goes in `<deck>/stepdeck/layouts/<name>/`. Step by step, see [Adding a layout](../contributing/adding-a-layout.md). In short:
+The runtime and `validate` read layouts from the engine root only: the repository's `engine/`, or a deck's `stepdeck/` copy made by `stepdeck new`. `catalog` run on a deck also lists any `<deck>/layouts/` folder, but the runtime does not use it: such a layout is listed, then fails as `unknown-layout` or `layout '<name>' not found`. So a new layout for one deck goes in `<deck>/stepdeck/layouts/<name>/`. Step by step, see [Adding a layout](../contributing/adding-a-layout.md). In short:
 
 1. Write `schema.json` with every region the slides may use, and list each grid variable with the same default you use in the CSS fallback.
 2. Write `layout.css` scoped with `.sd-canvas[data-layout="<name>"]`: grid templates and areas named after the regions, and canvas padding (the built-ins with a footer use `var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2)`).

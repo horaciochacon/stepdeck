@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const url = (slide, q = "") => `core/render.html?deck=../test/fixtures/decks/layouts/&slide=${slide}&${q}`;
+const url = (slide, q = "") => `engine/core/render.html?deck=../../test/fixtures/decks/layouts/&slide=${slide}&${q}`;
 
 // Canvas-pixel boxes (offset*, unaffected by the shell's scale) of every region and element.
 const boxes = (page) =>

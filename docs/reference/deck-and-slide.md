@@ -2,7 +2,7 @@
 
 This page lists every key of `deck.js`, of a slide file, of an element and of a step, with its type, its default and what the engine does with it. It also covers boxes, `advance`, step references and the slide title shortcut, plus the runtime behaviour that the JSON schemas do not express. It is for people who write decks by hand and for agents that generate them.
 
-The schemas are [`schema/deck.schema.json`](../../schema/deck.schema.json) and [`schema/slide.schema.json`](../../schema/slide.schema.json); [`types/stepdeck.d.ts`](../../types/stepdeck.d.ts) has the same shapes as TypeScript types. `validate` checks a deck against both schemas. Where the runtime is more lenient than the schema, this page says so; write to the schema.
+The schemas are [`schema/deck.schema.json`](../../engine/schema/deck.schema.json) and [`schema/slide.schema.json`](../../engine/schema/slide.schema.json); [`schema/stepdeck.d.ts`](../../engine/schema/stepdeck.d.ts) has the same shapes as TypeScript types. `validate` checks a deck against both schemas. Where the runtime is more lenient than the schema, this page says so; write to the schema.
 
 For how steps fold into states, with worked examples, read [The step model](../guide/step-model.md) first. Agents use [skill/references/step-model.md](../../skill/references/step-model.md).
 
@@ -24,7 +24,7 @@ my-talk/
 
 ## Canvas
 
-Every slide is drawn on a canvas of **1920 x 1080** pixels (`CANVAS` in [`core/constants.js`](../../core/constants.js)) and scaled to fit the screen. Element boxes, `regions` values in pixels, and the boxes `dump` prints are all in canvas pixels.
+Every slide is drawn on a canvas of **1920 x 1080** pixels (`CANVAS` in [`core/constants.js`](../../engine/core/constants.js)) and scaled to fit the screen. Element boxes, `regions` values in pixels, and the boxes `dump` prints are all in canvas pixels.
 
 | Constant | Value | Used for |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ The default export is an object with these keys. No other key is allowed (`addit
 
 ### How the runtime resolves the deck
 
-When the page boots (`loadDeck` in [`core/stepdeck.js`](../../core/stepdeck.js)):
+When the page boots (`loadDeck` in [`core/stepdeck.js`](../../engine/core/stepdeck.js)):
 
 - `lang` is `?lang=` if present and non-empty, else `deck.lang`, else `"en"`.
 - `theme` is `?theme=` if present and non-empty, else `deck.theme`, else `modern`.
@@ -232,7 +232,7 @@ No other key is allowed: `validate` reports `unknown-key` and names the step.
 
 ### Patch order and merge rules
 
-Inside one step the operations run in this order (`stateAt` in [`core/fold.js`](../../core/fold.js)):
+Inside one step the operations run in this order (`stateAt` in [`core/fold.js`](../../engine/core/fold.js)):
 
 1. the `from`, `at` and `advance` shortcuts expanded for this step,
 2. `replace`,
@@ -264,7 +264,7 @@ A patch that names an element the slide does not have makes the fold throw `unkn
 
 `transition.duration` is the length, in milliseconds, of the motion that plays when moving forward into this step; it replaces the component's default motion length: the theme's `--sd-duration` for `terminal` and twice that for `chart.line` and `chart.bar`, a fixed 400 ms for the other built-ins (the `ctx.animate` helpers' default), and 900 ms for the `big-number` count-up. A theme that changes `--sd-duration` changes only the `terminal` and chart defaults. `0` makes the step snap. Typing effects keep their own per-character speed: `terminal` ignores `duration` when it types a command, and `chat` honours only `0`. The built-in components read only `duration`. `stagger` is accepted and passed through in `info.transition`, but no built-in component reads it.
 
-Motion plays only when moving forward by exactly one step; jumps and backward moves render the end state directly. A step without `transition` gives `info.transition === null` (the type in `types/stepdeck.d.ts` says `Transition | undefined`; the code passes `null`). See [Animation and motion](../guide/animation-and-motion.md).
+Motion plays only when moving forward by exactly one step; jumps and backward moves render the end state directly. A step without `transition` gives `info.transition === null` (the type in `schema/stepdeck.d.ts` says `Transition | undefined`; the code passes `null`). See [Animation and motion](../guide/animation-and-motion.md).
 
 ## Step references
 
@@ -277,7 +277,7 @@ A step reference names a step. It is used by `from`, `at`, `advance.start`, the 
 
 In a slide file, the type of the value decides: `1` is an index, `"1"` is a step id (and since step ids may not be digits only, `"1"` never matches). Prefer ids.
 
-Values read from a URL (`?step=`, `#/<slide>/<step>`) go through `parseStepRef` ([`core/fold.js`](../../core/fold.js)):
+Values read from a URL (`?step=`, `#/<slide>/<step>`) go through `parseStepRef` ([`core/fold.js`](../../engine/core/fold.js)):
 
 | Value | Result |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 `diagram` draws nodes, arrows and nested groups on an explicit grid, and reveals them step by step. This page lists every prop, how the component places and draws each part, how it animates, and which mistakes `validate` and `check` catch. It is for anyone writing slides by hand or reviewing what an agent wrote. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog diagram <deck>`.
 
-Sources: [`components/diagram/schema.json`](../../../components/diagram/schema.json), [`components/diagram/index.js`](../../../components/diagram/index.js), [`components/diagram/place.js`](../../../components/diagram/place.js), [`core/stepdeck.css`](../../../core/stepdeck.css), [`cli/validate.js`](../../../cli/validate.js). For the other components, see the [components reference](index.md).
+Sources: [`components/diagram/schema.json`](../../../engine/components/diagram/schema.json), [`components/diagram/index.js`](../../../engine/components/diagram/index.js), [`components/diagram/place.js`](../../../engine/components/diagram/place.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css), [`cli/validate.js`](../../../cli/validate.js). For the other components, see the [components reference](index.md).
 
 ## Use it
 

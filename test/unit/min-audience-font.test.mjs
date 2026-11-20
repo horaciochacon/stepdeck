@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const themes = fileURLToPath(new URL("../../themes/", import.meta.url));
+const themes = fileURLToPath(new URL("../../engine/themes/", import.meta.url));
 const check = readFileSync(fileURLToPath(new URL("../../cli/check.js", import.meta.url)), "utf8");
 
 /** Custom properties declared in the :root block of a tokens.css. */

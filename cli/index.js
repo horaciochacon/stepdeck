@@ -11,27 +11,25 @@
 // Only `validate` needs the repo's dependencies (Ajv). It is imported when that command runs, so
 // `--help`, `new` and the rest work before `npm install`; without Ajv, validate says to run it (exit 2).
 import { existsSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative, resolve } from "node:path";
 import { catalog, buildCatalog, catalogTarget, formatEntry } from "./catalog.js";
 import { newDeck, newComponent, cli } from "./new.js";
 import { serve } from "./serve.js";
 import { deckTarget } from "./browser.js";
-import { suggest } from "../core/registry.js";
+import { REPO } from "./engine.js";
+import { suggest } from "#engine/core/registry.js";
 import { dump, formatDump } from "./dump.js";
 import { runCheck } from "./check.js";
 import { shoot, SHOT_SIZES } from "./shoot.js";
 import { formatProblem, formatProblems } from "./problems.js";
 
-const ENGINE = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-/** cli/validate.js, which needs Ajv; a missing Ajv becomes "run `npm install` in <engine> first". */
+/** cli/validate.js, which needs Ajv; a missing Ajv becomes "run `npm install` in <repo> first". */
 async function loadValidate() {
   try {
     return await import("./validate.js");
   } catch (e) {
     if (e?.code === "ERR_MODULE_NOT_FOUND" && /'ajv'|\bajv\//.test(e.message)) {
-      throw new Error(`validate needs the repo's dependencies (Ajv): run \`npm install\` in ${ENGINE} first`, { cause: e });
+      throw new Error(`validate needs the repo's dependencies (Ajv): run \`npm install\` in ${REPO} first`, { cause: e });
     }
     throw e;
   }
@@ -162,8 +160,8 @@ async function run(args) {
     }
     case "catalog": {
       // Positionals: an optional entry name and an optional folder, in any order. A folder is one
-      // holding deck.js or components/index.json (an entry name never does).
-      const isTarget = (p) => existsSync(join(resolve(p), "deck.js")) || existsSync(join(resolve(p), "components", "index.json"));
+      // holding deck.js or components/index.json, or this repository's root (an entry name never is).
+      const isTarget = (p) => resolve(p) === REPO || existsSync(join(resolve(p), "deck.js")) || existsSync(join(resolve(p), "components", "index.json"));
       const dirArg = args.positionals.find(isTarget);
       const names = args.positionals.filter((p) => p !== dirArg);
       if (names.length > 1) throw new UsageError(`catalog takes one name (got ${names.join(", ")})`);

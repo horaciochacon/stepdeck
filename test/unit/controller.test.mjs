@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRegistry } from "../../core/registry.js";
-import { animate } from "../../core/animate.js";
-import { SlideController, SETTLE_TIMEOUT_MS } from "../../core/controller.js";
-import { makeFormat } from "../../core/format.js";
+import { createRegistry } from "#engine/core/registry.js";
+import { animate } from "#engine/core/animate.js";
+import { SlideController, SETTLE_TIMEOUT_MS } from "#engine/core/controller.js";
+import { makeFormat } from "#engine/core/format.js";
 
 // ---------- fakes ----------
 

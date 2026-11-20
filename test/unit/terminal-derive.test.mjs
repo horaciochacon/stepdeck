@@ -1,7 +1,7 @@
 // terminal: everything shown is derived from the script and `shown` (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampShown, deriveTasks, deriveFiles, windowOf, lineText, checkScript } from "../../components/terminal/derive.js";
+import { clampShown, deriveTasks, deriveFiles, windowOf, lineText, checkScript } from "#engine/components/terminal/derive.js";
 
 const script = Object.freeze({
   title: "t",

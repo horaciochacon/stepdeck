@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const kit = (slide) => `core/render.html?deck=../test/fixtures/decks/layouts-kit/&slide=${slide}`;
-const spike = (slide) => `core/render.html?deck=../examples/spike/&slide=${slide}`;
+const kit = (slide) => `engine/core/render.html?deck=../../test/fixtures/decks/layouts-kit/&slide=${slide}`;
+const spike = (slide) => `engine/core/render.html?deck=../../examples/spike/&slide=${slide}`;
 
 // Canvas-pixel boxes (offset*, unaffected by the shell's scale) of every region and element.
 const boxes = (page) =>

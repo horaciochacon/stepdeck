@@ -9,15 +9,16 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { createAjv, compile } from "../../cli/ajv.js";
 import { classifyErrors } from "../../cli/check.js";
-import * as constants from "../../core/constants.js";
+import * as constants from "#engine/core/constants.js";
 
 // A namespace import, so a missing export fails the tests that use it rather than the whole file.
 const { HOOKS = [], REGION_HOOKS = [], LAYOUT_KINDS = [], LAYER_ORDER } = constants;
 
 const repo = new URL("../../", import.meta.url);
+const engine = new URL("../../engine/", import.meta.url);
 const dirs = (url) => readdirSync(url, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const layoutDirs = [
-  ...dirs(new URL("layouts/", repo)).map((n) => new URL(`layouts/${n}/`, repo)),
+  ...dirs(new URL("layouts/", engine)).map((n) => new URL(`layouts/${n}/`, engine)),
   new URL("test/fixtures/fourth-layout/", repo),
 ];
 const read = (url) => readFileSync(url, "utf8");
@@ -76,7 +77,7 @@ for (const dir of layoutDirs) {
 }
 
 test("schema/layout.schema.json publishes exactly REGION_HOOKS and LAYOUT_KINDS", () => {
-  const schema = JSON.parse(read(new URL("schema/layout.schema.json", repo)));
+  const schema = JSON.parse(read(new URL("schema/layout.schema.json", engine)));
   assert.deepEqual(HOOKS, ["title", "kicker", "accent", "subtitle", "meta", "statement"]);
   assert.deepEqual(LAYOUT_KINDS, ["content", "cover"]);
   assert.deepEqual(REGION_HOOKS, ["subtitle", "meta", "statement"]);
@@ -88,7 +89,7 @@ test("schema/layout.schema.json publishes exactly REGION_HOOKS and LAYOUT_KINDS"
 
 test("layout schemas validate: hooks name real regions and published hooks, kind is a layout kind", () => {
   const ajv = createAjv();
-  const validate = compile(ajv, JSON.parse(read(new URL("schema/layout.schema.json", repo))));
+  const validate = compile(ajv, JSON.parse(read(new URL("schema/layout.schema.json", engine))));
   for (const dir of layoutDirs) {
     const schema = JSON.parse(read(new URL("schema.json", dir)));
     assert.ok(validate(schema), `${schema.name}: ${ajv.errorsText(validate.errors)}`);
@@ -99,19 +100,19 @@ test("layout schemas validate: hooks name real regions and published hooks, kind
     }
     assert.ok(LAYOUT_KINDS.includes(schema.kind ?? "content"), `${schema.name}: kind '${schema.kind}'`);
   }
-  const title = JSON.parse(read(new URL("layouts/title/schema.json", repo)));
+  const title = JSON.parse(read(new URL("layouts/title/schema.json", engine)));
   assert.equal(title.kind, "cover");
   assert.deepEqual(title.hooks, { subtitle: "subtitle", meta: "meta" });
-  const statement = JSON.parse(read(new URL("layouts/statement/schema.json", repo)));
+  const statement = JSON.parse(read(new URL("layouts/statement/schema.json", engine)));
   assert.deepEqual(statement.hooks, { main: "statement" });
   assert.equal(statement.kind ?? "content", "content");
 });
 
 test("theme.css targets hooks only: never [data-layout], [data-region] or !important", () => {
-  const themes = dirs(new URL("themes/", repo));
-  assert.ok(existsSync(new URL("themes/academic-light/theme.css", repo)), "academic-light ships a theme.css");
+  const themes = dirs(new URL("themes/", engine));
+  assert.ok(existsSync(new URL("themes/academic-light/theme.css", engine)), "academic-light ships a theme.css");
   for (const t of themes) {
-    const file = new URL(`themes/${t}/theme.css`, repo);
+    const file = new URL(`themes/${t}/theme.css`, engine);
     if (!existsSync(file)) continue;
     const css = stripComments(read(file));
     assert.doesNotMatch(css, /\[data-layout/, `${t}/theme.css targets a layout`);
@@ -121,14 +122,14 @@ test("theme.css targets hooks only: never [data-layout], [data-region] or !impor
 });
 
 test("core/stepdeck.css opens with LAYER_ORDER", () => {
-  const css = stripComments(read(new URL("core/stepdeck.css", repo)));
+  const css = stripComments(read(new URL("core/stepdeck.css", engine)));
   const first = /@layer[^;{]*;/.exec(css)?.[0];
   assert.equal(first, LAYER_ORDER);
   assert.equal(LAYER_ORDER, "@layer sd-core, sd-layout, sd-theme, sd-deck, sd-slide;");
 });
 
-test("types/stepdeck.d.ts: LayoutDescriptor's hook union is REGION_HOOKS, and kind is LAYOUT_KINDS", () => {
-  const dts = read(new URL("types/stepdeck.d.ts", repo));
+test("schema/stepdeck.d.ts: LayoutDescriptor's hook union is REGION_HOOKS, and kind is LAYOUT_KINDS", () => {
+  const dts = read(new URL("schema/stepdeck.d.ts", engine));
   const union = (re) => [...(re.exec(dts)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(union(/hooks\?:\s*\{\s*\[region: string\]:\s*([^};]+)\}/), REGION_HOOKS);
   assert.deepEqual(union(/kind\?:\s*([^;]+);/), LAYOUT_KINDS);

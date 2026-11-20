@@ -5,10 +5,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
-import { createRegistry } from "../../core/registry.js";
+import { createRegistry } from "#engine/core/registry.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const spike = (q) => `core/render.html?deck=../examples/spike/&slide=story&${q}`;
+const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&slide=story&${q}`;
 const STEPS = ["start", "collect", "analyze", "share"];
 
 const snapshot = (page) =>
@@ -68,7 +68,7 @@ test("registry: a name declared by the deck is imported from the deck root, neve
 });
 
 test("non-namespaced collision errors: a deck component named like a built-in", async () => {
-  await withPage({ root, url: "core/render.html?deck=../test/fixtures/decks/collision/&slide=uses-text" }, async (page) => {
+  await withPage({ root, url: "engine/core/render.html?deck=../../test/fixtures/decks/collision/&slide=uses-text" }, async (page) => {
     const errors = await page.evaluate(() => window.STEPDECK.errors);
     assert.ok(errors.some((e) => e.includes("collides")), `errors: ${JSON.stringify(errors)}`);
     assert.ok(errors.some((e) => e.includes("my.text")), "the fix names a namespace");
