@@ -8,7 +8,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { runCheck } from "../../cli/check.js";
 import { dump } from "../../cli/dump.js";
 import { spawnSync } from "node:child_process";
@@ -16,6 +16,7 @@ import { formatProblem } from "../../cli/problems.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deckTarget, withPage } from "../../cli/browser.js";
+import { tokenRgb } from "./helpers.mjs";
 import { ENGINE, copyEngine } from "../../cli/engine.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
@@ -352,6 +353,36 @@ test("theme.css is optional:a theme without one checks clean (played too); a mis
   makeDeck(noTokens, { deckSlides: one, theme: "broken", themes: { broken: ["tokens.css"] } });
   const lines = (await runCheck(noTokens)).problems.map(formatProblem).join("\n");
   assert.match(lines, /network-error.*themes\/broken\/tokens\.css/, lines);
+});
+
+test("core styles the lede and badge roles for a theme with tokens only (no theme.css, no --sd-font-size-lede)", async () => {
+  const deckSlides = { roles: { id: "roles", layout: "full-bleed", title: TITLE, lede: "One line under the title.", elements: [{ id: "tag", type: "text", props: { role: "badge", text: "Draft" } }] } };
+  const dir = join(tmp, "roles-tokens-only");
+  makeDeck(dir, { deckSlides, theme: "plain", themes: { plain: ["theme.css"] } });
+  // The token the fallback has its own default for is dropped from the theme.
+  const tokens = join(dir, "stepdeck/themes/plain/tokens.css");
+  const css = readFileSync(tokens, "utf8").replace(/^\s*--sd-font-size-lede:.*$/m, "");
+  writeFileSync(tokens, css);
+  const target = deckTarget(dir);
+  await withPage({ root: target.root, url: target.url({ slide: "roles" }) }, async (page, ctx) => {
+    const got = await page.evaluate(() => {
+      const look = (id) => {
+        const cs = getComputedStyle(document.querySelector(`[data-el="${id}"] p`));
+        return { size: parseFloat(cs.fontSize), color: cs.color, display: cs.display, upper: cs.textTransform, border: [cs.borderTopWidth, cs.borderTopStyle], radius: parseFloat(cs.borderTopLeftRadius) };
+      };
+      return { lede: look("lede"), badge: look("tag"), note: getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue("--sd-font-size-note") };
+    });
+    assert.equal(got.lede.color, await tokenRgb(page, "--sd-color-muted"), "the lede is muted");
+    assert.equal(got.lede.size, parseFloat(got.note), "the lede takes the note size without its own token");
+    assert.ok(got.lede.size >= 28, `at least the minimum audience font (${got.lede.size})`);
+    assert.deepEqual([got.badge.display, got.badge.upper, got.badge.border, got.badge.size], ["inline-block", "uppercase", ["2px", "solid"], 28]);
+    assert.ok(got.badge.radius >= 100, `rounded (${got.badge.radius})`);
+    assert.equal(got.badge.color, await tokenRgb(page, "--sd-color-accent"), "the accent colour");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.failed, ["404 /stepdeck/themes/plain/theme.css"], "the only failed request is the theme.css this theme leaves out");
+  });
+  const run = await runCheck(dir);
+  assert.equal(run.problems.length, 0, run.problems.map(formatProblem).join("\n"));
 });
 
 test("reveal css unaffected: the reveal sheets stay unlayered, the shell loads and scales as before", async () => {

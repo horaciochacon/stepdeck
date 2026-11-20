@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "terminal",
   "description": "A terminal window showing a recorded agent session: a typed command, an activity log of the newest lines that fit, a task list and a file list. Driven by props only: `shown` says how many of the script's events are visible, and the task statuses and the file list are derived from those events. Usually set with `advance` on the slide.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": [

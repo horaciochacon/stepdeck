@@ -12,13 +12,13 @@ export const DEFAULT_LAYOUT = "full-bleed";
 /**
  * Published styling hooks (default-theme spec §5.2, §10.1). Core emits `sd-<hook>` classes: `title` on the
  * reserved title element, the others on the regions a layout schema maps to them (`hooks`) and on their
- * element wrappers. Themes (theme.css) style these classes; layouts never do. `kicker` and `accent` are
- * published here and emitted by core inside the title region.
+ * element wrappers. Themes (theme.css) style these classes; layouts never do. `kicker`, `lede` and `accent` are
+ * published here and emitted by core inside the title region (`lede` on the box of the reserved `lede` element).
  */
-export const HOOKS = ["title", "kicker", "accent", "subtitle", "meta", "statement"];
+export const HOOKS = ["title", "kicker", "lede", "accent", "subtitle", "meta", "statement"];
 /**
- * The hooks a layout may map a region to (layout schema `hooks`). title, kicker and accent are core's own: core
- * puts them on the title element, the kicker and the accent phrase, never on a region.
+ * The hooks a layout may map a region to (layout schema `hooks`). title, kicker, lede and accent are core's own:
+ * core puts them on the title element, the kicker, the lede and the accent phrase, never on a region.
  */
 export const REGION_HOOKS = ["subtitle", "meta", "statement"];
 /** Layout kinds (layout schema `kind`, default "content"); core sets it as `data-kind` on the canvas. */

@@ -107,17 +107,20 @@ The rule the CLI enforces is **jump equals play**. The markup after playing forw
 
 ```js
 async update(props, info = {}) {
-  const animate = canAnimate(info);
-  const before = animate ? snapshot() : null;   // read the old state only when there is motion to play
+  const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;  // its own entrance (x-enter: own)
+  const animate = draw || (canAnimate(info) && !info.entered);  // appearing otherwise: the box moves, not the items
+  const before = animate && !draw ? snapshot() : null;  // read the old state only when there is motion to play
   const { rebuilt } = renderState(props);        // 1. write the target state straight into the DOM
   clearInline();                                 // 2. no inline style from an earlier, aborted move survives
-  if (!animate || rebuilt || before.length !== rows.length) return;  // 3. jump, backward, first render, rebuild: done
+  if (!animate || (!draw && (rebuilt || before.length !== rows.length))) return;  // 3. jump, backward, first render, rebuild
 
-  const opts = motion(info);
-  // ... collect what changed between `before` and the new state ...
+  const opts = motion(info, ctx);                // the theme's timing, or the step's transition
+  if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
+  // ... collect what changed between `before` (nothing, for an entrance) and the new state, and write each
+  //     item's start state now, before any await, so nothing paints before its turn ...
   try {
     await Promise.all([
-      ctx.animate.stagger(risers, async ({ li, tick }, _i, o) => { await rise(ctx.animate, li, o); /* ... */ }, opts),
+      ctx.animate.stagger(risers, async ({ li }, _i, o) => { li.style.opacity = ""; await ctx.motion.in(li, "rise", { ...opts, signal: o.signal }); }, opts),
       ...fades.map(({ paint, from, to }) => ctx.animate.tween(from, to, paint, opts)),
       ...draws.map((tick) => ctx.animate.drawPath(tick, opts)),
     ]);
@@ -127,7 +130,9 @@ async update(props, info = {}) {
 }
 ```
 
-The engine sets `info.animate` only when motion was requested and the move is forward by exactly one step from the last applied step. Every other move, and the first `update` after mount, has `animate: false`. The first `update` also has `prev: null`, every key in `changed` and `entered` equal to the element's visibility. A new `goTo` aborts `info.signal`. Every `ctx.animate` helper then snaps to its end state and resolves, so after an abort the `finally` still leaves the target state. An `update` that has not settled after 10 s fails the element with `did not settle within 10s`.
+The engine sets `info.animate` only when motion was requested and the move is forward by exactly one step from the last applied step. Every other move, and the first `update` after mount, has `animate: false`. The first `update` also has `prev: null`, every key in `changed` and `entered` equal to the element's visibility. A new `goTo` aborts `info.signal`. Every `ctx.animate` and `ctx.motion` helper then snaps to its end state and resolves, so after an abort the `finally` still leaves the target state. An `update` that has not settled after 10 s fails the element with `did not settle within 10s`.
+
+**Entrances.** When an element appears on an animating step, the engine moves its box (the theme's `--sd-enter`, or the slide's `enter`), so a component must not also fade itself in on `info.entered`. A component with a natural build declares `"x-enter": "own"` at the top of its `schema.json` instead: the engine then keeps the box still and passes `info.entrance = { motion: "draw" | "none", duration }` in the update where the element appears, after its stagger hold. On `"draw"` the component plays its build from empty to the props, writing the start state before the first `await` (the engine shows the element in the same task); on `"none"` it renders at once. See [Animation and motion](../guide/animation-and-motion.md#which-system-plays-an-entrance).
 
 ### Helpers to use
 
@@ -136,19 +141,23 @@ From `core/kit.js` (no imports, no DOM beyond the document you pass):
 | Helper | What it does |
 | --- | --- |
 | `canAnimate(info)` | `info.animate === true` and the signal is not aborted. Gate all motion on it. |
-| `motion(info)` | `{ signal, duration }` for the `ctx.animate` helpers. `duration` is the step's `transition.duration`, else the helper's default (400 ms). |
+| `motion(info, ctx, opts)` | `ctx.motion.timing(info, opts)`: `{ duration, ease, stagger, signal }` from the theme tokens, overridden by the step's `transition`; `opts` is `{ factor, fast }`. Without a `ctx`, `{ signal, duration: info.transition?.duration }`. |
 | `motionMs(info, ctx, factor = 1)` | The step's `transition.duration`, else `factor` x the theme's `--sd-duration` (400 ms when unknown). The charts use factor 2. |
 | `el`, `svgEl`, `xhtmlEl`, `sizeSvg` | Create HTML, SVG and foreignObject elements. Always pass `el.ownerDocument`, never the global `document`. |
 | `measureWidth`, `measureHeight` | The node's size in canvas pixels, else `ctx.size`, else 0. |
 | `inkMix(p)` | A text color between `--sd-color-muted` (0) and `--sd-color-ink` (1), for emphasis that keeps contrast. |
+| `focusPaint(ctx, color, dimmed)` | `color`, or the theme's `--sd-color-dim` (else `--sd-color-rule`) when `dimmed`. The look of a mark out of focus; never fade by opacity. |
+| `tweenColor(ctx, from, to, set, opts)` | Tweens a color in RGB through `ctx.animate.tween` and `ctx.d3`, calling `set(color)` each frame; `opts` is `motion(info, ctx, { fast: true })` for a focus change. |
 | `num`, `lerp`, `clamp01`, `escapeHtml`, `message`, `memoAsync` | Small helpers for numbers, text, errors and caches. |
 
-From `ctx.animate` (`core/animate.js`): `fadeIn`, `reveal`, `drawPath`, `tween(from, to, onValue, opts)` and `stagger(items, fn, opts)` (60 ms apart by default). Call them through `ctx.animate`, not by importing them, so that tests that stub `ctx.animate` also stub your motion. Import only the helpers that are not part of `ctx.animate`, and pass `ctx.animate` into the ones that take it:
+From `ctx.motion` (`core/motion.js`): `in(node, name, opts)` and `out(node, name, opts)` play a named motion (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`) on one node with the theme's duration, easing and rise distance, and put back the inline styles they touched; `timing(info, opts)` is the timing above. Item motions use these names, so an item and a box move the same way.
+
+From `ctx.animate` (`core/animate.js`): `fadeIn`, `reveal`, `drawPath`, `tween(from, to, onValue, opts)` and `stagger(items, fn, opts)` (`opts.stagger` apart, else 60 ms; pass `motion(info, ctx)` so it is the theme's `--sd-stagger`). Call them through `ctx.animate`, not by importing them, so that tests that stub `ctx.animate` also stub your motion. Import only the helpers that are not part of `ctx.animate`, and pass `ctx.animate` into the ones that take it:
 
 | Import from `core/animate.js` | What it does |
 | --- | --- |
 | `clearInlineStyle(...nodes)` | Removes every inline style and the `style` attribute itself. Call it after rendering and in `finally`. |
-| `rise(ctx.animate, node, opts)` | Fades a node in while it moves up by `--sd-space`. |
+| `rise(ctx.animate, node, opts)` | Fades a node in while it moves up by `--sd-space`. Legacy: the built-ins use `ctx.motion.in(node, "rise", opts)`, which travels `--sd-motion-distance`. |
 | `typeCount(ctx.animate, total, onCount, opts)`, `typingMs(chars)` | Typing at 28 ms per character, at most 1400 ms. |
 
 For a chart, `core/chart.js` has `loadTable(props, ctx, name, columns)`, which loads a CSV and gives the shared column errors (`column '<c>' not found in <data> (columns: …)`), and `tickFormat` and `opacityAttr`. Author text goes through `renderInline` or `renderBlock` from `core/inline.js`, which escape raw HTML and keep only safe link URLs.

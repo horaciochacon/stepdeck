@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "list",
   "description": "Numbered, lettered, bulleted or checklist items revealed one by one. `shown` says how many items are visible (hidden ones keep their space), `done` ticks a checklist, `active` emphasises one item. Set the state props per step with `advance` or `set` on the slide.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["items", "marker"],

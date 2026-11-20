@@ -19,12 +19,18 @@
 //     at its final length and hidden with CSS visibility, so nothing reflows.
 // Motion: a category that appears grows from zero and then its whisker is drawn (GROW is the share of the
 // motion given to the bar); a category that leaves does it in reverse; a changed value tweens the bar, its
-// whisker and its label; `highlight` fades the other bars to a theme color (never opacity, which would lower
-// the contrast of the labels).
+// whisker and its label; `highlight` tweens the other bars to the theme's --sd-color-dim over
+// --sd-duration-fast (never opacity, which would lower the contrast of the labels) and draws the highlighted
+// bar after (above) them.
+// Entrance: the chart owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" every shown
+// bar grows from zero and then draws its whisker, over info.entrance.duration (else 2 x --sd-duration), while the
+// box stays still. The zero-length bars are written before the first await, in the same task as the engine shows
+// the element, so the chart never paints at full length first. Any other entrance ("none", or a box motion)
+// renders the end state at once.
 // Colors come from ctx.palette("categorical") (the first color) and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, opacityAttr } from "../../core/chart.js";
-import { SVG_NS, num, lerp, clamp01, measureWidth, measureHeight, motionMs } from "../../core/kit.js";
+import { SVG_NS, num, lerp, clamp01, measureWidth, measureHeight, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
 const THICK = 0.65; // bar thickness as a share of its band
@@ -115,7 +121,6 @@ function buildModel(props, rows, ctx, el) {
   const shown = new Set(Array.isArray(props.shown) ? props.shown.map(String) : categories.map((r) => String(r[props.x])));
   const colors = ctx.palette?.("categorical")?.colors ?? [];
   const fill = colors[0] ?? tokenColor(ctx.tokens, "--sd-color-accent");
-  const dimFill = tokenColor(ctx.tokens, "--sd-color-rule");
   const ink = tokenColor(ctx.tokens, "--sd-color-ink");
   const muted = tokenColor(ctx.tokens, "--sd-color-muted");
   const bars = categories.map((row) => {
@@ -131,7 +136,7 @@ function buildModel(props, rows, ctx, el) {
     return {
       key, label, value, lo: value === null ? null : lo, hi: value === null ? null : hi,
       text, title: `${label}: ${text}${range}`, shown: shown.has(key), dim,
-      fill: dim && dimFill ? dimFill : fill, labelFill: dim && muted ? muted : ink,
+      fill: focusPaint(ctx, fill, dim), labelFill: dim && muted ? muted : ink,
     };
   });
 
@@ -196,6 +201,13 @@ const staticView = (m) => ({
   ticks: m.ticks.map((t) => ({ ...t, opacity: 1 })),
   bars: new Map(m.bars.map((b) => [b.key, { v: b.value, lo: b.lo, hi: b.hi, whisker: 1, visible: b.shown, labelOpacity: 1, fill: b.fill, labelFill: b.labelFill }])),
 });
+
+/** The start of an entrance: every shown bar at zero length, with no whisker and no label (as a morph's t = 0). */
+const emptyView = (m) => {
+  const view = staticView(m);
+  for (const b of m.bars) if (b.shown) Object.assign(view.bars.get(b.key), { v: 0, whisker: 0, labelOpacity: 0 });
+  return view;
+};
 
 export default {
   async mount(el, props, ctx) {
@@ -323,6 +335,8 @@ export default {
             .attr("fill", s.labelFill)
             .attr("opacity", s.labelOpacity === 1 ? null : s.labelOpacity);
         });
+      // The focused bar is drawn after (above) the dimmed ones; the DOM order depends on the model alone.
+      groups.filter((d) => !d.dim).raise();
 
       text(bandTitle, m.axes.x).attr("text-anchor", horizontal ? "start" : "middle")
         .attr("x", horizontal ? 0 : view.margin.left + view.pw / 2)
@@ -341,18 +355,20 @@ export default {
     const signature = (m) => JSON.stringify([m.domain, m.pw, m.ph, m.margin, m.bars.map((b) => [b.value, b.lo, b.hi, b.shown, b.dim]), m.ticks.map((t) => t.label)]);
 
     /** Plays `from` -> `to` (from may be null: everything shown grows in, as when the element appears). */
-    async function morph(from, to, info, enterAll) {
-      const duration = motionMs(info, ctx, 2);
+    async function morph(from, to, info, enterAll, duration = motionMs(info, ctx, 2)) {
       const prev = new Map((from?.bars ?? []).map((b) => [b.key, b]));
-      const colorAt = (a, b) => (a && b && a !== b ? d3.interpolateRgb(a, b) : () => b);
       const ref = from ?? to;
-      // What does not depend on t: the union of the tick sets, and per bar its start and color interpolators.
+      // What does not depend on t: the union of the tick sets.
       const before = new Map(ref.ticks.map((k) => [k.value, k]));
       const after = new Map(to.ticks.map((k) => [k.value, k]));
       const tickValues = [...new Set([...(from ? before.keys() : []), ...after.keys()])];
-      const barMotion = to.bars.map((b) => {
-        const p = prev.get(b.key) ?? b;
-        return { b, p, fill: colorAt(p.fill, b.fill), labelFill: colorAt(p.labelFill, b.labelFill) };
+      // Colors change on their own, faster tween (a focus change takes --sd-duration-fast); the frame reads them.
+      const live = new Map(to.bars.map((b) => [b.key, { fill: (prev.get(b.key) ?? b).fill, labelFill: (prev.get(b.key) ?? b).labelFill }]));
+      const fast = motion(info, ctx, { fast: true });
+      const recolor = to.bars.flatMap((b) => {
+        const p = prev.get(b.key);
+        const now = live.get(b.key);
+        return p ? ["fill", "labelFill"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
       });
       let first = true;
       const frame = (t) => {
@@ -369,7 +385,8 @@ export default {
           view.ticks.push({ ...tick, opacity: before.has(value) && after.has(value) ? 1 : after.has(value) ? (from ? t : 1) : 1 - t });
         }
         view.ticks.sort((a, b) => a.value - b.value);
-        for (const { b, p, fill, labelFill } of barMotion) {
+        for (const b of to.bars) {
+          const p = prev.get(b.key) ?? b;
           const from01 = enterAll || !prev.has(b.key) ? 0 : p.shown ? 1 : 0;
           const to01 = b.shown ? 1 : 0;
           let grow = 1; // 1 = full length (also for a bar that stays hidden: it is laid out at its final length)
@@ -389,23 +406,29 @@ export default {
             v: v === null ? null : v * grow,
             lo: lerpNull(p.lo, b.lo, t), hi: lerpNull(p.hi, b.hi, t),
             whisker, visible: from01 > 0 || to01 > 0, labelOpacity,
-            fill: fill(t), labelFill: labelFill(t),
+            ...live.get(b.key),
           });
         }
         paint(to, view, first);
         first = false;
       };
-      await ctx.animate.tween(0, 1, frame, { duration, signal: info.signal });
+      // The geometry eases with the theme's --sd-easing, like every other motion.
+      await Promise.all([ctx.animate.tween(0, 1, frame, { duration, signal: info.signal, ease: motion(info, ctx).ease }), ...recolor]);
     }
 
     return {
       async update(props, info = {}) {
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // The start state of the entrance, before the first await: the bars of the last render at zero length.
+        if (draw && last) paint(last, emptyView(last));
         const rows = await loadRows(props, ctx);
         const model = buildModel(props, rows, ctx, el);
-        if (info.animate && !info.signal?.aborted) {
-          const from = comparable(last, model) ? last : null;
-          if (info.entered) await morph(from, model, info, true);
-          else if (from && signature(from) !== signature(model)) await morph(from, model, info, false);
+        const from = comparable(last, model) ? last : null;
+        if (draw && !info.signal?.aborted) {
+          await morph(from, model, info, true, info.entrance.duration);
+        } else if (info.animate && !info.entered && !info.signal?.aborted && from && signature(from) !== signature(model)) {
+          // A change while the chart stays shown. An element that just appeared without a draw snaps.
+          await morph(from, model, info, false);
         }
         renderStatic(model);
         last = model;

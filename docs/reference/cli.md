@@ -237,7 +237,7 @@ catalog: 11 components, 5 layouts, 2 themes -> my-talk/catalog/index.json
 
 Any catalog problems come first, as `warning: <problem line>`. With `--json`, stdout holds only the entries array, and the problems are dropped. They are not printed at all.
 
-**With a name**, `catalog` prints that one entry and writes nothing. The text form lists the props of a component (transition, required or optional, description, examples), the regions and variables of a layout, or the tokens and palettes of a theme:
+**With a name**, `catalog` prints that one entry and writes nothing. The text form lists the props of a component (transition, required or optional, description, examples), the regions and variables of a layout, or the tokens and palettes of a theme. A component's text also says who plays its entrance, in an `enter:` line under the summary: `enter: own (the component builds its own entrance; its box stays still)` or `enter: box (the element's box moves in)`:
 
 ```
 halves · layout
@@ -272,7 +272,8 @@ More than one name exits 2 with `catalog takes one name (got a, b)`.
   "kind": "component",
   "name": "big-number",
   "summary": "One large figure with an optional label and 95% interval.",
-  "animates": ["value", "label", "ci"]
+  "animates": ["value", "label", "ci"],
+  "enter": "own"
 }
 ```
 
@@ -282,6 +283,7 @@ More than one name exits 2 with `catalog takes one name (got a, b)`.
 | `name` | The entry name, also the file name `<name>.json`. |
 | `summary` | The first sentence of the component schema's `description`, the layout's `description`, or the first paragraph of the theme's README. |
 | `animates` | Props whose `x-transition` is not `snap`. Always `[]` for layouts and themes. |
+| `enter` | `"own"` when the component's schema declares a top-level `"x-enter": "own"`: it builds its own entrance and its box stays still. Otherwise `"box"`: the element's box moves in. Always `"box"` for layouts and themes. See [Animation and motion](../guide/animation-and-motion.md#which-system-plays-an-entrance). |
 
 **Detail** (`<name>.json`, and `catalog <name> --json`) is the entry plus:
 
@@ -297,7 +299,7 @@ Catalog problems are warnings and never change the exit code:
 
 | Rule | When |
 | --- | --- |
-| `catalog-schema` | A component schema has no top-level `description`; a prop lacks `description`, `examples` or an `x-transition` of `tween`, `draw`, `fade` or `snap`; a `schema.json` or `palettes.json` cannot be read; a theme README has no first paragraph. |
+| `catalog-schema` | A component schema has no top-level `description`; a prop lacks `description`, `examples` or an `x-transition` of `tween`, `draw`, `fade` or `snap`; a top-level `x-enter` is neither `"own"` nor `"box"`; a `schema.json` or `palettes.json` cannot be read; a theme README has no first paragraph. |
 | `catalog-name` | A component, layout or theme shares its name with an entry of another kind. The later one is left out. |
 
 ## serve
@@ -450,13 +452,14 @@ Each step is a fresh page load of the bare shell at that step in capture mode, m
 | `stepId` | The step id, or its index as a string when the step has no id. A slide with no steps has `"0"`. |
 | `elements[].id`, `type` | The element id and component type, in element order. |
 | `elements[].visible` | Measured on the page from computed `visibility` and `display`, not read from the spec. |
-| `elements[].text` | The element's text nodes, each with whitespace collapsed, joined by one space. |
+| `elements[].ghost` | Present only while the element's ghost placeholder is on screen (the element is hidden and has `ghost`): the label, or `true` for a ghost without one. Measured on the page. |
+| `elements[].text` | The element's text nodes, each with whitespace collapsed, joined by one space. A ghost's label is not part of it. |
 | `elements[].box` | `{ x, y, w, h }` relative to the canvas, in canvas pixels, rounded to 1 px. A collapsed element is `{ 0, 0, 0, 0 }`. |
 | `elements[].props` | The resolved props (bindings applied) from `STEPDECK.state()`. They appear only in the JSON. |
 | `changed` | Ids whose resolved props or visibility differ from the previous step. At step 0, every id. With `--step`, the previous step is also loaded to compute it (and not printed). |
 | `errors` | Runtime errors (`STEPDECK.errors`) plus console errors (`console: …`) and uncaught page errors (`pageerror: …`) seen while showing the step. Failed network requests are not included: a 404 does not appear here and does not fail `dump`. Use `check` for those. |
 
-**Text output**, one block per step. Each element line shows visibility, id, type, box, and its text, cut to 48 characters (47 plus `…`) when longer:
+**Text output**, one block per step. Each element line shows visibility, id, type, box, `ghost "label"` (or `ghost`) while a ghost placeholder is shown, and its text, cut to 48 characters (47 plus `…`) when longer:
 
 ```
 chart · step 1 (compare)

@@ -6,9 +6,10 @@
 //
 // update() writes the state straight into the DOM, then waits for the image (`img.decode()`), so the engine's
 // settled() covers the load. A file that is missing or not a decodable image rejects, which is an element
-// error naming the path. With info.animate a new `src` (or the element entering) fades in once loaded and a
-// changed caption fades in; the motion is bound to info.signal (an abort snaps to the end state) and the
-// inline styles it used are removed, so the html is the same however a state was reached.
+// error naming the path. With info.animate a new `src` fades in once loaded and a changed caption fades in,
+// timed by the theme; an element that appears is moved by its box, not by itself. The motion is bound to
+// info.signal (an abort snaps to the end state) and the inline styles it used are removed, so the html is the
+// same however a state was reached.
 import { renderInline } from "../../core/inline.js";
 import { clearInlineStyle } from "../../core/animate.js";
 import { motion } from "../../core/kit.js";
@@ -88,11 +89,11 @@ export default {
             throw new Error(`image '${s.src}' could not be loaded: the file is missing or is not a decodable image (${s.url})`, { cause });
           }
           if (info.animate !== true || info.signal?.aborted) return;
-          const opts = motion(info);
+          if (info.entered) return; // the box carries the entrance
+          const opts = motion(info, ctx);
           const motions = [];
-          if (info.entered) motions.push(ctx.animate.fadeIn(figure, opts));
-          else if (changed.srcChanged) motions.push(ctx.animate.fadeIn(img, opts));
-          if (changed.captionChanged && caption && !info.entered) motions.push(ctx.animate.fadeIn(caption, opts));
+          if (changed.srcChanged) motions.push(ctx.animate.fadeIn(img, opts));
+          if (changed.captionChanged && caption) motions.push(ctx.animate.fadeIn(caption, opts));
           await Promise.all(motions);
         } finally {
           clearInline();

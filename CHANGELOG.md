@@ -7,6 +7,29 @@ All notable changes to stepdeck are recorded here. The format follows
 
 ### Changed
 
+- **Elements enter and leave with motion.** On a forward step (motion on, not in capture), every element that
+  becomes visible now enters: its box plays the theme's entrance (`rise` in `modern`, `fade` in
+  `academic-light`), and the elements that appear on one step enter one after another, in slide order. Elements
+  that become hidden fade out, except those with `collapse: true`, which are hidden at once. Decks that did not
+  ask for motion now move: set `enter: "none"` (and `exit: "none"`) on an element to turn it off, or give a step
+  `transition: { duration: 0 }`. For a whole deck, a theme with `--sd-enter: none` turns off the box entrances;
+  components that build themselves (below) still build, so give those elements `enter: "none"`, and entering
+  elements still appear one stagger apart unless the theme also sets `--sd-stagger: 0ms`. Jumps, backward
+  moves, slide changes, screenshots and reduced motion still render at once, and a played step still ends exactly
+  where a jump does.
+- **The focus-dim look changed.** `highlight` in `chart.line` and `diagram` no longer fades the other marks by
+  opacity: they turn a neutral grey (see Focus-dim below), as in `chart.bar`. `chart.bar`'s dimmed bars change too:
+  their fill is the new `--sd-color-dim` instead of `--sd-color-rule`.
+- **Built-ins follow the theme's timing.** Every motion now reads `--sd-duration` and `--sd-easing`, chart draws and
+  morphs included (before, most components used a fixed 400 ms and a cubic ease; typing keeps its constant speed), and items in a build are `--sd-stagger` apart. `text`,
+  `markdown` and `image` no longer fade themselves in when they appear (their box does); a changed `text`
+  crossfades instead of fading in from nothing.
+- **Custom components** that fade themselves in when `info.entered` is true now move twice (the box moves too).
+  They still end in the right state; drop the fade, or declare `"x-enter": "own"` and build on `info.entrance`.
+  While a box moves, the engine writes inline `opacity`, `transform` and `clip-path` on it, so a slide `style` rule
+  on those properties of the element box waits until the motion ends: style a node inside the box instead.
+- **A step's `transition` has bounds.** `transition.stagger` is at most 1000 ms and `transition.duration` at most
+  5000 ms (`validate` reports `spec-invalid` above them), like an element's own `delay` and `duration`.
 - **The engine lives in `engine/`.** `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/` moved
   there from the repository root. Decks are unchanged: `stepdeck new` copies the same folders into
   `<deck>/stepdeck/`.
@@ -17,6 +40,41 @@ All notable changes to stepdeck are recorded here. The format follows
   to it works.
 - `.nojekyll` is gone: Pages deploys from an Actions artifact, which never runs Jekyll.
 - CI uploads the site while the fast gate runs, and splits the browser suite over six runners.
+
+### Added
+
+- **Named motions.** One vocabulary for every entrance and exit: `fade`, `rise`, `wipe`, `pop` (new), `draw` and
+  `none`. A `rise` leaves moving up as it fades, a `pop` leaves shrinking slightly, and a `draw` exit is a fade. An element's `enter` and `exit` take a name or `{ motion, delay, duration }` (ms; `delay` for entrances).
+  `validate` suggests the closest name for a misspelt one, in both forms, and names the bound of a `delay` or
+  `duration` over 5000.
+- **Choreography.** The elements that enter on one step take stagger slots: each is held until its slot, then
+  plays its entrance. A step's `transition.stagger` sets the gap (it was accepted before but did nothing).
+  `validate` warns `motion-budget` for an element whose hold plus entrance reaches 8 s (each element has 10 s to
+  settle), and `exit-delay-ignored` for a `delay` in an `exit` (exits start at once).
+- **Theme motion tokens.** `--sd-stagger` (80ms in `modern`, 60ms in `academic-light`), `--sd-enter` (`rise`,
+  `fade`) and `--sd-motion-distance` (24px, 16px). `--sd-duration-fast` and `--sd-easing`, unused before, now
+  time quick changes and ease every motion.
+- **Components that build themselves.** `chart.line`, `chart.bar`, `big-number`, `list`, `chat`, `diagram`,
+  `terminal` and `timeline` declare `"x-enter": "own"`: when they appear they play their build (lines draw, bars
+  grow, items rise in turn, the figure counts up) while their box stays still, in their stagger slot. A list that
+  appears with its items already shown now builds them. `catalog` shows each entry's `enter` (`own` or `box`).
+- **For component authors:** `ctx.motion` (`in`, `out`, `timing`), `info.entrance`, and `"x-enter": "own"` in a
+  schema. The starter that `new-component` writes uses `ctx.motion` and no longer fades the element in.
+- **Ghost placeholders.** `ghost: true` or `ghost: "<label>"` on an element shows a dashed frame, with the label,
+  in its space while it is hidden (`false`, the default, shows none). `dump` reports it; `validate` reports `ghost-collapse` for a ghost on a
+  collapsing element.
+- **The gallery** ends with five motion slides: the named motions, a step's choreography, focus-dim, the message
+  line with a badge, and ghost placeholders.
+- **Message line and badges.** A slide `lede` string is a muted line under the title (the `text` role `lede`, sized
+  by the new theme token `--sd-font-size-lede`: 36px in `modern`, 32px in `academic-light`); a step can change it
+  and the text crossfades; its box carries the new hook class `sd-lede`. The `text` component also has a `badge`
+  role (an inline uppercase pill) with an optional `tone`, the index of its colour in the categorical palette:
+  the border takes that colour and the text the same colour darkened to 4.5:1, so every tone passes `check`.
+  `validate` warns `lede-on-cover` for a `lede` on a cover layout.
+- **Focus-dim.** `highlight` now looks the same in `chart.line`, `chart.bar` and `diagram`: what is out of focus
+  turns to the new optional theme token `--sd-color-dim` (opacity stays 1, text turns `--sd-color-muted`), the
+  focused marks are drawn above the dimmed ones, and the change tweens over `--sd-duration-fast`. A theme
+  without `--sd-color-dim` falls back to `--sd-color-rule`.
 
 ## [0.1.0] · 2026-11-19 · first public release
 

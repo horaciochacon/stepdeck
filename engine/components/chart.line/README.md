@@ -11,7 +11,7 @@ annotations fade in, and changing `y` morphs every line point by point.
 | `y` | string | (required) | tween | Numeric y column. A change morphs the lines (keyed by series and x) and rescales the y axis. |
 | `series` | string | none | snap | Column naming each row's series. Without it there is one line, keyed `all`. |
 | `series_shown` | string[] | all series | draw | Series to draw. Newly shown series draw along their length; removed ones fade out. |
-| `highlight` | string | none | fade | Series to emphasize; the others' lines are dimmed and their labels turn the muted text color. Use `only` so it lasts one step. |
+| `highlight` | string | none | fade | Series to emphasize; the others' lines and bands turn the theme's dim color (`--sd-color-dim`, opacity stays 1), sit below it, and their labels turn the muted text color. The change tweens over `--sd-duration-fast`. Use `only` so it lasts one step. |
 | `annotate` | `{x, label}`[] | `[]` | fade | Vertical dashed rules with a label. |
 | `axes` | `{x?, y?}` | (required) | snap | Axis titles: x under the axis, y above the plot. |
 | `format` | `{x?, y?}` | step precision | snap | d3-format specs for tick labels, localized by the deck language. |
@@ -21,6 +21,11 @@ annotations fade in, and changing `y` morphs every line point by point.
 Behaviour:
 - **Idempotent.** Every `update` ends by writing the target state straight from props, so the DOM
   after `settled()` is identical whether the state was jumped to or played step by step.
+- **Entrance.** The chart builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
+  an animated step, its lines draw along their length over 2 × `--sd-duration` or the element's `enter.duration`,
+  while its box stays still; axes, labels, bands and annotations show at once. It waits for its stagger slot like
+  any entering element, and the lines are undrawn the moment it shows. With `enter: "none"`, or a box motion such
+  as `enter: "rise"`, the chart is drawn at once (the box moves instead).
 - **Morph** (spec §6.3): the component's own keyed join. Series are keyed by name, points by
   series and x, ticks by value, annotations by x. With `info.animate` it interpolates from the
   previous state; all motion runs through `ctx.animate` bound to `info.signal`, so an aborted

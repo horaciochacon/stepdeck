@@ -221,11 +221,15 @@ Motion plays only when all of these hold:
 - The OS does not ask for reduced motion. With `prefers-reduced-motion: reduce`, steps snap. Add `?motion=full` to the URL to animate anyway.
 - The page is not a capture (`?capture`) and not a presenter preview frame. Both never animate. The CLI loads pages with `?capture` for `dump` and `shoot`.
 
-`STEPDECK.flags.motion` and `STEPDECK.flags.animate` tell you which applies. A step whose `transition.duration` is `0` also snaps. See [When motion plays](guide/animation-and-motion.md#when-motion-plays) and [Reduced motion](guide/presenting.md#reduced-motion).
+`STEPDECK.flags.motion` and `STEPDECK.flags.animate` tell you which applies. A step whose `transition.duration` is `0` also snaps, and so does an element with `enter: "none"` or `exit: "none"`. See [When motion plays](guide/animation-and-motion.md#when-motion-plays) and [Reduced motion](guide/presenting.md#reduced-motion).
 
-### `section`, `sections`, `enter`, `exit` or `seconds` do nothing
+### Elements now animate in, and I did not ask for it
 
-They are accepted by the schema and by `validate`, but nothing reads them yet: slide `section`, deck `sections`, element `enter` and `exit`, and slide `seconds`. Each component decides its own entry motion. See [Deck and slide](reference/deck-and-slide.md).
+Every element that appears on a forward step enters with a motion: the theme's `--sd-enter` (`rise` in `modern`, `fade` in `academic-light`) on its box, or the component's own build (charts draw, lists build, big numbers count up). Leaving elements fade out. To turn it off for one element, set `enter: "none"` (or `exit: "none"`) on it; for one step, give the step `transition: { duration: 0 }`. A custom component that also fades itself in when `info.entered` is true now moves twice: drop that fade. See [Animation and motion](guide/animation-and-motion.md#how-an-element-enters-and-leaves).
+
+### `sections` or `seconds` do nothing
+
+They are accepted by the schema and by `validate`, but nothing reads them yet: deck `sections` and slide `seconds`. (Slide `section` is the kicker above the title.) See [Deck and slide](reference/deck-and-slide.md).
 
 ### A `slide.regions` value is ignored
 

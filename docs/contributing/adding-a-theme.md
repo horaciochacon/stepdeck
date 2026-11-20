@@ -41,20 +41,20 @@ themes/my-theme/
 
 A theme has no `schema.json` and no `example.js`.
 
-`theme.css` is optional. A theme with only `tokens.css` works: core ships default rules for every published hook, driven by the tokens. The loader tolerates a 404 for `theme.css`, and so does `check`. Add one when the theme needs to restyle a hook, as `modern` does for the kicker, the accent phrase and the cover author line (see [Write theme.css](#write-themecss)).
+`theme.css` is optional. A theme with only `tokens.css` works: core ships default rules for every published hook and for the `lede` and `badge` text roles, driven by the tokens. The loader tolerates a 404 for `theme.css`, and so does `check`. Add one when the theme needs to restyle a hook, as `modern` does for the kicker, the accent phrase and the cover author line (see [Write theme.css](#write-themecss)).
 
 ## Write tokens.css
 
 ### Keep every token name
 
-Declare every custom property that `themes/modern/tokens.css` declares, with the same name, and change only the values. Seven of them are optional (core falls back when they are missing): `--sd-color-title`, `--sd-color-grid`, `--sd-color-kicker`, `--sd-letter-spacing-title`, `--sd-letter-spacing-cover`, `--sd-font-size-kicker` and `--sd-font-size-cover-figure`. The [themes reference](../reference/themes.md#tokens) gives each fallback. Components, layouts and `core/stepdeck.css` read these names, and `ctx.tokens` holds only the names the theme declares, so a missing name is a missing value: the `var()` that reads it falls back to its default, or to nothing. No rule checks this, so compare the names yourself. This prints nothing when they match:
+Declare every custom property that `themes/modern/tokens.css` declares, with the same name, and change only the values. Nine of them are optional (core falls back when they are missing): `--sd-color-title`, `--sd-color-grid`, `--sd-color-dim`, `--sd-color-kicker`, `--sd-letter-spacing-title`, `--sd-letter-spacing-cover`, `--sd-font-size-kicker`, `--sd-font-size-lede` and `--sd-font-size-cover-figure`. The [themes reference](../reference/themes.md#tokens) gives each fallback. Components, layouts and `core/stepdeck.css` read these names, and `ctx.tokens` holds only the names the theme declares, so a missing name is a missing value: the `var()` that reads it falls back to its default, or to nothing. No rule checks this, so compare the names yourself. This prints nothing when they match:
 
 ```sh
 names() { grep -oE '^ *--[a-z0-9-]+ *:' "$1" | tr -d ' :' | sort -u; }
 diff <(names themes/modern/tokens.css) <(names themes/my-theme/tokens.css)
 ```
 
-The token groups are colors (`--sd-color-*`), fonts and sizes (`--sd-font-*`, `--sd-line-height*`, `--sd-measure`), the minimum audience font, spacing (`--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`) and motion (`--sd-duration`, `--sd-duration-fast`, `--sd-easing`). The [tokens section of the reference](../reference/themes.md#tokens) lists each one with what reads it. Some values in `core/stepdeck.css` are hard-coded rather than read from tokens (title line height 1.15, label weight 600, big-number suffix weight 500, and others); they are listed under [Values not taken from tokens](../reference/themes.md#values-not-taken-from-tokens), and a theme cannot change them.
+The token groups are colors (`--sd-color-*`), fonts and sizes (`--sd-font-*`, `--sd-line-height*`, `--sd-measure`), the minimum audience font, spacing (`--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`) and motion (`--sd-duration`, `--sd-duration-fast`, `--sd-easing`, `--sd-stagger`, `--sd-enter`, `--sd-motion-distance`: the timing and feel of every entrance, exit and change). The [tokens section of the reference](../reference/themes.md#tokens) lists each one with what reads it. Some values in `core/stepdeck.css` are hard-coded rather than read from tokens (title line height 1.15, label weight 600, big-number suffix weight 500, and others); they are listed under [Values not taken from tokens](../reference/themes.md#values-not-taken-from-tokens), and a theme cannot change them.
 
 Put the tokens in a `:root { ... }` block. `catalog` reads token names and values only from `:root` blocks.
 
@@ -190,7 +190,7 @@ Darken a color in steps until both rules pass. The `academic-light` README expla
 
 `theme.css` is optional. It is loaded after `tokens.css` and sits in the `sd-theme` cascade layer, so its rules beat core's hook defaults and every layout, and lose to a slide's own `style`. Start from the rules in [`themes/modern/theme.css`](../../engine/themes/modern/theme.css). The published hooks and the rules for writing them are in [Themes: styling hooks](../reference/themes.md#styling-hooks). The ones that trip people up:
 
-- Target hook classes (`.sd-title`, `.sd-kicker`, `.sd-accent`, `.sd-subtitle`, `.sd-meta`, `.sd-statement`), `[data-kind="cover"]` and component part classes. Never `[data-layout]`, a region name or `!important`.
+- Target hook classes (`.sd-title`, `.sd-kicker`, `.sd-lede`, `.sd-accent`, `.sd-subtitle`, `.sd-meta`, `.sd-statement`), the text roles that have a rule of their own (`.sd-role-lede`, `.sd-role-badge`), `[data-kind="cover"]` and component part classes. Never `[data-layout]`, a region name or `!important`.
 - A hook class sits on its region and on every element wrapper inside it. A box property (padding, margin, border, background, outline, box-shadow) on a bare hook class is drawn once per wrapper. Put it on the region only: `.sd-region.sd-meta`.
 - Set inherited properties (colour, weight, tracking, transform) on the element that carries the hook, `.sd-title` or `.sd-kicker`, not on its inner `.sd-text` or `.sd-markdown`. The text inherits them, and a slide's `style` on the hook element still wins; a rule on the inner node would beat it.
 - Do not set `font-size` on `.sd-title`: it would override core's cover and cover-figure sizes. Use `--sd-font-size-title`, `--sd-font-size-cover` and `--sd-font-size-cover-figure`.
@@ -277,7 +277,7 @@ Adding a theme does not change the default. Decks without `theme` use `DEFAULT_T
 | Item | Checked by |
 | --- | --- |
 | Folder in the engine's `themes/` (`<deck>/stepdeck/themes/` for a deck), holding `tokens.css` | `validate` (`unknown-theme`) |
-| Every token name of `modern` (the seven optional ones may be omitted), inside `:root` | the `diff` above; nothing else |
+| Every token name of `modern` (the nine optional ones may be omitted), inside `:root` | the `diff` above; nothing else |
 | `theme.css`, if any: hooks and part classes only; no `[data-layout]`, region names or `!important`; no box properties on a bare hook class | `test/unit/layout-contract.test.mjs`, `test/unit/theme-modern.test.mjs` |
 | `--sd-color-background` as `#rgb` or `#rrggbb` | `validate` (`theme-background`) |
 | Ink and muted text at 4.5:1 on the background | `check` (`contrast`) |

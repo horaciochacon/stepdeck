@@ -14,11 +14,15 @@ import {
   expectBackwardEqualsJump,
   expectInterruptEqualsJump,
   expectAnimatedStepMoves,
+  elementHtml,
+  htmlAfterJump,
+  sampleFrames,
 } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const deck = fileURLToPath(new URL("../fixtures/decks/list/", import.meta.url));
 const pages = deckPages("test/fixtures/decks/list/");
+const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 const REVEAL = ["none", "one", "two", "three"];
 const CHECK = ["start", "first", "second", "all", "byid"];
 
@@ -231,4 +235,112 @@ test("check is clean on the list slides", async () => {
     const problems = await check(deck, { slide });
     assert.deepEqual(problems.map(formatProblem), [], slide);
   }
+});
+
+// Owned entrance. Per frame: each item's computed opacity, each tick's computed visibility and whether it has a
+// dash style, and whether any inline style is left on an item.
+const buildProbe = (el) => {
+  const rows = [...el.querySelectorAll(".sd-list-item")];
+  const ticks = rows.map((li) => li.querySelector(".sd-list-tick"));
+  return {
+    ops: rows.map((li) => Number(getComputedStyle(li).opacity)),
+    tickShown: ticks.map((t) => getComputedStyle(t).visibility === "visible"),
+    dashed: ticks.map((t) => t.style.strokeDasharray !== "" || t.style.strokeDashoffset !== ""),
+    inline: rows.some((li) => li.getAttribute("style") !== null),
+  };
+};
+
+test("list entering with shown 0 to 3 plays one staggered build", async () => {
+  await withPage({ root, url: motion.url("list-enters", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const r = await sampleFrames(page, "list-enters", "go", "list", buildProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the list is shown");
+    const first = shown[0];
+    assert.ok(first.ms >= 150, `held for the third slot, 2 x 80 ms (first shown at ${first.ms.toFixed(0)} ms)`);
+    assert.ok(first.ops.every((o) => o < 0.5), `no item shows built at the first shown frame (${first.ops})`);
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the items rise themselves");
+
+    // At 60 ms into the build the first item is on its way and the third has not begun.
+    const at60 = shown.find((f) => f.ms >= first.ms + 60);
+    assert.ok(at60.ops[0] > at60.ops[2], `item 1 is more opaque than item 3 at 60 ms (${at60.ops})`);
+    assert.ok(shown.every((f) => f.ops[0] >= f.ops[1] && f.ops[1] >= f.ops[2]), "items come in in order, never out of it");
+    // Items start one --sd-stagger (80 ms) apart: the third 2 x 80 ms after the first (a frame of slack each side).
+    const startOf = (i) => shown.find((f) => f.ops[i] > 0).ms;
+    const lag = startOf(2) - startOf(0);
+    assert.ok(lag >= 140 && lag < 600, `the third item starts ~160 ms after the first (${lag.toFixed(0)} ms)`);
+
+    // A done tick draws after its row has risen, and an undone item never shows one.
+    assert.ok(shown.every((f) => !f.tickShown[0] || f.ops[0] >= 0.99), "a tick shows only once its row is in");
+    assert.ok(shown.some((f) => f.dashed[0]) && shown.some((f) => f.dashed[1]), "the done ticks were drawn");
+    assert.ok(shown.every((f) => !f.tickShown[2]), "an item that is not done never shows a tick");
+    assert.equal(r.end.inline, false, "no inline style left on an item");
+    assert.ok(r.settledMs < 6000, `the build settles (${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "list"), await htmlAfterJump(ctx, page, motion, "list-enters", "go", "list"));
+
+    // Played, backward and interrupted (while held, and mid-build) equal a jump.
+    const steps = ["start", "go", "more"];
+    await expectJumpEqualsPlayed(ctx, page, { pages: motion, slide: "list-enters", steps, id: "list" });
+    await expectBackwardEqualsJump(ctx, page, { pages: motion, slide: "list-enters", steps, id: "list" });
+    await expectInterruptEqualsJump(ctx, page, { pages: motion, slide: "list-enters", from: "start", via: "go", to: "more", id: "list" });
+    const jumped = await htmlAfterJump(ctx, page, motion, "list-enters", "more", "list");
+    await ctx.open(motion.url("list-enters", "step=start&motion=full"));
+    const midBuild = await page.evaluate(async () => {
+      const first = () => document.querySelector('[data-el="list"] .sd-list-item');
+      window.STEPDECK.goTo("list-enters", "go");
+      let building = false;
+      for (let i = 0; i < 300 && !building; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const o = Number(getComputedStyle(first()).opacity);
+        building = o > 0 && o < 1 && getComputedStyle(document.querySelector('[data-el="list"]')).visibility === "visible";
+      }
+      window.STEPDECK.goTo("list-enters", "more");
+      await window.STEPDECK.settled();
+      return building;
+    });
+    assert.ok(midBuild, "the list was being built when the next step came");
+    assert.equal(await elementHtml(page, "list"), jumped, "interrupted mid-build equals a jump");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("the items' start state is written before update awaits; a shown element without an entrance snaps", async () => {
+  await withPage({ root, url: pages.url("reveal", "step=none") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const { default: list } = await import("../components/list/index.js");
+      const { animate } = await import("../core/animate.js");
+      const { makeMotion } = await import("../core/motion.js");
+      const host = document.createElement("div");
+      document.querySelector(".sd-canvas").appendChild(host);
+      const ctx = { animate, motion: makeMotion({}), tokens: {} };
+      const props = { marker: "check", shown: 3, done: 1, items: [{ text: "One" }, { text: "Two" }, { text: "Three" }] };
+      const inst = await list.mount(host, { ...props, shown: 0, done: 0 }, ctx);
+      const rows = () => [...host.querySelectorAll(".sd-list-item")];
+      const signal = new AbortController().signal;
+      const info = (extra) => ({ prev: { ...props, shown: 0, done: 0 }, changed: ["shown", "done"], animate: true, entered: true, entrance: null, signal, ...extra });
+
+      // A drawn entrance: opacity 0 and a hidden tick at once, before update returns its promise.
+      const drawing = inst.update(props, info({ entrance: { motion: "draw", duration: 120 } }));
+      const sync = { ops: rows().map((li) => li.style.opacity), tick: host.querySelector(".sd-list-tick").style.visibility };
+      await drawing;
+      const afterDraw = rows().map((li) => li.getAttribute("style"));
+      // An entrance of "none", and an entered element with no entrance at all (a box moves instead): snap.
+      const out = {};
+      for (const [name, entrance] of [["none", { motion: "none", duration: 0 }], ["moved", null]]) {
+        await inst.update({ ...props, shown: 0, done: 0 }, info({ entered: false, entrance: null, animate: false }));
+        const p = inst.update(props, info({ entrance }));
+        out[name] = { sync: rows().map((li) => li.style.opacity), tick: host.querySelector(".sd-list-tick").style.visibility };
+        await p;
+      }
+      return { sync, afterDraw, out };
+    });
+    assert.deepEqual(r.sync.ops, ["0", "0", "0"], "every visible item starts at opacity 0");
+    assert.equal(r.sync.tick, "hidden", "a tick that draws later starts hidden");
+    assert.deepEqual(r.afterDraw, [null, null, null], "no inline style after the build");
+    for (const name of ["none", "moved"]) {
+      assert.deepEqual(r.out[name].sync, ["", "", ""], `${name}: nothing is held back`);
+      assert.equal(r.out[name].tick, "", `${name}: no tick is hidden`);
+    }
+  });
 });

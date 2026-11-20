@@ -8,26 +8,36 @@
 //   settleTimeout  ms, default SETTLE_TIMEOUT_MS (10 s): the watchdog on every mount and update call
 //   ctxBase:
 //     setVisible(id, visible, collapse)   required; the shell applies visibility to the element's box
+//     enterBox(id, name, { duration, ease, signal }) -> Promise
+//                                          optional; plays the box's entrance `name`. Called right after
+//                                          setVisible(id, true), in the same synchronous block.
+//     exitBox(id, name, { duration, ease, signal }, collapse) -> Promise
+//                                          optional; plays the box's out motion, then hides the box itself.
+//                                          Without these two (Node tests, older shells) visibility snaps.
 //     load(path, opts?)                    data loader (core/data.js); also used for bindings
 //     format(spec)                         makeFormat(lang) (core/format.js); also used for bindings
 //     t(key)                               i18n bound to the deck language
 //     capture                              boolean, passed through to ctx
-//     tokens, palette                      passed through to ctx
+//     tokens, palette                      passed through to ctx; tokens also give the step's motion
+//                                          timing (--sd-duration, --sd-easing, --sd-stagger, --sd-enter)
 //     d3                                   optional; defaults to core/d3.js
 //     onError(id, error)                   optional; called once when an element fails (the shell shows it)
 //
 // ctx.size is { w, h } in canvas pixels (offsetWidth/offsetHeight, unaffected by the shell's scaling).
+// ctx.motion is makeMotion(tokens) (core/motion.js): the named motions with the theme's defaults.
 //
 // ctx.mount(type, el, props) -> Promise<handle>   (spec §6.3: built-ins inside a custom component)
 //   Resolves `type` through the same registry (deck components first, then built-ins; so a custom
 //   component can mount another deck component too), resolves bindings in `props`, and mounts the
-//   component into `el` with a child ctx (same d3/data/format/t/tokens/palette/animate/capture; `size`
+//   component into `el` with a child ctx (same d3/data/format/t/tokens/palette/animate/motion/capture; `size`
 //   measured from `el`; its own ctx.mount for deeper nesting). The handle is
 //     { instance, update(props, info), pause(), destroy() }
 //   update resolves bindings, then calls instance.update(props, info') where info' is the parent's
-//   `info` (animate, signal, entered, step, transition: the parent supplies them; pass the parent's
+//   `info` (animate, signal, entered, entrance, step, transition: the parent supplies them; pass the parent's
 //   signal so an abort propagates) with `prev` and `changed` replaced by the child's own last props and
-//   changed keys. The handle never skips an update: skipping no-ops is the parent's call.
+//   changed keys. The handle never skips an update: skipping no-ops is the parent's call. A child that gets
+//   entered: true with no entrance renders at once (the parent's box carries the entrance); a parent that
+//   wants its child to build passes `entrance` through.
 //   handle.destroy() is idempotent and removes the child from the parent's list (swap a child freely);
 //   after it, pause is a no-op and update throws.
 //   Children are tracked per parent element and are paused/destroyed with it (children after the parent,
@@ -37,7 +47,9 @@
 //
 // Lifecycle:
 //   mount()   mounts every element (hidden ones too) with its step-0 resolved props. It does not
-//             apply visibility and does not count as an applied state.
+//             apply visibility and does not count as an applied state. It also reads, once per type,
+//             whether the component owns its entrance (`"x-enter": "own"` in registry.schema(type));
+//             a schema that cannot be read counts as not owned.
 //   goTo(ref, { animate })
 //             applies the state at step `ref`. The first goTo after mount calls setVisible and update
 //             for every element (prev: null, changed: all keys, entered: visible, animate: false).
@@ -49,8 +61,26 @@
 //             across elements; each element's signal aborts when the goTo is superseded (and on its
 //             own watchdog); updates of different goTos never overlap.
 //             Resolves when the latest target is applied; rejects only for an unknown step ref.
+//
+//             On an animating step, elements that change visibility move (core/choreography.js):
+//             - Entering elements (hidden -> visible) take stagger slots in slide order: element i is
+//               held i * stagger + its own `delay` ms (abort-aware). Then, in one synchronous block, it
+//               gets setVisible(id, true), enterBox when its box moves, and its update. A component
+//               that owns its entrance builds itself instead of the box moving: its update gets
+//               info.entrance = { motion: "draw" | "none", duration } (duration: the element's own, or
+//               undefined). info.entrance is null in every other update.
+//             - Exiting elements (visible -> hidden) start at once: exitBox, then update. An exit that
+//               snaps (collapse: true, or "none") gets setVisible at once instead.
+//             Timing comes from ctxBase.tokens and the step's transition (core/motion.js timing); an
+//             element's own `duration` wins. A step whose duration is 0 holds nothing and snaps.
+//             On abort every held element is released at once and moves with the aborted signal.
+//             Elsewhere (first goTo, jumps, backward, animate not requested) nothing is held and
+//             visibility snaps, as above. Each element's hold, box motion and update run inside its
+//             watchdog; the step settles when all of them have.
 //   settled() resolves when no goTo is in flight.
-//   pause()   aborts the in-flight goTo and calls instance.pause().
+//   pause()   aborts the in-flight goTo and calls instance.pause(). An element still held for its stagger
+//             slot is released by that abort only after pause() returns: it then gets setVisible, enterBox
+//             and update (with the aborted signal, so everything snaps) after its instance's pause().
 //   destroy() aborts, drops pending targets and calls instance.destroy().
 //   state     null until the first goTo; then { step, stepId, elements, title, notes, transition }
 //             (stateAt shape; elements[id].props are binding-resolved for live elements).
@@ -60,9 +90,11 @@
 //             "<slide>/<element>: did not settle within 10s", aborts that element's signal and lets the
 //             slide go on (a component that never settles must not freeze the talk). A mount that
 //             settles after its watchdog fired is destroyed at once; a late update is ignored.
-import { stateAt, stepIndex } from "./fold.js";
+import { initialElements, stateAt, stepIndex } from "./fold.js";
 import { resolveElementProps } from "./bindings.js";
-import { animate as animateHelpers } from "./animate.js";
+import { animate as animateHelpers, wait } from "./animate.js";
+import { MOTION_NAMES, makeMotion, timing } from "./motion.js";
+import { DEFAULT_ENTER, motionParts, resolveEntrance, resolveExit, slotDelays } from "./choreography.js";
 import { d3 as defaultD3 } from "./d3.js";
 
 /** Default watchdog per mount/update call (ms): well above the longest built-in motion. */
@@ -135,6 +167,15 @@ function runAll(fns) {
   if (failure) throw failure;
 }
 
+/** Calls fn and returns its result as a promise; a synchronous throw becomes a rejection. */
+function attempt(fn) {
+  try {
+    return Promise.resolve(fn());
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
 function pauseHolder(holder, instance) {
   runAll([() => instance?.pause?.(), ...holder.children.map((child) => () => child.pause())]);
 }
@@ -162,6 +203,9 @@ export class SlideController {
   #appliedIndex = null;
   #destroyed = false;
   #settleTimeout;
+  #owns = new Map(); // type -> true when its schema declares "x-enter": "own" (read in mount)
+  #order = null; // element id -> index in slide order
+  #motion = null; // ctx.motion, shared by every component of the slide
 
   state = null;
   errors = [];
@@ -200,6 +244,7 @@ export class SlideController {
       t: base.t,
       capture: Boolean(base.capture),
       animate: animateHelpers,
+      motion: (this.#motion ??= makeMotion(base.tokens ?? {})),
       tokens: base.tokens,
       palette: base.palette,
       size: sizeOf(el),
@@ -260,7 +305,11 @@ export class SlideController {
     const { elements } = stateAt(this.#slide, 0);
     // Load modules and resolve bindings in parallel, then mount in element order (deterministic).
     const entries = Object.entries(elements);
-    const loaded = await Promise.allSettled(entries.map(async ([, e]) => Promise.all([this.#registry.get(e.type), this.#resolve(e.type, e.props)])));
+    const types = [...new Set(entries.map(([, e]) => e.type))];
+    const [loaded] = await Promise.all([
+      Promise.allSettled(entries.map(async ([, e]) => Promise.all([this.#registry.get(e.type), this.#resolve(e.type, e.props)]))),
+      Promise.all(types.map((type) => this.#readOwns(type))),
+    ]);
     for (const [i, [id]] of entries.entries()) {
       if (this.#destroyed) return;
       const { status, value, reason } = loaded[i];
@@ -294,6 +343,17 @@ export class SlideController {
         this.#fail(id, err);
       }
     }
+  }
+
+  /** Whether `type` owns its entrance; never throws (an unreadable schema counts as not owned). */
+  async #readOwns(type) {
+    let owns = false;
+    try {
+      owns = (await this.#registry.schema?.(type))?.["x-enter"] === "own";
+    } catch {
+      // The element's box moves instead; a missing component fails on its own when it is loaded.
+    }
+    this.#owns.set(type, owns);
   }
 
   goTo(ref, { animate = false } = {}) {
@@ -350,6 +410,8 @@ export class SlideController {
       signal,
       transition: st.transition,
     };
+    // What moves is decided against the last applied state, before rec.applied moves on.
+    const moves = info0.animate ? this.#moves(resolved, info0) : new Map();
     this.#appliedIndex = index;
     // state.elements[id].props are the resolved props for live elements (raw props for failed ones).
     const elements = { ...st.elements };
@@ -367,7 +429,9 @@ export class SlideController {
       const visibilityChanged = !last || last.visible !== e.visible;
       const propsChanged = !last || !deepEqual(last.props, props);
       rec.applied = { props, visible: e.visible };
-      if (visibilityChanged) {
+      const move = moves.get(id);
+      // A moving element's visibility is applied by its move: after its hold, or by exitBox.
+      if (visibilityChanged && !move) {
         try {
           this.#ctxBase.setVisible?.(id, e.visible, e.collapse);
         } catch (error) {
@@ -385,15 +449,14 @@ export class SlideController {
         prev,
         changed: changedKeys(prev, props),
         entered: e.visible && (!last || !last.visible),
+        entrance: move?.entrance ?? null,
       };
+      const update = () => rec.instance.update(props, info);
+      const run = move ? () => this.#play(id, e, move, update, info.signal, own.signal) : update;
       calls.push(
         (async () => {
           try {
-            await watchdog(
-              Promise.resolve().then(() => rec.instance.update(props, info)),
-              this.#settleTimeout,
-              () => own.abort(),
-            );
+            await watchdog(Promise.resolve().then(run), this.#settleTimeout, () => own.abort());
           } catch (error) {
             this.#fail(id, error);
           }
@@ -401,6 +464,75 @@ export class SlideController {
       );
     }
     await Promise.all(calls);
+  }
+
+  /**
+   * The entrances and exits an animating step plays, by element id:
+   *   { delay, box, duration, ease, entrance }   an entering element
+   *   { exit, duration, ease }                    an exiting element whose box plays `exit`
+   * An exit that snaps (collapse, "none", or no exitBox in ctxBase) has no entry: its visibility is
+   * applied at once, as on a non-animating step.
+   */
+  #moves(resolved, info0) {
+    const base = this.#ctxBase;
+    const tokens = base.tokens ?? {};
+    const { duration, ease, stagger } = timing(tokens, info0);
+    const snap = !(duration > 0); // a zero duration snaps the whole step, holds included
+    const themeEnter = MOTION_NAMES.includes(tokens["--sd-enter"]) ? tokens["--sd-enter"] : DEFAULT_ENTER;
+    const moves = new Map();
+    const entering = [];
+    const own = {};
+    for (const [id, e, , isError] of resolved) {
+      if (isError) continue;
+      const wasVisible = this.#elements.get(id).applied?.visible === true;
+      if (e.visible && !wasVisible) {
+        const r = resolveEntrance(e.enter, { owns: this.#owns.get(e.type) === true, themeEnter });
+        const entrance = r.own ? { motion: r.own, duration: snap ? 0 : r.duration } : null;
+        moves.set(id, { delay: 0, box: r.box, duration: snap ? 0 : (r.duration ?? duration), ease, entrance });
+        entering.push(id);
+        own[id] = snap ? 0 : r.delay;
+      } else if (!e.visible && wasVisible && base.exitBox) {
+        const exit = resolveExit(e.exit, e.collapse);
+        if (exit !== null) moves.set(id, { exit, duration: snap ? 0 : (motionParts(e.exit).duration ?? duration), ease });
+      }
+    }
+    this.#order ??= new Map(initialElements(this.#slide).map((d, i) => [d.id, i]));
+    entering.sort((a, b) => this.#order.get(a) - this.#order.get(b));
+    const slots = slotDelays(entering, snap ? 0 : stagger, own);
+    for (const id of entering) moves.get(id).delay = slots[id];
+    return moves;
+  }
+
+  /**
+   * One element's move and update; runs inside the element's watchdog. `timedOut` is the watchdog's
+   * signal: once it fired the element has failed and gets no update.
+   * - Entrance: held until its slot (released at once on abort), then setVisible, enterBox and update in
+   *   one synchronous block, so the box's or the component's start state lands before the next paint.
+   * - Exit: exitBox (which hides the box when its motion ends), then update.
+   */
+  async #play(id, e, move, update, signal, timedOut) {
+    const base = this.#ctxBase;
+    const opts = { duration: move.duration, ease: move.ease, signal };
+    if (move.exit) {
+      try {
+        await base.exitBox(id, move.exit, opts, false);
+      } catch (error) {
+        try {
+          base.setVisible?.(id, false, e.collapse); // end hidden anyway, as the state says
+        } catch {
+          // The motion's error is the one recorded.
+        }
+        throw error;
+      }
+      if (timedOut.aborted || this.#destroyed) return;
+      return update();
+    }
+    await wait(move.delay, signal);
+    if (this.#destroyed) return;
+    base.setVisible?.(id, true, e.collapse);
+    if (timedOut.aborted) return;
+    const box = move.box && base.enterBox ? attempt(() => base.enterBox(id, move.box, opts)) : undefined;
+    await Promise.all([box, attempt(update)]);
   }
 
   pause() {

@@ -94,6 +94,7 @@ A hook is a class that core puts on the elements that play a role, so a theme ca
 |---|---|---|
 | `title` | The element with id `title` (the slide's `title`, or an explicit element of that id). | Title size, weight and tight line height; `--sd-letter-spacing-title`; `--sd-color-title`. |
 | `kicker` | The element wrapper of the `kicker` element, which core makes from the slide's `section`. Its selector is `[data-el="kicker"]` or `.sd-kicker`. | `--sd-font-size-kicker` (else the label size), strong weight, 0.12em tracking, uppercase, `--sd-color-kicker` (else muted). |
+| `lede` | The element wrapper of the `lede` element (the slide's `lede`, or an explicit element of that id). Its selector is `[data-el="lede"]` or `.sd-lede`. | None on the hook: the text's `lede` role (`.sd-role-lede`) sets the lede size, tight line height and muted colour, and the built-in themes restyle that role. |
 | `accent` | The `<em class="sd-accent">` of an accent phrase (`*phrase*` in a title). | `--sd-color-accent`; `font-style: normal`, so it is an `<em>` but not italic. |
 | `subtitle` | The mapped region (`title` layout's `subtitle`) and every element wrapper in it. | Heading size, tight line height, muted, balanced wrapping. |
 | `meta` | The mapped region (`title` layout's `meta`) and its wrappers. | Note size. |
@@ -105,7 +106,7 @@ How to write `theme.css`:
 - **Hook classes sit on the region and on its wrappers.** `.sd-meta` is on the `meta` region and on every element in it. A box property (padding, margin, border, background, outline, box-shadow) on a bare hook class is drawn once per wrapper. Put it on the region only: `.sd-region.sd-meta`. The unit test `test/unit/theme-modern.test.mjs` flags a selector whose last compound is a bare hook class and that declares a box property.
 - **Target hooks and component part classes only.** Never `[data-layout]`, a region name (`[data-region]`) or `!important`; the contract test forbids all three.
 - **Do not set `font-size` on `.sd-title`.** A `theme.css` rule beats core's cover rules whatever the specificity, so it would also override the cover size and the cover-figure size. Set the sizes with tokens. If a theme does set a title size, it must restate the cover rules.
-- **Style the element that carries the hook, not its inner nodes.** The wrapper `.sd-el` carries the hook class (`.sd-title`, `.sd-kicker`), and the text sits in a `.sd-text` or `.sd-markdown` inside it. Set inherited properties (colour, font, weight, tracking, size, transform) on the hook element: `.sd-kicker { color: … }`, not `.sd-kicker .sd-text { … }`. The text inherits them, a text and a markdown title alike, and a slide's `style` on the same element (`.sd-title { color: … }`) still wins. A rule on the inner node would beat that slide style, because the inner node then has its own value instead of inheriting.
+- **Style the element that carries the hook, not its inner nodes.** The wrapper `.sd-el` carries the hook class (`.sd-title`, `.sd-kicker`, `.sd-lede`), and the text sits in a `.sd-text` or `.sd-markdown` inside it. Set inherited properties (colour, font, weight, tracking, size, transform) on the hook element: `.sd-kicker { color: … }`, not `.sd-kicker .sd-text { … }`. The text inherits them, a text and a markdown title alike, and a slide's `style` on the same element (`.sd-title { color: … }`) still wins. A rule on the inner node would beat that slide style, because the inner node then has its own value instead of inheriting.
 - **A slide's `style` still wins**, because it sits in the `sd-slide` layer.
 - A theme with no `theme.css` is complete: core's hook defaults apply.
 
@@ -115,7 +116,7 @@ The title region is an inline-size container named `sd-title`, so a slide's `sty
 
 Every token is a CSS custom property on `:root` in `themes/<theme>/tokens.css`: [`modern`](../../engine/themes/modern/tokens.css) and [`academic-light`](../../engine/themes/academic-light/tokens.css). They are prefixed `--sd-`, except `--min-audience-font`, which keeps its spec name. Components, layouts and `core/stepdeck.css` read tokens instead of raw values, with the exceptions listed in [Values not taken from tokens](#values-not-taken-from-tokens). Both themes declare the same names (the contributing guide's `diff` of the names is empty); the tables give both values, with `=` where they are the same.
 
-Seven tokens are **optional**: a theme that does not declare them still works, because core's hook rules fall back as shown. They are marked *optional* below.
+Nine tokens are **optional**: a theme that does not declare them still works, because core's hook rules fall back as shown. They are marked *optional* below. The motion tokens have fallbacks in code too (see [Motion](#motion)), but every theme should declare them.
 
 The **Read by** column says where each token is used today. "Unused" means nothing in `core/`, `components/`, `layouts/` or `cli/` reads it: changing it changes nothing on screen.
 
@@ -131,8 +132,9 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-color-kicker` *(optional)* | `#5b5b62` | `#1d4ed8` | The kicker above a title. Falls back to `--sd-color-muted`. | `core/stepdeck.css` (`.sd-kicker`) |
 | `--sd-color-accent` | `#0072b2` | `#1d4ed8` | Emphasis: links, big numbers, prompts, accent phrases. Equals the categorical palette's `blue` (role `accent`). | `core/stepdeck.css`, `chart.bar` (fallback fill) |
 | `--sd-color-alert` | `#b75002` | `#d81b45` | Errors and warnings. Equals the categorical palette's `vermillion` (academic-light) or `rose` (modern), role `alert`. | `core/stepdeck.css` (error boxes), reveal shell |
-| `--sd-color-rule` | `#d4d4d8` | `#e4e4e7` | Hairlines: borders, separators; dimmed bars. | `core/stepdeck.css`, `chart.bar` |
+| `--sd-color-rule` | `#d4d4d8` | `#e4e4e7` | Hairlines: borders, separators. Also the fallback for `--sd-color-dim`. | `core/stepdeck.css`, `core/kit.js` (`focusPaint`, as the dim fallback) |
 | `--sd-color-grid` *(optional)* | `#d4d4d8` | `#f0f0f2` | Chart grid lines, lighter than a rule. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (`.sd-grid-line`) |
+| `--sd-color-dim` *(optional)* | `#b4b4bb` | `#c4c4cc` | What marks out of focus turn to when `highlight` emphasises another: a neutral grey lighter than `--sd-color-muted` and darker than `--sd-color-grid`. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (diagram), `core/kit.js`, `chart.line`, `chart.bar` |
 | `--sd-color-letterbox` | `#111114` | `=` | The page around the canvas when the window is not 16:9. | `core/stepdeck.css`, reveal shell |
 
 `accent` and `alert` are the same values as the palette colors their roles point at, so `{{color:accent}}` in a `markdown` element names the color the audience sees ("blue", "azul"). `modern`'s muted and alert were tuned from the mockup values so that text in them reaches 4.5:1 on the surface and the chat bubble; its README records each ratio.
@@ -158,6 +160,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-font-size-note` | `32px` | `=` | Notes (`role: "note"`), meta lines, big-number labels, diagram and timeline labels, captions. | `core/stepdeck.css` |
 | `--sd-font-size-label` | `28px` | `=` | Axis ticks, legends, terminal text, inline code. | `core/stepdeck.css`, `chart.line`, `chart.bar`, `diagram` |
 | `--sd-font-size-kicker` *(optional)* | `28px` | `=` | The kicker. Falls back to the label size. | `core/stepdeck.css` (`.sd-kicker`) |
+| `--sd-font-size-lede` *(optional)* | `32px` | `36px` | The message line under a title (`role: "lede"`, the slide's `lede`). Falls back to the note size. | `core/stepdeck.css` (`.sd-role-lede`), the theme's `theme.css` |
 | `--sd-font-size-source` | `28px` | `=` | Source lines (`role: "source"`). | `core/stepdeck.css` |
 
 The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 when it is missing.
@@ -194,7 +197,7 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 | Token | Value | Use | Read by |
 | --- | --- | --- | --- |
 | `--sd-grid` | `8px` | Base unit; the other spacing tokens are multiples of it. | `core/stepdeck.css`, `diagram`, `timeline` |
-| `--sd-space` | `16px` | Default inner spacing (two units). Also the distance of the `rise` motion. | `core/stepdeck.css`, `core/animate.js`, `diagram`, `title` layout |
+| `--sd-space` | `16px` | Default inner spacing (two units). (The `rise` motion travels `--sd-motion-distance`, see [Motion](#motion).) | `core/stepdeck.css`, `core/animate.js` (its legacy `rise` helper), `diagram`, `title` layout |
 | `--sd-region-gap` | `24px` | Gap between stacked elements in a region. | `core/stepdeck.css`, every layout |
 | `--sd-canvas-margin` | `96px` | Canvas margin. Layouts with a footer use half of it at the bottom; `full-bleed` pads its regions instead of the canvas. | every layout, `core/stepdeck.css`, reveal shell |
 | `--sd-rule-width` | `2px` | Width of rules and borders. | `core/stepdeck.css`, `diagram`, `timeline` |
@@ -210,13 +213,16 @@ Keep the gap at least twice the pad, or neighbouring group boxes touch; `validat
 
 ### Motion
 
-| Token | Value | Use | Read by |
-| --- | --- | --- | --- |
-| `--sd-duration` | `400ms` | Default duration of a component's motion. | `core/kit.js` (`motionMs`) |
-| `--sd-duration-fast` | `200ms` | Meant for small changes such as highlights. | **Unused** |
-| `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | Meant as the easing curve. | **Unused** |
+| Token | academic-light | modern | Use | Read by |
+| --- | --- | --- | --- | --- |
+| `--sd-duration` | `400ms` | `=` | The base duration of every motion: element entrances and exits, component changes and builds. Without it: 400ms. | `core/motion.js` (`timing`, `ctx.motion`), the controller (box motion), `core/kit.js` (`motion`, `motionMs`), every built-in that moves |
+| `--sd-duration-fast` | `200ms` | `=` | Quick changes: each half of a text crossfade, a highlight colour change (charts, diagram), a badge colour change. Without it: 200ms. | `core/motion.js` (`timing(info, { fast: true })`), `text`, `chart.line`, `chart.bar`, `diagram` |
+| `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | `=` | The easing of every JavaScript motion (box and item motions, chart draws and morphs, count-ups, colour changes; typing keeps a constant speed), parsed as `cubic-bezier(x1, y1, x2, y2)` or `linear`; anything else eases in and out. | `core/motion.js` (`parseEase`), the controller, every `ctx.motion` call |
+| `--sd-stagger` | `60ms` | `80ms` | The gap between the elements that enter on one step, and between the items of a build (list items, chat messages, diagram nodes, terminal lines). Without it: 60ms. | `core/motion.js` (`timing`), the controller, `list`, `chat`, `diagram`, `terminal` |
+| `--sd-enter` | `fade` | `rise` | How an element enters when its `enter` is unset and its component does not build its own entrance: a motion name (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`). Without it, or with another value: `fade`. | the controller |
+| `--sd-motion-distance` | `16px` | `24px` | How far a `rise` travels, for boxes and for list and chat items. Without it: 24px. | `core/layout.js` (box motion), `core/motion.js` (`ctx.motion`) |
 
-Components read `--sd-duration` through `motionMs(info, ctx, factor)`: the step's `transition.duration` if it has one, else `factor` x `--sd-duration` (400 when the token is missing). The charts use a factor of 2, so they move for 800ms by default. JavaScript motion eases with `easeCubicInOut` from [`core/animate.js`](../../engine/core/animate.js), not with `--sd-easing`. See [Animation and motion](../guide/animation-and-motion.md).
+A step's `transition.duration` replaces the durations (as it is: the charts' factor of 2 and the count-up's 2.25 do not apply to it), and `transition.stagger` replaces `--sd-stagger`; a duration of 0 snaps the step. Components read the tokens through `ctx.motion.timing(info, { factor, fast })`, or the `core/kit.js` wrappers `motion(info, ctx)` and `motionMs(info, ctx, factor)`. See [Animation and motion](../guide/animation-and-motion.md#theme-motion-tokens).
 
 ### Values not taken from tokens
 

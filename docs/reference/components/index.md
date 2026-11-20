@@ -6,25 +6,25 @@ Agents look components up in the catalog, as described in [skill/references/comp
 
 ## The built-in components
 
-The order is the order of `components/index.json`. **Required** lists the props the schema requires. **Animated** lists the props whose `x-transition` is not `snap`. These are the props a forward step can animate, and they match the catalog's `animates` list.
+The order is the order of `components/index.json`. **Required** lists the props the schema requires. **Animated** lists the props whose `x-transition` is not `snap`. These are the props a forward step can animate, and they match the catalog's `animates` list. **Entrance** is the catalog's `enter`: `own` when the component builds its own entrance (its schema declares `"x-enter": "own"`), `box` when the engine moves the element's box in.
 
-| Component | What it shows | Required props | Animated props | Page |
-| --- | --- | --- | --- | --- |
-| `text` | One paragraph of plain text: body copy, a source line, a note or a label. | `text` | `text` | [text](text.md) |
-| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval` | [chart.line](chart-line.md) |
-| `chart.bar` | Bars from a CSV, one per category, horizontal or vertical. Each bar has a value label and an optional interval whisker. | `data`, `x`, `y` | `y`, `interval`, `shown`, `highlight`, `domain` | [chart.bar](chart-bar.md) |
-| `terminal` | A recorded agent session in a terminal window: a typed command, an activity log, a task list and a file list. | `script`, `shown` | `shown`, `typing` | [terminal](terminal.md) |
-| `markdown` | A block of Markdown: paragraphs, headings, lists, emphasis, code and links. | `md` | `md` | [markdown](markdown.md) |
-| `big-number` | One large figure with an optional label and 95% interval. It counts up when its value changes. | `value`, `format` | `value`, `label`, `ci` | [big-number](big-number.md) |
-| `list` | Numbered, lettered, bulleted or checklist items revealed one by one. | `items`, `marker` | `shown`, `done`, `active` | [list](list.md) |
-| `diagram` | Nodes, arrows and nested groups on an explicit grid, appearing by step. | `cols`, `rows`, `nodes` | `shown`, `highlight` | [diagram](diagram.md) |
-| `chat` | An exchange shown as bubbles, or a single prompt or quote shown as a card. | `messages` | `shown`, `typing` | [chat](chat.md) |
-| `timeline` | A track between stops that fills as `progress` grows. Each stop lights up as the fill passes it. | `stops`, `progress` | `progress`, `current` | [timeline](timeline.md) |
-| `image` | A local image with required alt text, an optional caption and a fit mode. | `src`, `alt` | `src`, `caption` | [image](image.md) |
+| Component | What it shows | Required props | Animated props | Entrance | Page |
+| --- | --- | --- | --- | --- | --- |
+| `text` | One paragraph of plain text: body copy, a source line, a note, a label, the message line under a title or a badge. | `text` | `text`, `tone` | box | [text](text.md) |
+| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval` | own: the lines draw | [chart.line](chart-line.md) |
+| `chart.bar` | Bars from a CSV, one per category, horizontal or vertical. Each bar has a value label and an optional interval whisker. | `data`, `x`, `y` | `y`, `interval`, `shown`, `highlight`, `domain` | own: the bars grow | [chart.bar](chart-bar.md) |
+| `terminal` | A recorded agent session in a terminal window: a typed command, an activity log, a task list and a file list. | `script`, `shown` | `shown`, `typing` | own: types, then the lines fade in | [terminal](terminal.md) |
+| `markdown` | A block of Markdown: paragraphs, headings, lists, emphasis, code and links. | `md` | `md` | box | [markdown](markdown.md) |
+| `big-number` | One large figure with an optional label and 95% interval. It counts up when its value changes. | `value`, `format` | `value`, `label`, `ci` | own: counts up | [big-number](big-number.md) |
+| `list` | Numbered, lettered, bulleted or checklist items revealed one by one. | `items`, `marker` | `shown`, `done`, `active` | own: the items rise in turn | [list](list.md) |
+| `diagram` | Nodes, arrows and nested groups on an explicit grid, appearing by step. | `cols`, `rows`, `nodes` | `shown`, `highlight` | own: groups, nodes, then edges | [diagram](diagram.md) |
+| `chat` | An exchange shown as bubbles, or a single prompt or quote shown as a card. | `messages` | `shown`, `typing` | own: the messages rise in turn | [chat](chat.md) |
+| `timeline` | A track between stops that fills as `progress` grows. Each stop lights up as the fill passes it. | `stops`, `progress` | `progress`, `current` | own: the track fills | [timeline](timeline.md) |
+| `image` | A local image with required alt text, an optional caption and a fit mode. | `src`, `alt` | `src`, `caption` | box | [image](image.md) |
 
 `typing` (on `terminal` and `chat`) is a boolean that turns on a typing animation. It is listed as animated because its transition is `draw`, not because toggling it moves anything.
 
-The engine animates only when you move forward by exactly one step. A jump, a backward move and the first render all draw the target state directly. See [Animation and motion](../../guide/animation-and-motion.md).
+The engine animates only when you move forward by exactly one step. A jump, a backward move and the first render all draw the target state directly. On an animating step an element that appears enters in its stagger slot: its box plays the element's `enter` (default: the theme's `--sd-enter`), or a component with an `own` entrance builds itself, and an element that leaves plays its `exit` (default `fade`). See [Animation and motion](../../guide/animation-and-motion.md).
 
 ## Rules every component shares
 
@@ -129,16 +129,24 @@ A named entry is printed and nothing is written. Without a name, `catalog` rewri
 
 ```text
 text · component (built-in)
-One paragraph of plain text: body copy, a source line, a note or a label.
+One paragraph of plain text: body copy, a source line, a note, a label, a message line under a title or a badge.
+
+enter: box (the element's box moves in)
 
 props (name, transition, required, description):
-  text  fade   required  The text to show. May be a data binding such as {{data/summary.json#/responders | ,.0f}}.
-        e.g. "Above 250 mg the curve steepens.", "{{data/summary.json#/responders | ,.0f}}"
-  role  snap   optional  Typographic role: body copy, a source or citation line, a side note, or a short label.
-        e.g. "body", "source"
+  text    fade   required  The text to show. May be a data binding such as {{data/summary.json#/responders | ,.0f}}.
+          e.g. "Above 250 mg the curve steepens.", "{{data/summary.json#/responders | ,.0f}}"
+  role    snap   optional  Typographic role: body copy, a source or citation line, a side note, a short label, a message line under a title (lede), or a badge (an uppercase pill). …
+          e.g. "body", "badge"
+  tone    fade   optional  For role badge: the index of the badge's colour in the deck's categorical palette (0 is the first colour). …
+          e.g. 0, 1
+  accent  snap   optional  Render `*phrase*` in the text as an accent phrase …
+          e.g. true, false
 
 example: components/text/example.js
 ```
+
+(Long descriptions are cut here with `…`; the command prints them whole.)
 
 Each component folder in `components/` holds four files, and some hold helpers as well:
 

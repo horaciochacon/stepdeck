@@ -3,5 +3,5 @@ export default {
   title: "Image fixture",
   lang: "en",
   theme: "academic-light",
-  slides: ["show", "slow", "cover", "long", "missing", "outside"],
+  slides: ["show", "enter", "slow", "cover", "long", "missing", "outside"],
 };

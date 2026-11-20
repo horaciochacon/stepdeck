@@ -113,6 +113,7 @@ export default {
 | `regions` | object: keys matching `^--[a-z0-9-]+$`, string values | no | | CSS custom properties set on the canvas, mainly to override the layout's grid variables, e.g. `{ "--notes-width": "700px" }`. |
 | `notes` | string | no | `""` | Speaker notes for every step that has no `notes` of its own. |
 | `section` | string | no | | The kicker: a small label above the title. See [`section`: the kicker](#section-the-kicker). |
+| `lede` | string | no | | A message line under the title: a `text` element with the reserved id `lede` and `role: "lede"`, in the `title` region right after the title. Its box carries the hook class `sd-lede`. A step changes it with `set: { lede: { text } }` (the text crossfades). An element of your own with id `lede` replaces it. On a cover use the `subtitle` region instead (`validate` warns `lede-on-cover`). |
 | `seconds` | number > 0 | no | | **Inert.** Planned speaking time; nothing reads it yet. |
 
 No other key is allowed: `validate` reports `unknown-key`.
@@ -161,8 +162,9 @@ An element is one component placed in a region (or in a box) of the slide.
 | `from` | [step ref](#step-references) | no | | Visible from this step on, hidden before it. |
 | `at` | step ref[] | no | | Visible only at these steps. Ignored when `from` is also set. |
 | `advance` | [advance](#advance) | no | | Sets one prop to a list of values, one per step. |
-| `enter` | `"fade"`, `"rise"`, `"wipe"`, `"draw"` or `"none"` | no | | **Inert.** Accepted and copied into the element state, but nothing reads it. Entry motion is up to each component. |
-| `exit` | same as `enter` | no | | **Inert**, like `enter`. |
+| `enter` | a [motion](#enter-and-exit) | no | the theme's `--sd-enter`, or the component's own build | How the element arrives when it becomes visible on an animating step. |
+| `exit` | a [motion](#enter-and-exit) | no | `"fade"` | How the element leaves when it becomes hidden on an animating step. |
+| `ghost` | `true`, `false` or a non-empty string | no | `false` | While the element is hidden, show a dashed placeholder frame in its space; a string is a label centred in it, and `false` means no placeholder. Not with `collapse: true`. See [`ghost`](#ghost). |
 
 No other key is allowed: `validate` reports `unknown-key` and names the element.
 
@@ -192,6 +194,25 @@ A reference that names no step is reported as `step-ref`.
 | `collapse: true` | classes `sd-hidden` and `sd-collapsed` (`display: none`) | removed: the region reflows when it appears |
 
 `collapse` is part of the element definition; steps cannot change it.
+
+### `enter` and `exit`
+
+A motion is a name, or an object that adds timing in milliseconds:
+
+| Form | Example | Meaning |
+| --- | --- | --- |
+| a name | `"rise"` | One of `fade`, `rise`, `wipe`, `pop`, `draw`, `none`. |
+| an object | `{ motion: "pop", delay: 300, duration: 600 }` | `motion` (required) is a name. `delay` (0 to 5000) is added to the element's stagger slot, for entrances only: exits start at once, and `validate` warns `exit-delay-ignored` for a `delay` in `exit`. `duration` (0 to 5000) is how long the motion lasts, for entrances and exits; it wins over a non-zero `transition.duration`. No other key. |
+
+On an animating step (forward by one step, motion on), an element that becomes visible plays its `enter` and one that becomes hidden plays its `exit`. Entering elements take stagger slots in slide order; exits start at once. A component whose schema declares `"x-enter": "own"` (the charts, `big-number`, `list`, `chat`, `diagram`, `terminal`, `timeline`) builds itself when `enter` is unset or `"draw"`; a box motion name moves its box instead, and `"none"` turns the entrance off. A hidden element with `collapse: true` always leaves at once. A step whose duration is 0 snaps everything. The motions, the resolution table and the timing are in [Animation and motion](../guide/animation-and-motion.md#how-an-element-enters-and-leaves).
+
+`validate` reports an unknown name as `spec-invalid`, with a did-you-mean when one is close, in both forms: `"rize"` and `{ motion: "rize" }` suggest `"rise"`. An object's `delay` or `duration` over 5000 is reported with that bound, and an unknown key in it with the nearest allowed key.
+
+Every entering element must settle within the engine's 10 s watchdog, its hold included. `validate` warns `motion-budget` for an element whose stagger hold (slot × stagger + `delay`) plus its entrance reaches 8000 ms; see [Rules](rules.md).
+
+### `ghost`
+
+`ghost: true` shows a dashed frame over the element's box while the element is hidden (and not collapsed); `ghost: "2 · Result"` also centres that label in it, in muted text at the label size. `ghost: false` is the same as leaving it out: no placeholder. The frame is `<div class="sd-ghost" aria-hidden="true">` (with `<span class="sd-ghost-label">`), the first child of the element's box; it goes as soon as the element is visible. The label is measured by `check` like any text, and `dump` reports a hidden element's ghost. `ghost` with `collapse: true` is a `validate` error (`ghost-collapse`): a collapsed element has no space to show the frame in.
 
 ## box
 
@@ -226,7 +247,7 @@ A step is a patch over the state of the step before it. The state at step `k` is
 | `hide` | element id[] | Hides the elements. Folded. |
 | `only` | object: element id → merge patch | Like `set`, but at this step only: it is merged on top of the folded state and never carried into later steps. |
 | `notes` | string | Speaker notes for this step. Without it, the slide's `notes` (or `""`) apply. |
-| `transition` | `{ duration?, stagger? }`, numbers >= 0 | Motion hints for the move into this step, in milliseconds. Passed to components as `info.transition`. |
+| `transition` | `{ duration?, stagger? }`: `duration` 0 to 5000, `stagger` 0 to 1000 | Motion timing for the move into this step, in milliseconds: it replaces the theme's durations and stagger. Passed to components as `info.transition`. |
 
 No other key is allowed: `validate` reports `unknown-key` and names the step.
 
@@ -262,7 +283,9 @@ A patch that names an element the slide does not have makes the fold throw `unkn
 
 ### `transition`
 
-`transition.duration` is the length, in milliseconds, of the motion that plays when moving forward into this step; it replaces the component's default motion length: the theme's `--sd-duration` for `terminal` and twice that for `chart.line` and `chart.bar`, a fixed 400 ms for the other built-ins (the `ctx.animate` helpers' default), and 900 ms for the `big-number` count-up. A theme that changes `--sd-duration` changes only the `terminal` and chart defaults. `0` makes the step snap. Typing effects keep their own per-character speed: `terminal` ignores `duration` when it types a command, and `chat` honours only `0`. The built-in components read only `duration`. `stagger` is accepted and passed through in `info.transition`, but no built-in component reads it.
+`transition.duration` is the length, in milliseconds, of the motion that plays when moving forward into this step. It replaces the theme's durations at that step: the box motions of entering and leaving elements (`--sd-duration`), the components' changes and builds (`--sd-duration`, twice that for `chart.line` and `chart.bar`, 2.25 × for the `big-number` count-up; the step's value is used as it is, not scaled), a text crossfade (each half is `duration / 2`) and a highlight colour change (`--sd-duration-fast`). An element's own `enter` or `exit` `duration` still wins. `0` makes the whole step snap, stagger holds included. Typing keeps its own per-character speed and honours only `0`.
+
+`transition.stagger` replaces the theme's `--sd-stagger`: the gap between the elements that enter on this step, and between the items of a build (list items, chat messages, diagram nodes, terminal lines).
 
 Motion plays only when moving forward by exactly one step; jumps and backward moves render the end state directly. A step without `transition` gives `info.transition === null` (the type in `schema/stepdeck.d.ts` says `Transition | undefined`; the code passes `null`). See [Animation and motion](../guide/animation-and-motion.md).
 
@@ -383,6 +406,7 @@ A slide's `section: "Methods"` string is shortcut for a `text` element with the 
 | slide `regions` | `spec-invalid` (key pattern, non-string value) |
 | slide `title` (and a `text` title element) | `title-accent`, `accent-empty` (warnings) |
 | slide `section`, element id `kicker` | `kicker-no-region` (warning), `reserved-id` |
+| slide `lede` | `lede-on-cover` (warning) on a cover layout; `unknown-region` on a layout without a `title` region |
 | slide `notes`, `section`, `seconds` | `spec-invalid` (type only) |
 | element `id` | `duplicate-id`, `spec-invalid` |
 | element `type` | `unknown-component` |
@@ -392,12 +416,14 @@ A slide's `section: "Methods"` string is shortcut for a `text` element with the 
 | element `from`, `at` | `step-ref` |
 | element `advance` | `step-ref` (`start`), `advance-overflow`, `spec-invalid` (empty `values`), `unknown-key` (extra key) |
 | element `props`, at every step | `props-not-object`, `unknown-prop`, `prop-invalid`, `binding-file`, `binding-pointer`, `binding-format`, `file-missing`, `path-case`, `data-invalid`, `missing-column`, `remote-url`, `hex-color`, `diagram-id`, `diagram-overlap` |
-| element `enter`, `exit`, `collapse` | `spec-invalid` (value only) |
+| element `enter`, `exit`, `collapse`, `ghost` | `spec-invalid` (value only; an unknown motion name gets a did-you-mean, as a name or in an object), `unknown-key` (a key of an `enter`/`exit` object other than `motion`, `delay`, `duration`), `exit-delay-ignored` (warning) |
+| element entering on a step | `motion-budget` (warning): its stagger hold plus its entrance reach 8000 ms |
+| element `ghost` with `collapse: true` | `ghost-collapse` |
 | step `id` | `step-id-numeric`, `duplicate-step-id` |
 | step `set`, `replace`, `show`, `hide`, `only` | `unknown-element`, `fold-error`, `props-not-object` |
 | step (any key) | `unknown-key` |
 | step as a whole | `noop-step` (warning) |
-| step `transition` | `unknown-key` (a key other than `duration` or `stagger`), `spec-invalid` (negative number) |
+| step `transition` | `unknown-key` (a key other than `duration` or `stagger`), `spec-invalid` (a negative number, a `duration` over 5000 or a `stagger` over 1000) |
 | slide as a whole | `figure-source` (a `chart.*`, `map`, `map.*` or `big-number` element and no element whose own `props.role` is `"source"`; props set by steps do not count) |
 
 `check` then renders every step and measures the result: `text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small`, `contrast`, `render-error`, `console-error`, `network-error`, `step0-shows-all`, and with `--played`, `played-mismatch`. See [Checking a deck](../guide/checking-a-deck.md).
@@ -410,8 +436,6 @@ These keys are valid and pass `validate`, but nothing in the engine or the built
 | --- | --- |
 | `sections` | `deck.js` |
 | `seconds` | slide |
-| `enter`, `exit` | element |
-| `transition.stagger` | step (passed to components; no built-in reads it) |
 
 Setting them changes nothing on screen. They are reserved for later milestones.
 

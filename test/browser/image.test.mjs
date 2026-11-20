@@ -241,3 +241,36 @@ test("validate: the deck reports only the missing file; alt is required and non-
   assert.equal(ok({ alt: "x" }), false, "src is required too");
   assert.equal(ok({ src: "a.svg", alt: "x", fit: "stretch" }), false);
 });
+
+test("an entering image is moved by its box, not by itself", async () => {
+  await withPage({ root, url: pages.url("enter", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const frames = await page.evaluate(async () => {
+      const read = () => {
+        const fig = document.querySelector('[data-el="pic"] figure');
+        const box = document.querySelector('[data-el="pic"]');
+        return {
+          figure: fig.getAttribute("style"),
+          img: fig.querySelector("img").getAttribute("style"),
+          box: Number(getComputedStyle(box).opacity),
+          visible: getComputedStyle(box).visibility === "visible",
+        };
+      };
+      const out = [];
+      let done = false;
+      const tick = () => {
+        if (done) return;
+        out.push(read());
+        requestAnimationFrame(tick);
+      };
+      const moved = window.STEPDECK.goTo("enter", "go").then(() => window.STEPDECK.settled());
+      requestAnimationFrame(tick);
+      await moved;
+      done = true;
+      return out;
+    });
+    assert.ok(frames.every((f) => f.figure === null && f.img === null), "the figure and the picture never get an inline style");
+    assert.ok(frames.some((f) => f.visible && f.box < 1), "the box fades in");
+    assert.deepEqual(ctx.errors, []);
+  });
+});

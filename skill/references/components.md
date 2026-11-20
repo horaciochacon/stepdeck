@@ -11,7 +11,7 @@ node "$STEPDECK/cli/index.js" catalog chart.line my-talk --json  # the full entr
 ```
 
 The two files the catalog writes:
-- **`catalog/index.json`** has one line per component, layout and theme: `kind`, `name`, a one-sentence `summary`, and `animates` (the props whose change animates).
+- **`catalog/index.json`** has one line per component, layout and theme: `kind`, `name`, a one-sentence `summary`, `animates` (the props whose change animates) and `enter`: `own` when the component builds its own entrance (charts draw, lists build, big numbers count up), `box` when its box moves in with the theme's motion.
 - **`catalog/<name>.json`**, or `catalog <name> --json`, adds:
   - `props`: each prop's `required`, `x-transition`, `description`, `examples`, `default` and JSON `schema`;
   - the component's `readme`, which holds the behaviour notes and file shapes;
@@ -27,9 +27,11 @@ Only the components in the catalog exist. `mark`, `callout`, `table` and the lik
 - `body` (40px, the default);
 - `note` (32px, muted), for side notes;
 - `label`;
-- `source` (28px, muted), for the source line every figure slide needs.
+- `source` (28px, muted), for the source line every figure slide needs;
+- `lede` (36px in `modern`, muted), the message line under the title: write the slide's `lede` key rather than an element;
+- `badge` (28px, an uppercase pill), with an optional `tone`: the index of its colour in the categorical palette. Every tone passes the 4.5:1 text contrast: the border takes the palette colour, and the text the same colour darkened until it reads. Pick the tone for its meaning, such as the colour of the series it names.
 
-Text inside the `title` region is styled as the slide title. It fades in when it appears or changes in an animated step. Bindings inside `text` are resolved. `{{color:…}}` words are **not** resolved in `text`; use `markdown` for them.
+The element with id `title` is styled as the slide title. When it appears its box moves in (the theme's entrance); when its `text` changes while it stays on screen, it crossfades (the title, the `lede` and badges too). Bindings inside `text` are resolved. `{{color:…}}` words are **not** resolved in `text`; use `markdown` for them.
 
 **`markdown`.**
 - What it renders: paragraphs, headings, lists, emphasis, code and links (relative links only; validate rejects remote URLs).
@@ -44,14 +46,14 @@ Text inside the `title` region is styled as the slide title. It fades in when it
 - **Typical builds:**
   - `series_shown` grows, and new series draw in;
   - `annotate` adds vertical rules with labels;
-  - `highlight` dims the others, set with `only` so it lasts one step;
+  - `highlight` dims the others to a neutral grey (opacity stays 1, labels turn muted), set with `only` so it lasts one step, or with `set` to move the focus step by step;
   - changing `y` morphs the lines to another column.
 - **Year axes.** Use `format: { x: "d" }` so years print as `2020`, not `2,020`.
 - **The `axes` prop is required.** It gives the axis titles.
 
 **`big-number`.** One large figure (128px), with an optional label, `ci` (95% interval), `prefix` and `suffix`.
 - **Binding.** Bind `value` with **no format**: `"{{data/summary.json#/total}}"` resolves to the raw number. Put the d3 format in the separate `format` prop, which is required.
-- **Count-up.** In an animated step it counts up: from 0 when it appears, from the old value when `value` changes.
+- **Count-up.** In an animated step it counts up: from 0 when it appears (its own entrance), from the old value when `value` changes.
 - **Source line.** It counts as a figure: the slide needs a `role: "source"` element.
 
 **`terminal`.** A terminal window that replays a recorded session from a JSON `script` file (`title`, `command`, `tasks`, `events`). A complete example script is in `catalog terminal --json`, in the `readme` field. A new deck has no session file, so create one in `data/`.
@@ -78,6 +80,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 
 **What they share:**
 - State props (`shown`, `done`, `active`, `progress`, `current`, `highlight`) are set per step with `advance` or `set`. The component renders them and never reads the step.
+- `list`, `diagram`, `chart.bar`, `chat` and `timeline` build their own entrance (`enter: own`): when the element appears on a forward step, it plays its build from nothing to that step's state (items rise in turn, nodes pop in and edges draw, bars grow, the track fills). Item motions use the shared names and the theme's timing.
 - Hidden parts keep their space, so nothing reflows when a part appears.
 - Going backward undoes a step: a tick comes off, a fill retracts, a node hides, a bar shrinks back.
 - Author text (`text`, `label`, `sub`) is inline Markdown and wraps inside its box. Two labels are plain text instead: a diagram edge `label` and a chat message `label`. Every piece of audience text is at least 28px, so trim long labels rather than shrink them.
@@ -92,13 +95,13 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - Each node sits in a cell (`col`, `row`, 0-based). Its `shape` is `box`, `pill`, `circle` or `text`.
 - An edge's id is its `id`, else `"<from>-><to>"`. Its `label` sits beside the arrow.
 - A group's `contains` lists node and group ids, so groups nest. A group's box covers all its members, shown or not, so it never resizes between steps.
-- `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else.
+- `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else: outlines and lines turn a neutral grey, labels turn muted.
 - A diagram takes the height the other elements in its region leave, so a source line can share the region.
 
 **`chart.bar`** (`catalog chart.bar`). Horizontal or vertical bars from a CSV, one row per category, each with its value at the end of the bar.
 - Switching `y` between columns grows or shrinks the bars. Set an explicit `domain: [min, max]` then, so the axis stays put and the change is visible.
 - `interval` adds a whisker from a lower to an upper column.
-- `shown` brings categories in one by one; hidden ones keep their band. `highlight` mutes the other bars.
+- `shown` brings categories in one by one; hidden ones keep their band. `highlight` dims the other bars to a neutral grey.
 - It counts as a figure, so the slide needs a `role: "source"` line.
 - A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
 

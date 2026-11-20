@@ -113,15 +113,15 @@ When the update animates:
 
 | What happened | What moves |
 | --- | --- |
-| The element just became visible | The whole figure fades in, and the digits count up from 0 to `value` (unless `value` is 0). |
-| `value` changed and the old value was a number | The digits count up (or down) from the old value to the new one. |
+| The element just became visible | Its own entrance (`"x-enter": "own"`): the figure fades in and the digits count up from 0 to `value` (unless `value` is 0), in the element's stagger slot, while its box stays still. The 0 is drawn the moment the element shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the value shows at once; with `enter: "none"` nothing moves. |
+| `value` changed and the old value was a number (element already visible) | The digits count up (or down) from the old value to the new one. |
 | `label` changed | The caption fades in. |
 | `ci` changed | The interval line fades in. |
 | `prefix` or `suffix` changed | That part fades in. |
 | `format` changed | The whole figure line (prefix, digits, suffix) fades in. |
 
-- The count-up lasts 900 ms, or the step's `transition.duration` when set. It uses `ctx.animate.tween` with a cubic ease in and out.
-- The fades last the step's `transition.duration` when set, else 400 ms (the engine's default fade length; this component does not read `--sd-duration`).
+- The count-up lasts 2.25 × the theme's `--sd-duration` (900ms in both built-in themes), or the step's `transition.duration` when set, or on the entrance the element's own `enter.duration`. It uses `ctx.animate.tween` with the theme's `--sd-easing`.
+- The fades last the theme's `--sd-duration` (400ms), or the step's `transition.duration` when set; the entrance's fade never outlasts its count.
 - A step that changes nothing for this element starts nothing: the engine skips the update when props and visibility are unchanged.
 - If you move on before the motion ends, it stops and the final value is written at once.
 

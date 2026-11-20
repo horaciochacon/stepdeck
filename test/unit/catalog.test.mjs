@@ -28,7 +28,7 @@ test("catalog index lists chart.line with animates including y", async () => {
     assert.ok(!line.animates.includes("data"), "snap props do not animate");
     assert.match(line.summary, /^Line chart of one or more series/);
     assert.ok(!line.summary.includes("morphs"), "summary is the first sentence only");
-    for (const e of index) assert.deepEqual(Object.keys(e), ["kind", "name", "summary", "animates"]);
+    for (const e of index) assert.deepEqual(Object.keys(e), ["kind", "name", "summary", "animates", "enter"]);
 
     // Every built-in component, layout and theme is listed, each with its detail file.
     const builtins = readBuiltins(ENGINE);
@@ -75,7 +75,7 @@ test("catalog reads schema.json only: a component whose index.js throws on impor
     const { entries } = await catalog([ENGINE, throws], { outDir: out });
     assert.equal(globalThis.__stepdeckCatalogImportedBoom, undefined, "index.js was imported");
     const boom = entries.find((e) => e.name === "bad.boom");
-    assert.deepEqual(boom, { kind: "component", name: "bad.boom", summary: "A fixture component whose code throws on import.", animates: ["level"] });
+    assert.deepEqual(boom, { kind: "component", name: "bad.boom", summary: "A fixture component whose code throws on import.", animates: ["level"], enter: "box" });
     const detail = JSON.parse(readFileSync(join(out, "bad.boom.json"), "utf8"));
     assert.equal(detail.origin, "deck");
     assert.equal(detail.props.label["x-transition"], "snap");
@@ -97,6 +97,21 @@ test("catalog lint: built-ins are complete, and a prop without description, exam
     const rules = problems.map((p) => `${p.element} ${p.rule} ${p.measured}`);
     assert.ok(rules.some((r) => /^my\.thin catalog-schema .*description/.test(r)), rules.join("\n"));
     assert.ok(rules.some((r) => /^my\.thin catalog-schema .*'a'.*x-transition/.test(r)), rules.join("\n"));
+
+    // A top-level "x-enter": "own" is accepted and listed; any other value is a problem naming it.
+    const schema = (enter) => JSON.stringify({ description: "A fixture.", "x-enter": enter, type: "object", properties: { a: { type: "string", description: "A.", examples: ["a"], "x-transition": "snap" } } });
+    mkdirSync(join(deck, "components/my.own"), { recursive: true });
+    mkdirSync(join(deck, "components/my.odd"), { recursive: true });
+    writeFileSync(join(deck, "deck.js"), 'export default { title: "t", components: ["my.own", "my.odd"], slides: ["s"] };\n');
+    writeFileSync(join(deck, "components/my.own/schema.json"), schema("own"));
+    writeFileSync(join(deck, "components/my.odd/schema.json"), schema("draw"));
+    const owned = await buildCatalog([ENGINE, deck]);
+    assert.equal(owned.entries.find((e) => e.name === "my.own").enter, "own");
+    assert.deepEqual(owned.problems.filter((p) => p.element === "my.own"), [], "x-enter: own is not a problem");
+    assert.equal(owned.entries.find((e) => e.name === "my.odd").enter, "box", "an unknown x-enter does not own the entrance");
+    const odd = owned.problems.filter((p) => p.element === "my.odd").map((p) => `${p.rule} ${p.measured} | ${p.limit}`);
+    assert.equal(odd.length, 1, odd.join("\n"));
+    assert.match(odd[0], /^catalog-schema .*x-enter.*"draw".*\| .*"own"/);
   } finally {
     rmSync(deck, { recursive: true, force: true });
   }
@@ -134,4 +149,26 @@ test("cli: catalog on a deck writes <deck>/catalog/ with the deck's components",
   } finally {
     rmSync(join(throws, "catalog"), { recursive: true, force: true });
   }
+});
+
+test("catalog --json lists enter own for the components that own their entrance", () => {
+  const owners = ["big-number", "chart.bar", "chart.line", "chat", "diagram", "list", "terminal", "timeline"];
+  try {
+    const res = cli(["catalog", throws, "--json"]);
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    const index = JSON.parse(res.stdout);
+    const enter = (value) => index.filter((e) => e.enter === value).map((e) => e.name).sort();
+    assert.deepEqual(enter("own"), owners);
+    assert.deepEqual(enter("box"), index.map((e) => e.name).filter((n) => !owners.includes(n)).sort(), "every other entry: box");
+    assert.ok(enter("box").includes("text") && enter("box").includes("bad.boom"));
+  } finally {
+    rmSync(join(throws, "catalog"), { recursive: true, force: true });
+  }
+  // One entry: the detail carries it too, and the text listing shows it.
+  const json = cli(["catalog", "chart.line", "--json"]);
+  assert.equal(JSON.parse(json.stdout).enter, "own");
+  const own = cli(["catalog", "big-number"]);
+  assert.equal(own.status, 0, own.stdout + own.stderr);
+  assert.match(own.stdout, /^enter: own /m);
+  assert.match(cli(["catalog", "text"]).stdout, /^enter: box /m);
 });

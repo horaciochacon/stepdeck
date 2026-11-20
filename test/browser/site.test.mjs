@@ -139,7 +139,7 @@ test("landing page under /stepdeck/: content, gallery list, live deck, no failed
         assert.ok(links.includes(`site/gallery/#/${e.slide}/0`), `gallery link for ${e.slide}`);
         assert.ok(links.includes(`site/docs/?p=${e.doc}`), `doc link for ${e.doc}`);
       }
-      assert.match(await page.locator("main").innerText(), /Layouts[\s\S]*Components/);
+      assert.match(await page.locator("main").innerText(), /Layouts[\s\S]*Components[\s\S]*Motion/);
 
       // The live deck inside the iframe boots, and nothing failed.
       const frame = page.frames().find((f) => new URL(f.url()).pathname === "/stepdeck/examples/kit/");
@@ -153,7 +153,9 @@ test("landing page under /stepdeck/: content, gallery list, live deck, no failed
       const prefix = `${ctx.base}stepdeck/`;
       const hrefs = await page.evaluate(() => [...document.querySelectorAll("a[href], iframe[src]")].map((n) => n.href ?? n.src));
       const inSite = [...new Set(hrefs.filter((h) => !h.startsWith("https://github.com/")))];
-      assert.ok(inSite.length >= entries.length * 2 + 6, "the page links into the site");
+      // One link per gallery slide and one per doc page (the motion slides share the motion guide), plus the rest.
+      const docs = new Set(entries.map((e) => e.doc)).size;
+      assert.ok(inSite.length >= entries.length + docs + 6, "the page links into the site");
       for (const h of inSite) assert.ok(h.startsWith(prefix), `${h} stays under /stepdeck/`);
       // One request per document: the gallery's slide addresses differ only in their #hash.
       const documents = [...new Set(inSite.map((h) => h.split("#")[0]))];

@@ -135,7 +135,9 @@ The pixel values are those of `academic-light`; `modern`, the default theme, has
 
 The engine animates an update only when you move forward exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (`shoot`, `check`) draw the target state at once. So going back a step retracts the fill with no motion. See [Animation and motion](../../guide/animation-and-motion.md).
 
-When the update animates:
+**Entrance.** The timeline builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the build runs from an empty track: the fill runs from the start to `progress`, lighting each stop as it passes, then the `current` stop grows and its label fades in. The fill and the current stop are reset the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the track is drawn at once; with `enter: "none"` nothing moves.
+
+While the timeline stays visible, when the update animates:
 
 | What happened | What moves |
 | --- | --- |
@@ -145,9 +147,8 @@ When the update animates:
 | `current` was removed | The old stop's circle shrinks. |
 | `stops` changed, or the element's width changed | Nothing moves: the track is rebuilt and drawn in its end state. |
 
-- Both motions use `ctx.animate.tween` with a cubic ease in and out, and last the step's `transition.duration` when set, else 400 ms (the engine's default; this component does not read `--sd-duration`). When `progress` and `current` change at the same step, both run together.
+- Both motions use `ctx.animate.tween` (the label with the shared `fade` motion), with the theme's `--sd-easing`, and last the theme's `--sd-duration` (400 ms), or the step's `transition.duration` when set. When `progress` and `current` change at the same step, both run together; in the entrance, the fill runs first.
 - `dashed` and the label text snap: they are written directly.
-- The element becoming visible (for example through `from`) adds no entry motion of its own. If `progress` is unchanged when it appears, the track is simply drawn.
 - If you move on before the motion ends, it stops and the end state is written at once.
 
 Every update first writes the target state straight from the props, and ends by writing it again and removing the inline styles the motion used. The markup after a played step is the same as after a jump to that step, which is what `check --played` compares.

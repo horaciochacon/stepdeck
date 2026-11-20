@@ -9,8 +9,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
+import { deckPages, elementHtml, htmlAfterJump, sampleFrames, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&slide=terminal&${q}`;
 const session = JSON.parse(readFileSync(new URL("../../examples/spike/data/session.json", import.meta.url), "utf8"));
 const STEPS = ["open", "inspect", "summarize", "fix", "report", "done"];
@@ -199,5 +201,221 @@ test("an animated step really types and staggers", async () => {
     const end = await snapshot(page);
     assert.notEqual(mid.command, end.command, "mid-flight the command is partially typed");
     assert.equal(end.command, session.command);
+  });
+});
+
+// Owned entrance, in the motion fixture's terminal-enters slide (the command, then four lines at the "go" step).
+// Per frame: how much of the command is typed, each log line's computed opacity, and whether any inline style is
+// left inside the element.
+const buildProbe = (el) => ({
+  typed: el.querySelector(".sd-terminal-command").textContent.length,
+  ops: [...el.querySelectorAll(".sd-terminal-line")].map((l) => Number(getComputedStyle(l).opacity)),
+  inline: el.querySelectorAll("[style]").length > 0,
+});
+const motionSession = JSON.parse(readFileSync(new URL("../fixtures/decks/motion/data/session.json", import.meta.url), "utf8"));
+
+test("terminal entering builds from empty: the command types, then the lines fade in", async () => {
+  await withPage({ root, url: motion.url("terminal-enters", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const full = motionSession.command.length;
+    const r = await sampleFrames(page, "terminal-enters", "go", "term", buildProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the terminal is shown");
+    const first = shown[0];
+    assert.ok(first.ms >= 150, `held for the third slot, 2 x 80 ms (first shown at ${first.ms.toFixed(0)} ms)`);
+    assert.ok(first.typed < full && first.ops.every((o) => o < 0.5), `nothing shows built at the first shown frame (${first.typed} chars, ${first.ops})`);
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the terminal builds itself");
+
+    // 100 ms into the build the command is part-typed.
+    const at100 = shown.find((f) => f.ms >= first.ms + 100);
+    assert.ok(at100.typed > 0 && at100.typed < full, `the command is part-typed 100 ms in (${at100.typed} of ${full} chars)`);
+    const typing = shown.filter((f) => f.typed > 0 && f.typed < full);
+    assert.ok(typing.length >= 5, `the command was seen part-typed (${typing.length} frames)`);
+    assert.ok(typing.every((f) => f.ops.every((o) => o === 0)), "no line shows while the command is typed");
+    // Then the lines fade in one after another, each --sd-stagger (80 ms) after the previous.
+    assert.ok(shown.every((f) => f.ops.every((o) => o === 0) || f.typed === full), "the lines come only once the command is fully typed");
+    const startOf = (i) => shown.find((f) => f.ops[i] > 0).ms;
+    const lag = startOf(2) - startOf(0);
+    assert.ok(lag >= 140 && lag < 600, `the third line starts ~160 ms after the first (${lag.toFixed(0)} ms)`);
+    assert.ok(shown.every((f) => f.ops.every((o, i) => i === 0 || f.ops[i - 1] >= o)), "lines come in in order");
+    assert.ok(shown.some((f) => f.ops[0] > 0.1 && f.ops[0] < 0.9), "a line was seen part-faded");
+    assert.equal(r.end.typed, full, "the end state is the full command");
+    assert.ok(r.end.ops.length === 4 && r.end.ops.every((o) => o === 1), "the end state shows the four lines");
+    assert.equal(r.end.inline, false, "no inline style left inside the terminal");
+    assert.ok(r.settledMs < 6000, `the build settles (${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "term"), await htmlAfterJump(ctx, page, motion, "terminal-enters", "go", "term"));
+
+    const steps = ["start", "go", "more"];
+    await expectJumpEqualsPlayed(ctx, page, { pages: motion, slide: "terminal-enters", steps, id: "term" });
+    await expectBackwardEqualsJump(ctx, page, { pages: motion, slide: "terminal-enters", steps, id: "term" });
+    await expectInterruptEqualsJump(ctx, page, { pages: motion, slide: "terminal-enters", from: "start", via: "go", to: "more", id: "term" });
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// Interrupted in each phase of the build; the page watches every frame until the phase holds, then asks for the
+// next step. The phase must have been reached, or the test fails.
+const phases = {
+  held: "getComputedStyle(document.querySelector('[data-el=\"term\"]')).visibility === 'hidden' && performance.now() - t0 > 60",
+  typing: "p.typed > 3 && p.typed < FULL && p.ops.every((o) => o === 0)",
+  lines: "p.typed === FULL && p.ops[0] > 0.2 && p.ops[0] < 0.8",
+};
+for (const [phase, until] of Object.entries(phases)) {
+  test(`terminal interrupted while ${phase === "held" ? "held" : `its ${phase === "typing" ? "command types" : "lines fade in"}`} snaps to the jumped state`, async () => {
+    await withPage({ root, url: motion.url("terminal-enters", "step=more") }, async (page, ctx) => {
+      const jumped = await elementHtml(page, "term");
+      await ctx.open(motion.url("terminal-enters", "step=start&motion=full"));
+      const reached = await page.evaluate(
+        async ([until, probe, FULL]) => {
+          const read = new Function("el", `return (${probe})(el)`);
+          const t0 = performance.now();
+          window.STEPDECK.goTo("terminal-enters", "go");
+          let hit = false;
+          for (let i = 0; i < 400 && !hit; i++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            const p = read(document.querySelector('[data-el="term"]'));
+            hit = new Function("p", "t0", "FULL", `return ${until}`)(p, t0, FULL);
+          }
+          window.STEPDECK.goTo("terminal-enters", "more");
+          await window.STEPDECK.settled();
+          return hit;
+        },
+        [until, String(buildProbe), motionSession.command.length],
+      );
+      assert.ok(reached, `the ${phase} phase was reached before the next step came`);
+      assert.equal(await elementHtml(page, "term"), jumped, `interrupted in the ${phase} phase equals a jump`);
+      assert.equal(await page.evaluate(() => document.querySelectorAll('[data-el="term"] [style]').length), 0, "no inline styles remain");
+      assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("a later step fades the new lines in with the theme's timing; the command is not typed again", async () => {
+  await withPage({ root, url: motion.url("terminal-enters", "step=go&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "terminal-enters", "more", "term", buildProbe);
+    const full = motionSession.command.length;
+    assert.ok(r.frames.every((f) => f.typed === full), "the command stays whole");
+    assert.ok(r.frames.some((f) => f.ops[4] > 0.1 && f.ops[4] < 0.9), "a new line was seen part-faded");
+    assert.ok(r.frames.every((f) => f.ops.slice(0, 4).every((o) => o === 1)), "the lines already shown stay put");
+    assert.ok(r.settledMs >= 450, `400 ms fade plus one 80 ms stagger (settled at ${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(r.end.inline, false);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("entering with a new script: the old script's content is gone before the new one loads", async () => {
+  await withPage({ root, url: spike("step=open") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const { default: terminal } = await import("../components/terminal/index.js");
+      const { animate } = await import("../core/animate.js");
+      const { makeMotion } = await import("../core/motion.js");
+      const scripts = {
+        "old.json": { title: "Old", command: "old run", tasks: ["Old task"], events: [{ type: "note", text: "Old one" }, { type: "note", text: "Old two" }, { type: "file", text: "old.txt" }] },
+        "new.json": { title: "New", command: "new run", tasks: ["New task"], events: [{ type: "note", text: "New one" }, { type: "note", text: "New two" }, { type: "note", text: "New three" }] },
+      };
+      /** One element entering with new.json (held loading) over old.json, with this entrance. */
+      const scenario = async (entrance) => {
+        let gate = null; // while set, new.json stays loading
+        const host = document.createElement("div");
+        host.className = "sd-el";
+        host.dataset.type = "terminal";
+        host.style.cssText = "display:flex;flex-direction:column;width:1200px;height:600px";
+        document.querySelector(".sd-canvas").appendChild(host);
+        const ctx = { animate, motion: makeMotion({}), tokens: {}, data: async (path) => (path === "new.json" && gate ? gate : scripts[path]), size: { w: 1200, h: 600 } };
+        const inst = await terminal.mount(host, { script: "old.json", shown: 3 }, ctx);
+        const q = (sel) => [...host.querySelectorAll(sel)];
+        // What paints: the texts, and the lines that are not at opacity 0.
+        const showing = () => ({
+          title: host.querySelector(".sd-terminal-title").textContent,
+          command: host.querySelector(".sd-terminal-command").textContent,
+          lines: q(".sd-terminal-line").filter((l) => l.style.opacity !== "0").map((l) => l.textContent),
+          tasks: q(".sd-terminal-task").map((t) => t.textContent),
+          files: q(".sd-terminal-file").map((f) => f.textContent),
+        });
+        const out = { before: showing() };
+        let release;
+        gate = new Promise((resolve) => (release = () => resolve(scripts["new.json"])));
+        const signal = new AbortController().signal;
+        const updating = inst.update({ script: "new.json", shown: 3, typing: true }, { animate: true, entered: true, entrance, signal });
+        out.loading = showing();
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        out.painted = showing();
+        release();
+        await updating;
+        out.after = { ...showing(), styled: host.querySelectorAll("[style]:not(.sd-el)").length };
+        host.remove();
+        return out;
+      };
+      return { drawn: await scenario({ motion: "draw", duration: 60 }), moved: await scenario(null) };
+    });
+    const empty = { title: "", command: "", lines: [], tasks: [], files: [] };
+    for (const [name, got] of Object.entries(r)) {
+      assert.equal(got.before.command, "old run", `${name}: the old script is on screen before`);
+      assert.equal(got.before.lines.length, 3, name);
+      assert.deepEqual(got.loading, empty, `${name}: nothing of the old script is left once update returns its promise`);
+      assert.deepEqual(got.painted, empty, `${name}: nor in the frames painted while the new script loads`);
+      assert.equal(got.after.title, "New", name);
+      assert.equal(got.after.command, "new run", name);
+      assert.deepEqual(got.after.lines, ["noteNew one", "noteNew two", "noteNew three"], name);
+      assert.equal(got.after.styled, 0, `${name}: no inline style left`);
+    }
+  });
+});
+
+test("the start state is written before update awaits; a shown element without an entrance snaps; timing is the theme's", async () => {
+  await withPage({ root, url: spike("step=open") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const { default: terminal } = await import("../components/terminal/index.js");
+      const { animate } = await import("../core/animate.js");
+      const { makeMotion } = await import("../core/motion.js");
+      const script = {
+        title: "T", command: "assistant run", tasks: [],
+        events: [{ type: "note", text: "One" }, { type: "note", text: "Two" }, { type: "note", text: "Three" }],
+      };
+      const make = async (tokens = {}) => {
+        const host = document.createElement("div");
+        host.className = "sd-el";
+        host.dataset.type = "terminal"; // the element styles that give the log its height
+        host.style.cssText = "display:flex;flex-direction:column;width:1200px;height:600px";
+        document.querySelector(".sd-canvas").appendChild(host);
+        const ctx = { animate, motion: makeMotion(tokens), tokens, data: async () => script, size: { w: 1200, h: 600 } };
+        const hidden = { script: "s.json", shown: 0, typing: true };
+        return { host, hidden, props: { ...hidden, shown: 3 }, inst: await terminal.mount(host, hidden, ctx) };
+      };
+      const state = (host) => ({
+        command: host.querySelector(".sd-terminal-command").textContent,
+        ops: [...host.querySelectorAll(".sd-terminal-line")].map((l) => l.style.opacity),
+      });
+      const signal = new AbortController().signal;
+      const info = (extra) => ({ animate: true, entered: true, entrance: null, signal, ...extra });
+      const out = {};
+      {
+        const { host, props, inst } = await make();
+        const building = inst.update(props, info({ entrance: { motion: "draw", duration: 120 } }));
+        out.sync = state(host);
+        await building;
+        out.after = { ...state(host), styled: host.querySelectorAll("[style]").length };
+      }
+      for (const [name, extra] of [["none", { entrance: { motion: "none", duration: 0 } }], ["moved", { entrance: null }], ["aborted", { entrance: { motion: "draw", duration: 120 }, signal: AbortSignal.abort() }]]) {
+        const { host, props, inst } = await make();
+        const p = inst.update(props, info(extra));
+        out[name] = state(host);
+        await p;
+      }
+      // Theme timing: two lines fade over --sd-duration 300 ms, the second 200 ms after the first.
+      const { host, hidden, props, inst } = await make({ "--sd-duration": "300ms", "--sd-stagger": "200ms" });
+      await inst.update({ ...hidden, shown: 1 }, info({ entered: false, animate: false }));
+      const t0 = performance.now();
+      await inst.update({ ...props, shown: 3 }, info({ entered: false }));
+      out.elapsed = performance.now() - t0;
+      return out;
+    });
+    assert.equal(r.sync.command, "", "the command starts empty");
+    assert.deepEqual(r.sync.ops, ["0", "0", "0"], "every line starts at opacity 0");
+    assert.deepEqual(r.after, { command: "assistant run", ops: ["", "", ""], styled: 0 });
+    for (const name of ["none", "moved", "aborted"]) assert.deepEqual(r[name], { command: "assistant run", ops: ["", "", ""] }, `${name}: nothing is held back`);
+    assert.ok(r.elapsed >= 480 && r.elapsed < 3000, `two lines: 300 ms fade, 200 ms stagger, 200 ms more (${r.elapsed.toFixed(0)} ms)`);
   });
 });

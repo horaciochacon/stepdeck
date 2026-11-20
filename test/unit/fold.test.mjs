@@ -6,6 +6,7 @@ import {
   stepIndex,
   stepCount,
   stateAt,
+  initialElements,
 } from "#engine/core/fold.js";
 
 test("mergePatch merges objects, replaces arrays, deletes on null", () => {
@@ -173,7 +174,7 @@ test("title string becomes a title element that a step can set", () => {
   assert.equal(stateAt(s, 1).title, "Second");
 });
 
-test("elements carry type, region, box, collapse, enter and exit", () => {
+test("elements carry type, region, box, collapse, enter, exit and ghost", () => {
   const s = {
     id: "s",
     elements: [
@@ -183,7 +184,7 @@ test("elements carry type, region, box, collapse, enter and exit", () => {
   };
   const { elements } = stateAt(s, 0);
   assert.deepEqual(elements.a, {
-    type: "text", props: { text: "a" }, visible: true, region: "main", collapse: true, enter: "fade", exit: "none",
+    type: "text", props: { text: "a" }, visible: true, region: "main", collapse: true, enter: "fade", exit: "none", ghost: undefined,
   });
   assert.equal(elements.b.collapse, false);
   assert.deepEqual(elements.b.box, { x: 1, y: 2, w: 3, h: 4 });
@@ -282,4 +283,56 @@ test("jump equals replay (property over every k, in shuffled order)", () => {
   assert.equal(stateAt(s, 4).elements.term.props.shown, 9);
   assert.equal(stateAt(s, 4).elements.old.props.text, "new");
   assert.equal(stateAt(s, 2).title, "Annotated");
+});
+
+test("stateAt carries enter, exit and ghost from the element", () => {
+  const s = {
+    id: "s",
+    elements: [
+      el("p", { from: 1, enter: { motion: "pop", delay: 120 }, exit: "fade", ghost: "2 · Adjust" }),
+      el("q", { ghost: true }),
+      el("r"),
+    ],
+    steps: [{}, {}],
+  };
+  const { elements } = stateAt(s, 0);
+  assert.equal(elements.p.ghost, "2 · Adjust");
+  assert.deepEqual(elements.p.enter, { motion: "pop", delay: 120 });
+  assert.equal(elements.p.exit, "fade");
+  assert.equal(elements.q.ghost, true);
+  assert.equal(elements.r.ghost, undefined);
+});
+
+test("lede string becomes a text element right after the title, in the title region with role lede", () => {
+  const s = { id: "s", section: "Methods", title: "T", lede: "One line.", elements: [{ id: "b", type: "text", props: { text: "x" } }] };
+  const defs = initialElements(s);
+  assert.deepEqual(defs.map((d) => d.id), ["kicker", "title", "lede", "b"]);
+  assert.deepEqual(defs[2], { id: "lede", type: "text", region: "title", props: { text: "One line.", role: "lede" } });
+  assert.deepEqual(stateAt(s, 0).elements.lede.props, { text: "One line.", role: "lede" });
+  assert.deepEqual(initialElements({ id: "s", lede: "Only a lede.", elements: [] }).map((d) => d.id), ["lede"], "no title needed");
+  assert.deepEqual(initialElements({ id: "s", title: "T", elements: [] }).map((d) => d.id), ["title"], "no lede, no element");
+  assert.deepEqual(initialElements({ id: "s", title: "T", lede: "", elements: [] }).map((d) => d.id), ["title", "lede"], "an empty lede still reserves its element, so a step can fill it");
+});
+
+test("a step can set the lede text, and a replace keeps the role default", () => {
+  const s = { id: "s", title: "T", lede: "First", elements: [], steps: [{}, { set: { lede: { text: "Second" } } }, { replace: { lede: { text: "Third" } } }] };
+  assert.equal(stateAt(s, 1).elements.lede.props.text, "Second");
+  assert.deepEqual(stateAt(s, 1).elements.lede.props, { text: "Second", role: "lede" });
+  assert.deepEqual(stateAt(s, 2).elements.lede.props, { text: "Third", role: "lede" }, "a replace drops props; the role default comes back");
+});
+
+test("an explicit lede element wins over the sugar and gets role lede unless its props set a role", () => {
+  const explicit = { id: "lede", type: "text", region: "title", props: { text: "Mine" } };
+  const s = { id: "s", title: "T", lede: "Sugar", elements: [explicit] };
+  const defs = initialElements(s);
+  assert.deepEqual(defs.map((d) => d.id), ["title", "lede"], "one lede, the author's");
+  assert.equal(stateAt(s, 0).elements.lede.props.text, "Mine");
+  assert.equal(stateAt(s, 0).elements.lede.props.role, "lede");
+  assert.deepEqual(explicit.props, { text: "Mine" }, "the author's definition is not mutated");
+
+  const own = { id: "s", elements: [{ id: "lede", type: "text", region: "title", props: { text: "Mine", role: "note" } }] };
+  assert.equal(stateAt(own, 0).elements.lede.props.role, "note");
+
+  const md = { id: "s", elements: [{ id: "lede", type: "markdown", region: "title", props: { md: "Mine" } }] };
+  assert.equal("role" in stateAt(md, 0).elements.lede.props, false, "only a text element gets the role");
 });

@@ -14,8 +14,17 @@
 // Every update first writes that state straight into the DOM (writeState), so the DOM after settled() is
 // the same whether a state was jumped to or played. With info.animate the fill then tweens from the
 // previous progress to the new one and each stop lights up (or goes hollow) as the fill passes it; a
-// changed `current` grows the new stop's circle and fades its label in. All motion is bound to info.signal
-// (an abort snaps to the end state) and the inline styles it used are removed afterwards.
+// changed `current` grows the new stop's circle and fades its label in (ctx.motion.in "fade"), both with
+// the theme's timing. All motion is bound to info.signal (an abort snaps to the end state) and the inline
+// styles it used are removed afterwards.
+//
+// The timeline owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it
+// plays the same build from an empty "before" (no fill, no stop current) to this step's state, while its box
+// stays still, in order: the fill runs from the start to `progress`, then the `current` stop grows and its
+// label fades in. The start state (an empty fill, every stop at the base size, the current label hidden) is
+// written before the first await, in the same task as the engine shows the element, so nothing paints built
+// first. Any other update of a freshly shown element (an entrance of "none", or a box that moves instead)
+// snaps to the end state.
 //
 // Colors and font sizes come from theme tokens through CSS (core/stepdeck.css); radii and gaps are
 // multiples of --sd-grid. An unknown `current` id, fewer than two stops, or a bad `progress` is an element
@@ -122,33 +131,49 @@ export default {
 
     return {
       async update(props, info = {}) {
-        const animate = canAnimate(info);
-        const { rebuilt, before } = writeState(props);
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // An element that just appeared without a drawn entrance (none, or its box moves) snaps.
+        const animate = draw || (canAnimate(info) && !info.entered);
+        const written = writeState(props);
+        const { rebuilt } = written;
+        // A drawn entrance builds from nothing: an empty fill and no current stop.
+        const before = draw ? { progress: 0, current: -1 } : written.before;
         clearInline();
-        if (!animate || rebuilt) return;
+        if (!animate || (!draw && rebuilt)) return;
 
-        const opts = motion(info);
+        const opts = motion(info, ctx);
+        if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
         const now = shown;
-        const motions = [];
-        if (now.progress !== before.progress) motions.push(ctx.animate.tween(before.progress, now.progress, paint, opts));
-        if (now.current !== before.current) {
-          const shrink = (t) => parts[before.current].stop.setAttribute("r", String(lerp(R_CURRENT, R, t)));
-          if (now.current >= 0) {
-            const grow = parts[now.current];
-            grow.label.style.opacity = "0";
-            motions.push(
-              ctx.animate.tween(0, 1, (t) => {
-                grow.stop.setAttribute("r", String(lerp(R, R_CURRENT, t)));
-                grow.label.style.opacity = String(t);
-                if (before.current >= 0) shrink(t);
-              }, opts),
-            );
-          } else if (before.current >= 0) {
-            motions.push(ctx.animate.tween(0, 1, shrink, opts));
-          }
+        if (draw) {
+          // The start state, written now: nothing of the build paints before its slot.
+          paint(before.progress);
+          parts.forEach((p) => p.stop.setAttribute("r", radius(false)));
         }
+        const growing = now.current !== before.current && now.current >= 0 ? parts[now.current] : null;
+        if (growing) growing.label.style.opacity = "0";
+
+        const fillRuns = () => (now.progress !== before.progress ? ctx.animate.tween(before.progress, now.progress, paint, opts) : null);
+        const currentMoves = () => {
+          if (now.current === before.current) return null;
+          const shrink = (t) => parts[before.current].stop.setAttribute("r", String(lerp(R_CURRENT, R, t)));
+          if (!growing) return ctx.animate.tween(0, 1, shrink, opts);
+          const grow = (t) => {
+            growing.stop.setAttribute("r", String(lerp(R, R_CURRENT, t)));
+            if (before.current >= 0) shrink(t);
+          };
+          // Hand the start state to the motion in one synchronous block: it saves the (now empty) inline
+          // style, writes opacity 0 again, and puts the saved state back at the end.
+          growing.label.style.opacity = "";
+          return Promise.all([ctx.animate.tween(0, 1, grow, opts), ctx.motion.in(growing.label, "fade", opts)]);
+        };
         try {
-          await Promise.all(motions);
+          // A drawn entrance builds in order, the fill before the stop; a later step moves them together.
+          if (draw) {
+            await fillRuns();
+            await currentMoves();
+          } else {
+            await Promise.all([fillRuns(), currentMoves()]);
+          }
         } finally {
           // Back to the exact end state: an abort or a throwing frame leaves nothing half-way.
           paint(now.progress);

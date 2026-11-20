@@ -93,13 +93,14 @@ When the update animates, the motion starts after the new picture has decoded:
 
 | What happened | What moves |
 | --- | --- |
-| The element just became visible | The whole figure fades in. |
+| The element just became visible | Its box enters with the element's `enter`, or the theme's `--sd-enter` (`rise` in `modern`, `fade` in `academic-light`), in its stagger slot. The figure itself does not fade. |
+| The element just became hidden | Its box leaves with its `exit` (default `fade`). |
 | `src` changed (element already visible) | The picture fades in. |
 | `caption` changed to a non-empty value (element already visible) | The caption fades in. |
 | `caption` removed | The caption disappears at once. |
 | `alt` or `fit` changed | Nothing moves; the new value applies at once. |
 
-- Fades last the step's `transition.duration` when set, else 400 ms (the engine's default fade length). They do not follow the theme's `--sd-duration` token.
+- Fades last the theme's `--sd-duration` (400ms in both built-in themes), or the step's `transition.duration` when set, with the theme's `--sd-easing`.
 - If you move on before a fade ends, it stops and the final state is shown.
 - Every update writes the target state first and removes the inline styles the motion used, so the markup after a played step equals the markup after a jump. `check --played` on the example slide reports no problems.
 

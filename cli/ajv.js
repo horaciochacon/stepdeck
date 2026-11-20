@@ -2,8 +2,8 @@
 //
 // createAjv() -> Ajv2020 instance: strict, allErrors (report every problem, not the first), verbose
 //   (errors carry parentSchema, so did-you-mean can list the allowed keys). Annotation keywords that
-//   stepdeck schemas use (`x-transition`, and any other `x-*` found in a schema) are registered as
-//   no-op keywords, so strict mode still rejects real typos.
+//   stepdeck schemas use (`x-transition` on props, `x-enter` at the top level, and any other `x-*` found in
+//   a schema passed to compile()) are registered as no-op keywords, so strict mode still rejects real typos.
 // compile(ajv, schema) -> validate function; registers the schema's `x-*` keywords first.
 // readSchema(name) -> parsed engine/schema/<name>.schema.json ("deck", "slide", "layout").
 import { readFileSync } from "node:fs";
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { ENGINE } from "./engine.js";
 
-const ANNOTATIONS = ["x-transition"];
+const ANNOTATIONS = ["x-transition", "x-enter"];
 const registered = new WeakMap(); // ajv -> Set of annotation keywords added
 
 function annotate(ajv, keyword) {

@@ -8,6 +8,7 @@ export default {
   id: "results",               // equals the file name; letters, digits, - and _
   layout: "figure-notes",      // default: full-bleed
   title: "A short title",      // sugar for an element with id "title" (type text, region title)
+  lede: "The message of the slide, in one line.",   // optional: a muted line under the title; set it per step
   elements: [ /* … */ ],
   steps: [ /* … */ ],          // optional; no steps = one state
   notes: "Speaker notes for steps that have none.",
@@ -30,7 +31,8 @@ export default {
 | `at` | Visible only at these steps (an array). |
 | `collapse` | `true`: when hidden, take no space (the region reflows). Default: hidden elements keep their space. |
 | `advance` | Drive one prop step by step (below). |
-| `enter`, `exit` | Accepted by the schema (`fade`, `rise`, `wipe`, `draw`, `none`) but not applied in this version. Components animate their own entry (text and markdown fade in, big numbers count up, series draw in). |
+| `enter`, `exit` | How the element arrives and leaves on a forward step: `fade`, `rise`, `wipe`, `pop`, `draw` or `none`, or `{ motion, delay, duration }` (ms; `delay` is for entrances only). Defaults: the theme's entrance (`rise` in `modern`, `fade` in `academic-light`) and `fade`; charts, `big-number`, `list`, `chat`, `diagram`, `terminal` and `timeline` build themselves instead (below). |
+| `ghost` | `true` or a label (`"2 · Result"`): while the element is hidden, a dashed frame (with the label) holds its space. Not with `collapse: true` (`ghost-collapse`). |
 
 ## States and step references
 
@@ -58,11 +60,11 @@ Each step entry is a patch applied on top of the state of the step before (it **
 | `show` / `hide` | `["id", …]` | Visibility, folding forward (see above). |
 | `only` | like `set` | Applied at this step only, **not** folded into later steps. For a one-step highlight. |
 | `notes` | string | Speaker notes for this step (the slide's `notes` is the fallback). |
-| `transition` | `{ duration, stagger }` (ms) | Passed to the components that change at this step. |
+| `transition` | `{ duration, stagger }` (ms) | Times this step: `duration` replaces the theme's durations (`0` snaps the step), `stagger` the gap between entering elements and between list, chat, diagram or terminal items. |
 
 Never write `set: { chart: null }`: that makes props `null` (`props-not-object`). To delete one prop: `set: { chart: { highlight: null } }`.
 
-The title is an element too: `set: { title: { text: "A new title" } }` changes it at a step.
+The title is an element too: `set: { title: { text: "A new title" } }` changes it at a step. So is the `lede`: `set: { lede: { text: "The next point." } }` changes the line under the title, and it crossfades. `lede` needs a layout with a `title` region (all built-ins have one); on the `title` cover use a `text` in `subtitle` instead (`lede-on-cover`).
 
 ### Example fold
 
@@ -101,9 +103,11 @@ Components with an internal sequence (the terminal, a custom `stage`-driven stor
 ## Animation
 
 - A step change animates only when moving **forward by exactly one step**, with motion on and outside capture. Jumps, backward moves, screenshots and `dump` render the end state directly.
-- Components decide what animates; the catalog's `animates` list and each prop's `x-transition` (`tween`, `draw`, `fade`, `snap`) say how.
-- `transition: { duration, stagger }` on a step tunes the components that change there (e.g. a big number's count-up duration, the stagger of new terminal lines).
-- Rapid navigation aborts the running animation and lands on the latest step's end state.
+- **Entrances.** Every element that becomes visible on a forward step enters, one after another in slide order, `--sd-stagger` apart (80ms in `modern`; `transition.stagger` overrides it). A plain element's box plays its `enter` (default the theme's: `rise` in `modern`). A component whose catalog entry says `enter: own` builds itself instead (lines draw, bars grow, list items rise in turn, a big number counts up) while its box stays still. A list that appears with `shown: 3` builds its three items: no need to reveal them on later steps to get motion.
+- **Exits.** An element that becomes hidden fades out (its `exit`), at the start of the step. With `collapse: true` it leaves at once, so a swap in one spot never jumps.
+- **Turning it off.** `enter: "none"` / `exit: "none"` on an element; `transition: { duration: 0 }` on a step.
+- **Changes.** Components animate prop changes themselves; the catalog's `animates` list and each prop's `x-transition` (`tween`, `draw`, `fade`, `snap`) say how. A changed `text` (the title and the `lede` included) crossfades. `highlight` on charts and diagrams dims the rest to a neutral grey.
+- Rapid navigation aborts the running animation and lands on the latest step's end state: held elements appear at once.
 
 ## Notes and timing
 

@@ -62,7 +62,7 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 | `axes` | `{ x?, y? }` | yes | | snap | Axis titles: `x` is drawn under the x axis, `y` above the plot. Both keys are optional, but the object is required (`{}` gives no titles). |
 | `series` | string | no | none | snap | Column naming the series of each row. Without it the chart draws one line, keyed `all`, and no series labels. |
 | `series_shown` | string[] | no | every series | draw | Series to draw, by name. A series that appears is drawn along its length; one that leaves fades out. |
-| `highlight` | string | no | none | fade | Series to emphasize. Every other series' line and band drop to opacity 0.25, and their labels switch to the muted text color. |
+| `highlight` | string | no | none | fade | Series to emphasize. Every other series' line and band turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and sit below the emphasized one, and their labels switch to the muted text color. |
 | `annotate` | `{ x, label? }[]` | no | none | fade | Vertical dashed rules at the given x values, each with an optional short label. |
 | `format` | `{ x?, y? }` | no | precision from the tick step | snap | d3-format specs for the tick labels, localized by the deck language. Without one, ticks use fixed precision derived from the tick step (`d3.precisionFixed`), so a step of 0.5 gives one decimal. |
 | `types` | `{ <column>: "string" \| "number" \| "date" }` | no | guessed | snap | CSV column types passed to the data loader. An undeclared column is a number only when every non-empty value looks like one. |
@@ -83,7 +83,7 @@ Rows whose x or y cell is empty are left out of the line; the line joins the poi
 
 Series colors come from the theme's categorical palette (`ctx.palette("categorical")`), assigned in order of first appearance in the data. A series therefore keeps its color at every step, whichever series are shown. With more series than palette colors, the colors repeat.
 
-Palette colors promise 3:1 contrast against the background, which is enough for a line. A series label is text, so it is drawn in its series color mixed toward black (toward white on a dark background) until it reaches 4.5:1, the contrast `check` requires of text. When `highlight` dims a series, its label uses `--sd-color-muted` instead of being faded.
+Palette colors promise 3:1 contrast against the background, which is enough for a line. A series label is text, so it is drawn in its series color mixed toward black (toward white on a dark background) until it reaches 4.5:1, the contrast `check` requires of text. When `highlight` dims a series, its label uses `--sd-color-muted`, and its line and band use `--sd-color-dim`.
 
 Neutral colors and sizes come from theme tokens through `core/stepdeck.css`: ticks, axis titles, series labels and annotation labels use `--sd-font-size-label` (28px in academic-light); axis text and tick labels are `--sd-color-muted`; grid lines are `--sd-color-rule`; axis titles and annotation labels are `--sd-color-ink`. Lines are 5px wide; bands use 15% fill opacity. See [Themes](../themes.md).
 
@@ -93,14 +93,14 @@ The chart animates only when the engine asks for it: you moved forward exactly o
 
 | What changed | What plays |
 | --- | --- |
-| The element just became visible | The chart is drawn in its final state, then every line draws along its length. |
+| The element just became visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every line draws along its length while the box stays still; axes, labels, bands and annotations show at once. The lines are undrawn the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the chart is drawn at once; with `enter: "none"` nothing moves. |
 | `y` (or anything that moves points) | A keyed morph: each point, keyed by `series\|x`, moves from its old position to its new one while the y axis domain, ticks and plot origin interpolate. Bands morph with the lines. |
 | `series_shown` adds a series | Its line draws along its length; its label and band fade in. |
 | `series_shown` removes a series | Its line, label and band fade out. |
-| `highlight` set or cleared | Line and band opacity tween between 1 and 0.25. Label colors switch at once. |
+| `highlight` set or cleared | Line, band and label colors tween in RGB over `--sd-duration-fast`. Opacity never changes. |
 | `annotate` | New annotations fade in; removed ones fade out. Ticks that enter or leave fade the same way. |
 
-Motion lasts twice `--sd-duration` (400 ms in academic-light, so 800 ms). A step's `transition.duration` replaces it as is (it is not doubled). An aborted step snaps to its end state. Every update ends by writing the target state from props and clearing inline styles and opacities, so the markup after a played step equals the markup after jumping to it.
+Motion lasts twice `--sd-duration` (400 ms in both built-in themes, so 800 ms), with the theme's `--sd-easing`. A step's `transition.duration` replaces it as is (it is not doubled); on the entrance, the element's own `enter.duration` wins. The one exception is color: a `highlight` change tweens line, band and label colors in their own tween over `--sd-duration-fast` (200 ms), or over the step's `transition.duration`, beside the geometry morph. An aborted step snaps to its end state. Every update ends by writing the target state from props and clearing inline styles and opacities, so the markup after a played step equals the markup after jumping to it.
 
 A point with no previous position (a new x value) starts at its final position rather than flying in.
 
@@ -145,7 +145,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="chart.line"]`) the co
 | `g.sd-annotation` | An annotation: `line.sd-annotation-rule` and `text.sd-annotation-label`. |
 | `text.sd-axis-title.sd-axis-title-x`, `.sd-axis-title-y` | The axis titles. |
 
-A dimmed series' line and band carry an `opacity="0.25"` attribute. Use slide `style` with these classes to restyle one slide.
+A dimmed series' line has a `stroke` attribute and its band a `fill` attribute of the theme's dim color, and the emphasized series' line and band come after the dimmed ones in their groups, so they draw on top. Use slide `style` with these classes to restyle one slide.
 
 ## Errors
 

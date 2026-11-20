@@ -83,7 +83,7 @@ Moving forward by exactly one step plays that step's motion. Every other move (b
 
 - One reveal `<section>` per slide, holding that slide's 1920 x 1080 canvas, scaled to the window and letterboxed in the theme's letterbox color.
 - A thin progress bar at the bottom, in the theme's muted ink color.
-- No reveal transitions between slides (`transition: "none"`). All motion comes from stepdeck components, so slides look the same as in `check` and `shoot`.
+- No reveal transitions between slides (`transition: "none"`). All motion comes from stepdeck itself, within a slide: elements entering and leaving, and the components' own changes. A step ends in the same state as in `check` and `shoot`.
 - No on-screen arrow controls and no slide number.
 - In the overview, a slide that has not been mounted yet shows only its title.
 

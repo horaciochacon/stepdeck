@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "big-number",
   "description": "One large figure with an optional label and 95% interval. A change of `value` counts up when the step animates. Bind `value` to a data file so no figure is typed by hand.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["value", "format"],

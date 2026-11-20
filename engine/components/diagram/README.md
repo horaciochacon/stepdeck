@@ -10,15 +10,22 @@ inside their node.
 | `edges` | `[{ id?, from, to, label?, dashed? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. |
 | `groups` | `[{ id, label?, contains, dashed? }]` | none | snap | A box around all its members (node and group ids, so groups nest). The label is drawn inside the box's top padding, above its members. |
 | `shown` | `string[]` | everything | draw | The ids visible (nodes, groups, edges by edge id). Anything not listed is hidden and keeps its place. |
-| `highlight` | `string[]` | none | fade | The ids emphasised; the shapes and lines of the rest fade, their text turns muted. |
+| `highlight` | `string[]` | none | fade | The ids emphasised; the outlines and lines of the rest turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and their text turns muted. |
 
 Behaviour:
 - **Driven by props only.** Set `shown` and `highlight` per step with `set` (or `advance` over a list of
   `shown` arrays). An edge is visible only when `shown` lists its id, so reveal it after its nodes.
-- **Motion** (forward by exactly one step only; any other move renders directly): newly shown groups fade
-  in and nodes fade and scale in, staggered; then newly shown edges draw from source to target and their
-  label fades in (dashed edges fade). A highlight change fades the shapes and the text color. Going back
-  hides parts again with no motion.
+- **Entrance.** The diagram builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on an
+  animated step, its box stays still and its parts build from nothing to the state of that step, in order. The groups
+  fade in, then the nodes pop in (the shared `pop` motion), one after another, `--sd-stagger` apart; then the edges draw
+  from source to target and their labels fade in (dashed edges fade). It waits for its stagger slot like any entering
+  element, and its parts are hidden the moment it shows. With `enter: "none"`, or a box motion such as `enter: "rise"`,
+  the diagram shows its state at once (the box moves instead).
+- **Change motion** (forward by exactly one step only; any other move renders directly): while the diagram stays shown,
+  newly shown groups fade in and nodes pop in, staggered by `--sd-stagger` over `--sd-duration` (or the step's
+  `transition`), then newly shown edges draw from source to target and their label fades in (dashed edges fade). A
+  highlight change tweens the outline, fill and text colors over `--sd-duration-fast`. Going back hides parts again
+  with no motion.
 - **Idempotent.** Every `update` writes the state from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping.
 - **Placement.** Explicit only. The grid cell is a node's slot; the drawn shape is sized to its label

@@ -84,11 +84,20 @@ export default {
       async update(props, info) {
         const before = shown;
         shown = render(props);
-        if (info.animate && shown > before) {
-          const reached = rows.slice(before + 1, shown + 1).map((r) => r.li);
-          await ctx.animate.stagger(reached, (li, i, opts) => ctx.animate.fadeIn(li, opts), { signal: info.signal, duration: info.transition?.duration });
+        try {
+          // A change only: on the step where the element appears (info.entered), the engine moves its box.
+          if (info.animate && !info.entered && !info.signal?.aborted && shown > before) {
+            const reached = rows.slice(before + 1, shown + 1).map((r) => r.li);
+            for (const li of reached) li.style.opacity = "0"; // the start state, before any await
+            const timing = ctx.motion.timing(info);
+            await ctx.animate.stagger(reached, (li, i, o) => {
+              li.style.opacity = "";
+              return ctx.motion.in(li, "fade", { ...timing, signal: o.signal });
+            }, timing);
+          }
+        } finally {
+          for (const r of rows) r.li.style.opacity = "";
         }
-        for (const r of rows) r.li.style.opacity = "";
       },
       destroy() {
         list.remove();
@@ -104,7 +113,7 @@ Builds the component's DOM inside `el` and returns the instance, or a promise of
 
 | Argument | What it is |
 |---|---|
-| `el` | The element's box: a `div.sd-el[data-el][data-type]` inside its region (or positioned on the canvas when the element has a `box`). Build inside it; never replace it. |
+| `el` | The element's box: a `div.sd-el[data-el][data-type]` inside its region (or positioned on the canvas when the element has a `box`). Build inside it; never replace it. When the element has a `ghost`, `el` already holds its placeholder (`div.sd-ghost`) as its first child, before you build: append your nodes inside `el`, never empty it (`el.innerHTML = …`, `el.replaceChildren(…)`, `el.textContent = …`), and keep references to the nodes you create instead of reaching them by index (`el.firstChild`, `el.children[0]`). |
 | `props` | The element's props at step 0, with bindings resolved. |
 | `ctx` | The [context](#ctx), built for this element. |
 
@@ -127,7 +136,7 @@ The engine calls `update`:
 - **After that, only when the element's resolved props or its visibility changed** (deep comparison). A step that changes nothing for an element skips it, so a count-up never re-runs on a no-op step.
 - **When only visibility changed**, with `changed: []`. `entered` is `true` when it became visible and `false` when it was hidden.
 
-The visibility class (`sd-hidden` or `sd-collapsed`) is applied before that element's `update` is called.
+The visibility class (`sd-hidden` or `sd-collapsed`) is applied before that element's `update` is called. On an animating step this takes the element's motion into account: an entering element is held until its stagger slot, then shown and updated in one synchronous block (with its box motion started in the same block); a leaving element plays its out motion first, is hidden when it ends, and is updated after that. A leaving element with `collapse: true`, or `exit: "none"`, is hidden at once. See [Animation and motion](../guide/animation-and-motion.md#choreography-within-a-step).
 
 Calls for one instance never overlap. On one step, the slide's elements update in parallel. When a new `goTo` arrives, the engine aborts the running step's signal, waits for its updates to settle, and then applies only the latest target; intermediate targets are dropped.
 
@@ -143,6 +152,7 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 | `prev` | `object \| null` | The previous resolved props; `null` on the first update. |
 | `changed` | `string[]` | Top-level keys whose values differ from `prev`, added and removed keys included. All keys on the first update; `[]` when only visibility changed. |
 | `entered` | `boolean` | The element just became visible. On the first update: it is visible. |
+| `entrance` | `{ motion, duration } \| null` | Set only for a component whose `schema.json` declares `"x-enter": "own"`, in the update where its element becomes visible on an animating step (after its stagger hold); `null` in every other update. `motion` is `"draw"` (play your build from empty to these props; the box stays still) or `"none"` (render at once: the box moves instead, or nothing does). `duration` is the element's own `enter.duration` in ms (0 on a step whose duration is 0), or `undefined`: then time the build with `ctx.motion.timing(info)`. See [Owning the entrance](#owning-the-entrance). |
 
 `schema/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
 
@@ -162,16 +172,30 @@ goTo(2, animate)           (no update: nothing changed; info.step would be the n
 
 ### Durations
 
-The `ctx.animate` helpers default to 400 ms when `duration` is `undefined`. Pass `info.transition?.duration`, which is `undefined` both when there is no transition and when it has no `duration`. Do not pass `info.transition && info.transition.duration`: when `transition` is `null` that yields `null`, which the helpers read as 0 and snap.
+Time your motion with `ctx.motion.timing(info, { factor, fast })`. It returns `{ duration, ease, stagger, signal }`: the theme's `--sd-duration` (× `factor`; `--sd-duration-fast` with `fast: true`), `--sd-easing` and `--sd-stagger`, each overridden by the step's `transition` (`duration` as it is, not scaled), and `info.signal`. A duration of 0 also gives a stagger of 0. Pass the result to `ctx.motion.in`/`out` and to every `ctx.animate` helper, `stagger` included, so your items follow the theme and the step.
 
-The engine passes `transition.stagger` through untouched; no helper applies it automatically. Pass it to `ctx.animate.stagger` yourself if your component supports it.
+The `ctx.animate` helpers on their own default to 400 ms and a 60 ms stagger when `duration` or `stagger` is `undefined`. If you call them without `ctx.motion.timing`, pass `info.transition?.duration`, which is `undefined` both when there is no transition and when it has no `duration`. Do not pass `info.transition && info.transition.duration`: when `transition` is `null` that yields `null`, which the helpers read as 0 and snap.
+
+### Owning the entrance
+
+When an element becomes visible on an animating step, the engine moves its box with the slide's `enter` or the theme's `--sd-enter`. A component therefore **must not fade itself in on `info.entered`**: the motion would play twice. Animate only changes while the element stays visible.
+
+The box motion writes inline `opacity`, `transform` and `clip-path` on `el` while it plays (an exit too), and puts back exactly what was there when it ends. Inline styles beat stylesheet rules, so a slide's `style` (or a theme rule) that sets one of those three properties on the element box itself does not apply until the motion ends, and then it jumps in. Put such styling on a node inside the box instead, and leave those three properties on `el` to the engine.
+
+A component whose content has a natural build (lines that draw, items that rise in turn) can play it instead. Declare `"x-enter": "own"` at the top level of `schema.json`; the engine reads it once per type when the slide mounts. Then:
+
+- with `enter` unset or `"draw"`, the box stays still and `update` gets `info.entrance.motion === "draw"`: play the build from empty to the props, over `info.entrance.duration` or `ctx.motion.timing(info)`;
+- with `enter` set to `"fade"`, `"rise"`, `"wipe"` or `"pop"`, the box moves and `update` gets `info.entrance.motion === "none"`: render at once;
+- with `enter: "none"`, nothing moves and `info.entrance.motion` is `"none"`.
+
+The engine holds the element until its stagger slot, then calls `setVisible` and `update` in one synchronous block. **Write the build's start state synchronously at the top of `update`, before any `await`**, so the finished state never paints before the build starts. The eight built-ins with `x-enter: own` (`chart.line`, `chart.bar`, `big-number`, `list`, `chat`, `diagram`, `terminal`, `timeline`) all follow this pattern.
 
 ## Optional members
 
 | Member | Called by | Meaning |
 |---|---|---|
 | `anchor(ref)` | Nothing in the engine today. | Canvas-pixel box `{ x, y, w, h }` of a named part, or `null`. Reserved for future annotation elements. Only `chart.line` implements it (`anchor("series:<name>")`). |
-| `pause()` | `controller.pause()`, which the reveal shell calls on the slide you leave. The bare shell never pauses: it destroys the slide on every slide change. | Stop media and timers. The controller aborts the running step first, then calls `pause` on the instance and on its `ctx.mount` children. |
+| `pause()` | `controller.pause()`, which the reveal shell calls on the slide you leave. The bare shell never pauses: it destroys the slide on every slide change. | Stop media and timers. The controller aborts the running step first, then calls `pause` on the instance and on its `ctx.mount` children. An element that was still held for its stagger slot is released by that abort a moment later: it is shown and gets its `update` (with the aborted signal, so it renders at once) after its `pause` was called. |
 | `destroy()` | `controller.destroy()`: the bare shell on every slide change, the reveal shell on `pagehide`. Also a mount that settles after its watchdog fired. | Tear down. The controller calls the instance's `destroy`, then destroys its `ctx.mount` children, newest first. |
 
 A throw from `pause` or `destroy` is recorded as that element's error; the other elements are still paused or destroyed. An element that failed after a successful mount is still paused and destroyed; an element whose mount failed is not.
@@ -184,7 +208,9 @@ Each rule exists so that a step reached by playing looks exactly like the same s
 |---|---|
 | End at the target state, whatever `animate` says. | Keep one `render(props)` that writes the whole state from the props alone. Call it in every `update`, then animate only if `info.animate`. Never accumulate state across calls, and never read the step: drive an internal sequence through a prop (typically `stage` with `advance`). |
 | Respect `signal`. | Pass `info.signal` to every `ctx.animate` helper and `await` them. On abort each helper jumps to its end state and resolves. Check `info.signal.aborted` before starting motion of your own. `STEPDECK.settled()` waits for your promise. |
-| Leave no animation residue. | After the motion, clear the inline styles it wrote (`opacity`, `transform`, `clip-path`, dash styles), so the markup after a played step equals the markup after a jump. The helpers' end states are listed under [`ctx.animate`](#ctxanimate). |
+| Leave no animation residue. | After the motion, clear the inline styles it wrote (`opacity`, `transform`, `clip-path`, dash styles), so the markup after a played step equals the markup after a jump. The helpers' end states are listed under [`ctx.animate`](#ctxanimate); `ctx.motion.in` puts back what it touched. |
+| Do not fade in on `entered`. | The engine's box motion is the entrance. Animate changes only, or declare `"x-enter": "own"` and build on `info.entrance` (see [Owning the entrance](#owning-the-entrance)). |
+| Write a start state synchronously. | A build's start state (and any item hidden until its turn) is written before the first `await` in `update`, so the end state never paints first. |
 | Use `el.ownerDocument`, not the global `document`. | The renderer takes a `document` argument, and tests and the CLI run components in other documents. Every built-in creates nodes through `el.ownerDocument`. |
 | No network. | Read deck files through `ctx.data` and `ctx.assetUrl`. Presentation makes no remote requests: the CLI's browser blocks every request to another origin and `check` reports it as `network-error`; `validate` reports remote URLs in props and styles as `remote-url`. |
 | Settle. | `mount` and `update` must settle within 10 s (see below). |
@@ -214,6 +240,7 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.t(key)` | `string` | An engine string in the deck language. Keys: `section`, `step`, `of`, `error`, `tasks`, `files`, `ci95`. An unknown key returns the key. |
 | `ctx.capture` | `boolean` | True when rendering for screenshots (`?capture`). Nothing animates then; `info.animate` is already false. |
 | `ctx.animate` | object | `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. See below. |
+| `ctx.motion` | object | The named motions with the theme's defaults: `in`, `out`, `timing`, `names`. See below. |
 | `ctx.tokens` | `{ [name]: string }` | Every custom property declared in the theme's `tokens.css`, by full name, with its computed value on the canvas: `ctx.tokens["--sd-font-size-note"]`. |
 | `ctx.palette(kind = "categorical")` | `Palette \| null` | `{ name, kind, colors, names, roles }` for `categorical`, `sequential` or `diverging`. `deck.palette` when its kind matches, else the theme default; `null` when there is none. `names` are in the deck language; `roles.accent` is the accent color. |
 | `ctx.size` | `{ w, h }` | `el`'s `offsetWidth` and `offsetHeight` in canvas pixels (unaffected by the shell's scaling), measured once when `ctx` is built at mount. It is `{ w: 0, h: 0 }` when the element has no layout. Read `el.offsetWidth` and `el.offsetHeight` again in `update` if you need the current size. |
@@ -231,7 +258,20 @@ Every helper takes `{ duration, signal }` (`duration` in ms, default 400; `<= 0`
 | `tween(from, to, onValue, opts)` | Numbers only. `onValue(from)` first, one call per frame, `onValue(to)` always last. When `duration` <= 0 or the signal is already aborted, only `onValue(to)` is called. Takes an extra `ease`. | Whatever `onValue(to)` writes. |
 | `stagger(items, fn, opts)` | Starts `fn(item, i, { duration, signal })` for item `i` after `i × stagger` ms (default 60; 0 when `duration` is 0). On abort every pending item starts at once with the aborted signal. Takes an extra `stagger`. | Waits for every item; rejects with the first error. |
 
-`fadeIn` leaves `opacity: 1` inline: clear it after awaiting, as the starter does.
+`fadeIn` leaves `opacity: 1` inline: clear it after awaiting.
+
+### `ctx.motion`
+
+The named motions of `core/motion.js`, with the theme's tokens filled in. Every call writes only `opacity`, `transform` and `clip-path` on the node, and resolves (never rejects) at its end state on abort or a duration of 0.
+
+| Member | What it does |
+|---|---|
+| `in(node, name, opts)` | Plays `name` (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`; `draw` enters as a `wipe` on a node) to the shown state, then puts back exactly the inline `opacity`, `transform` and `clip-path` the node had when the call started. The start state is written synchronously, when the call is made. |
+| `out(node, name, opts)` | Plays `name` to the hidden state and leaves it there (`rise` moves up as it fades, `pop` shrinks to 0.96, `draw` fades). Resolves with the inline values it replaced, so you can hide the node and then restore them. |
+| `timing(info, { factor, fast })` | `{ duration, ease, stagger, signal }` from `--sd-duration` (or `--sd-duration-fast`), `--sd-easing` and `--sd-stagger`, overridden by `info.transition`. See [Durations](#durations). |
+| `names` | `["fade", "rise", "wipe", "pop", "draw", "none"]`. |
+
+`opts` is `{ duration, ease, signal, distance }`. A missing (or `undefined`) option takes the theme's value: `--sd-duration`, `--sd-easing`, and for `rise` `--sd-motion-distance`. An unknown name throws `unknown motion '<name>' (motions: fade, rise, wipe, pop, draw, none)`.
 
 ### `ctx.mount(type, el, props)`
 
@@ -245,12 +285,12 @@ const text = await ctx.mount("text", caption, { text: CAPTIONS[clampStage(props.
 await text.update({ text: CAPTIONS[stage], role: "body" }, info);
 ```
 
-It resolves `type` through the same registry (deck components first, then built-ins), resolves the bindings in `props`, and mounts the component into `el` with a child `ctx` (the same `d3`, `data`, `assetUrl`, `format`, `t`, `tokens`, `palette`, `animate`, `capture`; `size` measured from `el`; its own `mount`). It resolves to a handle:
+It resolves `type` through the same registry (deck components first, then built-ins), resolves the bindings in `props`, and mounts the component into `el` with a child `ctx` (the same `d3`, `data`, `assetUrl`, `format`, `t`, `tokens`, `palette`, `animate`, `motion`, `capture`; `size` measured from `el`; its own `mount`). It resolves to a handle:
 
 | Handle member | Meaning |
 |---|---|
 | `instance` | The child's instance. |
-| `update(props, info)` | Resolves the child's bindings, then calls the child's `update` with your `info` (`animate`, `signal`, `entered`, `step`, `transition`, …), with `prev` and `changed` replaced by the child's own. The first call has `prev: null` and every key changed. Pass your `signal` so an abort reaches the child. |
+| `update(props, info)` | Resolves the child's bindings, then calls the child's `update` with your `info` (`animate`, `signal`, `entered`, `entrance`, `step`, `transition`, …), with `prev` and `changed` replaced by the child's own. The first call has `prev: null` and every key changed. Pass your `signal` so an abort reaches the child. A child that gets `entered: true` with no `entrance` renders at once, because your box carries the entrance; a parent that owns its entrance passes `entrance` through, so a child chart or list builds with it. |
 | `pause()` | Pauses the child and its children. A no-op after `destroy`. |
 | `destroy()` | Idempotent. Destroys the child and its children and removes it from your list, so you can swap a child. |
 
@@ -269,8 +309,9 @@ The built-ins import small helpers from three engine modules. They are internal:
 
 | Module | What the built-ins use from it |
 |---|---|
-| `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info)` (`{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
-| `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (fade in while rising by `--sd-space`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
+| `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
+| `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
+| `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
 | `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`. Used by `chart.line` and `chart.bar`. |
 
 ## `schema.json`
@@ -280,11 +321,12 @@ Use JSON Schema 2020-12 with `"type": "object"` and `"additionalProperties": fal
 | Requirement | Checked by | Problem when missing |
 |---|---|---|
 | A top-level `description`. Its first sentence is the catalog summary. | `catalog` | `catalog-schema` (warning) |
+| Optionally a top-level `"x-enter": "own"`: the component builds its own entrance (see [Owning the entrance](#owning-the-entrance)). Absent, or `"box"`, the element's box moves. | the runtime, `catalog` (`enter`) | `catalog-schema` for any other value |
 | On every prop: `description`, a non-empty `examples` array, and `x-transition` (`tween`, `draw`, `fade` or `snap`). | `catalog` | `catalog-schema`: `prop '<key>' lacks …` |
 | The schema compiles with Ajv in strict mode. | `validate`, for every deck and built-in component, used or not. | `component-schema` |
 | The slide's props match the schema at every step, after bindings are resolved. | `validate` | `unknown-prop`, `prop-invalid` |
 
-`cli/ajv.js` registers `x-transition`, and any other keyword starting with `x-`, as a no-op annotation, so strict mode accepts them and still rejects a misspelled real keyword. `x-transition` is metadata only: the catalog lists every prop that is not `snap` under `animates`, and the engine never reads it. Your code must implement the motion the schema advertises.
+`cli/ajv.js` registers `x-transition`, `x-enter` and any other keyword starting with `x-` as a no-op annotation, so strict mode accepts them and still rejects a misspelled real keyword. `x-transition` is metadata only: the catalog lists every prop that is not `snap` under `animates`, and the engine never reads it. Your code must implement the motion the schema advertises. `x-enter` is the exception: the controller reads it (`registry.schema(type)`) to decide who plays the entrance.
 
 The starter's schema:
 

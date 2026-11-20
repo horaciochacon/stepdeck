@@ -13,11 +13,18 @@ import {
   expectBackwardEqualsJump,
   expectInterruptEqualsJump,
   expectAnimatedStepMoves,
+  elementHtml,
+  htmlAfterJump,
+  sampleFrames,
+  tokenRgb,
+  colorMove,
 } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const deck = fileURLToPath(new URL("../fixtures/decks/diagram/", import.meta.url));
 const pages = deckPages("test/fixtures/decks/diagram/");
+const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
+const focus = deckPages("test/fixtures/decks/focus/"); // modern theme: --sd-duration-fast 200ms; steps all, a, b, end
 const FLOW = ["start", "model", "result", "all", "focus"];
 
 // What a viewer sees of each part: { id: "visible" | "hidden" }, read from computed style.
@@ -114,21 +121,97 @@ test("edge appears only when listed in shown", async () => {
   });
 });
 
-test("highlight dims the rest; labels turn muted, never faint", async () => {
+test("highlight dims the rest to the theme's dim colour; labels turn muted, never faint", async () => {
   await withPage({ root, url: pages.url("flow", "step=focus") }, async (page) => {
-    const dim = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el="flow"] [data-part]')].map((g) => [g.dataset.id, g.dataset.dim])));
-    assert.equal(dim.model, "false");
-    assert.equal(dim.result, "false");
-    assert.equal(dim["model->result"], "false");
-    assert.equal(dim.data, "true");
-    assert.equal(dim.check, "true");
-    const [dataShape, dataText, modelShape] = await page.evaluate(() => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const [muted, background] = [await tokenRgb(page, "--sd-color-muted"), await tokenRgb(page, "--sd-color-background")];
+    const flags = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el="flow"] [data-part]')].map((g) => [g.dataset.id, g.dataset.dim])));
+    assert.equal(flags.model, "false");
+    assert.equal(flags.result, "false");
+    assert.equal(flags["model->result"], "false");
+    assert.equal(flags.data, "true");
+    assert.equal(flags.check, "true");
+    const at = await page.evaluate(() => {
       const q = (s) => document.querySelector(`[data-el="flow"] ${s}`);
-      return [getComputedStyle(q('[data-id="data"] .sd-diagram-shape')).opacity, getComputedStyle(q('[data-id="data"] .sd-diagram-text')).opacity, getComputedStyle(q('[data-id="model"] .sd-diagram-shape')).opacity];
+      const paint = (n) => { const cs = getComputedStyle(n); return { stroke: cs.stroke, fill: cs.fill, opacity: cs.opacity }; };
+      return {
+        dataShape: paint(q('[data-id="data"] .sd-diagram-shape')),
+        dataText: { ...paint(q('[data-id="data"] .sd-diagram-text')), color: getComputedStyle(q('[data-id="data"] .sd-diagram-text')).color },
+        modelShape: paint(q('[data-id="model"] .sd-diagram-shape')),
+        fit: paint(q('[data-id="fit"] .sd-diagram-shape')),
+        dimmedEdge: paint(q('[data-id="data->model"] .sd-diagram-line')),
+        focusedEdge: paint(q('[data-id="model->result"] .sd-diagram-line')),
+      };
     });
-    assert.ok(Number(dataShape) < 1, "a dimmed shape fades");
-    assert.equal(Number(dataText), 1, "dimmed text keeps full opacity (contrast)");
-    assert.equal(Number(modelShape), 1);
+    assert.deepEqual([at.dataShape.stroke, at.dataShape.fill, at.dataShape.opacity], [dim, background, "1"], "a dimmed node: dim outline, background fill, full opacity");
+    assert.deepEqual([at.fit.stroke, at.fit.fill, at.fit.opacity], [dim, background, "1"], "a dimmed group likewise");
+    assert.deepEqual([at.dimmedEdge.stroke, at.dimmedEdge.opacity], [dim, "1"], "a dimmed edge: dim line, full opacity");
+    assert.equal(at.dataText.opacity, "1", "dimmed text keeps full opacity (contrast)");
+    assert.equal(at.dataText.color, muted, "dimmed text is muted");
+    assert.notEqual(at.modelShape.stroke, dim, "a focused node keeps its outline");
+    assert.notEqual(at.modelShape.fill, background);
+    assert.notEqual(at.focusedEdge.stroke, dim);
+  });
+});
+
+test("a dimmed text-only node draws no shape", async () => {
+  await withPage({ root, url: focus.url("flow", "step=b") }, async (page) => {
+    const shape = await page.evaluate(() => { const cs = getComputedStyle(document.querySelector('[data-el="flow"] [data-id="check"] .sd-diagram-shape')); return [cs.stroke, cs.fill]; });
+    assert.deepEqual(shape, ["none", "none"]);
+  });
+});
+
+test("the focused parts are drawn after (above) the dimmed ones, in every layer", async () => {
+  const order = (page) =>
+    page.evaluate(() => {
+      const ids = (cls) => [...document.querySelectorAll(`[data-el="flow"] .${cls} > [data-id], [data-el="flow"] .${cls} > [data-for]`)].map((g) => g.dataset.id ?? g.dataset.for);
+      return { nodes: ids("sd-diagram-nodes"), edges: ids("sd-diagram-edges"), tags: ids("sd-diagram-edge-labels") };
+    });
+  await withPage({ root, url: focus.url("flow", "step=all") }, async (page, ctx) => {
+    assert.deepEqual(await order(page), { nodes: ["data", "model", "result", "check"], edges: ["data->model", "model->result", "check->model"], tags: ["model->result"] });
+    await ctx.open(focus.url("flow", "step=a"));
+    assert.deepEqual(await order(page), { nodes: ["result", "check", "data", "model"], edges: ["model->result", "check->model", "data->model"], tags: ["model->result"] }, "data, model and their edge are raised");
+    await ctx.open(focus.url("flow", "step=b"));
+    assert.deepEqual(await order(page), { nodes: ["data", "check", "model", "result"], edges: ["data->model", "check->model", "model->result"], tags: ["model->result"] });
+  });
+});
+
+test("focus: jump equals played, backward and interrupted", async () => {
+  const steps = ["all", "a", "b", "end"];
+  await withPage({ root, url: focus.url("flow", "step=all") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages: focus, slide: "flow", steps, id: "flow" });
+    await expectBackwardEqualsJump(ctx, page, { pages: focus, slide: "flow", steps, id: "flow" });
+    await expectInterruptEqualsJump(ctx, page, { pages: focus, slide: "flow", from: "all", via: "a", to: "b", id: "flow" });
+    await expectInterruptEqualsJump(ctx, page, { pages: focus, slide: "flow", from: "a", via: "b", to: "end", id: "flow" });
+  });
+});
+
+test("a highlight change tweens the outline colour over --sd-duration-fast, never the opacity", async () => {
+  // The step also pops a node in and then draws an edge (about 800 ms), a long reference that stretches with load.
+  await withPage({ root, url: focus.url("grow", "step=base&motion=full") }, async (page, ctx) => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const r = await sampleFrames(page, "grow", "grow", "flow", () => {
+      const q = (s) => getComputedStyle(document.querySelector(`[data-el="flow"] ${s}`));
+      const shape = q('[data-id="b"] .sd-diagram-shape');
+      const line = q('[data-id="b->c"] .sd-diagram-line');
+      return { color: shape.stroke, opacity: shape.opacity, lineColor: line.stroke, lineOpacity: line.opacity, textColor: q('[data-id="b"] .sd-diagram-text').color };
+    });
+    // b, c and the edge b->c leave focus: their outline and line go to the dim colour.
+    const node = colorMove(r.frames);
+    const edge = colorMove(r.frames.map((f) => ({ ms: f.ms, color: f.lineColor })));
+    const text = colorMove(r.frames.map((f) => ({ ms: f.ms, color: f.textColor })));
+    assert.equal(node.to, dim);
+    assert.equal(edge.to, dim);
+    for (const [name, m] of [["node", node], ["edge", edge], ["text", text]]) {
+      assert.ok(m.moved >= 3, `${name}: the colour was seen part-way (${m.moved} frames)`);
+      assert.ok(m.arrived >= 170, `${name}: 200 ms, not a snap (arrived at ${m.arrived.toFixed(0)} ms)`);
+      // 200 ms against a build of node pop (400 ms) then edge draw (400 ms): a colour tween at --sd-duration would be half.
+      assert.ok(m.arrived < 0.4 * r.settledMs, `${name}: done in the fast duration, well before the build settles (${m.arrived.toFixed(0)} of ${r.settledMs.toFixed(0)} ms)`);
+    }
+    assert.ok(r.settledMs >= 700, `the reference build runs about 800 ms (${r.settledMs.toFixed(0)} ms)`);
+    assert.ok(r.frames.every((f) => f.opacity === "1" && f.lineOpacity === "1"), "the dimmed outline never changes opacity");
+    assert.equal(r.end.style, null);
+    assert.deepEqual(ctx.errors, []);
   });
 });
 
@@ -251,4 +334,180 @@ test("check is clean on the diagram slides", async () => {
     const problems = await check(deck, { slide });
     assert.deepEqual(problems.map(formatProblem), [], slide);
   }
+});
+
+// Owned entrance. Per frame, in the diagram-enters slide (group "pair" around a and b; edges a->b, b->c; node d
+// and edge c->d come one step later): each part's opacity as seen (0 while hidden), the scale of the nodes, how
+// much of each edge's line is drawn, and whether any inline style is left inside the element.
+const buildProbe = (el) => {
+  const seen = (n) => (getComputedStyle(n).visibility === "visible" ? Number(getComputedStyle(n).opacity) : 0);
+  const part = (id) => el.querySelector(`[data-part][data-id="${id}"]`);
+  const drawn = (id) => {
+    const g = part(id);
+    if (seen(g) === 0) return 0;
+    const line = g.querySelector("line");
+    const { strokeDasharray: dash, strokeDashoffset: off } = line.style;
+    return dash !== "" && off !== "" ? 1 - Number(off) / line.getTotalLength() : 1;
+  };
+  const scale = (id) => new DOMMatrix(getComputedStyle(part(id)).transform).a;
+  return {
+    group: seen(part("pair")),
+    nodes: ["a", "b", "c", "d"].map((id) => seen(part(id))),
+    scales: ["a", "b", "c", "d"].map(scale),
+    edges: ["a->b", "b->c", "c->d"].map(drawn),
+    inline: el.querySelectorAll("[style]").length > 0,
+  };
+};
+
+test("diagram entering builds from empty: group, then nodes pop in, then edges draw", async () => {
+  await withPage({ root, url: motion.url("diagram-enters", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const r = await sampleFrames(page, "diagram-enters", "go", "diagram", buildProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the diagram is shown");
+    const first = shown[0];
+    assert.ok(first.ms >= 150, `held for the third slot, 2 x 80 ms (first shown at ${first.ms.toFixed(0)} ms)`);
+    assert.ok(first.group < 0.5 && first.nodes.every((o) => o < 0.5) && first.edges.every((d) => d === 0), `nothing shows built at the first shown frame (${JSON.stringify(first)})`);
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the parts enter themselves");
+
+    // The group fades first; the nodes begin once it is in, and the edges once every node is in.
+    const at = (test) => shown.find(test)?.ms ?? Infinity;
+    const groupStart = at((f) => f.group > 0);
+    const nodeStart = at((f) => f.nodes[0] > 0);
+    const edgeStart = at((f) => f.edges[1] > 0);
+    assert.ok(groupStart < nodeStart && nodeStart < edgeStart, `group ${groupStart.toFixed(0)} < nodes ${nodeStart.toFixed(0)} < edges ${edgeStart.toFixed(0)} ms`);
+    assert.ok(shown.every((f) => f.nodes[0] === 0 || f.group >= 0.99), "no node shows before the group is fully in");
+    assert.ok(shown.every((f) => f.edges.every((d) => d === 0) || f.nodes.slice(0, 3).every((o) => o >= 0.99)), "no edge draws before every node is fully in");
+    assert.ok(shown.some((f) => f.nodes[0] > 0 && f.edges[1] === 0), "the first node is visible before the last edge has any drawn length");
+    assert.ok(shown.every((f) => f.nodes[3] === 0 && f.edges[2] === 0), "node d and its edge stay hidden: shown does not list them");
+    // Nodes come in one after another, each starting one --sd-stagger (80 ms) after the previous.
+    const nodeAt = (i) => at((f) => f.nodes[i] > 0);
+    const lag = nodeAt(2) - nodeAt(0);
+    assert.ok(lag >= 140 && lag < 600, `the third node starts ~160 ms after the first (${lag.toFixed(0)} ms)`);
+    assert.ok(shown.every((f) => f.nodes[0] >= f.nodes[1] && f.nodes[1] >= f.nodes[2]), "nodes come in in order");
+    const drawing = shown.filter((f) => f.edges[0] > 0 && f.edges[0] < 1);
+    assert.ok(drawing.length >= 3, `an edge was seen part-drawn (${drawing.length} frames)`);
+    // `pop` overshoots its end size; the old fade-and-scale never went past it.
+    assert.ok(shown.some((f) => f.nodes[0] > 0 && f.nodes[0] < 1 && f.scales[0] < 0.99), "a node starts smaller than its end size");
+    assert.ok(shown.some((f) => f.scales[0] > 1.001), "a node overshoots its end size: the named pop");
+    assert.equal(r.end.inline, false, "no inline style left inside the diagram");
+    assert.ok(r.end.nodes.slice(0, 3).every((o) => o === 1) && r.end.group === 1 && r.end.edges.slice(0, 2).every((d) => d === 1), "the end state is complete");
+    assert.ok(r.settledMs < 6000, `the build settles (${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "diagram"), await htmlAfterJump(ctx, page, motion, "diagram-enters", "go", "diagram"));
+
+    // Played and backward equal a jump.
+    const steps = ["start", "go", "more"];
+    await expectJumpEqualsPlayed(ctx, page, { pages: motion, slide: "diagram-enters", steps, id: "diagram" });
+    await expectBackwardEqualsJump(ctx, page, { pages: motion, slide: "diagram-enters", steps, id: "diagram" });
+    await expectInterruptEqualsJump(ctx, page, { pages: motion, slide: "diagram-enters", from: "start", via: "go", to: "more", id: "diagram" });
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// Interrupted in each phase of the build: the page watches every frame until the phase holds, then asks for the
+// next step; the phase must have been reached, or the test fails.
+const phases = {
+  held: "document.querySelector('[data-el=\"diagram\"]') && getComputedStyle(document.querySelector('[data-el=\"diagram\"]')).visibility === 'hidden' && performance.now() - t0 > 60",
+  group: "p.group > 0.2 && p.group < 0.8 && p.nodes[0] === 0",
+  nodes: "p.nodes[0] > 0.2 && p.nodes[0] < 0.8 && p.edges.every((d) => d === 0)",
+  edges: "p.edges[0] > 0.2 && p.edges[0] < 0.8 && p.nodes.slice(0, 3).every((o) => o >= 0.99)",
+};
+for (const [phase, until] of Object.entries(phases)) {
+  test(`diagram interrupted while ${phase === "held" ? "held" : `its ${phase} ${phase === "edges" ? "draw" : "build"}`} snaps to the jumped state`, async () => {
+    await withPage({ root, url: motion.url("diagram-enters", "step=more") }, async (page, ctx) => {
+      const jumped = await elementHtml(page, "diagram");
+      await ctx.open(motion.url("diagram-enters", "step=start&motion=full"));
+      const reached = await page.evaluate(
+        async ([until, probe]) => {
+          const el = () => document.querySelector('[data-el="diagram"]');
+          const read = new Function("el", `return (${probe})(el)`);
+          const t0 = performance.now();
+          window.STEPDECK.goTo("diagram-enters", "go");
+          let hit = false;
+          for (let i = 0; i < 400 && !hit; i++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            const p = read(el());
+            hit = new Function("p", "t0", `return ${until}`)(p, t0);
+          }
+          window.STEPDECK.goTo("diagram-enters", "more");
+          await window.STEPDECK.settled();
+          return hit;
+        },
+        [until, String(buildProbe)],
+      );
+      assert.ok(reached, `the ${phase} phase was reached before the next step came`);
+      assert.equal(await elementHtml(page, "diagram"), jumped, `interrupted in the ${phase} phase equals a jump`);
+      assert.equal(await page.evaluate(() => document.querySelectorAll('[data-el="diagram"] [style]').length), 0, "no inline styles remain");
+      assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("a later step pops the new node in with the theme's timing", async () => {
+  await withPage({ root, url: motion.url("diagram-enters", "step=go&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "diagram-enters", "more", "diagram", buildProbe);
+    const d = r.frames.filter((f) => f.nodes[3] > 0 && f.nodes[3] < 1);
+    assert.ok(d.length >= 3, `node d was seen part-in (${d.length} frames)`);
+    assert.ok(r.frames.some((f) => f.scales[3] > 1.001), "node d overshoots its end size: the named pop");
+    assert.ok(r.frames.every((f) => f.edges[2] === 0 || f.nodes[3] >= 0.99), "the new edge draws after the new node is in");
+    assert.ok(r.settledMs >= 750, `pop 400 ms then draw 400 ms (settled at ${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(r.end.inline, false);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("the parts' start state is written before update awaits; a shown element without an entrance snaps", async () => {
+  await withPage({ root, url: pages.url("flow", "step=start") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const { default: diagram } = await import("../components/diagram/index.js");
+      const { animate } = await import("../core/animate.js");
+      const { makeMotion } = await import("../core/motion.js");
+      const make = async (tokens = {}) => {
+        const host = document.createElement("div");
+        host.style.cssText = "width:1200px;height:400px";
+        document.querySelector(".sd-canvas").appendChild(host);
+        const ctx = { animate, motion: makeMotion(tokens), tokens: {}, size: { w: 1200, h: 400 } };
+        const base = {
+          cols: 2, rows: 1,
+          nodes: [{ id: "a", label: "A", shape: "box", col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 1, row: 0 }],
+          edges: [{ from: "a", to: "b" }],
+          groups: [{ id: "g", contains: ["a", "b"] }],
+        };
+        const props = { ...base, shown: ["a", "b", "g", "a->b"] };
+        const hidden = { ...base, shown: [] };
+        return { host, props, hidden, inst: await diagram.mount(host, hidden, ctx) };
+      };
+      const signal = new AbortController().signal;
+      const info = (hidden, extra) => ({ prev: hidden, changed: ["shown"], animate: true, entered: true, entrance: null, signal, ...extra });
+      const ops = (host) => [...host.querySelectorAll("[data-part]")].map((g) => g.style.opacity);
+      const styled = (host) => host.querySelectorAll("[style]").length;
+
+      const out = {};
+      {
+        const { host, props, hidden, inst } = await make();
+        const building = inst.update(props, info(hidden, { entrance: { motion: "draw", duration: 120 } }));
+        out.sync = ops(host);
+        await building;
+        out.afterDraw = styled(host);
+      }
+      for (const [name, extra] of [["none", { entrance: { motion: "none", duration: 0 } }], ["moved", { entrance: null }], ["entered", { entrance: null, animate: true }], ["aborted", { entrance: { motion: "draw", duration: 120 }, signal: AbortSignal.abort() }]]) {
+        const { host, props, hidden, inst } = await make();
+        const p = inst.update(props, info(hidden, extra));
+        out[name] = ops(host);
+        await p;
+      }
+      // Theme timing: two nodes pop in over --sd-duration 600 ms, the second 300 ms (--sd-stagger) after the first.
+      const { host, props, hidden, inst } = await make({ "--sd-duration": "600ms", "--sd-stagger": "300ms" });
+      const t0 = performance.now();
+      await inst.update({ ...props, shown: ["a", "b"] }, info(hidden, { entered: false }));
+      out.elapsed = performance.now() - t0;
+      return out;
+    });
+    assert.ok(r.sync.length === 4 && r.sync.every((o) => o === "0"), `every visible part starts at opacity 0 (${r.sync})`);
+    assert.equal(r.afterDraw, 0, "no inline style after the build");
+    for (const name of ["none", "moved", "entered", "aborted"]) assert.ok(r[name].every((o) => o === ""), `${name}: nothing is held back (${r[name]})`);
+    assert.ok(r.elapsed >= 870 && r.elapsed < 3000, `two pops: 600 ms each, 300 ms apart (${r.elapsed.toFixed(0)} ms)`);
+  });
 });

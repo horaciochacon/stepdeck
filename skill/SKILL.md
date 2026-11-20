@@ -51,7 +51,7 @@ If Playwright is missing, the command exits 2 with a message saying so.
 
 ## Workflow, in this order
 
-1. **Catalog.** Run `node "$STEPDECK/cli/index.js" catalog my-talk`, then read `my-talk/catalog/index.json`. It holds one line per component, layout and theme, plus the props that animate.
+1. **Catalog.** Run `node "$STEPDECK/cli/index.js" catalog my-talk`, then read `my-talk/catalog/index.json`. It holds one line per component, layout and theme, plus the props that animate and whether a component builds its own entrance (`enter: own`).
    - Then run `node "$STEPDECK/cli/index.js" catalog <name> my-talk --json` for each entry you will use. That gives you the props, the examples and the README, where component-specific shapes live (such as the terminal script).
    - The `example` path in an entry is relative to the engine, so it is `my-talk/stepdeck/<path>`. Example slides show the shape; their data files are not in your deck.
 2. **Slide spec.** Write one file per slide, `slides/<id>.js` (`export default { id, layout, title, elements, steps }`), and add the id to `slides` in `deck.js`.
@@ -84,6 +84,7 @@ Exit codes:
 - **Kicker and accent.** A slide's `section` is the kicker above its title, and `*phrase*` in a `title` is the accent phrase (one per title; `\*` for a literal asterisk). Do not define an element with id `kicker`. See [themes-layouts](references/themes-layouts.md).
 - **Text is at least 28px.** That is the theme's `--min-audience-font`. Sources and the footer are exempt.
 - **The canvas is 1920×1080.** All boxes and sizes are in canvas pixels.
+- **Elements move in by themselves.** On a forward step, every element that appears enters in turn (the theme's `rise` or `fade`, or its own build: charts draw, lists build, big numbers count up) and every element that disappears fades out. You do not need extra steps to get motion. Use `enter: "none"` to keep one still, `transition: { stagger }` to space a step's entrances, and `lede`, badges, `highlight` and `ghost` for the message line, status tags, focus and placeholders (see [step-model](references/step-model.md) and the [cookbook](references/cookbook.md#motion)).
 
 ## Working in parallel: one slide per agent
 
@@ -107,7 +108,7 @@ Add `?motion=full` to animate even when the OS asks for reduced motion.
 
 ## References
 
-- [step-model.md](references/step-model.md): states, visibility (`from`, `at`, `collapse`), `set`, `replace`, `show`, `hide`, `only`, `advance`, notes, transitions, step ids.
+- [step-model.md](references/step-model.md): states, visibility (`from`, `at`, `collapse`, `ghost`), `set`, `replace`, `show`, `hide`, `only`, `advance`, notes, transitions, entrances and exits (`enter`, `exit`), the `lede`, step ids.
 - [components.md](references/components.md): the built-in components, bindings and data files.
 - [custom-components.md](references/custom-components.md): when and how to write your own component.
 - [themes-layouts.md](references/themes-layouts.md): layouts and regions, the kicker and accent phrase, tokens, hooks and `theme.css`, palettes, `{{color:role}}`, the audience font, adding a theme or layout.

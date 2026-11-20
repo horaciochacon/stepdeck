@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "text",
-  "description": "One paragraph of plain text: body copy, a source line, a note or a label.",
+  "description": "One paragraph of plain text: body copy, a source line, a note, a label, a message line under a title or a badge.",
   "type": "object",
   "additionalProperties": false,
   "required": ["text"],
@@ -14,11 +14,18 @@
     },
     "role": {
       "type": "string",
-      "enum": ["body", "source", "note", "label"],
+      "enum": ["body", "source", "note", "label", "lede", "badge"],
       "default": "body",
-      "description": "Typographic role: body copy, a source or citation line, a side note, or a short label.",
-      "examples": ["body", "source"],
+      "description": "Typographic role: body copy, a source or citation line, a side note, a short label, a message line under a title (lede), or a badge (an uppercase pill). The slide `lede` sugar and a text element with id `lede` set it to lede unless their props say otherwise.",
+      "examples": ["body", "badge"],
       "x-transition": "snap"
+    },
+    "tone": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "For role badge: the index of the badge's colour in the deck's categorical palette (0 is the first colour). Without it, or beyond the palette, the badge takes the theme's accent colour. Changing it while the badge is on screen fades the colour.",
+      "examples": [0, 1],
+      "x-transition": "fade"
     },
     "accent": {
       "type": "boolean",

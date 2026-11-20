@@ -95,12 +95,12 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="chat"]`) the componen
 
 Motion plays only when the engine animates the update: you moved forward exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (`shoot`, and `check` without `--played`) draw the target state at once. `check --played` plays each forward step with motion, typing included, then checks that it ends with the same markup as a jump. See [Animation and motion](../../guide/animation-and-motion.md).
 
-On an animated step:
+**Entrance.** The chat builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and every visible message rises in, one after another, then the newest is typed (with `typing`), as below; the messages are hidden the moment the chat shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the messages show at once, full text; with `enter: "none"` nothing moves.
 
-1. **Rise and fade.** Each message that just became visible fades from opacity 0 to 1 while it moves up by `--sd-space`. With several new messages, each starts 60 ms after the previous one. Each rise lasts the step's `transition.duration` when set, else 400 ms.
+On an animated step while the chat stays visible (and in its entrance):
+
+1. **Rise.** Each message that just became visible plays the shared `rise` motion: it fades from opacity 0 to 1 while it moves up from `--sd-motion-distance` below. With several new messages, each starts `--sd-stagger` after the previous one (80 ms in `modern`, 60 ms in `academic-light`, or the step's `transition.stagger`). Each rise lasts the theme's `--sd-duration` (400 ms), or the step's `transition.duration` when set. The motion name is fixed: messages rise in every theme.
 2. **Typing.** When `typing` is `true` and the newest visible message is one of the new ones, its text is typed after it has risen. Typing takes 28 ms per character, at most 1400 ms, whatever the step's `transition.duration`; it is skipped (full text at once) when `transition.duration` is 0. Characters are counted in the rendered text, so Markdown markers such as `**` do not count. The untyped rest of the text is already in place but hidden, so the bubble does not grow while it types. Only the newest message is typed; an older message that appears on the same step only rises.
-
-There is no entry motion on visibility alone. Motion comes from messages whose own visibility changed between steps, not from the element appearing. If the whole element becomes visible (through `from`, `at` or `show`) while its `shown` stays the same, it appears at once with no fade. To have messages rise in, change `shown` on that step.
 
 Nothing animates when the message list itself changes (a different role, label or text, or a different number of messages): the messages are rebuilt and drawn at once. Changing `style` also takes effect at once.
 

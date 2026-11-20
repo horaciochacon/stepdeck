@@ -14,9 +14,17 @@ Numbered, lettered, bulleted or checklist items, revealed one by one. Item text 
 Behaviour:
 - **Driven by props only.** The component never reads the slide's step. Set `shown`, `done` and `active` per step
   with `advance` (`advance: { prop: "shown", values: [0, 1, 2, 3], start: "start" }`) or with `set` on a step.
-- **Motion** (forward by exactly one step only; any other move renders directly): items that become visible rise and
-  fade in, staggered; a check mark is drawn when an item becomes done; `active` fades the text color between the
-  emphasised and the muted one. Going backward, a ticked item unticks and a shown item hides, with no motion.
+- **Entrance.** The list builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on an
+  animated step, its box stays still and the items play the build from nothing to the state of that step. Every
+  visible item rises in (the shared `rise` motion), one after another, `--sd-stagger` apart; a done tick draws after
+  its row. It waits for its stagger slot like any entering element, and its items are hidden the moment it shows.
+  With `enter: "none"`, or a box motion such as `enter: "rise"`, the list shows its state at once (the box moves
+  instead).
+- **Change motion** (forward by exactly one step only; any other move renders directly): while the list stays
+  shown, items that become visible rise and fade in, staggered by `--sd-stagger` over `--sd-duration` (or the step's
+  `transition`), whatever the theme's `--sd-enter`; a check mark is drawn when an item becomes done; `active` fades
+  the text color between the emphasised and the muted one. Going backward, a ticked item unticks and a shown item
+  hides, with no motion.
 - **Idempotent.** Every `update` writes the state straight from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping.
 - **Layout.** Hidden items keep their space (`visibility`), so nothing reflows between steps. Long text wraps inside

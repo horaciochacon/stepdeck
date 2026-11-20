@@ -25,7 +25,7 @@ function frame(cb) {
 const durationOf = (opts) => (opts?.duration === undefined ? DEFAULT_DURATION : Number(opts.duration) || 0);
 
 /** Resolves after `ms`, or at once when ms <= 0 or the signal aborts. */
-function wait(ms, signal) {
+export function wait(ms, signal) {
   if (!(ms > 0) || signal?.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => {

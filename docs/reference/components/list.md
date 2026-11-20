@@ -130,20 +130,21 @@ Use slide `style` with these classes and attributes to restyle one slide.
 
 The engine animates an update only when you move forward by exactly one step, in a live presentation with motion on. Every other move (a jump, a backward move, the first render, capture mode for `shoot` and `check`) renders the target state at once. See [Animation and motion](../../guide/animation-and-motion.md).
 
-On an animated forward step, the list compares each item before and after the update and plays:
+**Entrance.** The list builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the list plays the build from nothing to the state of that step: every visible item rises in, one after another, and a done tick draws after its row. The items are hidden the moment the list shows. A list that appears with `shown: 3` plays one build of three items. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the list shows its state at once; with `enter: "none"` nothing moves.
+
+While the list stays visible, an animated forward step compares each item before and after the update and plays:
 
 | Change | Motion |
 | --- | --- |
-| An item becomes visible (`shown` grew) | It rises by `--sd-space` and fades in. Several new items are staggered 60 ms apart. |
+| An item becomes visible (`shown` grew) | The shared `rise` motion: it fades in while moving up from `--sd-motion-distance` below. Several new items are `--sd-stagger` apart (80 ms in `modern`, 60 ms in `academic-light`, or the step's `transition.stagger`). Items rise in every theme. |
 | An item becomes done (`done`, check marker) | Its tick is drawn. If the item also just became visible, the tick stays hidden while the item rises, then draws. |
 | A visible item changes emphasis (`active`) | Its text color tweens between ink and muted. |
 
-Each motion lasts the step's `transition.duration` when set, else 400 ms. Going backward, an item unticks or hides with no motion.
+Each motion lasts the theme's `--sd-duration` (400 ms), or the step's `transition.duration` when set. Going backward, an item unticks or hides with no motion.
 
 No motion plays in these cases:
 
 - **`items` or `marker` changed.** The list is rebuilt from scratch and drawn in its new state directly. This includes any change to an item's `id`, `text` or `sub`.
-- **The element itself just became visible** (through `from`, `at` or `show`) while its props stayed the same. The list compares item states, not the element's visibility, so it appears at once. `text`, `markdown`, `big-number`, `image` and the charts fade or draw in on entry; `list` does not. To get an entry motion, start with `shown: 0` and advance `shown`.
 - **`rule` changed.** It snaps.
 
 After every update the component removes all inline styles the motion used, so a played step and a jumped step end with the same markup. `check --played` verifies this.

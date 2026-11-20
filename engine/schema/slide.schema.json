@@ -10,6 +10,7 @@
     "layout": { "type": "string", "minLength": 1, "description": "Layout name under the engine's layouts/ (default full-bleed)." },
     "section": { "type": "string", "description": "Section name, shown as the kicker above the title: an element with the reserved id kicker (type text, region title). A layout without a title region drops it." },
     "title": { "type": "string", "description": "Sugar for an element with the reserved id title (type text, region title, accent true): *phrase* is an accent phrase, \\* a literal asterisk." },
+    "lede": { "type": "string", "description": "A message line under the title: sugar for an element with the reserved id lede (type text, region title, role lede). A step can change it with set: { lede: { text } }. Not for a cover: use the subtitle region there." },
     "elements": { "type": "array", "items": { "$ref": "#/$defs/element" } },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/step" } },
     "style": { "type": "string", "description": "Scoped CSS, prefixed with the slide id." },
@@ -32,6 +33,22 @@
       "type": "object",
       "description": "Element id -> patch. The folded result must keep props an object (checked per step)."
     },
+    "motion": {
+      "description": "How an element enters or leaves: a motion name, or an object that adds a delay and a duration (milliseconds).",
+      "anyOf": [
+        { "enum": ["fade", "rise", "wipe", "pop", "draw", "none"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["motion"],
+          "properties": {
+            "motion": { "enum": ["fade", "rise", "wipe", "pop", "draw", "none"] },
+            "delay": { "type": "number", "minimum": 0, "maximum": 5000 },
+            "duration": { "type": "number", "minimum": 0, "maximum": 5000 }
+          }
+        }
+      ]
+    },
     "element": {
       "type": "object",
       "additionalProperties": false,
@@ -52,9 +69,13 @@
             "h": { "type": "number", "exclusiveMinimum": 0 }
           }
         },
-        "enter": { "enum": ["fade", "rise", "wipe", "draw", "none"] },
-        "exit": { "enum": ["fade", "rise", "wipe", "draw", "none"] },
+        "enter": { "$ref": "#/$defs/motion" },
+        "exit": { "$ref": "#/$defs/motion" },
         "collapse": { "type": "boolean" },
+        "ghost": {
+          "anyOf": [{ "type": "boolean" }, { "type": "string", "minLength": 1 }],
+          "description": "While the element is hidden, show a placeholder in its space: true for a plain one, a string for a labelled one, false (the default) for none. Not with collapse."
+        },
         "from": { "$ref": "#/$defs/stepRef" },
         "at": { "type": "array", "items": { "$ref": "#/$defs/stepRef" } },
         "advance": {
@@ -84,8 +105,8 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "stagger": { "type": "number", "minimum": 0 },
-            "duration": { "type": "number", "minimum": 0 }
+            "stagger": { "type": "number", "minimum": 0, "maximum": 1000 },
+            "duration": { "type": "number", "minimum": 0, "maximum": 5000 }
           }
         }
       }

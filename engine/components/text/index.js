@@ -1,14 +1,23 @@
-// Built-in `text`: one paragraph of plain text with a role (body, source, note, label).
-// Idempotent: update renders exactly the given props, whatever state came before. It fades in
-// only when the engine says to animate (info.animate) and the text appeared or changed.
-// With `accent: true` (a slide title: default-theme spec §5.4) the text's `*phrase*` renders as
+// Built-in `text`: one paragraph of plain text with a role (body, source, note, label, lede, badge).
+// Idempotent: update renders exactly the given props, whatever state came before. An element that appears is
+// moved by its box (the engine's entrance), never by the paragraph itself. A change of the text while the
+// element stays on screen crossfades when the engine animates (info.animate): the old text fades out, the text
+// swaps, the new text fades in. The theme's --sd-duration-fast times each half (a step's transition.duration
+// is split in two). An abort renders the final text at once, and no inline style is left behind.
+// A badge's `tone` picks its colour from the categorical palette (ctx.palette). The pill's border takes that
+// colour (inline `border-color`); the text takes it darkened (lightened on a dark background) until it reads at
+// 4.5:1 on the theme's --sd-color-background (inline `color`, textColor in core/color.js), so every tone passes
+// `check`. A change of tone while the badge is on screen fades both colours over the same time. Without a tone
+// the theme's accent colour applies to both (the theme draws the border in currentColor).
+// With `accent: true` (a slide title) the text's `*phrase*` renders as
 // <em class="sd-accent">phrase</em>, built from DOM nodes (never innerHTML). The engine escapes values from data
 // bindings first (core/bindings.js resolveElementProps), so only the author's own `*` marks make a phrase.
 import { clearInlineStyle } from "../../core/animate.js";
-import { motion } from "../../core/kit.js";
+import { motion, tweenColor } from "../../core/kit.js";
 import { parseAccent } from "../../core/accent.js";
+import { textColor } from "../../core/color.js";
 
-const ROLES = ["body", "source", "note", "label"];
+const ROLES = ["body", "source", "note", "label", "lede", "badge"];
 
 export default {
   mount(el, props, ctx) {
@@ -16,12 +25,45 @@ export default {
     const p = doc.createElement("p");
     el.appendChild(p);
     let shown = null; // key of what p holds
-    const render = (props) => {
+    let shownColor = null; // the palette colour p carries (null: the theme's own)
+    const background = ctx.tokens?.["--sd-color-background"];
+    /** A palette colour's inks: the border as it is, the text darkened to text contrast; null for the theme's own. */
+    const inks = (color) => (color === null ? null : { text: textColor(color, background), border: color });
+    /** What the props show: the role's class, the badge's palette colour, and the text as parts plus its key. */
+    const read = (props) => {
       const role = ROLES.includes(props.role) ? props.role : "body";
-      p.className = `sd-text sd-role-${role}`;
       const text = props.text == null ? "" : String(props.text);
       const parts = props.accent === true ? parseAccent(text) : [{ text, accent: false }];
-      const key = JSON.stringify(parts);
+      const tone = role === "badge" && Number.isInteger(props.tone) && props.tone >= 0 ? props.tone : null;
+      const color = tone === null ? null : (ctx.palette?.("categorical")?.colors?.[tone] ?? null);
+      return { role, parts, color, key: JSON.stringify(parts) };
+    };
+    /** The text and border colours on screen for a palette colour, or for the theme's own (null). */
+    const resolved = (color) => {
+      if (color !== null) return inks(color);
+      const inline = { text: p.style.color, border: p.style.borderColor };
+      p.style.color = "";
+      p.style.borderColor = "";
+      const cs = doc.defaultView.getComputedStyle(p);
+      const own = { text: cs.color, border: cs.borderTopColor };
+      p.style.color = inline.text;
+      p.style.borderColor = inline.border;
+      return own;
+    };
+    // Always the same two declarations in the same order, so a played badge's markup equals a jumped one's.
+    const paint = (color) => {
+      shownColor = color;
+      const ink = inks(color);
+      if (ink === null) {
+        p.style.removeProperty("color");
+        p.style.removeProperty("border-color");
+      } else {
+        p.style.color = ink.text;
+        p.style.borderColor = ink.border;
+      }
+    };
+    const write = ({ role, parts, key }) => {
+      p.className = `sd-text sd-role-${role}`;
       if (key === shown) return;
       shown = key;
       p.replaceChildren(...parts.map((part) => {
@@ -32,16 +74,45 @@ export default {
         return em;
       }));
     };
-    render(props);
+    const first = read(props);
+    write(first);
+    paint(first.color);
     return {
       async update(props, info) {
-        render(props);
-        const fade = info.animate && (info.entered || info.changed.includes("text"));
-        if (fade) {
-          await ctx.animate.fadeIn(p, motion(info));
+        const next = read(props);
+        // Only a change of what shows, on an element that was already visible, crossfades.
+        const playing = info.animate && !info.entered && !info.signal?.aborted;
+        const crossfade = playing && next.key !== shown;
+        const recolor = playing && next.color !== shownColor;
+        try {
+          if (crossfade || recolor) {
+            // transition.duration is the whole crossfade; without it each half is the theme's fast duration.
+            const t = motion(info, ctx, { fast: true });
+            const half = info.transition?.duration != null ? t.duration / 2 : t.duration;
+            const opts = { ...t, duration: half };
+            const fade = async () => {
+              await ctx.animate.tween(1, 0, (v) => (p.style.opacity = String(v)), opts);
+              write(next);
+              await ctx.animate.tween(0, 1, (v) => (p.style.opacity = String(v)), opts);
+            };
+            // The colours move over the whole crossfade, or over one fast duration when only the colour changes.
+            const colour = () => {
+              const [from, to] = [resolved(shownColor), resolved(next.color)];
+              const o = crossfade ? { ...t, duration: half * 2 } : t;
+              return Promise.all([
+                tweenColor(ctx, from.text, to.text, (c) => { p.style.color = c; }, o),
+                tweenColor(ctx, from.border, to.border, (c) => { p.style.borderColor = c; }, o),
+              ]);
+            };
+            await Promise.all([crossfade ? fade() : null, recolor ? colour() : null]);
+          }
+        } finally {
+          // The final text and colours are written whatever happened, then no inline style is left behind
+          // but the badge's own two colours.
+          write(next);
+          clearInlineStyle(p);
+          paint(next.color);
         }
-        // Idempotent end state: no inline style left behind, whether the fade ran or not.
-        clearInlineStyle(p);
       },
       destroy() {
         p.remove();

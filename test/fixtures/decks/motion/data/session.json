@@ -1,0 +1,13 @@
+{
+  "title": "Session",
+  "command": "assistant \"summarize the survey in a short report\"",
+  "tasks": ["Check the data", "Write the report"],
+  "events": [
+    { "type": "note", "text": "Goal: a short summary of the survey." },
+    { "type": "read", "text": "data/survey.csv" },
+    { "type": "run", "text": "wc -l data/survey.csv" },
+    { "type": "result", "text": "1205 data/survey.csv" },
+    { "type": "file", "text": "src/report.py", "status": "created" },
+    { "type": "run", "text": "python src/report.py" }
+  ]
+}

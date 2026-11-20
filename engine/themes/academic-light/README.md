@@ -6,7 +6,8 @@ comes from size, weight and the muted color. Sizes are set for the 1920×1080 ca
 audience that watches at roughly 1000–1300 px (spec §3): nothing on screen goes below 28px.
 
 Files: `tokens.css` (custom properties and `@font-face`), `theme.css` (rules for the published hooks:
-today's title weight, a plain muted kicker, the muted subtitle; loaded in the `sd-theme` cascade layer),
+today's title weight, a plain muted kicker, the muted subtitle, the message line (`.sd-role-lede`) and the
+badge pill (`.sd-role-badge`); loaded in the `sd-theme` cascade layer),
 `palettes.json`, `fonts/` (vendored woff2).
 
 ## Tokens (`tokens.css`)
@@ -29,6 +30,7 @@ or a slide `style` can override any of them.
 | `--sd-color-alert` | `#b75002` | Errors and warnings. The categorical palette's `vermillion` (role `alert`). |
 | `--sd-color-rule` | `#d4d4d8` | Hairlines: grid lines, borders, separators. |
 | `--sd-color-grid` | `#d4d4d8` | Chart grid lines. Optional: falls back to `--sd-color-rule`. Same value as rule here. |
+| `--sd-color-dim` | `#b4b4bb` | What marks out of focus turn to when `highlight` emphasises another (`chart.line`, `chart.bar`, `diagram`). Optional: falls back to `--sd-color-rule`. Lighter than muted, darker than grid (relative luminance 0.46, against 0.11 and 0.66). |
 | `--sd-color-letterbox` | `#111114` | Outside the canvas when the window is not 16:9. |
 
 `accent` and `alert` equal the palette colors their roles point at, so `{{color:accent}}` in a
@@ -50,6 +52,7 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-font-size-note` | `32px` | Notes (`role: "note"`), meta lines, big-number labels. |
 | `--sd-font-size-label` | `28px` | Axis ticks, legends, terminal text. |
 | `--sd-font-size-kicker` | `28px` | The kicker. Optional: falls back to `--sd-font-size-label`. Same value as label here. |
+| `--sd-font-size-lede` | `32px` | The message line under a title (`role: "lede"`, the slide's `lede`). |
 | `--sd-font-size-source` | `28px` | Source lines (`role: "source"`). |
 | `--sd-font-weight-body` | `400` | Body weight. |
 | `--sd-font-weight-title` | `600` | Titles, big numbers. |
@@ -83,9 +86,12 @@ markdown element names the color the audience sees ("blue", "azul").
 
 | Token | Value | Use |
 |---|---|---|
-| `--sd-duration` | `400ms` | Default transition (enter, exit, morph). |
-| `--sd-duration-fast` | `200ms` | Small changes: highlights, color. |
-| `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | Ease-in-out; short and discrete for viewers on a video call. |
+| `--sd-duration` | `400ms` | The base duration of every motion: entrances, exits, changes (charts draw over twice this). |
+| `--sd-duration-fast` | `200ms` | Quick changes: each half of a text crossfade, a highlight or badge colour change. |
+| `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | Ease-in-out; short and discrete for viewers on a video call. Every motion uses it (typing keeps a constant speed). |
+| `--sd-stagger` | `60ms` | The gap between the elements that enter on one step, and between the items of a build. |
+| `--sd-enter` | `fade` | How an element enters when its component has no build of its own: a plain fade, the quietest entrance. |
+| `--sd-motion-distance` | `16px` | How far a `rise` travels (list and chat items rise in this theme too). |
 
 ## Fonts (`fonts/`)
 

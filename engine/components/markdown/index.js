@@ -5,8 +5,9 @@
 // - `{{color:<role>}}` becomes the palette's name for that color role in the deck language, so text
 //   never names a color the theme does not show. An unknown role is an error naming the role.
 //   (Data bindings are resolved by the engine before the props reach the component.)
-// - Idempotent: update renders exactly the given props. It fades in only when the engine animates
-//   (info.animate) and the element appeared or its text changed; no inline opacity is left behind.
+// - Idempotent: update renders exactly the given props. A change of `md` fades in when the engine animates
+//   (info.animate), timed by the theme; an element that appears is moved by its box, not by itself.
+//   No inline opacity is left behind.
 import { renderBlock } from "../../core/inline.js";
 import { clearInlineStyle } from "../../core/animate.js";
 import { motion } from "../../core/kit.js";
@@ -53,12 +54,14 @@ export default {
     return {
       async update(props, info) {
         render(props);
-        const fade = info.animate && (info.entered || info.changed.includes("md"));
-        if (fade) {
-          await ctx.animate.fadeIn(root, motion(info));
+        try {
+          if (info.animate && !info.entered && info.changed.includes("md")) {
+            await ctx.animate.fadeIn(root, motion(info, ctx));
+          }
+        } finally {
+          // Idempotent end state: no inline style left behind, whether the fade ran or not.
+          clearInlineStyle(root);
         }
-        // Idempotent end state: no inline style left behind, whether the fade ran or not.
-        clearInlineStyle(root);
       },
       destroy() {
         root.remove();

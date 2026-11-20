@@ -459,6 +459,112 @@ export default {
 };
 ```
 
+## Motion
+
+Every element that appears on a forward step enters in turn: its box plays the theme's entrance (`rise` in `modern`), or a component whose catalog entry says `enter: own` builds itself. These recipes use the data of a deck made with `new` (`data/series.csv`, `data/summary.json`). They pass `validate`, `check` and `check --played` there. The stepdeck gallery's motion slides (`site/gallery/slides/motion-*.js` in the repository) show the same devices at full size.
+
+### Cards that rise in turn, then a list that builds
+
+All four elements enter on the step `go`, one stagger slot apart: `transition.stagger` (here 220 ms, instead of the theme's 80 ms) spaces them so the order reads. The list owns its entrance: in the fourth slot its three items rise one after another, with no `shown` to advance. The slide `style` lays the main region out as a three-column grid and draws the cards with theme tokens only.
+
+```js
+export default {
+  id: "cards",
+  layout: "full-bleed",
+  title: "Three steps, in order",
+  style: `
+    :scope > [data-region="main"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: calc(var(--sd-space) * 2); }
+    [data-el^="card-"] { padding: calc(var(--sd-space) * 1.5); border: var(--sd-rule-width) solid var(--sd-color-rule); border-radius: calc(var(--sd-grid) * 2); background: var(--sd-color-surface); }
+    [data-el="next"] { grid-column: 1 / -1; }
+  `,
+  elements: [
+    { id: "card-collect", region: "main", type: "markdown", from: "go", props: { md: "### Collect\n\nOne file per source." } },
+    { id: "card-clean", region: "main", type: "markdown", from: "go", props: { md: "### Clean\n\nOne script, rerun every time." } },
+    { id: "card-model", region: "main", type: "markdown", from: "go", props: { md: "### Model\n\nOne estimate, with its interval." } },
+    { id: "next", region: "main", type: "list", from: "go",
+      props: { marker: "number", items: [{ text: "Check the data" }, { text: "Fit the model" }, { text: "Write it up" }] } },
+  ],
+  steps: [{ id: "start" }, { id: "go", transition: { stagger: 220 } }],
+};
+```
+
+To give one element a motion of its own, set `enter`: a name (`fade`, `rise`, `wipe`, `pop`, `none`) or `{ motion: "pop", delay: 300, duration: 600 }` (ms; `delay` is added to its slot).
+
+### A message line that changes with each step, and a badge
+
+The slide's `lede` is the muted line under the title. Each step sets its text, and it crossfades. The badge in the notes column flips its text with the same crossfade. `tone: 0` is the first palette colour; any tone reads, because the badge darkens its text to 4.5:1 and keeps the palette colour for its border.
+
+```js
+export default {
+  id: "message",
+  layout: "figure-notes",
+  title: "Two groups, one indicator",
+  lede: "Group A rises slowly from 2015.",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/series.csv", x: "year", y: "value", series: "group", series_shown: ["Group A"],
+               axes: { x: "Year", y: "Indicator per 1,000" }, format: { x: "d", y: ",.0f" } } },
+    { id: "status", region: "notes", type: "text", props: { role: "badge", tone: 0, text: "One group" } },
+    { id: "note", region: "notes", type: "text", props: { role: "note", text: "Each step changes the line under the title." } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "one" },
+    { id: "two", set: { chart: { series_shown: ["Group A", "Group B"] }, status: { text: "Both groups" },
+                        lede: { text: "Group B starts lower, then overtakes it." } } },
+    { id: "turn", set: { chart: { annotate: [{ x: 2020, label: "2020" }] },
+                         lede: { text: "The turn comes in 2020." } } },
+  ],
+};
+```
+
+`lede` needs a `title` region (every built-in layout has one); on the `title` cover, put the line in a `subtitle` text instead (`lede-on-cover`).
+
+### A focus that moves step by step
+
+`highlight` dims every other series to the theme's neutral grey, at full opacity, with muted labels; the series in focus is drawn on top. Set it with `set` to move the focus from step to step, or with `only` for one step. `chart.bar` (a category) and `diagram` (a list of ids) take `highlight` the same way.
+
+```js
+export default {
+  id: "focus",
+  layout: "figure-notes",
+  title: "One group at a time",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/series.csv", x: "year", y: "value", series: "group",
+               axes: { x: "Year", y: "Indicator per 1,000" }, format: { x: "d", y: ",.0f" } } },
+    { id: "note", region: "notes", type: "text", props: { role: "note", text: "The rest turns grey while one group is in focus." } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "both" },
+    { id: "a", set: { chart: { highlight: "Group A" } } },
+    { id: "b", set: { chart: { highlight: "Group B" } } },
+  ],
+};
+```
+
+### A panel that holds its place
+
+`ghost` shows a dashed frame, with its label, in the space of an element that is still hidden. The frame goes when the element arrives; here the big number then counts up (its own entrance). `ghost` cannot go with `collapse: true` (`ghost-collapse`).
+
+```js
+export default {
+  id: "ghost",
+  layout: "halves",
+  title: "Method first, then the result",
+  regions: { "--align": "center" },
+  elements: [
+    { id: "method", region: "left", type: "markdown",
+      props: { md: "### 1 · Method\n\nThe same indicator, measured every year in both groups." } },
+    { id: "result", region: "right", type: "big-number", from: "result", ghost: "2 · Result",
+      props: { value: "{{data/summary.json#/latest_b}}", format: ",.1f", label: "Group B in 2024, per 1,000" } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [{ id: "method" }, { id: "result" }],
+};
+```
+
 ## A custom component driven by `stage`
 
 After `node "$STEPDECK/cli/index.js" new-component my.flow my-talk`, the starter's example slide (`components/my.flow/example.js`) is a complete spec. The component draws a list and marks items up to `stage`; `advance` drives `stage`.

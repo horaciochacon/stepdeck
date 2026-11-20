@@ -166,10 +166,14 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="terminal"]`):
 
 ## Motion
 
-The engine animates an update only when you move forward by exactly one step, in a live presentation with motion on. Within such a step, the terminal moves only when `shown` grew:
+The engine animates an update only when you move forward by exactly one step, in a live presentation with motion on.
 
-1. **Typing.** When `typing` is true, the previous `shown` was 0 and the script has a non-empty `command`, the command is typed character by character at 28 ms per character, capped at 1400 ms in total. This speed is fixed: it ignores the step's `transition.duration`, even `0`.
-2. **New lines.** The log lines whose events are new in this step fade in, one after the other, 60 ms apart. Each fade lasts the step's `transition.duration` when set, else the theme's `--sd-duration` (400 ms in `academic-light`). With a duration of 0 they appear at once. The new lines stay hidden while the command types.
+**Entrance.** The terminal builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and it plays the build from an empty terminal to the state of that step: the typing and the new lines below, as if the session went from `shown: 0` to the step's `shown`. Its command and lines are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the terminal shows its state at once; with `enter: "none"` nothing moves.
+
+While the terminal stays visible, it moves only when `shown` grew:
+
+1. **Typing.** When `typing` is true, the previous `shown` was 0 and the script has a non-empty `command`, the command is typed character by character at 28 ms per character, capped at 1400 ms in total. This speed is fixed; only a step `transition.duration` of `0` skips it.
+2. **New lines.** The log lines whose events are new in this step fade in (the shared `fade` motion), one after the other, `--sd-stagger` apart (80 ms in `modern`, 60 ms in `academic-light`, or the step's `transition.stagger`). Each fade lasts the theme's `--sd-duration` (400 ms), or the step's `transition.duration` when set. With a duration of 0 they appear at once. The new lines stay hidden while the command types.
 
 The title, the task list and the file list change at once, without motion.
 

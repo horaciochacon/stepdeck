@@ -63,15 +63,17 @@ The runtime. Everything here runs in the browser. Modules marked "Node too" are 
 | `constants.js` | `CANVAS` (1920 x 1080), `DEFAULT_THEME`, `DEFAULT_LAYOUT` (`full-bleed`). Node too. |
 | `fold.js` | The pure fold: `stateAt`, `stepIndex`, `stepCount`, `expandSugar` (`from`, `at`, `advance`), `mergePatch`, `initialElements` (the slide `title` and `section` sugar), `parseStepRef`. Node too. |
 | `accent.js` | The accent phrase in titles: `parseAccent`, `stripAccent`, `escapeAccent`, `accentMarks`. Pure; the `text` component, the reveal placeholder, `dump` and `validate` share it. |
-| `controller.js` | `SlideController`: mount, `goTo`, abort, watchdog, `ctx` (including `ctx.mount` for nested components), error recording. Runs without a DOM. |
-| `layout.js` | `renderSlideFrame`: canvas, regions, element boxes, visibility classes, error boxes, scoped `slide.style`, `slide.regions` variables. |
+| `controller.js` | `SlideController`: mount, `goTo`, abort, watchdog, `ctx` (including `ctx.mount` for nested components and `ctx.motion`), error recording. On an animating step it holds entering elements to their stagger slot and asks the frame to move their boxes. Runs without a DOM. |
+| `layout.js` | `renderSlideFrame`: canvas, regions, element boxes, visibility classes, ghost placeholders, box entrances and exits (`enterBox`, `exitBox`), error boxes, scoped `slide.style`, `slide.regions` variables. |
 | `registry.js` | `createRegistry`: resolves a component name to its module and schema, deck components first. Did-you-mean on unknown names. Node too. |
 | `bindings.js` | `{{path#pointer \| format}}` resolution in props. Node too. |
 | `data.js` | The data loader (JSON, GeoJSON, CSV), path rules, CSV parsing and typing, caching. The caller injects `read`. Node too. |
 | `format.js` | `makeFormat(lang)`: d3-format with the deck's locale (`en`, `es`). Node too. |
 | `i18n.js` | `t(lang, key)` for the few engine strings. |
 | `animate.js` | `ctx.animate`: `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. All abort-aware; they settle at the end state when aborted. |
-| `kit.js` | Small shared helpers for the engine and components (`message`, `escapeHtml`, `memoAsync`, `motion`, `motionMs`, SVG and measuring helpers). |
+| `motion.js` | The named motions (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`), `parseEase`, the theme timing (`timing`: `--sd-duration`, `--sd-easing`, `--sd-stagger`, overridden by a step's `transition`) and `makeMotion(tokens)`, which is `ctx.motion`. Writes only `opacity`, `transform` and `clip-path` and puts them back. The frame moves element boxes with it; components move their parts. |
+| `choreography.js` | Pure rules for a step's entrances and exits: which system plays an entrance (`resolveEntrance`: the box, or a component with `"x-enter": "own"`), the exit (`resolveExit`), and the stagger slots (`slotDelays`). Used by the controller. Node too. |
+| `kit.js` | Small shared helpers for the engine and components (`message`, `escapeHtml`, `memoAsync`, `motion`, `motionMs`, `focusPaint`, `tweenColor`, SVG and measuring helpers). |
 | `chart.js` | Helpers shared by `chart.line` and `chart.bar` (`loadTable`, tick formats). |
 | `color.js` | WCAG 2 color math (`parseHex`, `luminance`, `contrast`). Node too: the CLI uses it for palette and contrast checks. |
 | `inline.js` | `renderBlock` and `renderInline`: sanitized Markdown through the vendored marked. |
@@ -116,6 +118,7 @@ Every move, from a key press in reveal or from the CLI, goes through `STEPDECK.g
    - `setVisible` when its visibility changed;
    - `update(props, info)` when its resolved props or its visibility changed (deep compare). The first `goTo` after mount updates every element, with `prev: null` and `animate: false`.
    `info.animate` is true only when animation was asked for and the target is exactly one step after the last applied step. `STEPDECK.flags.animate` asks for it unless the page is in capture mode, is a presenter preview frame (`?receiver`), or has reduced motion without `?motion=full`. Elements update in parallel. Each gets its own `AbortSignal`, linked to the step's signal.
+   On an animating step, elements that change visibility move (`core/choreography.js`): an entering element is held until its stagger slot, then shown and updated in one synchronous block while its box plays its entrance (`enterBox`), or the component builds itself when it declares `"x-enter": "own"` (`info.entrance`); a leaving element plays its out motion (`exitBox`) and is hidden when it ends. Abort releases every held element at once. See [Animation and motion](../guide/animation-and-motion.md#choreography-within-a-step).
 6. **Settle.** `STEPDECK.settled()` waits for the navigation queue, then for the host's pending work (reveal: neighbour prefetches), then for the controller's loop. It waits for every element's update, hidden ones included.
 
 ### Errors along the way

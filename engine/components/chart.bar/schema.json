@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.bar",
   "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker. The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["data", "x", "y"],
@@ -74,7 +75,7 @@
     },
     "highlight": {
       "type": "string",
-      "description": "Category to emphasize; the other bars turn a muted theme color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",
+      "description": "Category to emphasize; the other bars turn the theme's dim color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",
       "examples": ["with an agent"],
       "x-transition": "fade"
     },

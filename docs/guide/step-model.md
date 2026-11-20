@@ -227,7 +227,7 @@ Details:
 | notes | `step.notes`, else `slide.notes`, else `""` |
 | transition | `step.transition`, else `null` |
 
-Neither folds: each step reads only its own entry. The transition reaches every component that updates at that step (`info.transition`). `transition.duration` (ms) overrides the components' default motion length at that step. `transition.stagger` is accepted and passed on, but no built-in component reads it yet. See [Animation and motion](animation-and-motion.md) for which moves animate and the default durations.
+Neither folds: each step reads only its own entry. The transition times everything that moves at that step: the elements that enter or leave, and every component that updates (`info.transition`). `transition.duration` (ms) replaces the theme's durations at that step, and `0` snaps it. `transition.stagger` (ms) replaces the theme's `--sd-stagger`, the gap between the elements that enter on the step and between the items of a build. See [Animation and motion](animation-and-motion.md) for which moves animate and the default durations.
 
 ## Fields that are accepted but have no effect yet
 
@@ -235,7 +235,6 @@ The schema accepts these, and validate passes them, but nothing in this version 
 
 | Field | Where | Note |
 |---|---|---|
-| `enter`, `exit` (`fade`, `rise`, `wipe`, `draw`, `none`) | element | Components animate their own entry instead. |
 | `sections` | deck | No section footer is drawn. |
 | `seconds` | slide | Records planned speaking time only. |
 

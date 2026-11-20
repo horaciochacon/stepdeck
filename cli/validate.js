@@ -25,8 +25,14 @@
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
 //             theme's tokens.css). Each problem is reported once, at the first step where it appears.
+//   ghost     an element may not set ghost together with collapse: true (ghost-collapse, error).
+//   exit      an exit object with a delay is a warning (exit-delay-ignored): exits start at t = 0.
+//   budget    an element that enters on a step (k >= 1) must settle well inside the 10 s watchdog: its stagger
+//             hold (slot x stagger + its own delay) plus its entrance (the box motion, or the component's own
+//             build estimated from its props) reaching BUDGET_MS is a warning (motion-budget).
 //   kicker    an author element may not take the reserved id `kicker` (reserved-id, error); a slide `section` on
 //             a layout without a title region is not shown (kicker-no-region, warning; not unknown-region).
+//   lede      a slide `lede` on a layout of kind cover is a warning (lede-on-cover): a cover has a subtitle region.
 //   accent    a title (the sugar, or a text element `title` with accent true) at each step: an odd number of
 //             unescaped `*` is title-accent; an empty phrase `**` (markdown bold habit) is accent-empty (both
 //             warnings; both show their asterisks as written).
@@ -46,6 +52,9 @@ import { createRegistry, suggest } from "#engine/core/registry.js";
 import { makeFormat } from "#engine/core/format.js";
 import { problem, componentProblem } from "./problems.js";
 import { diagramProblems, diagramSpacing } from "#engine/components/diagram/place.js";
+import { DEFAULT_ENTER, motionParts, resolveEntrance, slotDelays } from "#engine/core/choreography.js";
+import { MOTION_NAMES, timing } from "#engine/core/motion.js";
+import { TYPE_MAX_MS, typingMs } from "#engine/core/animate.js";
 import { checkPalette } from "./palettes.js";
 import { createAjv, compile, readSchema } from "./ajv.js";
 import { THEME_NAME, engineFor, exactCase, findTheme, importDeck, isObject, listDirs, readBuiltins } from "./engine.js";
@@ -65,6 +74,9 @@ const BRACES = /\{\{[^{}]*\}\}/g;
 const FILE_REF = /^(?![/.])(?!.*\.\.)[\w./-]+\.(json|geojson|csv|png|jpe?g|gif|svg|webp|avif|mp4|webm|mp3|wav|ogg)$/i;
 const RESERVED_IDS = ["kicker"];
 const FIGURE = (type) => /^chart\./.test(type) || type === "map" || /^map\./.test(type) || type === "big-number";
+// An element settles within the controller's 10 s watchdog, its hold and entrance included; validate warns
+// well before that (motion-budget), so a slow machine still has room.
+const BUDGET_MS = 8000;
 
 const quote = (list) => list.map((s) => `'${s}'`).join(", ");
 const didYouMean = (name, known) => suggest(String(name), known);
@@ -97,6 +109,8 @@ function walkStrings(value, path, fn) {
   }
 }
 
+const BOUNDS = { maximum: (n) => `${n} or less`, minimum: (n) => `${n} or more`, exclusiveMaximum: (n) => `below ${n}`, exclusiveMinimum: (n) => `above ${n}` };
+
 const pointerToPath = (p) => p.split("/").slice(1).map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~")).join(".");
 
 /** Short description of a schema branch, for anyOf/oneOf limits. */
@@ -112,17 +126,27 @@ function describe(schema) {
 
 /**
  * Ajv errors -> [{ rule: "unknown"|"invalid", path, key?, allowed?, measured, limit, fix }].
- * Errors inside an anyOf/oneOf branch are folded into the anyOf error itself.
+ * Errors inside an anyOf/oneOf branch are folded into the anyOf error itself, except when the value is an object
+ * and a branch takes objects (a motion's `{ motion, delay?, duration? }`): that branch's own errors are reported
+ * instead of the union's, so an unknown name gets its did-you-mean and a number its bound.
  */
 function schemaErrors(errors, data) {
   const list = errors ?? [];
+  const valueAt = (e) => (e.instancePath === "" ? data : lookupPointer(data, e.instancePath).value);
   const unions = list.filter((e) => e.keyword === "anyOf" || e.keyword === "oneOf");
-  const inUnion = (e) => unions.some((u) => u !== e && e.instancePath.startsWith(u.instancePath) && e.schemaPath.startsWith(`${u.schemaPath}/`));
+  // union -> the index of its object branch, for a union whose value is an object
+  const objectBranch = new Map();
+  for (const u of unions) {
+    const i = isObject(valueAt(u)) && Array.isArray(u.schema) ? u.schema.findIndex((b) => isObject(b) && b.type === "object") : -1;
+    if (i !== -1) objectBranch.set(u, i);
+  }
+  const under = (e, u) => (e.instancePath === u.instancePath || e.instancePath.startsWith(`${u.instancePath}/`)) && e.schemaPath.startsWith(`${u.schemaPath}/`);
+  const inUnion = (e) => unions.some((u) => u !== e && under(e, u) && !(objectBranch.has(u) && e.schemaPath.startsWith(`${u.schemaPath}/${objectBranch.get(u)}/`)));
   const out = [];
   for (const e of list) {
-    if (inUnion(e)) continue;
+    if (inUnion(e) || objectBranch.has(e)) continue;
     const path = pointerToPath(e.instancePath);
-    const value = e.instancePath === "" ? data : lookupPointer(data, e.instancePath).value;
+    const value = valueAt(e);
     const shown = JSON.stringify(value);
     const at = path || "(root)";
     if (e.keyword === "additionalProperties") {
@@ -148,10 +172,17 @@ function schemaErrors(errors, data) {
     } else if (e.keyword === "type") {
       out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: `must be ${e.params.type}`, fix: `make ${at} ${article(String(e.params.type))}` });
     } else if (e.keyword === "anyOf" || e.keyword === "oneOf") {
-      const branches = (e.schema ?? []).map(describe);
-      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: `must be ${branches.join(" or ")}`, fix: `make ${at} ${branches.join(" or ")}` });
+      const list = e.schema ?? [];
+      const branches = list.map(describe);
+      // A string that misses a name list inside the union (a motion name, say) gets the same did-you-mean as a plain enum.
+      const names = list.filter((b) => isObject(b) && Array.isArray(b.enum)).flatMap((b) => b.enum.filter((v) => typeof v === "string"));
+      const close = typeof value === "string" ? didYouMean(value, names) : null;
+      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: `must be ${branches.join(" or ")}`, fix: close ? `set ${at} to "${close}"` : `make ${at} ${branches.join(" or ")}` });
+    } else if (BOUNDS[e.keyword]) {
+      // A number out of range (a motion's delay or duration, a step's stagger): name the bound in the fix.
+      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: e.message, fix: `make ${at} ${BOUNDS[e.keyword](e.params.limit)}` });
     } else {
-      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: e.message, fix: `change ${at} so it ${e.message.replace(/^must /, "is ")}` });
+      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: e.message, fix: `change ${at} so it ${e.message.replace(/^must be /, "is ").replace(/^must /, "does ")}` });
     }
   }
   return out;
@@ -183,6 +214,58 @@ function csvHeader(text) {
   }
   header.push(field);
   return header;
+}
+
+/**
+ * How long a component's own build lasts (ms), estimated from its props the way the built-ins play it, for the
+ * motion budget. `own` is the element's enter.duration (undefined when unset). A build moves its parts over the
+ * step's duration (the theme's --sd-duration, or transition.duration), each one stagger after the previous; the
+ * charts draw over twice the theme's duration and big-number counts over 2.25 times it (a step's or an element's
+ * duration is used as it is). A component that is not a built-in counts as one duration.
+ */
+function buildMs(type, props, own, tokens, transition) {
+  const t = timing(tokens, { transition });
+  const p = own ?? t.duration; // one part's motion
+  const run = (n, last = p) => (n > 0 ? (n - 1) * t.stagger + last : 0); // n parts, one stagger apart
+  const P = isObject(props) ? props : {};
+  const list = (key) => (Array.isArray(P[key]) ? P[key] : []);
+  const count = (key) => (Number.isInteger(P.shown) ? Math.max(0, Math.min(list(key).length, P.shown)) : list(key).length);
+  switch (type) {
+    case "chart.line":
+    case "chart.bar":
+      return own ?? timing(tokens, { transition }, { factor: 2 }).duration;
+    case "big-number":
+      return own ?? timing(tokens, { transition }, { factor: 2.25 }).duration;
+    case "list": {
+      // A done tick draws after its row has risen.
+      const ticks = P.marker === "check" && (Array.isArray(P.done) ? P.done.length > 0 : Number(P.done) > 0);
+      return run(count("items"), ticks ? 2 * p : p);
+    }
+    case "chat": {
+      // With `typing` the newest message is typed after it has risen.
+      const n = count("messages");
+      const newest = n > 0 ? list("messages")[n - 1]?.text : "";
+      return run(n, p + (P.typing === true && p > 0 ? typingMs(String(newest ?? "").length) : 0));
+    }
+    case "terminal": {
+      // The command types first (its length is in the script: counted at the typing cap), then the lines fade in.
+      const n = Number.isInteger(P.shown) ? Math.max(0, P.shown) : 0;
+      return n > 0 ? (P.typing === true && p > 0 ? TYPE_MAX_MS : 0) + run(n) : 0;
+    }
+    case "diagram": {
+      // Groups fade, then the nodes pop in turn, then the edges draw in turn (a drawn edge's label fades after it).
+      const shown = (id) => !Array.isArray(P.shown) || P.shown.includes(id);
+      const groups = list("groups").some((g) => shown(g?.id)) ? p : 0;
+      const nodes = list("nodes").filter((n) => shown(n?.id)).length;
+      const edges = list("edges").filter((e) => shown(e?.id ?? `${e?.from}->${e?.to}`));
+      const labelled = edges.some((e) => e?.label && e.dashed !== true);
+      return groups + run(nodes) + run(edges.length, labelled ? 2 * p : p);
+    }
+    case "timeline":
+      return 2 * p; // the fill, then the current stop
+    default:
+      return p;
+  }
 }
 
 export async function validate(deckDir, opts = {}) {
@@ -223,6 +306,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
 
   // Theme, palette and the palette check (g).
   let spacing = {}; // diagram grid gap and group padding (px) from the theme tokens, when known
+  let themeTokens = {}; // the theme's tokens.css custom properties (motion timing for the motion budget)
   const theme = typeof deck.theme === "string" ? deck.theme : DEFAULT_THEME;
   const themeDir = join(engine, "themes", theme);
   const found = findTheme(engine, theme, readdir);
@@ -243,7 +327,8 @@ export async function runValidate(deckDir, { slide: only } = {}) {
       add({ rule: "unknown-palette", measured: `palette '${deck.palette}'`, limit: `palettes of ${theme}: ${Object.keys(all).join(", ")}`, fix: close ? `set palette: "${close}" in deck.js` : `use one of ${quote(Object.keys(all))} or remove palette from deck.js` });
     }
     const tokens = readFileSync(join(themeDir, "tokens.css"), "utf8");
-    spacing = diagramSpacing(tokenValues(tokens));
+    themeTokens = tokenValues(tokens);
+    spacing = diagramSpacing(themeTokens);
     const background = /--sd-color-background\s*:\s*([^;]+);/.exec(tokens)?.[1].trim();
     if (!background || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(background)) {
       add({ rule: "theme-background", measured: `--sd-color-background: ${background ?? "missing"}`, limit: "a hex color", fix: `declare --sd-color-background as a hex color in themes/${theme}/tokens.css` });
@@ -340,7 +425,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
         }
         if (!REGION_HOOKS.includes(hook)) {
           hookProblem = true;
-          add({ rule: "layout-schema", measured: `${file}: hooks maps '${region}' to '${hook}'`, limit: `a region hook: ${REGION_HOOKS.join(", ")}`, fix: `use ${REGION_HOOKS.join(", ")}; title, kicker and accent are core's own hooks` });
+          add({ rule: "layout-schema", measured: `${file}: hooks maps '${region}' to '${hook}'`, limit: `a region hook: ${REGION_HOOKS.join(", ")}`, fix: `use ${REGION_HOOKS.join(", ")}; title, kicker, lede and accent are core's own hooks` });
         }
       }
     }
@@ -352,6 +437,12 @@ export async function runValidate(deckDir, { slide: only } = {}) {
     }
   }
   const knownComponents = [...deckComponents, ...builtins];
+  // Whether a component builds its own entrance ("x-enter": "own" in its schema.json); unreadable counts as no.
+  const owns = new Map();
+  const ownsFor = (name) => {
+    if (!owns.has(name)) owns.set(name, registry.schema(name).then((schema) => isObject(schema) && schema["x-enter"] === "own", () => false));
+    return owns.get(name);
+  };
 
   // ---------------- slides ----------------
   const ids = Array.isArray(deck.slides) ? deck.slides.filter((s) => typeof s === "string") : [];
@@ -361,7 +452,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   const load = createDataLoader({ root: deckRoot, read: (p) => readFile(p) });
   const layouts = new Map();
 
-  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, knownComponents, deckComponents, builtinSet, layouts, spacing };
+  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, ownsFor, knownComponents, deckComponents, builtinSet, layouts, spacing, tokens: themeTokens };
   for (const id of selected) {
     const where = exact(join(deckRoot, "slides"), `${id}.js`);
     if (!where.ok) {
@@ -394,21 +485,24 @@ function stepLabel(spec, i) {
   return isObject(s) && typeof s.id === "string" ? s.id : String(i);
 }
 
-function layoutRegions(name, env) {
+/** A layout's { regions (names), kind } from its schema.json (read once), or null when it has none. */
+function layoutInfo(name, env) {
   if (!env.layouts.has(name)) {
     const dir = join(env.engine, "layouts");
-    let regions = null;
+    let info = null;
     if (env.exact(dir, `${name}/schema.json`).ok) {
       try {
-        regions = (JSON.parse(readFileSync(join(dir, name, "schema.json"), "utf8")).regions ?? []).map((r) => r.name);
+        const schema = JSON.parse(readFileSync(join(dir, name, "schema.json"), "utf8"));
+        info = { regions: (schema.regions ?? []).map((r) => r.name), kind: schema.kind ?? "content" };
       } catch {
-        regions = null;
+        info = null;
       }
     }
-    env.layouts.set(name, regions);
+    env.layouts.set(name, info);
   }
   return env.layouts.get(name);
 }
+const layoutRegions = (name, env) => layoutInfo(name, env)?.regions ?? null;
 
 async function validateSlide(spec, env) {
   const { add } = env;
@@ -453,6 +547,14 @@ async function validateSlide(spec, env) {
     // reserved too, but an author may define it: it replaces the title sugar.)
     if (RESERVED_IDS.includes(d.id)) add({ slide, element: d.id, rule: "reserved-id", measured: `element id '${d.id}'`, limit: `reserved: ${quote(RESERVED_IDS)} (core's element for the slide's section)`, fix: `rename the element '${d.id}' (and the patches that target it); to show a kicker, set the slide's section` });
   }
+  for (const d of defs) {
+    if (d.collapse === true && d.ghost !== undefined && d.ghost !== false) {
+      add({ slide, element: d.id, rule: "ghost-collapse", measured: `element '${d.id}' has ghost and collapse: true`, limit: "ghost needs the element's space; collapse removes it", fix: "remove collapse, or remove ghost: a collapsed element has no space to show a placeholder" });
+    }
+    if (isObject(d.exit) && d.exit.delay !== undefined) {
+      add({ slide, element: d.id, rule: "exit-delay-ignored", measured: `exit.delay = ${JSON.stringify(d.exit.delay)}`, limit: "exits start at t = 0: an exit has no delay", fix: "remove delay from exit; to leave later, hide the element on a later step" }, "warning");
+    }
+  }
   const seenSteps = new Set();
   steps.forEach((s, i) => {
     if (typeof s.id !== "string") return;
@@ -495,6 +597,11 @@ async function validateSlide(spec, env) {
       const close = didYouMean(region, regions);
       add({ slide, element: d.id, rule: "unknown-region", measured: `region '${region}'`, limit: `regions of ${layout}: ${regions.join(", ")}`, fix: close ? `set region: "${close}"` : `set region to one of ${quote(regions)}, or give the element a box` });
     }
+  }
+
+  // A message line on a cover: the cover has a subtitle region for that line.
+  if (typeof spec.lede === "string" && layoutInfo(layout, env)?.kind === "cover") {
+    add({ slide, rule: "lede-on-cover", measured: `lede "${spec.lede}" on layout ${layout} (a cover)`, limit: "a cover puts its line under the title in the subtitle region", fix: "use the subtitle region on a cover: move the line into a text element with region: \"subtitle\", and remove lede" }, "warning");
   }
 
   // Step references in sugar, and advance length.
@@ -564,6 +671,12 @@ async function validateSlide(spec, env) {
     validator.set(d.id, await env.validatorFor(d.type));
   }
 
+  // Whether each element's component builds its own entrance (for the motion budget).
+  const ownType = new Map();
+  for (const d of all) {
+    if (!ownType.has(d.type)) ownType.set(d.type, env.builtinSet.has(d.type) || env.deckComponents.has(d.type) ? await env.ownsFor(d.type) : false);
+  }
+
   // Fold every step and check the resolved state.
   const once = new Set();
   const report = (key, p, severity) => {
@@ -592,11 +705,41 @@ async function validateSlide(spec, env) {
     if (prev && isDeepStrictEqual(prev, state.elements)) {
       add({ slide, step, rule: "noop-step", measured: "same elements, props and visibility as the previous step", limit: "a step changes something on screen", fix: `merge step '${step}' into the previous step (move its notes there), or give it a patch` }, "warning");
     }
+    if (prev) checkBudget(step, prev, state);
     prev = state.elements;
 
     const changed = Object.entries(state.elements).filter(([id, el]) => !(checked.has(id) && isDeepStrictEqual(checked.get(id), el.props)));
     for (const [id, el] of changed) checked.set(id, el.props);
     await Promise.all(changed.map(([id, el]) => checkElement(id, el, k, step)));
+  }
+
+  /**
+   * The motion budget of the elements that enter on this step (visible now, hidden at the previous step), played
+   * forward: each is held to its stagger slot (slide order), then plays its entrance, all inside its watchdog.
+   */
+  function checkBudget(step, before, state) {
+    const t = timing(env.tokens, { transition: state.transition });
+    if (!(t.duration > 0)) return; // a zero duration snaps the whole step: nothing is held
+    const themeEnter = MOTION_NAMES.includes(env.tokens["--sd-enter"]) ? env.tokens["--sd-enter"] : DEFAULT_ENTER;
+    const entering = elementIds.filter((id) => state.elements[id]?.visible && before[id] && !before[id].visible);
+    const delays = Object.fromEntries(entering.map((id) => [id, motionParts(state.elements[id].enter).delay]));
+    const holds = slotDelays(entering, t.stagger, delays);
+    entering.forEach((id, slot) => {
+      const e = state.elements[id];
+      const r = resolveEntrance(e.enter, { owns: ownType.get(e.type) === true, themeEnter });
+      const box = r.box ? (r.duration ?? t.duration) : 0;
+      const build = r.own === "draw" ? buildMs(e.type, e.props, r.duration, env.tokens, state.transition) : 0;
+      const entrance = Math.max(box, build);
+      const total = holds[id] + entrance;
+      if (total < BUDGET_MS) return;
+      const what = r.own === "draw" ? `its own build (${e.type})` : r.box ? `box motion '${r.box}'` : "no motion";
+      add({
+        slide, element: id, step, rule: "motion-budget",
+        measured: `enters in slot ${slot}: held ${holds[id]} ms (${slot} x ${t.stagger} ms stagger + ${delays[id]} ms delay), then ${entrance} ms of ${what}: ${total} ms`,
+        limit: `under ${BUDGET_MS} ms (each element settles within the 10 s watchdog)`,
+        fix: "shorten its delay or duration, or the step's transition.stagger, or split the step so fewer elements enter at once",
+      }, "warning");
+    });
   }
 
   async function checkElement(id, el, k, step) {

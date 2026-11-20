@@ -16,8 +16,10 @@
 //     before mount) and the shape (box, pill, circle, or none for text) is drawn around it. A label too long
 //     for its cell is never shrunk: the foreignObject does not clip, so `check` sees text that leaves the
 //     region.
-// `shown` hides the parts it does not list (visibility, so nothing moves) and `highlight` dims the shapes
-// of the parts it does not list and mutes their text (text keeps full opacity, so contrast holds).
+// `shown` hides the parts it does not list (visibility, so nothing moves) and `highlight` dims the parts it
+// does not list: their outlines and lines turn the theme's --sd-color-dim (a node or group is filled with the
+// background color, opacity stays 1) and their text turns muted, so contrast holds. The focused parts are drawn
+// after (above) the dimmed ones in each layer, in an order that depends on the state alone.
 //
 // Gap and group padding come from the theme tokens --sd-diagram-gap and --sd-diagram-pad, read through
 // ctx.tokens (diagramSpacing: 3 x and 1 x --sd-space when a theme lacks them). A labelled group's top padding
@@ -26,17 +28,25 @@
 //
 // Every update first writes the state straight into the DOM (data attributes), so the DOM after settled()
 // is the same whether a state was jumped to or played. With info.animate it then plays the change from the
-// previous state: newly shown groups fade in, newly shown nodes fade and scale in (staggered), then newly
-// shown edges draw from source to target (dashed ones fade); a highlight change fades the shapes and the
-// node text color. All motion is bound to info.signal (an abort snaps to the end state) and the inline
-// styles it used are removed afterwards.
+// previous state: newly shown groups fade in (ctx.motion.in "fade") and newly shown nodes pop in ("pop",
+// staggered by --sd-stagger), then newly shown edges draw from source to target (dashed ones fade); a
+// highlight change tweens the outline, fill and text colors over --sd-duration-fast. All the rest takes the theme's timing. All motion
+// is bound to info.signal (an abort snaps to the end state) and the inline styles it used are removed
+// afterwards.
+//
+// The diagram owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it plays
+// the same build from an empty "before" (nothing shown) to this step's state, while its box stays still, in
+// order: the groups fade in, then the nodes pop in one after another, then the edges draw. The parts' start
+// state (opacity 0) is written before the first await, in the same task as the engine shows the element, so
+// nothing paints built first. Any other update of a freshly shown element (an entrance of "none", or a box
+// that moves instead) snaps to the end state.
 //
 // An id that names nothing (an edge end, a group member, `shown`, `highlight`) is an element error naming
 // it. Overlapping sibling groups still render; `validate` reports them.
 import { renderInline } from "../../core/inline.js";
 import { placeDiagram, diagramProblems, diagramSpacing, edgeId } from "./place.js";
 import { clearInlineStyle } from "../../core/animate.js";
-import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, lerp, inkMix } from "../../core/kit.js";
+import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, tweenColor } from "../../core/kit.js";
 
 const MARKER = { size: 6 }; // arrowhead length and width, in stroke widths (markerUnits="strokeWidth")
 
@@ -68,6 +78,7 @@ export default {
     const svg = svgEl("svg", { class: "sd-diagram" }, el);
     let signature = null;
     let parts = []; // [{ id, kind, g, shape, line, text }]
+    let layers = null; // the svg groups the parts are drawn in, by kind: { group, node, edge, tag }
     const touched = new Set(); // nodes whose inline style the motion wrote
 
     const measure = () => ({ w: measureWidth(el, ctx), h: measureHeight(el, ctx) });
@@ -99,12 +110,13 @@ export default {
       const marker = svgEl("marker", { id: markerId, viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: MARKER.size, markerHeight: MARKER.size, markerUnits: "strokeWidth", orient: "auto-start-reverse" }, defs);
       svgEl("path", { class: "sd-diagram-arrowhead", d: "M0,0 L10,5 L0,10 z" }, marker);
       // Edge labels are the top layer, so a node never covers them.
-      const layers = {
+      const drawn = {
         groups: svgEl("g", { class: "sd-diagram-groups" }, svg),
         edges: svgEl("g", { class: "sd-diagram-edges" }, svg),
         nodes: svgEl("g", { class: "sd-diagram-nodes" }, svg),
         tags: svgEl("g", { class: "sd-diagram-edge-labels" }, svg),
       };
+      layers = { group: drawn.groups, node: drawn.nodes, edge: drawn.edges, tag: drawn.tags };
       parts = [];
       const opts = { width: w, height: h, gap, pad, legend: legendH };
 
@@ -115,7 +127,7 @@ export default {
       for (const def of props.nodes) {
         const cell = cells.get(def.id);
         if (!cell) continue;
-        const g = svgEl("g", { class: "sd-diagram-node", "data-part": "node", "data-id": def.id, "data-shape": def.shape }, layers.nodes);
+        const g = svgEl("g", { class: "sd-diagram-node", "data-part": "node", "data-id": def.id, "data-shape": def.shape }, drawn.nodes);
         const area = labelArea(def.shape, cell);
         const fo = svgEl("foreignObject", { class: "sd-diagram-label-box", x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }, g);
         const content = htmlEl("div", "sd-diagram-label-content", htmlEl("div", "sd-diagram-label", fo));
@@ -145,7 +157,7 @@ export default {
       const groups = (props.groups ?? []).filter((g) => layout.groups.has(g.id)).sort((a, b) => layout.groups.get(b.id).depth - layout.groups.get(a.id).depth);
       for (const def of groups) {
         const box = layout.groups.get(def.id);
-        const g = svgEl("g", { class: "sd-diagram-group", "data-part": "group", "data-id": def.id, "data-depth": box.depth, "data-dashed": String(def.dashed === true) }, layers.groups);
+        const g = svgEl("g", { class: "sd-diagram-group", "data-part": "group", "data-id": def.id, "data-depth": box.depth, "data-dashed": String(def.dashed === true) }, drawn.groups);
         const shape = svgEl("rect", { class: "sd-diagram-shape", x: box.x, y: box.y, width: box.w, height: box.h, rx: grid }, g);
         if (box.label) {
           const fo = svgEl("foreignObject", { class: "sd-diagram-legend-box", x: box.label.x, y: box.label.y, width: Math.max(1, box.label.w), height: box.label.h }, g);
@@ -163,7 +175,7 @@ export default {
         const def = edgeDefs.get(e.id);
         const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
         const k = len > back ? (len - back) / len : 1;
-        const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true) }, layers.edges);
+        const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true) }, drawn.edges);
         const line = svgEl("line", { class: "sd-diagram-line", x1: e.x1, y1: e.y1, x2: e.x1 + (e.x2 - e.x1) * k, y2: e.y1 + (e.y2 - e.y1) * k, "marker-end": `url(#${markerId})` }, g);
         let tag = null;
         if (def?.label) {
@@ -173,13 +185,30 @@ export default {
           const boxW = Math.min(w, Math.max(len, legendH * 4));
           const boxH = legendH * 3;
           const at = horizontal ? { x: mx - boxW / 2, y: my - grid - boxH } : { x: mx + grid, y: my - boxH / 2 };
-          tag = svgEl("g", { class: "sd-diagram-edge-tag", "data-for": e.id }, layers.tags);
+          tag = svgEl("g", { class: "sd-diagram-edge-tag", "data-for": e.id }, drawn.tags);
           const fo = svgEl("foreignObject", { class: "sd-diagram-edge-label-box", x: at.x, y: at.y, width: boxW, height: boxH }, tag);
           const row = htmlEl("div", "sd-diagram-edge-label-row", fo);
           row.dataset.side = horizontal ? "above" : "right";
           htmlEl("span", "sd-diagram-edge-label", row).textContent = def.label;
         }
         parts.push({ id: e.id, kind: "edge", g, line, tag, dashed: def?.dashed === true });
+      }
+    }
+
+    /**
+     * Draws the focused parts after (above) the dimmed ones, in each layer: the build order, dimmed first. It
+     * depends on the state alone, so a played step and a jump end with the same order.
+     */
+    function stack() {
+      const place = (layer, nodes) => {
+        if (!nodes.every((n, i) => layer.children[i] === n)) layer.append(...nodes);
+      };
+      const dimmed = (g) => g.dataset.dim === "true";
+      const first = (list) => [...list.filter((g) => dimmed(g)), ...list.filter((g) => !dimmed(g))];
+      for (const kind of ["group", "node", "edge"]) {
+        const own = parts.filter((p) => p.kind === kind);
+        place(layers[kind], first(own.map((p) => p.g)));
+        if (kind === "edge") place(layers.tag, first(own.filter((p) => p.tag).map((p) => p.tag)));
       }
     }
 
@@ -203,6 +232,7 @@ export default {
           g.dataset.dim = String(highlight !== null && !highlight.has(p.id));
         }
       }
+      stack();
       return { rebuilt };
     }
 
@@ -220,73 +250,82 @@ export default {
 
     return {
       async update(props, info = {}) {
-        const animate = canAnimate(info);
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // An element that just appeared without a drawn entrance (none, or its box moves) snaps.
+        const animate = draw || (canAnimate(info) && !info.entered);
         const dimmable = (p) => p.shape ?? p.line;
-        // The previous state, read before it is overwritten (only when there is motion to play).
+        // The previous state, read before it is overwritten (only when there is motion to play). A drawn
+        // entrance builds from nothing: no part is shown yet.
+        const paintOf = (p) => {
+          const cs = getComputedStyle(dimmable(p));
+          return { stroke: cs.stroke, fill: cs.fill, text: p.text ? getComputedStyle(p.text).color : null };
+        };
         const snapshot = () =>
-          new Map(parts.map((p) => [p.id, { visible: p.g.dataset.visible === "true", dim: p.g.dataset.dim === "true", opacity: Number(getComputedStyle(dimmable(p)).opacity) }]));
-        const before = animate ? snapshot() : null;
+          new Map(parts.map((p) => [p.id, { visible: p.g.dataset.visible === "true", dim: p.g.dataset.dim === "true", paint: paintOf(p) }]));
+        const before = animate && !draw ? snapshot() : null;
         let rebuilt;
         try {
           ({ rebuilt } = renderState(props));
         } finally {
           clearInline();
         }
-        if (!animate || rebuilt) return;
+        if (!animate || (!draw && rebuilt)) return;
 
-        const opts = motion(info);
+        const opts = motion(info, ctx);
+        const fast = motion(info, ctx, { fast: true }); // a focus change
+        if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
         const now = snapshot();
         const appearing = { group: [], node: [], edge: [] };
-        const fades = []; // highlight changes on parts visible before and after
+        const fades = []; // highlight changes on parts visible before and after: their colors move
         for (const p of parts) {
-          const a = before.get(p.id);
+          const a = before?.get(p.id) ?? { visible: false, dim: now.get(p.id)?.dim };
           const b = now.get(p.id);
           if (!a || !b) continue;
           if (b.visible && !a.visible) {
             appearing[p.kind].push(p);
+            // The start state, written now: nothing of the part paints before its slot.
             styleOf(p.g).opacity = "0";
             if (p.tag) styleOf(p.tag).opacity = "0";
           } else if (b.visible && a.dim !== b.dim) {
-            fades.push({ p, from: a.opacity, to: b.opacity, dim: b.dim });
+            fades.push({ p, from: a.paint, to: b.paint });
           }
         }
 
-        const tween = (from, to, paint, o = opts) => ctx.animate.tween(from, to, paint, o);
-        const fadeIn = (p, o) =>
-          tween(0, 1, (t) => {
-            const s = styleOf(p.g);
-            s.opacity = String(t);
-            if (p.kind === "node") s.transform = t >= 1 ? "" : `scale(${0.9 + 0.1 * t})`;
-          }, o);
-        const fadeDim = ({ p, from, to, dim }) => {
+        // Hand a part's start state to the motion in one synchronous block: it saves the (now empty) inline
+        // opacity, writes the start again, and puts the saved state back at the end.
+        const play = (node, name, o) => {
+          styleOf(node).opacity = "";
+          return ctx.motion.in(node, name, { ...opts, signal: o.signal });
+        };
+        // The outline, the fill and the text color of a part move to those of its new state.
+        const fadeDim = ({ p, from, to }) => {
           const shape = styleOf(dimmable(p));
           const text = p.text ? styleOf(p.text) : null;
-          // Text moves between the ink and the muted color; colors stay theme tokens.
-          return tween(0, 1, (t) => {
-            shape.opacity = String(lerp(from, to, t));
-            if (text) text.color = inkMix(dim ? 1 - t : t);
-          });
+          return Promise.all([
+            ...["stroke", "fill"].filter((k) => from[k] !== to[k]).map((k) => tweenColor(ctx, from[k], to[k], (c) => { shape[k] = c; }, fast)),
+            ...(text && from.text !== to.text ? [tweenColor(ctx, from.text, to.text, (c) => { text.color = c; }, fast)] : []),
+          ]);
         };
         const drawEdge = async (p, o) => {
-          const g = styleOf(p.g);
-          const tag = p.tag ? styleOf(p.tag) : null;
-          const fadeTag = () => (tag ? tween(0, 1, (t) => (tag.opacity = String(t)), o) : null);
           if (p.dashed) {
-            await Promise.all([tween(0, 1, (t) => (g.opacity = String(t)), o), fadeTag()]);
+            await Promise.all([play(p.g, "fade", o), p.tag ? play(p.tag, "fade", o) : null]);
             return;
           }
-          g.opacity = "";
+          styleOf(p.g).opacity = "";
           const line = styleOf(p.line);
           line.markerEnd = "none"; // the arrowhead lands once the line reaches the target
-          await ctx.animate.drawPath(p.line, o);
+          await ctx.animate.drawPath(p.line, { ...opts, signal: o.signal });
           line.markerEnd = "";
-          await fadeTag();
+          if (p.tag) await play(p.tag, "fade", o);
         };
 
         try {
+          const groups = Promise.all(appearing.group.map((p) => play(p.g, "fade", opts)));
+          // A drawn entrance builds in order, groups before nodes; a later step moves them together.
+          if (draw) await groups;
           await Promise.all([
-            ...appearing.group.map((p) => fadeIn(p, opts)),
-            ctx.animate.stagger(appearing.node, (p, _i, o) => fadeIn(p, o), opts),
+            groups,
+            ctx.animate.stagger(appearing.node, (p, _i, o) => play(p.g, "pop", o), opts),
             ...fades.map(fadeDim),
           ]);
           await ctx.animate.stagger(appearing.edge, (p, _i, o) => drawEdge(p, o), opts);

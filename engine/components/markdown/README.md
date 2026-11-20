@@ -18,8 +18,11 @@ Behaviour:
   and only `http:`, `https:`, `mailto:`, `#anchor` and relative URLs are kept. Any other scheme (`javascript:`, `data:`,
   or one hidden with entities, tabs or spaces) renders as plain text for a link, and as the alt text for an image.
   (Remote URLs are not this component's concern; `validate` rejects them.)
-- **Idempotent.** `update` renders exactly the given props. It fades in (`ctx.animate.fadeIn`) only when the
-  engine animates (`info.animate`) and the element appeared or `md` changed, and leaves no inline opacity behind.
+- **Idempotent.** `update` renders exactly the given props and leaves no inline opacity behind.
+- **Motion.** An element that appears is moved by its box (the engine's entrance), not by the component. A change of
+  `md` while the element stays visible fades the new content in (`ctx.animate.fadeIn`) when the engine animates
+  (`info.animate`), over the theme's `--sd-duration` (or the step's `transition.duration`). Jumps, backward moves,
+  capture and previews render instantly.
 - Parsed with `marked` (vendored in `vendor/marked/`, MIT).
 
 See `example.js` for a slide that uses it.

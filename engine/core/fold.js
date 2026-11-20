@@ -49,6 +49,9 @@ export function parseStepRef(value) {
  * reserved id `title`. It defaults to `accent: true`; props that set `accent` (e.g. false) keep their value. */
 const accentTitle = (id, type) => id === "title" && type === "text";
 const withAccent = (props) => (isObject(props) && props.accent === undefined ? { ...props, accent: true } : props);
+/** The same for the message line: a text element with the reserved id `lede` defaults to `role: "lede"`. */
+const roleLede = (id, type) => id === "lede" && type === "text";
+const withRole = (props) => (isObject(props) && props.role === undefined ? { ...props, role: "lede" } : props);
 
 /**
  * The slide's element definitions in order, with sugar expanded (never mutating the slide):
@@ -57,12 +60,22 @@ const withAccent = (props) => (isObject(props) && props.accent === undefined ? {
  *     layout without a title region drops it (core/layout.js placedSlide);
  *   - `title: "x"` becomes the element with the reserved id `title` (region "title", props { text, accent: true })
  *     unless the slide defines one itself;
- *   - an explicit text element with id `title` gets `accent: true` unless its props set `accent`.
+ *   - an explicit text element with id `title` gets `accent: true` unless its props set `accent`;
+ *   - `lede: "x"` becomes the element with the reserved id `lede` (region "title", props { text, role: "lede" }),
+ *     right after the title (or first without one), unless the slide defines one itself; an explicit text
+ *     element with id `lede` gets `role: "lede"` unless its props set `role`.
  */
 export function initialElements(slide) {
-  const defs = (slide.elements ?? []).map((d) => (d && accentTitle(d.id, d.type) && withAccent(d.props) !== d.props ? { ...d, props: withAccent(d.props) } : d));
+  const defs = (slide.elements ?? []).map((d) => {
+    if (d && accentTitle(d.id, d.type) && withAccent(d.props) !== d.props) return { ...d, props: withAccent(d.props) };
+    if (d && roleLede(d.id, d.type) && withRole(d.props) !== d.props) return { ...d, props: withRole(d.props) };
+    return d;
+  });
   if (typeof slide.title === "string" && !defs.some((d) => d.id === "title")) {
     defs.unshift({ id: "title", type: "text", region: "title", props: { text: slide.title, accent: true } });
+  }
+  if (typeof slide.lede === "string" && !defs.some((d) => d.id === "lede")) {
+    defs.splice(defs.findIndex((d) => d.id === "title") + 1, 0, { id: "lede", type: "text", region: "title", props: { text: slide.lede, role: "lede" } });
   }
   if (typeof slide.section === "string" && slide.section !== "" && !defs.some((d) => d.id === "kicker")) {
     defs.unshift({ id: "kicker", type: "text", region: "title", props: { text: slide.section } });
@@ -143,6 +156,7 @@ export function stateAt(slide, k) {
       collapse: d.collapse === true,
       enter: d.enter,
       exit: d.exit,
+      ghost: d.ghost,
     };
     if (d.region !== undefined) e.region = d.region;
     if (d.box !== undefined) e.box = clone(d.box);
@@ -162,9 +176,12 @@ export function stateAt(slide, k) {
     s.props = mergePatch(s.props, p);
   }
 
-  // A replace on the title drops its props: the accent default comes back, so every step reads the same way.
+  // A replace on the title (or the lede) drops its props: the accent (role) default comes back, so every step
+  // reads the same way.
   const title = state.get("title");
   if (title && accentTitle("title", title.type)) title.props = withAccent(title.props);
+  const lede = state.get("lede");
+  if (lede && roleLede("lede", lede.type)) lede.props = withRole(lede.props);
 
   const titleText = title?.props?.text;
   return {

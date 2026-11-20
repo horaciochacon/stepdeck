@@ -51,6 +51,28 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-el.sd-hidden { visibility: hidden !important; }
 .sd-el.sd-collapsed { display: none !important; }
 
+/* Ghost placeholder (an element's `ghost`): while its element is hidden, a dashed frame over the element's box
+   with the label centred. It shows only on a revealed canvas, and not on a collapsed element (no box) or a failed
+   one (its error shows instead). The label is real text: `check` measures its size and contrast like any other. */
+.sd-ghost { display: none; }
+.sd-canvas:not(.sd-booting) .sd-el.sd-hidden:not(.sd-failed) > .sd-ghost {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sd-space);
+  border: var(--sd-rule-width) dashed var(--sd-color-rule);
+  text-align: center;
+  visibility: visible;
+}
+.sd-ghost-label {
+  font-size: var(--sd-font-size-label);
+  line-height: var(--sd-line-height-tight);
+  color: var(--sd-color-muted);
+  overflow-wrap: anywhere;
+}
+
 /* Errors stay visible whatever the step says (after the rules above: same layer and specificity). */
 .sd-el.sd-failed { visibility: visible !important; display: block !important; }
 .sd-error {
@@ -73,6 +95,21 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-text.sd-role-note { font-size: var(--sd-font-size-note); color: var(--sd-color-muted); }
 .sd-text.sd-role-label { font-size: var(--sd-font-size-label); color: var(--sd-color-muted); }
 .sd-text.sd-role-source { font-size: var(--sd-font-size-source); color: var(--sd-color-muted); }
+/* The message line and the badge: a fallback for a theme without its own rules (a theme's theme.css, in the
+   later sd-theme layer, wins). The lede token falls back to the note size, which is above the audience minimum. */
+.sd-text.sd-role-lede { font-size: var(--sd-font-size-lede, var(--sd-font-size-note)); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
+.sd-text.sd-role-badge {
+  display: inline-block;
+  padding: 0.1em 0.7em;
+  font-size: var(--sd-font-size-label);
+  font-weight: var(--sd-font-weight-strong, 600);
+  line-height: var(--sd-line-height-tight);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sd-color-accent);
+  border: 2px solid currentColor;
+  border-radius: 9999px;
+}
 
 /* markdown: size and line height are inherited (body text from the canvas, or the hook it sits in); the
    first and last blocks sit flush with the element box. */
@@ -140,8 +177,9 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* diagram component: one svg sized to the element; node, edge and group labels are html in foreignObjects so
    they wrap. Node shapes are sized to their label (measured on .sd-diagram-label-content); edge labels sit in
    a top layer with a background backing. foreignObjects do not clip, so a label too long for its node shows (and `check` sees it) rather
-   than being cut. Hidden parts keep their place (visibility). `highlight` fades the shapes and lines of the
-   other parts and mutes their text; text itself never fades, so contrast holds. */
+   than being cut. Hidden parts keep their place (visibility). `highlight` turns the shapes and lines of the other
+   parts to the theme's dim color (opacity stays 1; a node or group keeps a background fill) and mutes their text,
+   so contrast holds. */
 .sd-diagram { display: block; overflow: visible; }
 .sd-diagram foreignObject { overflow: visible; }
 .sd-diagram [data-visible="false"] { visibility: hidden !important; }
@@ -152,10 +190,12 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-group[data-dashed="true"] .sd-diagram-shape,
 .sd-diagram-edge[data-dashed="true"] .sd-diagram-line { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
 .sd-diagram-line { fill: none; stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
-.sd-diagram-arrowhead { fill: var(--sd-color-ink); stroke: none; }
-.sd-diagram-node[data-dim="true"] .sd-diagram-shape,
-.sd-diagram-group[data-dim="true"] .sd-diagram-shape,
-.sd-diagram-edge[data-dim="true"] .sd-diagram-line { opacity: 0.3; }
+/* The arrowhead takes its line's stroke (a browser without context-stroke keeps the ink). */
+.sd-diagram-arrowhead { fill: var(--sd-color-ink); fill: context-stroke; stroke: none; }
+/* A text node has no shape to dim. */
+.sd-diagram-node[data-dim="true"]:not([data-shape="text"]) .sd-diagram-shape,
+.sd-diagram-group[data-dim="true"] .sd-diagram-shape { stroke: var(--sd-color-dim, var(--sd-color-rule)); fill: var(--sd-color-background); }
+.sd-diagram-edge[data-dim="true"] .sd-diagram-line { stroke: var(--sd-color-dim, var(--sd-color-rule)); }
 .sd-diagram-node[data-dim="true"] .sd-diagram-text { color: var(--sd-color-muted); }
 .sd-diagram-label { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
 .sd-diagram-label-content { max-width: 100%; display: flex; flex-direction: column; align-items: center; gap: calc(var(--sd-grid) / 2); }

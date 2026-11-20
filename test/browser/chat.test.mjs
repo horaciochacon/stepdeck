@@ -14,11 +14,15 @@ import {
   expectBackwardEqualsJump,
   expectInterruptEqualsJump,
   expectAnimatedStepMoves,
+  elementHtml,
+  htmlAfterJump,
+  sampleFrames,
 } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const deck = fileURLToPath(new URL("../fixtures/decks/chat/", import.meta.url));
 const pages = deckPages("test/fixtures/decks/chat/");
+const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 const EXCHANGE = ["none", "one", "two", "three"];
 const TYPING = ["first", "second", "third"];
 
@@ -298,4 +302,105 @@ test("check is clean on the chat slides", async () => {
     const problems = await check(deck, { slide });
     assert.deepEqual(problems.map(formatProblem), [], slide);
   }
+});
+
+// Owned entrance. Per frame: each message's computed opacity, whether the third (not yet shown) message shows, how much of the newest message's text is shown
+// (innerText skips the hidden rest) and whether any inline style is left on a message.
+const buildProbe = (el) => {
+  const msgs = [...el.querySelectorAll(".sd-chat-msg")];
+  return {
+    ops: msgs.map((m) => Number(getComputedStyle(m).opacity)),
+    thirdShown: getComputedStyle(msgs[2]).visibility === "visible",
+    typed: msgs[1].querySelector(".sd-chat-text").innerText.length,
+    inline: msgs.some((m) => m.getAttribute("style") !== null),
+  };
+};
+
+test("chat entering builds then types", async () => {
+  await withPage({ root, url: motion.url("chat-enters", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const full = await page.evaluate(() => document.querySelectorAll('[data-el="chat"] .sd-chat-text')[1].textContent.length);
+    const r = await sampleFrames(page, "chat-enters", "go", "chat", buildProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the chat is shown");
+    const first = shown[0];
+    assert.ok(first.ms >= 150, `held for the third slot, 2 x 80 ms (first shown at ${first.ms.toFixed(0)} ms)`);
+    assert.ok(first.ops.slice(0, 2).every((o) => o < 0.5) && first.typed === 0, `nothing shows built at the first shown frame (${first.ops}, ${first.typed} chars)`);
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the messages rise themselves");
+
+    // The messages rise one after the other, then the newest types, never before it is fully in.
+    assert.ok(shown.every((f) => f.ops[0] >= f.ops[1]), "the first message leads the second");
+    assert.ok(shown.some((f) => f.ops[1] > 0.1 && f.ops[1] < 0.9 && f.typed === 0), "the newest message was rising while still untyped");
+    const typing = shown.filter((f) => f.typed > 0 && f.typed < full);
+    assert.ok(typing.length >= 3, `the newest message was seen part-typed (${typing.length} frames)`);
+    assert.ok(typing.every((f) => f.ops[1] >= 0.99), "the newest message types only once it has risen");
+    assert.ok(shown.every((f) => !f.thirdShown), "the third message stays hidden: shown is 2");
+    assert.equal(r.end.typed, full, "the end state is the full text");
+    assert.equal(r.end.inline, false, "no inline style left on a message");
+    assert.ok(r.settledMs < 6000, `the build settles (${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "chat"), await htmlAfterJump(ctx, page, motion, "chat-enters", "go", "chat"));
+
+    // Played, backward and interrupted (while held, and mid-build) equal a jump.
+    const steps = ["start", "go", "more"];
+    await expectJumpEqualsPlayed(ctx, page, { pages: motion, slide: "chat-enters", steps, id: "chat" });
+    await expectBackwardEqualsJump(ctx, page, { pages: motion, slide: "chat-enters", steps, id: "chat" });
+    await expectInterruptEqualsJump(ctx, page, { pages: motion, slide: "chat-enters", from: "start", via: "go", to: "more", id: "chat" });
+    const jumped = await htmlAfterJump(ctx, page, motion, "chat-enters", "more", "chat");
+    await ctx.open(motion.url("chat-enters", "step=start&motion=full"));
+    const midBuild = await page.evaluate(async () => {
+      const msg = () => document.querySelectorAll('[data-el="chat"] .sd-chat-msg')[1];
+      window.STEPDECK.goTo("chat-enters", "go");
+      let building = false;
+      for (let i = 0; i < 300 && !building; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        building = msg().querySelector(".sd-chat-ghost") !== null && getComputedStyle(document.querySelector('[data-el="chat"]')).visibility === "visible";
+      }
+      window.STEPDECK.goTo("chat-enters", "more");
+      await window.STEPDECK.settled();
+      return building;
+    });
+    assert.ok(midBuild, "the newest message was being typed when the next step came");
+    assert.equal(await elementHtml(page, "chat"), jumped, "interrupted mid-typing equals a jump");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("the messages' start state is written before update awaits; a shown element without an entrance snaps", async () => {
+  await withPage({ root, url: pages.url("exchange", "step=none") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const { default: chat } = await import("../components/chat/index.js");
+      const { animate } = await import("../core/animate.js");
+      const { makeMotion } = await import("../core/motion.js");
+      const host = document.createElement("div");
+      document.querySelector(".sd-canvas").appendChild(host);
+      const ctx = { animate, motion: makeMotion({}), tokens: {} };
+      const messages = [{ role: "user", text: "One" }, { role: "agent", text: "Two" }, { role: "user", text: "Three" }];
+      const props = { messages, shown: 2, typing: true };
+      const hidden = { ...props, shown: 0 };
+      const inst = await chat.mount(host, hidden, ctx);
+      const msgs = () => [...host.querySelectorAll(".sd-chat-msg")];
+      const signal = new AbortController().signal;
+      const info = (extra) => ({ prev: hidden, changed: ["shown"], animate: true, entered: true, entrance: null, signal, ...extra });
+
+      const building = inst.update(props, info({ entrance: { motion: "draw", duration: 120 } }));
+      const sync = { ops: msgs().map((m) => m.style.opacity), ghost: host.querySelectorAll(".sd-chat-ghost").length };
+      await building;
+      const afterDraw = msgs().map((m) => m.getAttribute("style"));
+      const out = {};
+      for (const [name, entrance] of [["none", { motion: "none", duration: 0 }], ["moved", null]]) {
+        await inst.update(hidden, info({ entered: false, animate: false }));
+        const p = inst.update(props, info({ entrance }));
+        out[name] = { ops: msgs().map((m) => m.style.opacity), ghost: host.querySelectorAll(".sd-chat-ghost").length };
+        await p;
+      }
+      return { sync, afterDraw, out };
+    });
+    assert.deepEqual(r.sync.ops, ["0", "0", ""], "the shown messages start at opacity 0, the hidden one is left alone");
+    assert.equal(r.sync.ghost, 1, "the newest message is split for typing at once");
+    assert.deepEqual(r.afterDraw, [null, null, null], "no inline style after the build");
+    for (const name of ["none", "moved"]) {
+      assert.deepEqual(r.out[name], { ops: ["", "", ""], ghost: 0 }, `${name}: nothing is held back or split`);
+    }
+  });
 });

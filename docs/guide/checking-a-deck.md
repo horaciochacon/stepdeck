@@ -61,7 +61,7 @@ validate: 3 slides, 0 errors, 0 warnings
 Problems have a severity:
 
 - **error**: the deck is wrong. Any error makes validate exit 1.
-- **warning**: the deck works, but something is probably unintended. The warnings are `noop-step` (a step whose state equals the previous step's, so a click shows nothing new), `kicker-no-region` (a `section` on a layout with no `title` region), `title-accent` (an unmatched `*` in a title) and `accent-empty` (`**` in a title). Warnings are printed with a `warning:` prefix, and validate still exits 0 when there are only warnings.
+- **warning**: the deck works, but something is probably unintended. The warnings are `noop-step` (a step whose state equals the previous step's, so a click shows nothing new), `kicker-no-region` (a `section` on a layout with no `title` region), `lede-on-cover` (a `lede` on a cover layout), `title-accent` (an unmatched `*` in a title), `accent-empty` (`**` in a title), `exit-delay-ignored` (a `delay` in an `exit`, where it does nothing) and `motion-budget` (an element whose stagger hold plus entrance reaches 8000 ms, close to the 10 s an element has to settle). Warnings are printed with a `warning:` prefix, and validate still exits 0 when there are only warnings.
 
 Narrow it to one slide with `--slide`:
 

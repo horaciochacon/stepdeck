@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validate } from "../../cli/validate.js";
 import { copyEngine } from "../../cli/engine.js";
 import { formatProblem } from "../../cli/problems.js";
-import { cpSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -331,6 +331,17 @@ test("kicker-no-region: section on a layout without a title region is a warning,
   }
 });
 
+test("lede-on-cover: a lede on a cover layout is a warning that points at the subtitle region", async () => {
+  const problems = await validate(fixture("lede-on-cover"));
+  assert.deepEqual(rules(problems), ["lede-on-cover"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "warning");
+  assert.equal(p.slide, "s");
+  assert.match(p.measured, /lede/);
+  assert.match(p.limit, /title/);
+  assert.match(p.fix, /subtitle region/);
+});
+
 test("layout schema hooks: a key that is not a declared region, and a value that is not a region hook", async () => {
   const region = await validate(fixture("layout-hook-region"));
   assert.deepEqual(rules(region), ["layout-schema"], show(region));
@@ -339,4 +350,135 @@ test("layout schema hooks: a key that is not a declared region, and a value that
   assert.deepEqual(rules(value), ["layout-schema"], show(value));
   assert.match(value[0].measured, /hooks maps 'main' to 'title'/);
   assert.match(value[0].limit, /subtitle, meta, statement/);
+});
+
+test("ghost-collapse: a ghost on a collapsing element is an error", async () => {
+  const problems = await validate(fixture("ghost-collapse"));
+  assert.deepEqual(rules(problems), ["ghost-collapse"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "error");
+  assert.equal(p.element, "note");
+  assert.match(p.fix, /remove collapse, or remove ghost/);
+});
+
+test("an unknown motion name gets one schema problem suggesting the nearest name", async () => {
+  const problems = await validate(fixture("bad-motion"));
+  assert.deepEqual(rules(problems), ["spec-invalid"], show(problems));
+  assert.equal(problems[0].element, "note");
+  assert.match(problems[0].fix, /rise/);
+});
+
+test("enter and exit objects and a ghost label validate clean", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-motion-")));
+  try {
+    cpSync(fixture("bad-motion"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "slides", "s.js"), `export default {
+  id: "s", title: "Motion objects",
+  elements: [
+    { id: "p", type: "text", props: { text: "Hello." }, from: 1, enter: { motion: "pop", delay: 120 }, exit: { motion: "fade", duration: 200 }, ghost: "2 · Adjust" },
+    { id: "q", type: "text", props: { text: "World." }, from: 1, ghost: true, enter: "draw" },
+  ],
+  steps: [{ id: "a" }, { id: "b" }],
+};
+`);
+    const problems = await validate(tmp);
+    assert.deepEqual(problems, [], show(problems));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+/** Validates the bad-motion deck with its slide's elements and steps replaced (written to a temporary copy). */
+async function validateSlideBody(body) {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-motion-")));
+  try {
+    cpSync(fixture("bad-motion"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", title: "Motion", ${body} };\n`);
+    return await validate(tmp);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+test("an object-form enter reports its own problem: an unknown motion name gets a did-you-mean", async () => {
+  const problems = await validateSlideBody(`elements: [{ id: "note", type: "text", props: { text: "Hello." }, enter: { motion: "rize" } }]`);
+  const p = only(problems, "spec-invalid");
+  assert.equal(problems.length, 1, show(problems));
+  assert.equal(p.element, "note");
+  assert.match(p.measured, /^enter\.motion = "rize"$/);
+  assert.match(p.limit, /one of "fade", "rise"/);
+  assert.match(p.fix, /set enter\.motion to "rise"/);
+  assert.doesNotMatch(`${p.limit} ${p.fix}`, /or an object/, "the value is an object already");
+});
+
+test("an object-form enter or exit over its bounds names the bound, and an unknown key gets a did-you-mean", async () => {
+  const problems = await validateSlideBody(`elements: [
+    { id: "late", type: "text", props: { text: "Late." }, enter: { motion: "rise", delay: 6000 } },
+    { id: "slow", type: "text", props: { text: "Slow." }, exit: { motion: "fade", duration: 7000 } },
+    { id: "typo", type: "text", props: { text: "Typo." }, enter: { motion: "pop", dealy: 100 } },
+  ]`);
+  assert.deepEqual(rules(problems), ["spec-invalid", "spec-invalid", "unknown-key"], show(problems));
+  const late = problems.find((p) => p.element === "late");
+  assert.match(late.measured, /^enter\.delay = 6000$/);
+  assert.match(late.limit, /<= 5000/);
+  const slow = problems.find((p) => p.element === "slow");
+  assert.match(slow.measured, /^exit\.duration = 7000$/);
+  assert.match(slow.limit, /<= 5000/);
+  const typo = problems.find((p) => p.element === "typo");
+  assert.match(typo.fix, /rename 'dealy' to 'delay'/);
+});
+
+test("transition.stagger is at most 1000 ms and transition.duration at most 5000 ms", async () => {
+  const problems = await validateSlideBody(`elements: [{ id: "note", type: "text", props: { text: "Hello." }, from: "b" }],
+    steps: [{ id: "a" }, { id: "b", transition: { stagger: 1500, duration: 6000 } }]`);
+  assert.deepEqual(rules(problems), ["spec-invalid", "spec-invalid"], show(problems));
+  assert.deepEqual(problems.map((p) => p.step), ["b", "b"]);
+  assert.ok(problems.some((p) => /transition\.stagger = 1500/.test(p.measured) && /<= 1000/.test(p.limit)), show(problems));
+  assert.ok(problems.some((p) => /transition\.duration = 6000/.test(p.measured) && /<= 5000/.test(p.limit)), show(problems));
+});
+
+test("motion-budget: an element whose hold plus entrance reaches 8000 ms is a warning; box, list build and count-up", async () => {
+  const problems = await validate(fixture("motion-budget"));
+  assert.deepEqual(rules(problems), ["motion-budget", "motion-budget", "motion-budget"], show(problems));
+  const at = Object.fromEntries(problems.map((p) => [p.element, p]));
+  assert.deepEqual(Object.keys(at).sort(), ["c", "n", "tasks"]);
+  for (const p of problems) {
+    assert.equal(p.severity, "warning");
+    assert.equal(p.step, "go");
+    assert.match(p.limit, /8000 ms/);
+    assert.match(p.fix, /delay|duration|stagger/);
+    assert.match(p.fix, /split the step/);
+  }
+  assert.match(at.c.measured, /slot 2/);
+  assert.match(at.c.measured, /8200 ms/);
+  assert.match(at.tasks.measured, /8400 ms/, "six items, 1000 ms apart, after a 3000 ms hold");
+  assert.match(at.n.measured, /8100 ms/, "the count-up is 2.25 x --sd-duration");
+});
+
+test("motion-budget: the same entrances a little earlier are clean", async () => {
+  const problems = await validate(fixture("motion-budget-under"));
+  assert.deepEqual(problems, [], show(problems));
+});
+
+test("motion-budget: no hold on a step of duration 0, and an owned chart's explicit duration is not doubled", async () => {
+  const snap = await validateSlideBody(`elements: [
+    { id: "a", type: "text", props: { text: "x" }, from: "b", enter: { motion: "rise", delay: 5000, duration: 5000 } },
+  ], steps: [{ id: "a0" }, { id: "b", transition: { duration: 0 } }]`);
+  assert.deepEqual(snap, [], show(snap));
+  const own = await validateSlideBody(`elements: [
+    { id: "n", type: "big-number", props: { value: 1, format: "d" }, from: "b", enter: { motion: "draw", delay: 4000, duration: 3900 } },
+    { id: "src", type: "text", props: { role: "source", text: "Synthetic." } },
+  ], steps: [{ id: "a0" }, { id: "b" }]`);
+  assert.deepEqual(own, [], show(own));
+});
+
+test("exit-delay-ignored: an exit object with a delay is a warning (exits start at once)", async () => {
+  const problems = await validate(fixture("exit-delay"));
+  assert.deepEqual(rules(problems), ["exit-delay-ignored"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "warning");
+  assert.equal(p.element, "note");
+  assert.match(p.measured, /delay/);
+  assert.match(p.limit, /t = 0/);
+  assert.match(p.fix, /remove delay/);
 });

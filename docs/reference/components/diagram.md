@@ -85,7 +85,7 @@ Both slides pass `validate` and `check --played`. For more nesting, see `example
 | `edges` | array of edge objects | no | none | snap | Arrows from one node or group to another. See [Edges](#edges). |
 | `groups` | array of group objects | no | none | snap | Boxes drawn around their members. See [Groups](#groups). |
 | `shown` | string array | no | everything | draw | The ids visible at this step: nodes, groups and edges (by edge id). When set, anything not listed is hidden but keeps its place. |
-| `highlight` | string array | no | none | fade | The ids emphasised. Everything else dims. An empty array means no highlight. |
+| `highlight` | string array | no | none | fade | The ids emphasised. Everything else dims: shapes and lines turn the theme's dim color and their text turns muted. An empty array means no highlight. |
 
 The schema sets `additionalProperties: false` on the props and on every node, edge and group object, so a misspelled key is a `validate` error, `unknown-prop`, with a path such as `prop 'nodes.0.colour'`. A wrong type or a value outside an enum (for example `shape: "square"`) is `prop-invalid`.
 
@@ -130,7 +130,7 @@ All state lives in `shown` and `highlight`. Change them per step with `set`, as 
 - **`shown` absent**: every node, group and edge is visible.
 - **`shown` set**: only the listed ids are visible. An edge is visible only when `shown` lists its edge id, even if both its ends are shown, so add the edge id at the step where the arrow should appear. A hidden part keeps its place (`visibility: hidden`), so nothing moves when parts appear.
 - **A group's box covers all its members, shown or not**, so a group never resizes between steps. Showing a group does not show its members; list them too.
-- **`highlight`**: the listed parts keep full strength. On every other part, the shape or line drops to opacity 0.3 and a node's label text turns `--sd-color-muted`. Text never fades, so its contrast holds. Edge labels, group labels and subs (which are already muted) do not change.
+- **`highlight`**: the listed parts keep full strength and are drawn after (above) the others. On every other part, the outline of a node or group and the line of an edge (with its arrowhead) turn `--sd-color-dim`, a node or group is filled with the background color, and a node's label text turns `--sd-color-muted`. The arrowhead follows its line through `fill: context-stroke`, which Chromium supports; in a browser without it, a dimmed edge keeps an ink arrowhead. Opacity stays 1, so text keeps its contrast. A `text` node has no shape to dim. Edge labels, group labels and subs (which are already muted) do not change.
 
 ## Text
 
@@ -173,12 +173,14 @@ The component reads the element's size when it renders. If `cols`, `rows`, `node
 
 The engine animates only a forward move of exactly one step. A jump, a backward move and the first render draw the target state at once, and going back hides parts with no motion. Either way, every update first writes the target state and removes any inline style the motion used, so the markup after playing a step equals the markup after jumping to it. See [Animation and motion](../../guide/animation-and-motion.md).
 
-On an animated step, the motion runs in this order:
+**Entrance.** The diagram builds its own entrance (`"x-enter": "own"`). On the step where the element appears (through [`from` or `at`](../../guide/step-model.md#visibility-sugar-from-and-at)), in its stagger slot, its box stays still and its parts build from nothing to the state of that step, in the order below. Its parts are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the diagram shows its state at once; with `enter: "none"` nothing moves.
 
-1. At the same time: newly shown groups fade in; newly shown nodes fade in and scale from 0.9 to 1, staggered 60ms apart; parts whose highlight changed tween their shape opacity and their label text color between ink and muted.
+On an animated step (the entrance, or a step while the diagram stays visible), the motion runs in this order:
+
+1. At the same time (in the entrance, the groups first, then the nodes): newly shown groups fade in (the shared `fade` motion); newly shown nodes pop in (the shared `pop` motion: they fade in while scaling up from 0.92), one after another, `--sd-stagger` apart (80ms in `modern`, 60ms in `academic-light`, or the step's `transition.stagger`); parts whose highlight changed tween their outline, fill and label text color, in RGB over `--sd-duration-fast`.
 2. Then newly shown edges, staggered: a solid edge draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed edge fades in with its label instead of drawing.
 
-Each tween lasts the step's `transition.duration` (see [Setting a duration on a step](../../guide/animation-and-motion.md#setting-a-duration-on-a-step)) if set, else 400ms. Only parts that change visibility or highlight move. A step that also rebuilds the drawing (see [Size](#size)) plays no motion. When the whole element appears (through [`from` or `at`](../../guide/step-model.md#visibility-sugar-from-and-at)) without a change to `shown` at that step, its parts do not animate.
+Each motion lasts the theme's `--sd-duration` (400ms in both built-in themes), or the step's `transition.duration` (see [Setting a duration on a step](../../guide/animation-and-motion.md#setting-a-duration-on-a-step)) if set; the highlight color tween lasts `--sd-duration-fast` (200ms in both themes) instead, or the step's `transition.duration`. Only parts that change visibility or highlight move. A step that also rebuilds the drawing (see [Size](#size)) plays no motion.
 
 ## Errors and problems
 

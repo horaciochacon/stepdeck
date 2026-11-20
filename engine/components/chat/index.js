@@ -6,15 +6,23 @@
 //     the label on top (the "El encargo" prompt look).
 // Every update first writes that state straight into the DOM (renderState), so the DOM after settled() is
 // the same whether a state was jumped to or played. With info.animate and `shown` increasing by a forward
-// step, the new messages rise and fade in, staggered, and with `typing` the newest one is then typed: its
+// step, the new messages rise and fade in (ctx.motion.in "rise" with the theme's timing), staggered by
+// --sd-stagger, and with `typing` the newest one is then typed: its
 // text is split into a typed part and an untyped rest that stays in place but hidden, so the bubble keeps
 // the size it ends at. All motion is bound to info.signal, so an aborted step snaps to its end state; the
 // text is rebuilt whole and the inline styles removed afterwards: nothing from the motion survives.
+//
+// The chat owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it plays
+// the same build from an empty "before" (no message shown) to this step's state, while its box stays still:
+// the visible messages rise in, staggered, and then the newest types when `typing` is set. The messages'
+// start state (opacity 0) is written before the first await, in the same task as the engine shows the
+// element. Any other update of a freshly shown element (an entrance of "none", or a box that moves instead)
+// snaps to the end state.
 // `text` is inline Markdown through the shared sanitizing renderer (core/inline.js).
 // Sizes and colors come from theme tokens via CSS (core/stepdeck.css); no color or size is set here.
 import { renderInline } from "../../core/inline.js";
 import { deriveChat } from "./derive.js";
-import { clearInlineStyle, rise, typeCount, typingMs } from "../../core/animate.js";
+import { clearInlineStyle, typeCount, typingMs } from "../../core/animate.js";
 import { el as make, canAnimate, motion } from "../../core/kit.js";
 
 export default {
@@ -105,22 +113,31 @@ export default {
 
     return {
       async update(props, info = {}) {
-        const animate = canAnimate(info);
-        const before = animate ? rows.map(({ msg }) => msg.dataset.visible === "true") : null;
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // An element that just appeared without a drawn entrance (none, or its box moves) snaps.
+        const animate = draw || (canAnimate(info) && !info.entered);
+        // A drawn entrance builds from no message shown.
+        const before = animate && !draw ? rows.map(({ msg }) => msg.dataset.visible === "true") : null;
         const { derived, rebuilt } = renderState(props);
         clearInline();
-        if (!animate || rebuilt || before.length !== rows.length) return;
-        const fresh = derived.messages.filter((m) => m.visible && !before[m.index]);
+        if (!animate || (!draw && (rebuilt || before.length !== rows.length))) return;
+        const fresh = derived.messages.filter((m) => m.visible && !(before?.[m.index] ?? false));
         if (fresh.length === 0) return;
 
-        const opts = motion(info);
+        const opts = motion(info, ctx);
+        if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
+        // The start state, written now: nothing of a message paints before its slot.
         for (const m of fresh) rows[m.index].msg.style.opacity = "0";
         // Only the newest message is typed, and only when it just appeared.
         const typed = props.typing === true && fresh.some((m) => m.index === derived.newest) ? prepareTyping(rows[derived.newest], derived.messages[derived.newest].text) : null;
 
         try {
           await ctx.animate.stagger(fresh, async (m, _i, o) => {
-            await rise(ctx.animate, rows[m.index].msg, o);
+            const msg = rows[m.index].msg;
+            // Hand the start state to the motion in one synchronous block: it saves the (now empty) inline
+            // style, writes opacity 0 and the offset again, and puts the saved state back at the end.
+            msg.style.opacity = "";
+            await ctx.motion.in(msg, "rise", { ...opts, signal: o.signal });
             if (typed && m.index === derived.newest && typed.total > 0) {
               await typeCount(ctx.animate, typed.total, typed.type, { signal: o.signal, duration: o.duration > 0 ? typingMs(typed.total) : 0 });
             }

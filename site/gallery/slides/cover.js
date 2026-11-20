@@ -6,6 +6,6 @@ export default {
   title: "The *gallery*",
   elements: [
     { id: "subtitle", region: "subtitle", type: "text",
-      props: { text: "Every built-in layout and component, building step by step. Add ?theme=academic-light to see the other theme." } },
+      props: { text: "Every built-in layout and component, building step by step, then how things move. Add ?theme=academic-light to see the other theme." } },
   ],
 };

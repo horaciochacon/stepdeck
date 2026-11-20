@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "diagram",
   "description": "Nodes, arrows and nested groups on an explicit grid, appearing by step. Each node sits in a cell (`col`, `row`, optional spans); edges run between nodes or groups; groups draw a box around all their members. `shown` lists the ids visible at a step (hidden parts keep their place) and `highlight` dims everything else. Set the state props per step with `advance` or `set` on the slide.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["cols", "rows", "nodes"],
@@ -87,7 +88,7 @@
     "highlight": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Ids emphasised (nodes, groups, edges); everything else dims. The change fades. An unknown id is an error.",
+      "description": "Ids emphasised (nodes, groups, edges); everything else turns the theme's dim color. The change tweens the colors. An unknown id is an error.",
       "examples": [["model"], ["model", "model->result"]],
       "x-transition": "fade"
     }

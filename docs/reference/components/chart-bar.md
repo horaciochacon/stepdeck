@@ -66,7 +66,7 @@ To emphasize one bar for a single step, set `highlight` in the step's `only`, so
 | `axes` | `{ x?, y? }` | none | snap | Axis titles. `x` names the category axis and `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | `horizontal`: categories down the left, bars point right. `vertical`: categories along the bottom, bars point up. |
 | `shown` | string[] | every category | draw | Categories to show, by name. A category that appears grows from zero, then its whisker draws. Hidden categories keep their band. |
-| `highlight` | string | none | fade | One category to emphasize. The other bars and their value labels change color to muted theme colors. |
+| `highlight` | string | none | fade | One category to emphasize. The other bars turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color; the emphasized bar is drawn after (above) the others. |
 | `domain` | `[min, max]` | from the data | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). |
 | `types` | `{ column: "string" \| "number" \| "date" }` | guessed | snap | CSV column types for the data loader. An undeclared column is a number only when every non-empty value looks like one. |
 
@@ -98,17 +98,17 @@ The value axis has about 5 ticks with grid lines, plus a baseline at zero.
 
 The engine animates only a forward move of exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (used by `shoot` and `check`) draw the target state directly. See [Animation and motion](../../guide/animation-and-motion.md).
 
-Every animated change runs as a single `ctx.animate.tween` that lasts twice the theme's `--sd-duration` (800 ms in academic-light), or the step's `transition.duration` when it is set. Everything that changed moves in that one tween:
+Every animated change runs as a single `ctx.animate.tween` that lasts twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration` when it is set, with the theme's `--sd-easing`. Everything that changed moves in that one tween, except colors: a `highlight` change tweens the bar fill and label colors in their own tween over `--sd-duration-fast` (or the step's `transition.duration`), beside the geometry:
 
 | Change | What you see |
 | --- | --- |
 | `y` changes | Every bar, whisker and value label tweens to its new length. |
 | A category enters `shown` | The bar grows from zero over the first 60% of the motion, then the whisker draws out of the bar's end over the remaining 40%. The value label follows the bar's end and its opacity rises with the growth. |
 | A category leaves `shown` | The reverse: the whisker retracts into the bar's end over the first 40%, then the bar shrinks to zero over the remaining 60% while its label fades. The category is then hidden. |
-| `highlight` set, changed or cleared | The bar fill and value label color interpolate between the normal and muted colors. |
+| `highlight` set, changed or cleared | The bar fill and value label color interpolate in RGB over `--sd-duration-fast`. |
 | `domain` changes, or the default axis changes with `y` or `interval` | The axis range tweens. Ticks that stay move with it; new ticks fade in and dropped ticks fade out. |
 | Plot size or margins change (for example an axis title is added) | The plot area tweens to its new size. |
-| The element becomes visible | Every shown category grows from zero, then draws its whisker. |
+| The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown category grows from zero, then draws its whisker, while the box stays still (over the element's own `enter.duration` when set). The bars are at zero the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the bars are at full length at once; with `enter: "none"` nothing moves. |
 
 Hidden categories keep their band. Bands follow the data order whether or not a category is shown. A hidden category is laid out at its final length and hidden with `visibility`, together with its whisker, value label and category label, so nothing reflows when it appears.
 
@@ -118,6 +118,8 @@ No motion plays, and the new state is drawn at once, when:
 
 - `orient` changes, or
 - the set or order of categories changes (for example `data` or `x` points at different rows).
+
+The element's own entrance still grows every bar from zero.
 
 Adding `interval` to bars that are already shown makes the whiskers appear at full size at once; only entering categories draw their whisker.
 
@@ -129,7 +131,7 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 | --- | --- |
 | Bar thickness | 65% of the band, capped at 4 times the label font size (`--sd-font-size-label`, 28px in academic-light, so at most 112px). |
 | Bar color | The first color of the categorical palette (blue `#1d4ed8` in `modern`, the default; `#0072b2` in academic-light's `okabe-ito-dark`). If the theme has no categorical palette, `--sd-color-accent`. |
-| Dimmed bar color | `--sd-color-rule`; dimmed value labels use `--sd-color-muted`. |
+| Dimmed bar color | `--sd-color-dim` (`--sd-color-rule` in a theme without it); dimmed value labels use `--sd-color-muted`. |
 | Value labels | Past the bar's end, or past the whisker's end when there is one. On the right of a horizontal bar, above a vertical bar; on the other side for negative values. Weight 600, ink color. |
 | Category labels | On the band axis, in ink. Long names wrap. Horizontal: up to about a third of the chart width per line, and as many lines as fit the band. Vertical: the band width, up to 3 lines. A label that does not fit ends with `…`. |
 | Ticks and axis titles | Ticks in muted, axis titles in ink. All chart text uses `--sd-font-size-label`, which is at least `--sd-min-audience-font`. |

@@ -13,16 +13,20 @@ uses `--sd-font-size-display` (128px by default); label and interval use `--sd-f
 | `suffix` | string | none | snap | Text after the figure (a unit), drawn smaller. Not applied to the interval. |
 
 Behaviour:
-- **Count-up.** When the step animates (`info.animate`), the figure counts with `ctx.animate.tween` (900 ms, or the
-  step's `transition.duration`), formatting every frame: from 0 when the element just became visible
-  (`info.entered`), else from the previous value when `value` changed from a number. An abort snaps straight to the
-  end value.
+- **Entrance.** The figure builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
+  an animated step, it fades in and counts up from 0 while its box stays still. It waits for its stagger slot like
+  any entering element, and shows 0 the moment it appears. With `enter: "none"`, or a box motion such as
+  `enter: "rise"`, it shows its value at once (the box moves instead).
+- **Count-up.** The figure counts with `ctx.animate.tween` over 2.25 × `--sd-duration` (900 ms at 400 ms), or the
+  step's `transition.duration`, or on entrance the element's `enter.duration`, formatting every frame: from 0 on
+  its entrance, else from the previous value when `value` changed from a number while the element stays shown. An
+  abort snaps straight to the end value.
 - **Exact end state.** Every `update` finishes by writing `format(value)`, so the DOM after `settled()` is the
   same whether the step was played or jumped to. `root.dataset.value` holds the raw number.
 - **No re-run on a no-op.** The engine skips updates whose props and visibility did not change; an update that
   changes nothing also writes nothing and never starts a tween.
-- When the element becomes visible in an animated step it also fades in; a changed `label`, `ci`, `prefix` or
-  `suffix` fades that part in.
+- A changed `label`, `ci`, `prefix` or `suffix` fades that part in, timed by the theme (`--sd-duration`,
+  `--sd-easing`).
 - Errors (the element shows them): a non-number `value`, a missing `format`, an invalid format, a `ci` that is
   not two numbers.
 

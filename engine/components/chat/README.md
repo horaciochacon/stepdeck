@@ -17,9 +17,16 @@ Behaviour:
   muted text. Text is ink on those surfaces (at least 4.5:1 contrast in the built-in theme).
 - **Cards.** Each message is a full-width card with a 2px border (the accent, or the rule color for a note) and
   its `label` at the top. Use one message for a prompt or a quote.
-- **Motion** (forward by exactly one step only; any other move renders directly): messages that become visible rise
-  and fade in, staggered. With `typing`, the newest message is then typed, character by character; the untyped
-  rest keeps its place (hidden), so the box never grows while typing. The end state is always the full text.
+- **Entrance.** The chat builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on an
+  animated step, its box stays still and the visible messages rise in (the shared `rise` motion), one after another,
+  `--sd-stagger` apart; then, with `typing`, the newest message is typed. It waits for its stagger slot like any
+  entering element, and its messages are hidden the moment it shows. With `enter: "none"`, or a box motion such as
+  `enter: "rise"`, the chat shows its full text at once (the box moves instead).
+- **Change motion** (forward by exactly one step only; any other move renders directly): while the chat stays
+  shown, messages that become visible rise and fade in, staggered by `--sd-stagger` over `--sd-duration` (or the
+  step's `transition`), whatever the theme's `--sd-enter`. With `typing`, the newest message is then typed,
+  character by character; the untyped rest keeps its place (hidden), so the box never grows while typing. The end
+  state is always the full text.
 - **Idempotent.** Every `update` writes the state straight from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping. An interrupted step snaps to its end.
 - **Layout.** Long messages wrap inside the box. Text is the body size and `label` the label size, both at least

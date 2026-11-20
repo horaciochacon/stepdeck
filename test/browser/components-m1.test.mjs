@@ -5,11 +5,13 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { checkPlayed } from "../../cli/check.js";
+import { deckPages, elementHtml, htmlAfterJump, expectJumpEqualsPlayed, expectInterruptEqualsJump, sampleFrames } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = fileURLToPath(new URL("../fixtures/decks/components-m1/", import.meta.url));
 const url = (slide, q = "") => `engine/core/render.html?deck=../../test/fixtures/decks/components-m1/&slide=${slide}&${q}`;
 const spike = (q) => `engine/core/render.html?deck=../../examples/spike/&slide=trend&${q}`;
+const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 
 const goTo = async (page, slide, step) => {
   await page.evaluate(([sl, st]) => window.STEPDECK.goTo(sl, st), [slide, step]);
@@ -260,5 +262,151 @@ test("spike trend: the responders figure is a big-number bound to the data file,
     assert.equal(await digits(page, "big"), "2,942");
     assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
     assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// In the page: STEPDECK.goTo("mdswap", step), then one sample per animation frame of each markdown root in `ids`
+// until the step settles. A sample is { opacity (the root's computed opacity), inline (its style attribute) }.
+const sampleMarkdown = (page, step, ids) =>
+  page.evaluate(async ([step, ids]) => {
+    const read = () => ids.map((id) => {
+      const root = document.querySelector(`[data-el="${id}"] .sd-markdown`);
+      return { opacity: Number(getComputedStyle(root).opacity), inline: root.getAttribute("style") };
+    });
+    const frames = [];
+    let done = false;
+    const tick = () => {
+      if (done) return;
+      frames.push(read());
+      requestAnimationFrame(tick);
+    };
+    const moved = window.STEPDECK.goTo("mdswap", step).then(() => window.STEPDECK.settled());
+    requestAnimationFrame(tick);
+    await moved;
+    done = true;
+    return frames;
+  }, [step, ids]);
+
+test("markdown: a changed md fades in; an entering markdown is moved by its box, not by itself", async () => {
+  await withPage({ root, url: url("mdswap", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const frames = await sampleMarkdown(page, "go", ["tick", "fresh"]);
+    const tick = frames.map((f) => f[0]);
+    const fresh = frames.map((f) => f[1]);
+    assert.ok(tick.some((f) => f.opacity < 0.5), `the changed text fades in from nearly invisible (${tick.map((f) => f.opacity).slice(0, 8)})`);
+    assert.ok(fresh.every((f) => f.inline === null && f.opacity === 1), "the entering markdown has no motion of its own");
+    assert.equal(await page.evaluate(() => document.querySelector('[data-el="tick"]').textContent.trim()), "Después: dos");
+    // Played equals jumped.
+    const played = await page.innerHTML('[data-el="tick"]');
+    const playedFresh = await page.innerHTML('[data-el="fresh"]');
+    await ctx.open(url("mdswap", "step=go"));
+    assert.equal(await page.innerHTML('[data-el="tick"]'), played);
+    assert.equal(await page.innerHTML('[data-el="fresh"]'), playedFresh);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// Owned entrance. Per frame: the figure's text, the root's inline opacity and the element's markup.
+const numberProbe = (el) => ({
+  digits: el.querySelector(".sd-big-number-value")?.textContent ?? null,
+  rootOpacity: el.querySelector(".sd-big-number")?.style.opacity ?? "",
+  content: el.innerHTML,
+});
+const errorsClean = async (page, ctx) => {
+  assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+  assert.deepEqual(ctx.errors, []);
+};
+
+test("big-number no flash before the count: held for its slot, the first value shown is 0, the box stays still", async () => {
+  await withPage({ root, url: motion.url("number-third", "step=start&motion=full") }, async (page, ctx) => {
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const r = await sampleFrames(page, "number-third", "go", "num", numberProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the number is shown");
+    const first = shown[0];
+    assert.equal(first.digits, "0", "the first value shown is 0");
+    assert.ok(first.ms >= 150, `held for the third slot, 2 x 80 ms (first shown at ${first.ms.toFixed(0)} ms)`);
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the number counts itself");
+    const values = shown.map((f) => Number(f.digits.replace(/,/g, "")));
+    assert.ok(values.filter((n) => n > 0 && n < 4820).length >= 3, `counts through values in between: ${values.slice(0, 12)}`);
+    assert.ok(shown.some((f) => f.digits === "4,820"), "lands on the value");
+    // The count ends the step: its 160 ms hold (timers never fire early) plus 2.25 x 400 ms is at least 1060 ms
+    // from the goTo; 2 x --sd-duration would settle at about 960 ms.
+    assert.ok(r.settledMs >= 1040 && r.settledMs < 4000, `held 160 ms, then counts over 2.25 x --sd-duration (settled at ${r.settledMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "num"), await htmlAfterJump(ctx, page, motion, "number-third", "go", "num"));
+
+    await expectJumpEqualsPlayed(ctx, page, { pages: motion, slide: "number-third", steps: ["start", "go", "more"], id: "num" });
+    await expectInterruptEqualsJump(ctx, page, { pages: motion, slide: "number-third", from: "start", via: "go", to: "more", id: "num" });
+    await errorsClean(page, ctx);
+  });
+});
+
+test("big-number entrance timing: entrance.duration wins; else 2.25 x --sd-duration", async () => {
+  await withPage({ root, url: url("count", "step=start") }, async (page) => {
+    const r = await page.evaluate(async () => {
+      const mod = (await import("../components/big-number/index.js")).default;
+      const { animate } = await import("../core/animate.js");
+      const props = { value: 500, format: ".0f", label: "x" };
+      const signal = new AbortController().signal;
+      // A fresh big-number with `--sd-duration` = `base` ms, shown by an update with `entrance`; timed until it settles.
+      const timed = async (base, entrance) => {
+        const el = document.createElement("div");
+        document.body.append(el);
+        const ctx = { format: () => (n) => String(Math.round(n)), t: (k) => k, animate, tokens: { "--sd-duration": `${base}ms` } };
+        const inst = await mod.mount(el, props, ctx);
+        await inst.update(props, { prev: null, changed: Object.keys(props), animate: false, entered: false, entrance: null, signal });
+        const digits = () => el.querySelector(".sd-big-number-digits").textContent;
+        const t0 = performance.now();
+        const updating = inst.update(props, { prev: props, changed: [], animate: true, entered: true, entrance, signal });
+        const sync = digits();
+        await updating;
+        const ms = performance.now() - t0;
+        const end = digits();
+        el.remove();
+        return { sync, ms, end };
+      };
+      return {
+        own: await timed(100, { motion: "draw", duration: 500 }), // the theme's count would be 225 ms
+        theme: await timed(400, { motion: "draw", duration: undefined }), // 2.25 x 400 = 900 ms
+        none: await timed(400, { motion: "none", duration: undefined }),
+      };
+    });
+    // Lower bounds hold because a tween never ends before its duration; upper bounds are generous.
+    assert.equal(r.own.sync, "0", "the start state is written at once");
+    assert.ok(r.own.ms >= 450 && r.own.ms < 3000, `entrance.duration 500 ms wins over the theme's 225 ms (took ${r.own.ms.toFixed(0)} ms)`);
+    assert.equal(r.theme.sync, "0");
+    assert.ok(r.theme.ms >= 860 && r.theme.ms < 3000, `2.25 x a 400 ms --sd-duration is 900 ms; 2 x would be 800 (took ${r.theme.ms.toFixed(0)} ms)`);
+    assert.equal(r.none.sync, "500", "none: the value at once");
+    assert.ok(r.none.ms < 300, `none: no count, which would take 900 ms (took ${r.none.ms.toFixed(0)} ms)`);
+    for (const k of ["own", "theme", "none"]) assert.equal(r[k].end, "500");
+  });
+});
+
+test("big-number enter none snaps: no frame in motion, the end equals the jump", async () => {
+  await withPage({ root }, async (page, ctx) => {
+    const jumped = await htmlAfterJump(ctx, page, motion, "number-none", "go", "num");
+    const content = await page.evaluate(() => document.querySelector('[data-el="num"]').innerHTML);
+    await ctx.open(motion.url("number-none", "step=start&motion=full"));
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const r = await sampleFrames(page, "number-none", "go", "num", numberProbe);
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the number is shown");
+    assert.deepEqual(shown.filter((f) => f.style !== null || f.content !== content).map((f) => [f.ms, f.digits]), [], "every shown frame is the end state");
+    assert.equal(await elementHtml(page, "num"), jumped);
+    await errorsClean(page, ctx);
+  });
+});
+
+test("big-number enter rise: the box rises, the value shows at once", async () => {
+  await withPage({ root }, async (page, ctx) => {
+    const jumped = await htmlAfterJump(ctx, page, motion, "number-rise", "go", "num");
+    const content = await page.evaluate(() => document.querySelector('[data-el="num"]').innerHTML);
+    await ctx.open(motion.url("number-rise", "step=start&motion=full"));
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    const r = await sampleFrames(page, "number-rise", "go", "num", numberProbe);
+    assert.ok(r.frames.some((f) => f.visible && /translateY/.test(f.style ?? "")), "the box rises");
+    assert.deepEqual(r.frames.filter((f) => f.visible && f.content !== content).map((f) => [f.ms, f.digits, f.rootOpacity]), [], "the value shows from the first frame, with no fade of its own");
+    assert.equal(await elementHtml(page, "num"), jumped);
+    await errorsClean(page, ctx);
   });
 });

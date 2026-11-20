@@ -84,8 +84,9 @@ slides: ["title", "chart", "closing"],
 | `properties.<prop>.examples` | A non-empty array of sample values. Required on every prop. |
 | `properties.<prop>.x-transition` | How a change of the prop animates: `tween` (numbers interpolate), `draw` (lines draw along their length), `fade` or `snap` (no motion). Required on every prop. |
 | `properties.<prop>.default` | Documentation only. `validate` does not fill it in, so `index.js` must apply the default itself. |
+| `x-enter` (top level, optional) | `"own"` when the component builds its own entrance (a count-up, lines that draw, items that rise in turn) instead of letting the engine move its box. See [Own the entrance, or let the box move](#own-the-entrance-or-let-the-box-move). |
 
-`x-transition` is metadata: the catalog lists every prop that is not `snap` as one that animates, but the engine never reads it. Your `index.js` must implement the motion the annotation promises.
+`x-transition` is metadata: the catalog lists every prop that is not `snap` as one that animates, but the engine never reads it. Your `index.js` must implement the motion the annotation promises. `x-enter` is read by the engine, and the catalog shows it as `enter: own`.
 
 The counter's schema:
 
@@ -94,6 +95,7 @@ The counter's schema:
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "my.counter",
   "description": "One large number with a label, counting from its previous value to the new one when a step plays. The number is formatted in the deck language.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["value"],
@@ -128,18 +130,29 @@ A component is a renderer of props. Everything on screen is a function of the pr
 
 The engine calls `update` after `mount` and then whenever the element's resolved props or its visibility change. It asks for motion only on a forward move of exactly one step with motion on; on a jump, a backward move or the first render, `info.animate` is false. See [Animation and motion](animation-and-motion.md) for when motion plays.
 
+### Own the entrance, or let the box move
+
+When an element appears on an animating step, the engine moves its box: it plays the slide's `enter`, or the theme's `--sd-enter` (`rise` in `modern`), in the element's stagger slot. A plain component gets that for free and **must not fade itself in when `info.entered` is true**; it animates only changes while it stays visible.
+
+A component whose content has a natural build can play that build instead. Declare `"x-enter": "own"` at the top of `schema.json`. On the step where the element appears, after its stagger hold, `update` then gets `info.entrance`:
+
+- `{ motion: "draw", duration }`: play the build from empty to the props while the box stays still. `duration` is the element's own `enter.duration`, or `undefined`: then time it with `ctx.motion.timing(info)`.
+- `{ motion: "none" }`: the slide asked for a box motion (`enter: "rise"`, say) or for none; render at once.
+
+The engine shows the element and calls `update` in the same synchronous block, so **write the build's start state before the first `await`**: then the finished state never paints first. `info.entrance` is `null` in every other update. The counter below owns its entrance: it counts up from 0.
+
 ### The shape of `update`
 
 Keep one `render(props)` that writes the whole state, and use it like this in every `update`:
 
 1. Remember where the drawing is now, if a tween needs a start value.
 2. Call `render(props)`, so the end state is written even if nothing animates.
-3. If `canAnimate(info)`, start the motion with `info.signal` and `info.transition?.duration`, and `await` it.
+3. If the component builds its entrance (`info.entrance?.motion === "draw"`), or `canAnimate(info)` and the element did not just appear, start the motion with `ctx.motion.timing(info)`, and `await` it. Start every motion before the first `await`.
 4. Call `render(props)` again and clear any inline style the motion left, such as `opacity`.
 
 `canAnimate(info)` is `info.animate === true && !info.signal?.aborted`. The built-ins import it from `core/kit.js`; a deck component defines the same one-line test itself, as below.
 
-Awaiting the `ctx.animate` helpers with `info.signal` matters. When a newer step aborts this one, each helper jumps to its end state and resolves, and `STEPDECK.settled()` waits for your promise. An update that has not settled after 10 seconds fails the element (see the [contract](../reference/component-contract.md)).
+`ctx.motion.timing(info)` gives `{ duration, ease, stagger, signal }` from the theme's motion tokens, overridden by the step's `transition`, with `info.signal`. Awaiting the `ctx.motion` and `ctx.animate` helpers with that signal matters. When a newer step aborts this one, each helper jumps to its end state and resolves, and `STEPDECK.settled()` waits for your promise. An update that has not settled after 10 seconds fails the element (see the [contract](../reference/component-contract.md)).
 
 ### The counter
 
@@ -195,23 +208,27 @@ export default {
 
     return {
       async update(props, info) {
-        const from = info.entered ? 0 : shown;
+        // Its own entrance ("x-enter": "own" in schema.json): count up from 0 while the box stays still.
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        const from = draw ? 0 : shown;
         render(props); // the end state first, so it is right even when nothing plays
 
-        if (canAnimate(info)) {
-          const opts = { signal: info.signal, duration: info.transition?.duration };
+        // An element that just appeared any other way renders at once: its box moves, or nothing does.
+        if (draw || (canAnimate(info) && !info.entered)) {
+          const opts = ctx.motion.timing(info); // the theme's duration and easing, or the step's transition
+          if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
           const runs = [];
-          if (info.entered || info.changed.includes("value")) {
+          // Started before the first await: the count's first frame (the 0) is drawn in the same task as
+          // the engine shows the element, so the final number never flashes first.
+          if (draw || info.changed.includes("value")) {
             runs.push(ctx.animate.tween(from, props.value, (n) => drawNumber(n, props), opts));
           }
-          if (info.entered) runs.push(ctx.animate.fadeIn(root, opts));
-          else if (info.changed.includes("label")) runs.push(ctx.animate.fadeIn(label, opts));
+          if (!draw && info.changed.includes("label")) runs.push(ctx.motion.in(label, "fade", opts));
           await Promise.all(runs);
         }
 
         render(props); // the end state again, whether motion ran, was aborted or never started
-        root.style.opacity = "";
-        label.style.opacity = "";
+        label.style.opacity = ""; // ctx.motion.in puts back what it touched; this guards the end state anyway
       },
       destroy() {
         root.remove();
@@ -228,7 +245,8 @@ What each part does:
 | `el.ownerDocument` | Create nodes in the element's own document, not the global `document`. |
 | `ctx.palette(...)` and `var(--sd-...)` | Colors and sizes come from the theme, so the component follows the deck's theme. No literal colors or pixel sizes. |
 | `shown` | The tween starts from what is drawn now. If a step is interrupted half-way, the next update counts from there. |
-| `info.entered`, `info.changed` | Motion plays only for what changed: the count when `value` changed, a fade of the label when `label` changed, a fade of the whole block when the element just became visible. |
+| `info.entrance`, `info.entered`, `info.changed` | The count from 0 is the component's own entrance (`x-enter: own`). Otherwise motion plays only for what changed while the element stays visible: the count when `value` changed, a fade of the label when `label` changed. On a step where the element appears with a box motion (or none), it renders at once. |
+| `ctx.motion.timing(info)` | Durations and easing come from the theme's tokens, or the step's `transition`, so the counter moves like the built-ins. |
 | `props.format ?? ",.0f"` | The schema's `default` is documentation; the component applies it. |
 | `throw` in `render` | An error stays in this element: its box shows the message and `check` reports `render-error`. |
 | The second `render(props)` and the cleared `opacity` | The end state is identical however the update ended, so the markup after playing equals the markup after jumping. |
@@ -297,7 +315,8 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 | Get data colors | `ctx.palette(kind)` for `categorical`, `sequential` or `diverging`: `{ name, kind, colors, names, roles }`, or `null`. `roles.accent` is the accent color. |
 | Read a theme value in JavaScript | `ctx.tokens["--sd-font-size-note"]` |
 | Know the element's size | `ctx.size` is `{ w, h }` in canvas pixels, measured at mount. Read `el.offsetWidth` and `el.offsetHeight` yourself if you need the size later. |
-| Animate | `ctx.animate.fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. Each takes `{ duration, signal }` and resolves at the end state, also on abort. |
+| Animate a part with a named motion | `ctx.motion.in(node, name, opts)` and `ctx.motion.out(node, name, opts)`, with `fade`, `rise`, `wipe`, `pop`; `ctx.motion.timing(info)` for the theme's timing. They put back the inline styles they touched. |
+| Animate anything else | `ctx.animate.fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also on abort. |
 | Know whether this is a screenshot render | `ctx.capture` |
 | Draw with d3 | `ctx.d3` |
 | Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. |

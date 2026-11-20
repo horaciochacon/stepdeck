@@ -4,5 +4,5 @@ export default {
   title: "Components M1 fixture",
   lang: "es",
   theme: "academic-light",
-  slides: ["md", "badcolor", "count", "ci"],
+  slides: ["md", "mdswap", "badcolor", "count", "ci"],
 };

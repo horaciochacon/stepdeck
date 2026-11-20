@@ -75,7 +75,8 @@ import { luminance as relativeLuminance, contrast as ratio } from "#engine/core/
 const CANVAS_H = CANVAS.h;
 const OVERLAP_PX = 4;
 const EDGE_PX = 1;
-const MIN_CONTRAST = 4.5;
+/** The text contrast `check` requires (WCAG AA for normal text). */
+export const MIN_CONTRAST = 4.5;
 
 // ---------------------------------------------------------------------------------------------
 // Page errors

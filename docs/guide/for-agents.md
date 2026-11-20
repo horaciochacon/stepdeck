@@ -94,18 +94,19 @@ The catalog is what an agent reads instead of source code. `catalog` reads only 
 
 The name and the folder can come in either order. Without a folder, `catalog` uses the current folder; run from the repository root, it writes `<repo>/catalog/` (git-ignored). A deck reads its engine copy (`my-talk/stepdeck/`) plus its own `deck.js` `components`.
 
-An entry in `index.json` has four keys:
+An entry in `index.json` has five keys:
 
 ```json
 {
   "kind": "component",
   "name": "big-number",
   "summary": "One large figure with an optional label and 95% interval.",
-  "animates": ["value", "label", "ci"]
+  "animates": ["value", "label", "ci"],
+  "enter": "own"
 }
 ```
 
-`summary` is the first sentence of the schema's description (for a theme, of its README's first paragraph). `animates` lists the props whose `x-transition` is not `snap`; it is empty for layouts and themes.
+`summary` is the first sentence of the schema's description (for a theme, of its README's first paragraph). `animates` lists the props whose `x-transition` is not `snap`; it is empty for layouts and themes. `enter` is `"own"` when the component builds its own entrance (its schema declares `"x-enter": "own"`: the charts, `big-number`, `list`, `chat`, `diagram`, `terminal`, `timeline`), and `"box"` when the engine moves the element's box instead (every other component, and every layout and theme).
 
 The detail adds, by kind:
 
@@ -127,7 +128,7 @@ Every command except `help` accepts `--json` and then writes JSON to stdout.
 |---|---|
 | `validate` | Array of problems, each with `severity` (`error` or `warning`). |
 | `check` | Array of problems. |
-| `dump` | Array of steps: `{ slide, step, stepId, elements: [{ id, type, visible, text, box, props }], changed, errors }`. |
+| `dump` | Array of steps: `{ slide, step, stepId, elements: [{ id, type, visible, ghost?, text, box, props }], changed, errors }`. |
 | `shoot` | Array of absolute PNG paths. |
 | `catalog` | Entries array, or one detail with a name (see above). |
 | `serve` | `{ url, root, port }`, then the server keeps running until SIGINT or SIGTERM. |

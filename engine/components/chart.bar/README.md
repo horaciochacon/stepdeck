@@ -14,7 +14,7 @@ shrinks or grows the bars, and an optional interval whisker is drawn after its b
 | `axes` | `{x?, y?}` | none | snap | Axis titles: `x` names the category axis, `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | Categories down the left (bars point right) or along the bottom (bars point up). |
 | `shown` | string[] | all categories | draw | Categories to show, by name. A category that appears grows from zero, then draws its whisker. |
-| `highlight` | string | none | fade | One category emphasised; the other bars turn a muted theme color. Use `only` so it lasts one step. |
+| `highlight` | string | none | fade | One category emphasised; the other bars turn the theme's dim color (`--sd-color-dim`) and sit below it. Use `only` so it lasts one step. |
 | `domain` | `[min, max]` | from the data | tween | Fixed value axis, used as given. |
 | `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). |
 
@@ -26,12 +26,18 @@ Behaviour:
 - **Hidden categories keep their band.** Bands follow the data order whether or not a category is shown; a hidden
   category is laid out at its final length and hidden with `visibility` (bar, whisker, value label and its category
   label), so nothing reflows between steps.
+- **Entrance.** The chart builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
+  an animated step, every shown bar grows from zero and then draws its whisker, over 2 × `--sd-duration` or the
+  element's `enter.duration`, while its box stays still. It waits for its stagger slot like any entering element,
+  and the zero-length bars are in place the moment it shows. With `enter: "none"`, or a box motion such as
+  `enter: "rise"`, the bars are at full length at once (the box moves instead).
 - **Motion** (forward by exactly one step only; any other move renders directly):
   - a category that appears grows from zero, then its whisker is drawn out of the bar's end, and its label follows
     the bar; a category that leaves does the reverse;
   - a changed value tweens the bar, its whisker and its label;
-  - `highlight` fades the colors of the other bars (and their value labels) to muted theme colors. Opacity is never
-    used, so label contrast does not drop.
+  - `highlight` tweens the colors of the other bars to `--sd-color-dim` (and their value labels to `--sd-color-muted`)
+    over `--sd-duration-fast`, and draws the emphasised bar after (above) the others. Opacity is never used, so label
+    contrast does not drop.
   - Motion goes through `ctx.animate.tween` bound to `info.signal`: an aborted step snaps to its end state.
 - **Idempotent.** Every `update` ends by writing the target state from props and rows alone; the component writes
   attributes only (never inline styles), so the markup after playing equals the markup after jumping.
@@ -40,8 +46,8 @@ Behaviour:
   names wrap inside it. Everything is at least `--sd-min-audience-font` (it uses `--sd-font-size-label`). Margins come
   from character counts, not measured text; the room kept for value labels comes from the widest label over every
   numeric column but the category (and the domain ends), not from the current `y`, so switching `y` never resizes the plot.
-- **Colors.** Bars use the first color of `ctx.palette("categorical")`. Dimmed bars use `--sd-color-rule`, dimmed
-  labels `--sd-color-muted`; ink, grid and axis colors are theme tokens.
+- **Colors.** Bars use the first color of `ctx.palette("categorical")`. Dimmed bars use `--sd-color-dim` (`--sd-color-rule` in a
+  theme without it), dimmed labels `--sd-color-muted`; ink, grid and axis colors are theme tokens.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
   lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
   `shown` or `highlight` that the data does not have, and a `domain` that is not `[min, max]` with min < max.

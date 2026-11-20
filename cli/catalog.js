@@ -17,10 +17,12 @@
 // theme files (tokens.css as text, palettes.json, README.md). Component code (index.js) is never
 // imported (spec §5). deck.js is imported for its `components` list; it is plain data (spec §5).
 //
-// Entry  = { kind: "component"|"layout"|"theme", name, summary, animates: string[] }
+// Entry  = { kind: "component"|"layout"|"theme", name, summary, animates: string[], enter: "own"|"box" }
 //   summary   the first sentence of the schema's top-level description (a theme: of its README's
 //             first paragraph), so the text lives in one place
 //   animates  props whose x-transition is not "snap" (layouts and themes: [])
+//   enter     "own" when the schema declares a top-level "x-enter": "own" (the component builds its own
+//             entrance and its box stays still), else "box" (the element's box moves; layouts and themes: "box")
 // Detail = the entry plus, for a component: origin ("built-in"|"deck"), description, required,
 //   props: { <prop>: { required, x-transition, description, examples, default?, schema } } (schema is
 //   the prop's JSON Schema without description, examples and x-transition), readme, example (path);
@@ -29,13 +31,15 @@
 //
 // Problems (cli/problems.js, rule "catalog-schema", element = the name): a component schema without
 // a top-level description, or a prop without description, examples or x-transition (spec §6.3); an
-// unreadable file; two entries of different kinds with one name ("catalog-name").
+// unreadable file; two entries of different kinds with one name ("catalog-name"). A top-level x-enter
+// other than "own" or "box" is a "catalog-schema" problem too.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { problem } from "./problems.js";
 import { engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
 
 const TRANSITIONS = ["tween", "draw", "fade", "snap"];
+const ENTERS = ["own", "box"]; // a schema's top-level x-enter; absent means "box"
 
 const readText = (file) => (existsSync(file) ? readFileSync(file, "utf8") : null);
 
@@ -77,6 +81,10 @@ function componentDetail(name, dir, origin, add) {
   if (!schema.description) {
     add({ element: name, rule: "catalog-schema", measured: `${rel("schema.json")} has no top-level description`, limit: "a description whose first sentence is the summary", fix: `add "description" to ${rel("schema.json")}` });
   }
+  const xEnter = schema["x-enter"];
+  if (xEnter !== undefined && !ENTERS.includes(xEnter)) {
+    add({ element: name, rule: "catalog-schema", measured: `x-enter is ${JSON.stringify(xEnter)} in ${rel("schema.json")}`, limit: `"x-enter": "own" (the component builds its own entrance), "box" or no x-enter`, fix: `set "x-enter" to "own" or remove it from ${rel("schema.json")}` });
+  }
   const required = new Set(Array.isArray(schema.required) ? schema.required : []);
   const props = {};
   for (const [key, raw] of Object.entries(isObject(schema.properties) ? schema.properties : {})) {
@@ -103,6 +111,7 @@ function componentDetail(name, dir, origin, add) {
     name,
     summary: firstSentence(schema.description),
     animates,
+    enter: xEnter === "own" ? "own" : "box",
     origin,
     description: schema.description ?? "",
     required: [...required],
@@ -125,6 +134,7 @@ function layoutDetail(name, dir, add) {
     name,
     summary: firstSentence(d.description),
     animates: [],
+    enter: "box",
     description: d.description ?? "",
     regions: Array.isArray(d.regions) ? d.regions : [],
     variables: Array.isArray(d.variables) ? d.variables : [],
@@ -148,6 +158,7 @@ function themeDetail(name, dir, add) {
     name,
     summary: firstSentence(lead),
     animates: [],
+    enter: "box",
     description: lead,
     tokens: parseTokens(readFileSync(join(dir, "tokens.css"), "utf8")),
     palettes,
@@ -190,7 +201,7 @@ export async function buildCatalog(rootDirs) {
   const order = { component: 0, layout: 1, theme: 2 };
   const entries = [...details.values()]
     .sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name))
-    .map(({ kind, name, summary, animates }) => ({ kind, name, summary, animates }));
+    .map(({ kind, name, summary, animates, enter }) => ({ kind, name, summary, animates, enter }));
   return { entries, details, problems };
 }
 
@@ -225,6 +236,7 @@ export function catalogTarget(dir) {
 export function formatEntry(d) {
   const lines = [`${d.name} · ${d.kind}${d.origin ? ` (${d.origin})` : ""}`, d.description || d.summary];
   if (d.kind === "component") {
+    lines.push("", d.enter === "own" ? "enter: own (the component builds its own entrance; its box stays still)" : "enter: box (the element's box moves in)");
     lines.push("", "props (name, transition, required, description):");
     const width = Math.max(0, ...Object.keys(d.props).map((k) => k.length));
     for (const [k, p] of Object.entries(d.props)) {

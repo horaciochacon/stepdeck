@@ -17,7 +17,8 @@
 :root {
   /* Color roles. accent and alert are the categorical palette's blue and rose (palettes.json roles),
      so "{{color:accent}}" names the color on screen. muted and alert are tuned from the mockup's
-     #71717a and #e11d48 so both reach 4.5:1 on the surface and the chat user bubble (README). */
+     #71717a and #e11d48 so both reach 4.5:1 on the surface and the chat user bubble (README). dim is the
+     neutral that marks out of focus turn to: lighter than muted, darker than grid (README). */
   --sd-color-background: #ffffff;
   --sd-color-surface: #f4f4f5;
   --sd-color-title: #09090b;
@@ -28,6 +29,7 @@
   --sd-color-alert: #d81b45;
   --sd-color-rule: #e4e4e7;
   --sd-color-grid: #f0f0f2;
+  --sd-color-dim: #c4c4cc;
   --sd-color-letterbox: #111114;
 
   /* Type */
@@ -43,6 +45,7 @@
   --sd-font-size-note: 32px;
   --sd-font-size-label: 28px;
   --sd-font-size-kicker: 28px;
+  --sd-font-size-lede: 36px;
   --sd-font-size-source: 28px;
   --sd-font-weight-body: 400;
   --sd-font-weight-title: 600;
@@ -72,4 +75,8 @@
   --sd-duration: 400ms;
   --sd-duration-fast: 200ms;
   --sd-easing: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Named motions: the gap between staggered items, how an element enters by default, and how far a rise travels. */
+  --sd-stagger: 80ms;
+  --sd-enter: rise;
+  --sd-motion-distance: 24px;
 }

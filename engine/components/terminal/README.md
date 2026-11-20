@@ -62,10 +62,18 @@ Behaviour:
 - **Command line.** Empty prompt while `shown` is 0; the command appears once `shown > 0`. With `typing: true` it is
   typed out only in an animated step that takes `shown` from 0 to above 0; if the slide opens with `shown > 0`, or the step
   is jumped to, the command simply appears.
-- **Idempotent.** Every `update` ends by writing the state straight from props. With `info.animate` and `shown`
-  increasing, it first types the command (if `typing` and the session just started) and staggers the new lines in
-  (`ctx.animate.stagger`); all motion is bound to `info.signal`, so an aborted step snaps to its end state.
-  Backward moves and jumps render directly.
+- **Entrance.** The terminal builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on an
+  animated step, its box stays still and it plays the build from an empty terminal to the state of that step. With
+  `typing`, the command is typed first, at a constant speed per character; then the log lines fade in (the shared `fade`
+  motion), one after another, `--sd-stagger` apart. It waits for its stagger slot like any entering element, and its
+  command and lines are hidden the moment it shows. With `enter: "none"`, or a box motion such as `enter: "rise"`, the
+  terminal shows its state at once (the box moves instead). The task and file lists are not animated.
+- **Change motion** (forward by exactly one step only; any other move renders directly): while the terminal stays shown,
+  `shown` increasing fades the new lines in, staggered by `--sd-stagger` over `--sd-duration` (or the step's `transition`);
+  the command is typed only when the session starts, that is, from `shown: 0`.
+- **Idempotent.** Every `update` ends by writing the state straight from props, so the markup after playing equals the
+  markup after jumping. All motion is bound to `info.signal`, so an aborted step snaps to its end state. Backward moves
+  and jumps render directly.
 - All text is at least `--sd-min-audience-font`; colors and fonts come from theme tokens. The script is a shared
   cached value and is never mutated.
 

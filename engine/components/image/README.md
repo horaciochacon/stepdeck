@@ -18,8 +18,9 @@ Behaviour:
 - **Loading.** `update` waits for `img.decode()`, so `settled()` (and a screenshot) covers the load. A file that is
   missing or is not a decodable image is an element error naming the path; sibling elements carry on.
 - **Motion** (forward by exactly one step only; any other move renders directly): a new `src` fades in once it has
-  loaded, a changed `caption` fades in, and an element that becomes visible fades in. `fit` switches without motion.
-  Going backward renders directly. Every `update` writes the state first and removes the inline styles the motion
+  loaded and a changed `caption` fades in, over the theme's `--sd-duration` (or the step's `transition.duration`).
+  An element that becomes visible is moved by its box (the engine's entrance), not by the component. `fit` switches
+  without motion. Going backward renders directly. Every `update` writes the state first and removes the inline styles the motion
   used, so the markup after playing equals the markup after jumping.
 - **Layout.** In a region the element takes the room it is given; the picture fills the width and the height the
   caption leaves, so a long caption makes the picture shorter, never overflow. The caption is the note size (at least

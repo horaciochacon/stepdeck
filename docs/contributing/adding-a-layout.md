@@ -109,9 +109,9 @@ A default can be another token: `halves` declares `--gutter` with the default `v
 
 ### Map regions to hooks
 
-A hook is a class core puts on a region and on every element wrapper in it, and a theme styles it. Declare the map in `schema.json` as `hooks`: the name of a region the layout declares, to one of `subtitle`, `meta` or `statement` (`REGION_HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). `title`, `kicker` and `accent` are core's own hooks (on the title element, the kicker and the accent phrase) and cannot be mapped; `validate` reports a `layout-schema` problem for those, and for a key that is not a declared region. `title` maps `subtitle` and `meta`; `statement` maps `main` to `statement`. Core's defaults then give the region its type (for `statement`: the statement size, centred, balanced, on text and markdown only).
+A hook is a class core puts on a region and on every element wrapper in it, and a theme styles it. Declare the map in `schema.json` as `hooks`: the name of a region the layout declares, to one of `subtitle`, `meta` or `statement` (`REGION_HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). `title`, `kicker`, `lede` and `accent` are core's own hooks (on the title element, the kicker, the lede and the accent phrase) and cannot be mapped; `validate` reports a `layout-schema` problem for those, and for a key that is not a declared region. `title` maps `subtitle` and `meta`; `statement` maps `main` to `statement`. Core's defaults then give the region its type (for `statement`: the statement size, centred, balanced, on text and markdown only).
 
-The element with id `title` always gets `sd-title`, and the `kicker` element `sd-kicker`; no mapping is needed for them.
+The element with id `title` always gets `sd-title`, the `kicker` element `sd-kicker` and the `lede` element `sd-lede`; no mapping is needed for them.
 
 A hook class is on the region and on its wrappers, so give the layout no box properties through it, and tell theme authors the same: a theme targets the region as `.sd-region.sd-<hook>`.
 

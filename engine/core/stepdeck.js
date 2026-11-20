@@ -297,6 +297,9 @@ async function mountSlideUnsafe(env, id, { capture = false, attach, document: do
     mountPoint: frame.mountPoint,
     ctxBase: {
       setVisible: frame.setVisible,
+      // Box motion on animating steps: the controller decides what moves and when, the frame moves the box.
+      enterBox: frame.enterBox,
+      exitBox: frame.exitBox,
       onError: (elementId, e) => frame.showError(elementId, `${id}/${elementId}: ${message(e)}`),
       load: env.load,
       format: env.format,

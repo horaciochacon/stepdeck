@@ -35,6 +35,7 @@ Use JSON Schema 2020-12, with `"type": "object"` and `"additionalProperties": fa
   - `fade`;
   - `snap`: no animation.
 - The catalog warns `catalog-schema` when one of these is missing. A schema that does not compile fails validate (`component-schema`).
+- **Optional, top level: `"x-enter": "own"`**, when the component has a natural build (a count-up, lines that draw, items that rise in turn) and should play it when the element appears, instead of the engine moving its box. See the rules below.
 - Validate checks every slide's props against this schema **at every step**, after bindings are resolved.
 
 ## The contract
@@ -54,10 +55,14 @@ export default {
     return {
       async update(props, info) {        // idempotent: any state, reached in any order
         render(props);                   // the end state first …
-        await caption.update({ text: `Stage ${props.stage}`, role: "note" }, info);
-        if (info.animate) {              // … animate only when the engine says so, and await it
-          await ctx.animate.fadeIn(root, { signal: info.signal, duration: info.transition?.duration });
+        // … animate only a change, only when the engine says so. Start the motion before the first await, so its
+        // start state is written in the same task as the end state and the end state never paints first. When
+        // the element just appeared (info.entered), the engine already moves its box: never fade yourself in then.
+        const runs = [caption.update({ text: `Stage ${props.stage}`, role: "note" }, info)];
+        if (info.animate && !info.entered && info.changed.includes("stage")) {
+          runs.push(ctx.motion.in(root, "fade", ctx.motion.timing(info)));   // theme timing, or the step's transition
         }
+        await Promise.all(runs);         // await both: settled() waits for them, and an abort snaps them
         root.style.opacity = "";         // leave no animation residue
       },
       destroy() { root.remove(); },      // optional; pause() and anchor(ref) are optional too
@@ -75,13 +80,18 @@ export default {
   - A component never reads the slide's step number: `info.step` is for logging.
   - A slide drives an internal sequence through a prop, typically `stage` with `advance`.
 - **Animate only when `info.animate` is true.** That is a forward move by exactly one step, motion on, not in capture.
+  - **Never fade yourself in when `info.entered` is true.** The engine's entrance already moves the element's box (the theme's `rise` or `fade`, or the slide's `enter`), in its stagger slot. Animate only changes while the element stays visible.
+  - **Or own the entrance.** With `"x-enter": "own"` in `schema.json`, the box stays still and the update where the element appears gets `info.entrance = { motion: "draw", duration }`: play your build from empty to the props, over `duration` or `ctx.motion.timing(info)`. `{ motion: "none" }` means render at once (the slide set a box motion or `"none"`). Write the build's start state **before the first `await`**, so the finished state never flashes. `info.entrance` is `null` in every other update.
+  - Time everything with `ctx.motion.timing(info)` (`{ duration, ease, stagger, signal }` from the theme, overridden by the step's `transition`), and move parts with `ctx.motion.in(node, name, opts)` / `ctx.motion.out(node, name, opts)` (`fade`, `rise`, `wipe`, `pop`), so your component moves like the built-ins.
   - Pass `info.signal` to every helper and `await` it, so an abort snaps to the end state and `STEPDECK.settled()` waits for you.
+  - Start a change's motion (or write its start state) before your first `await`, as the sample does with `Promise.all`; started after an `await`, the end state paints for a frame first.
   - `mount` and `update` must settle. A call still pending after 10 s fails the element (`did not settle within 10s`, a `render-error` in `check`).
   - End with no inline animation residue, such as a leftover `opacity`.
 - **`info`** carries:
   - `prev`: the previous props, `null` on the first update;
   - `changed`: the top-level keys that changed, all of them at first;
   - `entered`: true if the element just became visible;
+  - `entrance`: `{ motion, duration }` on the entrance of a component with `"x-enter": "own"`, else `null`;
   - `step` and `prevStep`;
   - `animate`, `signal` and `transition`.
 - **The engine skips `update`** when the resolved props and the visibility did not change, so a count-up never re-runs on a no-op step.
@@ -94,7 +104,7 @@ export default {
 | Member | What it is |
 |---|---|
 | `ctx.d3` | d3 v7. |
-| `ctx.mount(type, el, props)` | Mounts a built-in or deck component inside yours. **Returns `Promise<handle>`**, where `handle = { instance, update(props, info), pause(), destroy() }`. `handle.update` resolves the child's bindings and passes your `info` on (`animate`, `signal`, …). Children pause and are destroyed with the parent. `destroy()` is idempotent, so you can swap a child. |
+| `ctx.mount(type, el, props)` | Mounts a built-in or deck component inside yours. **Returns `Promise<handle>`**, where `handle = { instance, update(props, info), pause(), destroy() }`. `handle.update` resolves the child's bindings and passes your `info` on (`animate`, `signal`, `entered`, `entrance`, …). A child that gets `entered` without `entrance` renders at once (your box carries the entrance). Children pause and are destroyed with the parent. `destroy()` is idempotent, so you can swap a child. |
 | `ctx.data(path, { types })` | Loads a deck file (`.json`, `.geojson`, `.csv`), cached and **shared: read-only**, so copy it before sorting. For CSV, the declared `types` (`string`, `number`, `date`) win. |
 | `ctx.assetUrl(path)` | The URL of a deck file (an image, say) for the browser to fetch. Same path rules as `ctx.data` (relative to the deck root, no `..`, no `%`, not remote), and it throws otherwise. Nothing is read, so a missing file shows up only when the browser loads it. |
 | `ctx.format(spec)` | A d3-format function localized by the deck `lang`. |
@@ -102,7 +112,8 @@ export default {
 | `ctx.tokens` | Theme values by full name, e.g. `ctx.tokens["--sd-font-size-note"]`. |
 | `ctx.palette(kind)` | `{ name, kind, colors, names, roles }` for `categorical`, `sequential` or `diverging`. `names` are in the deck language. `roles.accent` is the accent color. |
 | `ctx.size` | `{ w, h }` of `el` in canvas pixels, measured at mount. Read `el.offsetWidth`/`offsetHeight` yourself if you need the size at update time. |
-| `ctx.animate` | `fadeIn(el)`, `reveal(el)`, `drawPath(path)`, `tween(from, to, onValue)`, `stagger(items, fn)`. Each takes `{ duration, signal }` and resolves at the end state, also when it is aborted. |
+| `ctx.motion` | The named motions with the theme's timing: `in(node, name, opts)`, `out(node, name, opts)` (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`), `timing(info, { factor, fast })` → `{ duration, ease, stagger, signal }`. They put back the inline styles they touched and resolve at the end state, also when aborted. |
+| `ctx.animate` | `fadeIn(el)`, `reveal(el)`, `drawPath(path)`, `tween(from, to, onValue)`, `stagger(items, fn)`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also when it is aborted. |
 | `ctx.capture` | True when rendering for screenshots, where nothing animates. |
 
 ### Styling

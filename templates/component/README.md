@@ -15,12 +15,17 @@ A deck component, scaffolded by `stepdeck new-component __NAME__`. It lives in
 | `items` | string[] | (required) | snap | The items, in order. |
 | `stage` | integer | `0` | fade | Index of the current item; items up to it are marked. `-1` marks none. |
 
-## The contract (spec §6.3), in short
+## The contract, in short
 
 - `update` is **idempotent**: it renders exactly the props it is given, from any previous state,
   so a jumped step equals a played one. Keep one `render(props)` that writes the whole state.
-- Animate only when `info.animate` is true, and `await` the `ctx.animate` helpers with
-  `info.signal`, so an abort snaps to the end state and `STEPDECK.settled()` waits for you.
+- Animate only when `info.animate` is true, and `await` the `ctx.motion` and `ctx.animate` helpers
+  with `info.signal`, so an abort snaps to the end state and `STEPDECK.settled()` waits for you.
+- Do not fade the element in when it appears (`info.entered`): the engine moves its box. Animate
+  changes only, with `ctx.motion.in(node, "fade", ctx.motion.timing(info))` and the other named
+  motions (`rise`, `wipe`, `pop`), so the theme sets the timing. To build your own entrance instead, declare
+  `"x-enter": "own"` in `schema.json` and play the build when `info.entrance.motion` is `"draw"`,
+  writing its start state before the first `await`.
 - Read colors and sizes from theme tokens (`var(--sd-color-ink)`, `ctx.tokens`, `ctx.palette()`),
   never literals; text stays at or above `--min-audience-font` (28px).
 - Props are JSON only. Bind figures to data files (`{{data/x.json#/n}}`) instead of typing them.

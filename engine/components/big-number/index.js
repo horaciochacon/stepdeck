@@ -5,15 +5,21 @@
 // ctx.t) using the same format; `prefix` and `suffix` wrap the main figure only.
 //
 // Idempotent: every update ends by writing the exact formatted value, whether a count-up ran or not.
-// The count-up (ctx.animate.tween) runs only when the engine animates (info.animate) and either the element
-// just appeared (from 0) or `value` changed from a number (from the previous value). The engine skips updates
-// whose props and visibility did not change, and this component also does nothing for an update that changed
-// nothing (`entered` is false there), so a count-up never re-runs on a no-op step.
+// The count-up (ctx.animate.tween) lasts 2.25 x --sd-duration (900 ms at 400 ms), or the step's
+// transition.duration. It runs in two cases:
+// - the entrance: the component owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw"
+//   the figure fades in and counts up from 0 (over info.entrance.duration when given) while the box stays still;
+//   the 0 is written synchronously, in the same task as the engine shows the element. Any other entrance
+//   ("none", or a box motion) shows the value at once;
+// - an animated step that changes `value` from a number, while the element stays shown: it counts from the
+//   previous value.
+// The engine skips updates whose props and visibility did not change, and this component also does nothing for
+// an update that changed nothing, so a count-up never re-runs on a no-op step.
 // An abort (info.signal) snaps to the final value; no inline opacity is left behind.
 import { clearInlineStyle } from "../../core/animate.js";
-import { el as make, motion } from "../../core/kit.js";
+import { el as make, motion, motionMs } from "../../core/kit.js";
 
-const COUNT_UP_MS = 900;
+const COUNT_UP = 2.25; // the count-up's length, in --sd-duration
 
 const isNumber = (v) => typeof v === "number" && Number.isFinite(v);
 
@@ -69,18 +75,26 @@ export default {
     return {
       async update(props, info) {
         const prev = info.prev;
-        // Count from 0 when the element appears in an animated step, else from the previous value on a change.
-        // `entered` is false on a no-op step, so this never re-runs there.
-        const from = !info.animate ? null : info.entered ? 0 : info.changed.includes("value") && isNumber(prev?.value) ? prev.value : null;
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // Count from 0 on a drawn entrance, else from the previous value when `value` changed on an animated step
+        // while the element stays shown. An element that just appeared without a draw shows its value at once.
+        const changedFrom = info.animate && !info.entered && info.changed.includes("value") && isNumber(prev?.value) ? prev.value : null;
+        const from = draw ? 0 : changedFrom;
         const countUp = from !== null && from !== props.value;
         const fmt = render(props, !countUp);
-        const opts = motion(info);
-        if (info.animate) {
-          const fading = info.entered
+        if (countUp) setText(digits, fmt(from)); // the start state, before anything can paint
+        if (draw || info.animate) {
+          const opts = motion(info, ctx);
+          const duration = (draw ? info.entrance.duration : undefined) ?? motionMs(info, ctx, COUNT_UP);
+          const fading = draw
             ? [root]
-            : [["label", label], ["ci", ci], ["prefix", prefix], ["suffix", suffix], ["format", value]].filter(([key]) => info.changed.includes(key)).map(([, node]) => node);
-          const run = fading.map((node) => ctx.animate.fadeIn(node, opts));
-          if (countUp) run.push(ctx.animate.tween(from, props.value, (v) => setText(digits, fmt(v)), { ...opts, duration: info.transition?.duration ?? COUNT_UP_MS }));
+            : info.entered
+              ? []
+              : [["label", label], ["ci", ci], ["prefix", prefix], ["suffix", suffix], ["format", value]].filter(([key]) => info.changed.includes(key)).map(([, node]) => node);
+          // The entrance's fade never outlasts its count.
+          const fade = draw ? { ...opts, duration: Math.min(opts.duration ?? duration, duration) } : opts;
+          const run = fading.map((node) => ctx.animate.fadeIn(node, fade));
+          if (countUp) run.push(ctx.animate.tween(from, props.value, (v) => setText(digits, fmt(v)), { ...opts, duration }));
           await Promise.all(run);
         }
         // Idempotent end state: the exact value and no inline opacity, whether the motion ran, was aborted or never started.

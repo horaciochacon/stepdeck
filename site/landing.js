@@ -5,6 +5,7 @@ import { entries } from "./gallery/deck.js";
 const GROUPS = [
   ["layout", "Layouts"],
   ["component", "Components"],
+  ["motion", "Motion"],
 ];
 
 const list = document.getElementById("gallery-list");

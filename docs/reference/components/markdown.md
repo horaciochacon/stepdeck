@@ -115,7 +115,9 @@ In an `es` deck, `"The **{{color:accent}}** line"` renders as "The **azul** line
 
 ## Motion
 
-`md` has the `fade` transition. The block fades in (`ctx.animate.fadeIn`) when the engine animates the step and either the element just appeared or `md` changed. The fade lasts the step's `transition.duration` if set, else 400ms (the default of the `ctx.animate` helpers; the theme's `--sd-duration` is not read).
+When the element appears, its box enters with the element's `enter`, or the theme's `--sd-enter` (`rise` in `modern`, `fade` in `academic-light`), in its stagger slot; when it is hidden, its box leaves with its `exit` (default `fade`). The block itself does not move then.
+
+`md` has the `fade` transition: when `md` changes while the element stays visible, the block fades in (`ctx.animate.fadeIn`) over the theme's `--sd-duration` (400ms in both built-in themes), or the step's `transition.duration` if set, with the theme's `--sd-easing`. A block that appears and changes on the same step is shown at once.
 
 The engine animates only a forward move of exactly one step. A jump, a backward move or the first render shows the final text at once. Either way the component leaves no inline style behind, so a played step and a jumped-to step end in the same markup. See [Animation and motion](../../guide/animation-and-motion.md).
 

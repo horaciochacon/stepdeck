@@ -78,7 +78,7 @@ for (const dir of layoutDirs) {
 
 test("schema/layout.schema.json publishes exactly REGION_HOOKS and LAYOUT_KINDS", () => {
   const schema = JSON.parse(read(new URL("schema/layout.schema.json", engine)));
-  assert.deepEqual(HOOKS, ["title", "kicker", "accent", "subtitle", "meta", "statement"]);
+  assert.deepEqual(HOOKS, ["title", "kicker", "lede", "accent", "subtitle", "meta", "statement"]);
   assert.deepEqual(LAYOUT_KINDS, ["content", "cover"]);
   assert.deepEqual(REGION_HOOKS, ["subtitle", "meta", "statement"]);
   assert.ok(REGION_HOOKS.every((h) => HOOKS.includes(h)), "every region hook is a published hook");

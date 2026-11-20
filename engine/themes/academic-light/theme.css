@@ -11,3 +11,26 @@
 
 /* Cover subtitle in the muted ink, as before. */
 .sd-subtitle { color: var(--sd-color-muted); }
+
+/* The message line (the slide's lede): one muted line under the title, in the lede size. */
+.sd-role-lede {
+  font-size: var(--sd-font-size-lede);
+  line-height: var(--sd-line-height-tight);
+  color: var(--sd-color-muted);
+}
+
+/* A badge: an inline pill in the kicker's face (uppercase, tracked, strong), the label size, a 2px border in
+   its own colour. A `tone` sets two inline colours: the border in the palette colour and the text in that colour
+   darkened to 4.5:1; without one both are the accent. */
+.sd-role-badge {
+  display: inline-block;
+  padding: 0.1em 0.7em;
+  font-size: var(--sd-font-size-label);
+  font-weight: var(--sd-font-weight-strong);
+  line-height: var(--sd-line-height-tight);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sd-color-accent);
+  border: 2px solid currentColor;
+  border-radius: 9999px;
+}

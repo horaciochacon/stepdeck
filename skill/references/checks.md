@@ -63,6 +63,12 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `advance-overflow` | `advance.values` runs past the last step. | Add steps or drop values, as the fix says. |
 | `reserved-id` | An element has the id `kicker`, which core uses for the element it makes from the slide's `section`. | Rename the element. To show a kicker, set the slide's `section`. |
 | `kicker-no-region` | Warning. The slide has a `section`, but its layout has no `title` region, so the kicker is not drawn (steps that set, replace, show or hide `kicker` are ignored). | Use a layout with a `title` region, or remove `section`. |
+| `lede-on-cover` | Warning. The slide has a `lede`, and its layout is a cover (`title`), which has a `subtitle` region for that line. | Put the line in a `text` element with `region: "subtitle"`, and remove `lede`. |
+| `ghost-collapse` | An element has `ghost` together with `collapse: true`: a collapsed element has no space to show the placeholder in. | Remove `collapse`, or remove `ghost`. |
+| `spec-invalid` on `enter`/`exit` | A motion name that does not exist, as a name or as an object's `motion` (did-you-mean given), or an object's `delay` or `duration` over 5000. A key other than `motion`, `delay`, `duration` in the object is `unknown-key`, with the nearest key. | Use `fade`, `rise`, `wipe`, `pop`, `draw` or `none`, or `{ motion, delay?, duration? }` (ms, 0 to 5000). |
+| `spec-invalid` on `transition` | A step's `transition.stagger` over 1000 or `transition.duration` over 5000. | Lower it; split a long build over several steps. |
+| `exit-delay-ignored` | Warning. An `exit` object has a `delay`; exits start at once, so it does nothing. | Remove `delay` from `exit`. To leave later, hide the element on a later step. |
+| `motion-budget` | Warning. An element entering on a step settles 8000 ms or more after the step starts: its stagger hold (slot × stagger + its `delay`) plus its entrance (box motion, or its own build estimated from its props). An element must settle within 10 s, or it fails on stage. | Shorten its `delay` or `duration`, or the step's `transition.stagger`, or split the step so fewer elements enter at once. |
 
 ### Per step
 
@@ -154,4 +160,4 @@ These are printed as `warning:` lines; `catalog` still exits 0.
 - **`figure-source` reads only initial props.** The source element must have `role: "source"` in its `props`, not only after a `set`.
 - **`{{color:role}}` is not checked by validate.** An unknown role shows up only at run time, as a `render-error` from the markdown element.
 - **`slide.style` is not scanned for hex colors.** It is scanned for remote URLs (`remote-url`) and `@import` (`style-import`). Keep it to tokens and relative paths anyway.
-- **Inert options.** `enter`/`exit` on elements and `sections` (deck) are accepted but have no effect in this version. (`section` on a slide is the kicker.)
+- **Inert options.** `sections` (deck) and `seconds` (slide) are accepted but have no effect in this version. (`section` on a slide is the kicker.)

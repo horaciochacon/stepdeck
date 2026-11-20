@@ -55,17 +55,17 @@ A deck sets its theme in `deck.js`: `theme: "modern"`, the default. Two themes a
 - a `palettes.json`;
 - vendored fonts.
 
-Components and layouts read only tokens, never raw colors or sizes. `catalog modern my-talk` lists every token with its value. The main ones (sizes are the same in both themes, except the cover):
+Components and layouts read only tokens, never raw colors or sizes. `catalog modern my-talk` lists every token with its value. The main ones (sizes are the same in both themes, except the cover and the lede):
 
 | Group | Tokens |
 |---|---|
-| Color roles | `--sd-color-background`, `-surface`, `-ink`, `-muted`, `-accent`, `-alert`, `-rule`; optional `-title`, `-kicker`, `-grid` (fall back to ink, muted, rule) |
-| Type | `--sd-font-body`, `--sd-font-mono`; sizes `--sd-font-size-display` (128), `-cover` (`modern` 140, `academic-light` 88), `-title` (64), `-statement` (64), `-heading` (48), `-body` (40), `-note` (32), `-label` (28), `-source` (28); optional `-cover-figure` (the cover title beside a figure; falls back to cover) and `-kicker` (28; falls back to label), and tracking `--sd-letter-spacing-title`, `-cover` (fall back to `normal`) |
+| Color roles | `--sd-color-background`, `-surface`, `-ink`, `-muted`, `-accent`, `-alert`, `-rule`; optional `-title`, `-kicker`, `-grid` (fall back to ink, muted, rule) and `-dim` (what `highlight` turns the rest to; falls back to rule) |
+| Type | `--sd-font-body`, `--sd-font-mono`; sizes `--sd-font-size-display` (128), `-cover` (`modern` 140, `academic-light` 88), `-title` (64), `-statement` (64), `-heading` (48), `-body` (40), `-note` (32), `-label` (28), `-source` (28); optional `-cover-figure` (the cover title beside a figure; falls back to cover), `-kicker` (28; falls back to label) and `-lede` (the message line: `modern` 36, `academic-light` 32; falls back to note), and tracking `--sd-letter-spacing-title`, `-cover` (fall back to `normal`) |
 | Spacing | `--sd-grid` (8px), `--sd-space` (16px), `--sd-region-gap` (24px), `--sd-canvas-margin` (96px), `--sd-rule-width`, `--sd-diagram-gap` (48px, between diagram cells), `--sd-diagram-pad` (16px, inside diagram nodes and groups) |
-| Motion | `--sd-duration` (400ms), `--sd-duration-fast`, `--sd-easing` |
+| Motion | `--sd-duration` (400ms), `--sd-duration-fast` (200ms), `--sd-easing`, `--sd-stagger` (`modern` 80ms, `academic-light` 60ms), `--sd-enter` (`rise`, `fade`), `--sd-motion-distance` (24px, 16px) |
 | Audience | `--min-audience-font` (28px); `--sd-min-audience-font` is an alias of it (`var(--min-audience-font)`) |
 
-**Hooks, layers and `theme.css`.** Core puts published classes on the elements that play a role: `sd-title` (the title element), `sd-kicker`, `sd-accent`, and `sd-subtitle`, `sd-meta`, `sd-statement` on a layout's mapped regions and every element wrapper in them. A theme restyles them in `theme.css`. CSS runs in cascade layers, lowest first: `sd-core` (with `components` and `hooks` inside), `sd-layout`, `sd-theme` (`theme.css`), `sd-deck` (declared and empty, reserved for per-deck overrides), `sd-slide` (the slide's `style`). So a slide's `style` always beats the theme. Rules for `theme.css`:
+**Hooks, layers and `theme.css`.** Core puts published classes on the elements that play a role: `sd-title` (the title element), `sd-kicker`, `sd-lede` (the message line's box), `sd-accent`, and `sd-subtitle`, `sd-meta`, `sd-statement` on a layout's mapped regions and every element wrapper in them. A theme restyles them in `theme.css`. CSS runs in cascade layers, lowest first: `sd-core` (with `components` and `hooks` inside), `sd-layout`, `sd-theme` (`theme.css`), `sd-deck` (declared and empty, reserved for per-deck overrides), `sd-slide` (the slide's `style`). So a slide's `style` always beats the theme. Rules for `theme.css`:
 - target hook classes and component part classes, never `[data-layout]`, region names or `!important`;
 - a hook class is on the region *and* its wrappers, so put box properties (border, padding, background) on the region only: `.sd-region.sd-meta`, not `.sd-meta`;
 - set inherited properties on the hook element (`.sd-kicker { color: … }`), not on its inner `.sd-text`, so a slide's `style` on that element still wins;

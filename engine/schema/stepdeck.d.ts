@@ -24,7 +24,10 @@ export interface Box {
 /** A step reference: the step's id, or its index (0-based). Prefer ids. */
 export type StepRef = string | number;
 
-export type EnterExit = "fade" | "rise" | "wipe" | "draw" | "none";
+export type MotionName = "fade" | "rise" | "wipe" | "pop" | "draw" | "none";
+
+/** A motion name, or an object that adds a delay and a duration (milliseconds, 0 to 5000). */
+export type EnterExit = MotionName | { motion: MotionName; delay?: number; duration?: number };
 
 export interface DeckSpec {
   title: string;
@@ -60,10 +63,20 @@ export interface ElementSpec {
   region?: string;
   /** Float anywhere on the canvas instead of flowing in a region. */
   box?: Box;
+  /**
+   * How the element arrives on an animating step: default the theme's --sd-enter, or the component's own build
+   * when its schema declares "x-enter": "own". `delay` (entrances only) adds to its stagger slot.
+   */
   enter?: EnterExit;
+  /**
+   * How the element leaves on an animating step: default "fade". A collapsing element always leaves at once.
+   * Exits start at once: a `delay` here does nothing (validate: exit-delay-ignored).
+   */
   exit?: EnterExit;
   /** Hidden elements keep their space unless collapse is true. */
   collapse?: boolean;
+  /** While hidden, show a placeholder in the element's space: true for a plain one, a string for a labelled one, false for none. Not with collapse. */
+  ghost?: boolean | string;
   /** Visible from this step on. */
   from?: StepRef;
   /** Visible only at these steps. */
@@ -72,9 +85,9 @@ export interface ElementSpec {
 }
 
 export interface Transition {
-  /** Delay between items, ms. */
+  /** Gap between the elements that enter on the step and between the items of a build, ms (0 to 1000); replaces --sd-stagger. */
   stagger?: number;
-  /** Duration, ms. */
+  /** Duration, ms (0 to 5000); replaces the theme's durations at this step. 0 snaps the step. */
   duration?: number;
 }
 
@@ -106,6 +119,13 @@ export interface SlideSpec {
    * `*phrase*` is an accent phrase (hook .sd-accent); `\*` is a literal asterisk.
    */
   title?: string;
+  /**
+   * A message line under the title: sugar for an element with the reserved id "lede" (type text, region title,
+   * props { text, role: "lede" }), placed right after the title. A step changes it with `set: { lede: { text } }`.
+   * An element of your own with id "lede" replaces the sugar. On a cover layout use the subtitle region instead
+   * (validate: lede-on-cover).
+   */
+  lede?: string;
   elements: ElementSpec[];
   steps?: StepSpec[];
   /** Scoped CSS, prefixed with the slide id. `:scope`/`&` target the canvas. */
@@ -220,6 +240,25 @@ export interface UpdateInfo<P extends Props = Props> {
   /** Aborted when a newer navigation supersedes this one: snap to the end state. Shared by the step's elements. */
   signal: AbortSignal;
   transition?: Transition;
+  /**
+   * Set only for a component whose schema.json declares `"x-enter": "own"`, in the update where its element
+   * becomes visible on an animating step (the engine has already held it to its stagger slot); null otherwise.
+   */
+  entrance: Entrance | null;
+}
+
+/**
+ * How a component that owns its entrance enters: "draw" builds from empty to this state (the box stays
+ * still); "none" renders this state at once (the box moves instead, or nothing does). Write the start state
+ * synchronously at the top of update(), before any await.
+ */
+export interface Entrance {
+  motion: "draw" | "none";
+  /**
+   * The element's own `enter.duration` (ms; 0 on a step whose duration is 0). Undefined: time the build with
+   * ctx.motion.timing(info), as for any other motion of the step.
+   */
+  duration: number | undefined;
 }
 
 export interface AnimateOptions {
@@ -246,6 +285,38 @@ export interface AnimateHelpers {
     fn: (item: T, index: number, opts: AnimateOptions) => void | Promise<void>,
     opts?: AnimateOptions & { stagger?: number },
   ): Promise<void>;
+}
+
+export interface MotionOptions {
+  /** ms; default the theme's --sd-duration. <= 0 jumps to the end state. */
+  duration?: number;
+  signal?: AbortSignal;
+  /** Default the theme's --sd-easing. */
+  ease?: (t: number) => number;
+  /** Travel in px for `rise`; default the theme's --sd-motion-distance. */
+  distance?: number;
+}
+
+export interface MotionTiming {
+  duration: number;
+  ease: (t: number) => number;
+  /** 0 when the duration is 0. */
+  stagger: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * The named motions with the theme's defaults (an option passed as undefined keeps the default). They write
+ * only opacity, transform and clip-path, and resolve (never reject) on abort or a zero duration.
+ */
+export interface MotionHelpers {
+  /** Plays `name` to the shown state, then restores the node's inline opacity, transform and clip-path. */
+  in(node: Element, name: MotionName, opts?: MotionOptions): Promise<void>;
+  /** Plays `name` to the hidden state and leaves it there; resolves with the inline values it replaced. */
+  out(node: Element, name: MotionName, opts?: MotionOptions): Promise<{ opacity?: string; transform?: string; clipPath?: string }>;
+  /** Duration, ease and stagger from the theme tokens; the step's `transition` overrides them. */
+  timing(info: Partial<UpdateInfo>, opts?: { factor?: number; fast?: boolean }): MotionTiming;
+  names: readonly MotionName[];
 }
 
 export interface Palette {
@@ -306,6 +377,7 @@ export interface ComponentContext {
   /** Rendering for capture (screenshots, PDF): no animation. */
   capture: boolean;
   animate: AnimateHelpers;
+  motion: MotionHelpers;
   /** Size of el in canvas pixels, measured at mount. */
   size: { w: number; h: number };
 }
@@ -325,6 +397,7 @@ export interface ElementState {
   collapse: boolean;
   enter?: EnterExit;
   exit?: EnterExit;
+  ghost?: boolean | string;
   region?: string;
   box?: Box;
 }
@@ -405,6 +478,11 @@ export interface CatalogEntry {
   summary: string;
   /** Props whose x-transition is not "snap" (layouts and themes: []). */
   animates: string[];
+  /**
+   * "own" when the component's schema.json declares `"x-enter": "own"` (it builds its own entrance and its box
+   * stays still), else "box" (the element's box moves in; layouts and themes: "box").
+   */
+  enter: "own" | "box";
 }
 
 export interface CatalogProp {

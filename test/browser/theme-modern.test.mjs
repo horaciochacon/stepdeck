@@ -3,7 +3,7 @@
 //
 // Temporary decks (each with a copied engine, like a `stepdeck new` deck):
 //   examples  the five layouts' example.js slides, with the data they read;
-//   bare      a deck.js with no `theme`, and covers whose meta or figure appear at a later step.
+//   bare      a deck.js with no `theme`, covers whose meta or figure appear at a later step, a lede and badges.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/theme-modern.test.mjs
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -17,6 +17,8 @@ import { ENGINE, copyEngine, listDirs } from "../../cli/engine.js";
 import { runCheck } from "../../cli/check.js";
 import { withDeck } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
+import { paletteRgb, tokenRgb } from "./helpers.mjs";
+import { contrast, luminance } from "#engine/core/color.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const THEMES = ["modern", "academic-light"];
@@ -48,6 +50,23 @@ const bareSlides = {
       { id: "where", region: "meta", type: "text", from: "two", props: { role: "note", text: "Somewhere · 2026" } },
     ],
     steps: [{ id: "one" }, { id: "two" }],
+  },
+  // A message line under a title, and text badges (one with a palette tone).
+  "message-line": {
+    id: "message-line", layout: "figure-notes", section: "Results", title: "Response by dose", lede: "Participants respond more as the dose rises.",
+    elements: [{ id: "figure", region: "main", type: "text", props: { text: "A figure stands here." } }],
+  },
+  badges: {
+    id: "badges", layout: "full-bleed", title: "Status",
+    elements: [
+      { id: "plain", region: "main", type: "text", props: { role: "badge", text: "Draft" } },
+      { id: "toned", region: "main", type: "text", props: { role: "badge", tone: 1, text: "In review" } },
+    ],
+  },
+  // One badge per palette tone: in each theme some of these colours are under 4.5:1 as they are.
+  tones: {
+    id: "tones", layout: "full-bleed", title: "Every tone",
+    elements: [0, 1, 2, 3, 4, 5].map((i) => ({ id: `t${i}`, region: "main", type: "text", props: { role: "badge", tone: i, text: `Tone ${i}` } })),
   },
   // The figure appears only at step two: the title keeps its size and its column from step one.
   "late-figure": {
@@ -360,4 +379,99 @@ test("a theme name that is not a folder name (?theme=../../x) is not found, and 
     assert.deepEqual(themeFiles, [], "no theme file was requested");
     assert.deepEqual(ctx.failed, []);
   });
+});
+
+test("lede: under the title in the title region, the lede token size, the muted ink; check is clean (both themes)", async () => {
+  const SIZE = { modern: "36px", "academic-light": "32px" };
+  for (const theme of THEMES) {
+    await withPage({ root: bare.root, url: bare.url({ slide: "message-line", query: { theme } }) }, async (page, ctx) => {
+      const got = await page.evaluate(() => {
+        const box = (sel) => document.querySelector(sel).getBoundingClientRect();
+        const p = document.querySelector('[data-el="lede"] p');
+        const cs = getComputedStyle(p);
+        const region = document.querySelector('[data-region="title"]').getBoundingClientRect();
+        const title = box('[data-el="title"] p');
+        const lede = box('[data-el="lede"] p');
+        return {
+          text: p.textContent,
+          cls: p.className,
+          size: cs.fontSize,
+          color: cs.color,
+          below: lede.top >= title.bottom - 0.5,
+          inside: lede.top >= region.top && lede.bottom <= region.bottom + 0.5 && lede.left >= region.left && lede.right <= region.right + 0.5,
+          order: [...document.querySelectorAll('[data-region="title"] > .sd-el')].map((e) => e.dataset.el),
+          hooks: Object.fromEntries([...document.querySelectorAll('[data-region="title"] > .sd-el')].map((e) => [e.dataset.el, [...e.classList].filter((c) => c !== "sd-el")])),
+        };
+      });
+      assert.equal(got.text, "Participants respond more as the dose rises.");
+      assert.deepEqual(got.hooks, { kicker: ["sd-kicker"], title: ["sd-title"], lede: ["sd-lede"] }, `${theme}: each box carries its hook class`);
+      assert.equal(got.cls, "sd-text sd-role-lede");
+      assert.equal(got.size, SIZE[theme], `${theme}: --sd-font-size-lede`);
+      assert.ok(parseFloat(got.size) >= 28, "at least the minimum audience font");
+      assert.equal(got.color, await tokenRgb(page, "--sd-color-muted"), `${theme}: the muted ink`);
+      assert.deepEqual(got.order, ["kicker", "title", "lede"]);
+      assert.equal(got.below, true, `${theme}: the lede sits below the title`);
+      assert.equal(got.inside, true, `${theme}: the lede sits inside the title region`);
+      await clean(page, ctx, theme);
+    });
+    const run = await runCheck(bare.root, { slide: "message-line", theme });
+    assert.equal(run.problems.length, 0, `${theme}:\n${show(run.problems)}`);
+  }
+});
+
+test("badge: an inline uppercase pill in the label size with a 2px border; accent without a tone, the palette colour with one (both themes)", async () => {
+  for (const theme of THEMES) {
+    await withPage({ root: bare.root, url: bare.url({ slide: "badges", query: { theme } }) }, async (page, ctx) => {
+      const look = (id) => page.evaluate((id) => {
+        const p = document.querySelector(`[data-el="${id}"] p`);
+        const cs = getComputedStyle(p);
+        return {
+          cls: p.className, display: cs.display, upper: cs.textTransform, size: cs.fontSize, tracking: cs.letterSpacing, color: cs.color,
+          border: [cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor, cs.borderRadius],
+          hugs: p.getBoundingClientRect().width < p.parentElement.getBoundingClientRect().width / 2,
+        };
+      }, id);
+      const plain = await look("plain");
+      assert.equal(plain.cls, "sd-text sd-role-badge");
+      assert.deepEqual([plain.display, plain.upper, plain.size, plain.tracking, plain.hugs], ["inline-block", "uppercase", "28px", "3.36px", true], theme);
+      assert.deepEqual(plain.border.slice(0, 2), ["2px", "solid"]);
+      assert.ok(parseFloat(plain.border[3]) >= 1000 || plain.border[3].includes("%"), `fully rounded (${plain.border[3]})`);
+      const accent = await tokenRgb(page, "--sd-color-accent");
+      assert.equal(plain.color, accent, `${theme}: no tone, the accent colour`);
+      assert.equal(plain.border[2], accent, `${theme}: the border follows the colour`);
+      const toned = await look("toned");
+      assert.equal(toned.border[2], paletteRgb(theme, 1), `${theme}: tone 1 draws the border in the second palette colour`);
+      assert.notEqual(toned.border[2], accent);
+      assert.ok(ratio(toned.color, await tokenRgb(page, "--sd-color-background")) >= 4.5, `${theme}: the text reads at 4.5:1 (${toned.color})`);
+      await clean(page, ctx, theme);
+    });
+  }
+});
+
+/** WCAG contrast of two computed `rgb(r, g, b)` colours. */
+const ratio = (a, b) => contrast(...[a, b].map((c) => luminance(c.match(/\d+/g).slice(0, 3).map((v) => Number(v) / 255))));
+
+test("badge: every tone 0 to 5 reads at 4.5:1 in both themes, and the border keeps the palette colour", async () => {
+  for (const theme of THEMES) {
+    await withPage({ root: bare.root, url: bare.url({ slide: "tones", query: { theme } }) }, async (page, ctx) => {
+      const background = await tokenRgb(page, "--sd-color-background");
+      const got = await page.evaluate(() => [0, 1, 2, 3, 4, 5].map((i) => {
+        const cs = getComputedStyle(document.querySelector(`[data-el="t${i}"] p`));
+        return { color: cs.color, border: cs.borderTopColor };
+      }));
+      let darkened = 0;
+      got.forEach(({ color, border }, i) => {
+        const palette = paletteRgb(theme, i);
+        assert.equal(border, palette, `${theme} tone ${i}: the border is the palette colour`);
+        assert.ok(ratio(color, background) >= 4.5, `${theme} tone ${i}: text ${color} reads at 4.5:1 (${ratio(color, background).toFixed(2)})`);
+        // A palette colour that already reads at 4.5:1 is the text colour as it is; the others are darkened.
+        if (ratio(palette, background) >= 4.5) assert.equal(color, palette, `${theme} tone ${i}: a colour that passes is kept`);
+        else darkened += 1;
+      });
+      assert.ok(darkened >= 2, `${theme}: the fixture has tones under 4.5:1 as they are (${darkened})`);
+      await clean(page, ctx, theme);
+    });
+    const run = await runCheck(bare.root, { slide: "tones", theme });
+    assert.equal(run.problems.length, 0, `${theme}:\n${show(run.problems)}`);
+  }
 });

@@ -7,41 +7,39 @@
 // keyed joins (series by name, points by series+x, ticks by value, annotations by x), driven by
 // ctx.animate helpers bound to info.signal, so an abort snaps straight to the end state.
 //
+// The chart owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" its
+// lines draw along their length over info.entrance.duration, else 2 x --sd-duration, while the box stays
+// still; axes, labels and bands show at once. The undrawn lines are written before the first await, in the
+// same task as the engine shows the element, so the chart never paints drawn first. Any other entrance
+// ("none", or a box motion) renders the end state at once.
+//
+// `highlight` turns the other series to the theme's --sd-color-dim (lines and bands keep opacity 1, their
+// labels turn muted) and draws the highlighted one after (above) them; the colors tween over --sd-duration-fast,
+// apart from the morph of the geometry.
+//
 // Colors come from ctx.palette("categorical") in data order (first appearance of each series), so a
 // series keeps its color whichever series are shown. A palette color only promises 3:1 against the
 // background (enough for a line), so a series label is drawn in the same color darkened (lightened
-// on a dark background) until it reaches 4.5:1, the contrast `check` requires of text.
+// on a dark background) until it reaches 4.5:1, the contrast `check` requires of text (textColor in
+// core/color.js, which text badges use too).
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr } from "../../core/chart.js";
-import { luminance as lum01, contrast as ratio } from "../../core/color.js";
-import { SVG_NS, num, lerp, measureWidth, measureHeight, motionMs } from "../../core/kit.js";
+import { loadTable, tickFormat } from "../../core/chart.js";
+import { textColor } from "../../core/color.js";
+import { SVG_NS, num, lerp, measureWidth, measureHeight, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
-const DIM = 0.25; // opacity of the lines and bands of series that are not highlighted
 const NO_SERIES = "all"; // series key when props.series is absent
 
-const TEXT_CONTRAST = 4.5;
-const hexRgb = (c) => {
-  const m = /^#([0-9a-f]{6})$/i.exec(String(c ?? "").trim());
-  return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null;
-};
-const luminance = (rgb) => lum01(rgb.map((v) => v / 255)); // channels 0..255
-const contrast = (a, b) => ratio(luminance(a), luminance(b));
-
-/** `color` mixed toward black (or white, on a dark background) until it reads as text on `background`. */
-function textColor(color, background) {
-  const c = hexRgb(color);
-  const bg = hexRgb(background) ?? [255, 255, 255];
-  if (!c) return color;
-  const target = luminance(bg) > 0.18 ? [0, 0, 0] : [255, 255, 255];
-  for (let t = 0; t <= 1; t += 0.02) {
-    const mixed = c.map((v, i) => Math.round(lerp(v, target[i], t)));
-    if (contrast(mixed, bg) >= TEXT_CONTRAST) return `#${mixed.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-  }
-  return `#${target.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+
+/** Hides an SVG path along its length (the start of ctx.animate.drawPath); a path with no length is left as is. */
+function undraw(path) {
+  const length = typeof path.getTotalLength === "function" ? Number(path.getTotalLength()) || 0 : 0;
+  if (!(length > 0)) return;
+  path.style.strokeDasharray = `${length} ${length}`;
+  path.style.strokeDashoffset = String(length);
+}
 
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
@@ -115,8 +113,10 @@ function buildModel(props, rows, ctx, el) {
     return {
       name,
       color,
-      opacity: dimmed ? DIM : 1,
-      // Labels are text: never faded, so a dimmed series' label switches to the muted text color.
+      dimmed,
+      // A series out of focus turns to the theme's dim color (opacity stays 1) and is drawn below the focused ones.
+      paint: focusPaint(ctx, color, dimmed),
+      // Labels are text: their color changes, so a dimmed series' label switches to the muted text color.
       labelColor: dimmed && muted ? muted : colors.length ? textColor(color, background) : null,
       points,
     };
@@ -199,6 +199,13 @@ export default {
       });
     }
 
+    /** Draws the focused series after (above) the dimmed ones: the data order, with the dimmed first. */
+    function stackFocus(m) {
+      const focused = (d) => !d.dimmed;
+      gLines.selectAll("path.sd-line:not(.sd-exiting)").data(m.series, byName).order().filter(focused).raise();
+      gBands.selectAll("path.sd-band:not(.sd-exiting)").data(m.hasInterval ? m.series : [], byName).order().filter(focused).raise();
+    }
+
     /** Writes the model exactly: the end state of every update, animated or not. */
     function renderStatic(m) {
       join(m);
@@ -214,11 +221,10 @@ export default {
       const y = d3.scaleLinear().domain(m.yDomain).range(m.yRange);
       placeMarks(m, x, y);
       gLines.selectAll("path.sd-line").data(m.series, (d) => d.name)
-        .attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.color)
-        .attr("opacity", opacityAttr).order();
+        .attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
       gBands.selectAll("path.sd-band").data(m.hasInterval ? m.series : [], (d) => d.name)
-        .attr("d", (d) => bandD(d.points)).attr("fill", (d) => d.color)
-        .attr("opacity", opacityAttr).order();
+        .attr("d", (d) => bandD(d.points)).attr("fill", (d) => d.paint);
+      stackFocus(m);
       gLabels.selectAll("text.sd-series-label").data(m.hasSeriesLabels ? m.series : [], (d) => d.name)
         .attr("x", m.pw + m.font * 0.4).attr("y", (d) => d.ly).attr("dy", "0.35em")
         .attr("fill", (d) => d.labelColor).text((d) => d.name)
@@ -256,7 +262,9 @@ export default {
     async function morph(from, to, info) {
       const duration = motionMs(info, ctx, 2);
       const signal = info.signal;
+      const { ease } = motion(info, ctx); // the theme's --sd-easing, for every geometry tween and draw
       join(to);
+      stackFocus(to);
       // Pixel positions of the previous state, keyed by series+x.
       const prevPts = new Map(from.series.flatMap((s) => s.points.map((p) => [p.key, p])));
       const prevSeries = new Map(from.series.map((s) => [s.name, s]));
@@ -266,7 +274,17 @@ export default {
         const mix = (a, b) => (a === null || b === null ? b : lerp(a, b, t));
         return { px: lerp(q.px, p.px, t), py: lerp(q.py, p.py, t), lo: mix(q.lo, p.lo), hi: mix(q.hi, p.hi) };
       };
-      const opacityOf = (name, target, t) => lerp(prevSeries.get(name)?.opacity ?? target, target, t);
+      // Colors change on their own, faster tween (a focus change takes --sd-duration-fast); the frame reads them.
+      const live = new Map(to.series.map((s) => [s.name, { paint: prevSeries.get(s.name)?.paint ?? s.paint, label: prevSeries.get(s.name)?.labelColor ?? s.labelColor }]));
+      const fast = motion(info, ctx, { fast: true });
+      const recolor = to.series.flatMap((s) => {
+        const was = prevSeries.get(s.name);
+        const now = live.get(s.name);
+        return was ? [
+          was.paint !== s.paint && tweenColor(ctx, was.paint, s.paint, (c) => { now.paint = c; }, fast),
+          was.labelColor !== s.labelColor && tweenColor(ctx, was.labelColor, s.labelColor, (c) => { now.label = c; }, fast),
+        ].filter(Boolean) : [];
+      });
       const fadeOf = (sel, t) => sel.attr("opacity", function () {
         return this.classList.contains("sd-exiting") ? 1 - t : this.__sdEnter ? t : null;
       });
@@ -277,8 +295,8 @@ export default {
       });
       // Entering series draw at their final shape while everything else morphs.
       const lines = gLines.selectAll("path.sd-line:not(.sd-exiting)").data(to.series, (d) => d.name);
-      lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.color);
-      const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal }));
+      lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
+      const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
 
       const frame = (t) => {
         const { x, y } = scalesAt(from, to, t);
@@ -289,30 +307,34 @@ export default {
         fadeOf(svg.selectAll(".tick, g.sd-annotation"), t);
         lines.filter((d) => !entering.has(d.name))
           .attr("d", (d) => lineD(d.points.map((p) => tween(p, t))))
-          .attr("stroke", (d) => d.color)
-          .attr("opacity", (d) => opacityOf(d.name, d.opacity, t));
+          .attr("stroke", (d) => live.get(d.name).paint);
         gBands.selectAll("path.sd-band:not(.sd-exiting)").data(to.hasInterval ? to.series : [], (d) => d.name)
           .attr("d", (d) => bandD(d.points.map((p) => ({ ...p, ...tween(p, t) }))))
-          .attr("fill", (d) => d.color).attr("opacity", (d) => opacityOf(d.name, d.opacity, t) * (entering.has(d.name) ? t : 1));
+          .attr("fill", (d) => live.get(d.name).paint).attr("opacity", (d) => (entering.has(d.name) ? t : 1));
         gLabels.selectAll("text.sd-series-label:not(.sd-exiting)").data(to.hasSeriesLabels ? to.series : [], (d) => d.name)
           .attr("x", x.range()[1] + to.font * 0.4).attr("y", (d) => lerp(prevSeries.get(d.name)?.ly ?? d.ly, d.ly, t))
-          .attr("dy", "0.35em").attr("fill", (d) => d.labelColor).text((d) => d.name)
+          .attr("dy", "0.35em").attr("fill", (d) => live.get(d.name).label).text((d) => d.name)
           .attr("opacity", (d) => (entering.has(d.name) ? t : 1));
         svg.selectAll("path.sd-line.sd-exiting, .sd-band.sd-exiting, .sd-series-label.sd-exiting").attr("opacity", 1 - t);
       };
-      await Promise.all([ctx.animate.tween(0, 1, frame, { duration, signal }), ...draws]);
+      await Promise.all([ctx.animate.tween(0, 1, frame, { duration, signal, ease }), ...draws, ...recolor]);
     }
 
     return {
       async update(props, info = {}) {
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // The start state of the entrance, before the first await: the lines of the last render are undrawn.
+        if (draw) gLines.selectAll("path.sd-line").each(function () { undraw(this); });
         const rows = await loadRows(props, ctx);
         const model = buildModel(props, rows, ctx, el);
-        if (info.animate && info.entered && !info.signal?.aborted) {
-          // Just became visible: draw every line in from its final shape.
+        if (draw && !info.signal?.aborted) {
+          // The entrance: every line draws in from its final shape.
           renderStatic(model);
-          const duration = motionMs(info, ctx, 2);
-          await Promise.all(gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal: info.signal })));
-        } else if (info.animate && last && !info.signal?.aborted) {
+          const duration = info.entrance.duration ?? motionMs(info, ctx, 2);
+          const { ease } = motion(info, ctx);
+          await Promise.all(gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal: info.signal, ease })));
+        } else if (info.animate && last && !info.entered && !info.signal?.aborted) {
+          // A change while the chart stays shown. An element that just appeared without a draw snaps.
           await morph(last, model, info);
         }
         renderStatic(model);

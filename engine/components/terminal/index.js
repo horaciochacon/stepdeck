@@ -8,12 +8,21 @@
 //   - the command line appears once shown > 0.
 // Every update ends by writing that state directly (renderStatic), so the DOM after settled() is the
 // same whether a state was jumped to or played. With info.animate and shown increasing, the component
-// first types the command (when `typing` and the session just started) and staggers in the new
-// lines, through ctx.animate helpers bound to info.signal, so an aborted step snaps to its end.
+// first types the command (when `typing` and the session just started, at a constant speed per character)
+// and then fades the new lines in (ctx.motion.in "fade", staggered by --sd-stagger, with the theme's
+// timing), through helpers bound to info.signal, so an aborted step snaps to its end.
+//
+// The terminal owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it
+// plays the same build from an empty terminal (shown 0) to this step's state, while its box stays still: the
+// command is typed (when `typing`), then the lines fade in. The command and the lines' start state is written
+// before the first await, in the same task as the engine shows the element, so nothing paints built first. An
+// element that appears with a new `script` is emptied before that script loads, so the old one never shows.
+// Any other update of a freshly shown element (an entrance of "none", or a box that moves instead) snaps to
+// the end state.
 // Sizes come from theme tokens via CSS (core/stepdeck.css), colors too; no color is set here.
 import { checkScript, clampShown, deriveTasks, deriveFiles, windowOf, lineText } from "./derive.js";
 import { clearInlineStyle, typeCount, typingMs } from "../../core/animate.js";
-import { el as element, motionMs } from "../../core/kit.js";
+import { el as element, canAnimate, motion } from "../../core/kit.js";
 
 const MARKERS = { result: "out" }; // a line's marker is its event type, except these
 const TASK_MARKERS = { pending: "[ ]", active: "[~]", done: "[x]" };
@@ -46,6 +55,7 @@ export default {
     const fileList = make("ul", "sd-terminal-files", side);
 
     let lastShown = 0; // `shown` of the last fully applied state
+    let scriptPath = props.script;
     let script = await loadScript(props, ctx); // fail early: the controller shows the error
 
     /** How many lines fit the log box, in canvas pixels (the shell may scale the canvas); cached per box size. */
@@ -72,6 +82,15 @@ export default {
       make("span", "sd-terminal-marker", line, MARKERS[event.type] ?? event.type);
       make("span", "sd-terminal-text", line, text);
       return line;
+    }
+
+    /** An empty terminal: nothing of any script (the start of an element that appears with a new script). */
+    function blank() {
+      title.textContent = "";
+      command.textContent = "";
+      log.replaceChildren();
+      taskList.replaceChildren();
+      fileList.replaceChildren();
     }
 
     /** Writes the state for `shown` exactly: the end state of every update, animated or not. */
@@ -108,24 +127,48 @@ export default {
 
     return {
       async update(props, info = {}) {
-        script = await loadScript(props, ctx);
-        const shown = clampShown(props.shown, script.events.length);
-        const before = lastShown;
-        renderStatic(shown);
-        if (info.animate && shown > before && !info.signal?.aborted) {
-          const signal = info.signal;
-          const duration = motionMs(info, ctx);
-          const fresh = [...log.children].filter((l) => Number(l.dataset.i) >= before);
-          for (const l of fresh) l.style.opacity = "0";
-          if (props.typing && before === 0 && script.command) {
-            const full = script.command;
-            command.textContent = "";
-            await typeCount(ctx.animate, full.length, (n) => (command.textContent = full.slice(0, n)), { duration: typingMs(full.length), signal });
-          }
-          await ctx.animate.stagger(fresh, (l, _i, o) => ctx.animate.fadeIn(l, o), { duration, signal });
-          clearInlineStyle(...fresh); // what fadeIn left behind
+        // The script is read again only when its path changes, so a usual update reaches the DOM before any await.
+        if (props.script !== scriptPath) {
+          // An element that appears with a new script (drawn, moved by its box or not at all) shows nothing of the
+          // old one while the new one loads: it is emptied now, in the same task as the engine shows it, and
+          // renderStatic fills it once the script is there. No inline style, so a failed load leaves none.
+          if (info.entered) blank();
+          script = await loadScript(props, ctx);
+          scriptPath = props.script;
         }
+        // Read after the script's load: a step aborted while it loaded snaps.
+        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        // An element that just appeared without a drawn entrance (none, or its box moves) snaps.
+        const animate = draw || (canAnimate(info) && !info.entered);
+        const shown = clampShown(props.shown, script.events.length);
+        // A drawn entrance builds from an empty terminal.
+        const before = draw ? 0 : lastShown;
+        renderStatic(shown);
         lastShown = shown;
+        if (!animate || shown <= before) return;
+
+        const opts = motion(info, ctx);
+        if (draw && info.entrance.duration !== undefined) opts.duration = info.entrance.duration;
+        const fresh = [...log.children].filter((l) => Number(l.dataset.i) >= before);
+        // The start state, written now: nothing of a new line paints before its slot.
+        for (const l of fresh) l.style.opacity = "0";
+        const full = script.command ?? "";
+        const typed = props.typing === true && before === 0 && full !== "";
+        if (typed) command.textContent = "";
+        try {
+          if (typed) {
+            await typeCount(ctx.animate, full.length, (n) => (command.textContent = full.slice(0, n)), { duration: opts.duration > 0 ? typingMs(full.length) : 0, signal: opts.signal });
+          }
+          await ctx.animate.stagger(fresh, async (l, _i, o) => {
+            // Hand the start state to the motion in one synchronous block: it saves the (now empty) inline
+            // style, writes opacity 0 again, and puts the saved state back at the end.
+            l.style.opacity = "";
+            await ctx.motion.in(l, "fade", { ...opts, signal: o.signal });
+          }, opts);
+        } finally {
+          command.textContent = shown > 0 ? full : "";
+          clearInlineStyle(...fresh);
+        }
       },
       destroy() {
         root.remove();

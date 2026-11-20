@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chat",
   "description": "An exchange as bubbles, or a single prompt or quote as a bordered card. `shown` says how many messages are visible (hidden ones keep their space), and `typing` types the newest message on a forward step. Set `shown` per step with `advance` or `set` on the slide.",
+  "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
   "required": ["messages"],

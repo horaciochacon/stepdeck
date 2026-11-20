@@ -55,7 +55,7 @@ The step is the step's `id`, or its index as a string when the step has no id.
 
 | Command | Severity | Exit code |
 | --- | --- | --- |
-| `validate` | Every rule is an error except `noop-step`, `kicker-no-region`, `title-accent` and `accent-empty`, which are warnings. Warnings print as `warning: <line>` after the errors. | `1` if any error; `0` if clean or warnings only. |
+| `validate` | Every rule is an error except `noop-step`, `kicker-no-region`, `lede-on-cover`, `title-accent`, `accent-empty`, `exit-delay-ignored` and `motion-budget`, which are warnings. Warnings print as `warning: <line>` after the errors. | `1` if any error; `0` if clean or warnings only. |
 | `check` | Every problem is an error. | `1` if any problem. |
 | `catalog` | Every problem is a warning. | Always `0`. |
 
@@ -131,7 +131,7 @@ The palette rules run only on the palettes the deck draws with. For each kind (c
 | `slide-load` | The slide file throws on import, or has no default object export. | Importable in plain Node; `export default { id, elements }`. | Plain data only: no DOM, fetch or top-level await. Loops are fine. |
 | `slide-id` | The exported `id` differs from the file name. | `'<id>' (the file name)`. | Set `id` to the file name. |
 | `unknown-key` | A key not allowed on the slide, an element or a step. Element problems are located by element id, step problems by step id. | `allowed: <keys>`. | Rename it as the did-you-mean says. |
-| `spec-invalid` | Any other slide schema error: a missing `id`, `type` or `elements`, a wrong type, an incomplete `box`, a bad `enter` value. | The schema constraint. | Follow the fix text. |
+| `spec-invalid` | Any other slide schema error: a missing `id`, `type` or `elements`, a wrong type, an incomplete `box`, a bad `enter` or `exit` (an unknown motion name gets a did-you-mean in both forms: `"rize"` and `{ motion: "rize" }` suggest `"rise"`; an object's `delay` or `duration` over 5000 names the bound), a `transition.stagger` over 1000 or a `transition.duration` over 5000, a `ghost` that is neither a boolean nor a label. | The schema constraint. | Follow the fix text. |
 | `duplicate-id` | Two elements share an id. | `unique per slide`. | Rename one, and the patches that target it. |
 | `step-id-numeric` | A step id is digits only, such as `"1"`. Digits mean a step number. | `not digits only`. | Use a word, such as `step-1`, and update references. |
 | `duplicate-step-id` | Two steps share an id. | `unique per slide`. | Rename one. |
@@ -144,6 +144,10 @@ The palette rules run only on the palettes the deck draws with. For each kind (c
 | `advance-overflow` | `advance.values` runs past the last step. At run time the extra values are dropped. | `<n> steps from there`. | Add steps, or drop the last values, as the fix says. |
 | `reserved-id` | An element of the slide has the id `kicker`, which core uses for the element it makes from the slide's `section`. (An element with id `title` is allowed: it replaces the title shortcut.) Located at the element. | `reserved: "kicker"`. | Rename the element, and the patches that target it. To show a kicker, set the slide's `section`. |
 | `kicker-no-region` | Warning. The slide has a `section`, but its layout has no `title` region, so the kicker is not drawn (it is dropped quietly at run time, and steps that set, replace, show or hide `kicker` are ignored). Located at the slide. | `layout <name> has no title region (regions: …)`. | Use a layout with a `title` region, or remove `section`. |
+| `lede-on-cover` | Warning. The slide has a `lede`, and its layout is a cover (`kind: "cover"`), which has a `subtitle` region for that line. Located at the slide. | `a cover puts its line under the title in the subtitle region`. | Use the subtitle region on a cover: put the line in a `text` element with `region: "subtitle"`, and remove `lede`. |
+| `ghost-collapse` | An element has `ghost` (`true` or a label; `false` is no placeholder and is fine) together with `collapse: true`: a collapsed element takes no space, so there is nowhere to show its placeholder. Located at the element. | `ghost needs the element's space; collapse removes it`. | Remove `collapse`, or remove `ghost`. |
+| `exit-delay-ignored` | Warning. An element's `exit` is an object with a `delay`. Exits start at t = 0, so the delay does nothing. Located at the element. | `exits start at t = 0: an exit has no delay`. | Remove `delay` from `exit`. To leave later, hide the element on a later step. |
+| `motion-budget` | Warning. An element that enters on a step (played forward) settles 8000 ms or more after the step starts: its stagger hold (slot × stagger + its own `delay`) plus its entrance (the box motion's duration, or the component's own build, estimated from its props: the charts draw over 2 × `--sd-duration`, `big-number` counts over 2.25 ×, `list`, `chat`, `diagram` and `terminal` build their shown items one stagger apart, `timeline` fills then marks its stop). Every element must settle within the 10 s watchdog, or it fails on stage with "did not settle". Located at the element and the step. | `under 8000 ms (each element settles within the 10 s watchdog)`. | Shorten the element's `delay` or `duration`, or the step's `transition.stagger`, or split the step so fewer elements enter at once. |
 
 ### validate: per-step rules
 
@@ -287,11 +291,16 @@ Each rule should have a fixture that yields exactly that problem. To add or chan
 | `test/fixtures/validate/duplicate-id` | `duplicate-id` |
 | `test/fixtures/validate/figure-without-source` | `figure-source` |
 | `test/fixtures/validate/hex-color` | `hex-color` |
+| `test/fixtures/validate/ghost-collapse` | `ghost-collapse` |
 | `test/fixtures/validate/kicker-no-region` | `kicker-no-region` |
+| `test/fixtures/validate/lede-on-cover` | `lede-on-cover` |
+| `test/fixtures/validate/exit-delay` | `exit-delay-ignored` |
+| `test/fixtures/validate/motion-budget` | `motion-budget` (three: a box motion, a list build and a count-up); `motion-budget-under` is the same slide a little earlier, and clean |
 | `test/fixtures/validate/image-alt-empty`, `image-alt-missing`, `invalid-at-step` | `prop-invalid` |
 | `test/fixtures/validate/missing-column`, `missing-column-bar` | `missing-column` |
 | `test/fixtures/validate/noop-step` | `noop-step` |
 | `test/fixtures/validate/numeric-step-id` | `step-id-numeric` |
+| `test/fixtures/validate/bad-motion` | `spec-invalid` (an unknown motion name in `enter`, with a did-you-mean) |
 | `test/fixtures/validate/props-null` | `props-not-object` |
 | `test/fixtures/validate/remote-style` | `remote-url` (in `slide.style`) |
 | `test/fixtures/validate/reserved-id` | `reserved-id` |
@@ -307,7 +316,7 @@ Each rule should have a fixture that yields exactly that problem. To add or chan
 | `test/fixtures/check/<rule>` | That `check` rule; `remote-fetch` and `remote-style` give `network-error` |
 | `test/fixtures/decks/played-mismatch` | `played-mismatch` |
 
-These rules have no fixture folder: `deck-load`, `spec-invalid`, `unknown-theme`, `theme-palettes`, `theme-background`, `unknown-palette`, `palette-cvd`, `engine`, `component-missing`, `layout-schema`, `slide-missing`, `slide-load`, `slide-id`, `duplicate-step-id`, `unknown-layout`, `fold-error`, `file-missing`, `data-invalid`, `catalog-schema` and `catalog-name`. Some are covered by inline tests in `test/unit/`.
+These rules have no fixture folder: `deck-load`, `unknown-theme`, `theme-palettes`, `theme-background`, `unknown-palette`, `palette-cvd`, `engine`, `component-missing`, `layout-schema`, `slide-missing`, `slide-load`, `slide-id`, `duplicate-step-id`, `unknown-layout`, `fold-error`, `file-missing`, `data-invalid`, `catalog-schema` and `catalog-name`. Some are covered by inline tests in `test/unit/`.
 
 ## See also
 

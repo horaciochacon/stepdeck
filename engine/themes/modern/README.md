@@ -23,6 +23,7 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-color-alert` | `#d81b45` | Errors and warnings. The categorical palette's `rose` (role `alert`). Tuned, see below. |
 | `--sd-color-rule` | `#e4e4e7` | Hairlines: borders, separators. |
 | `--sd-color-grid` | `#f0f0f2` | Chart grid lines, lighter than a rule. Optional: falls back to `--sd-color-rule`. |
+| `--sd-color-dim` | `#c4c4cc` | What marks out of focus turn to when `highlight` emphasises another (`chart.line`, `chart.bar`, `diagram`). Optional: falls back to `--sd-color-rule`. Lighter than muted, darker than grid (relative luminance 0.56, against 0.12 and 0.87). |
 | `--sd-color-letterbox` | `#111114` | Outside the canvas when the window is not 16:9. |
 
 `accent` and `alert` equal the palette colors their roles point at, so `{{color:accent}}` in a markdown element names the color the audience sees ("blue", "azul").
@@ -43,6 +44,7 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-font-size-note` | `32px` | Notes, meta lines, big-number labels. |
 | `--sd-font-size-label` | `28px` | Axis ticks, legends, terminal text. |
 | `--sd-font-size-kicker` | `28px` | The kicker. Optional: falls back to `--sd-font-size-label`. |
+| `--sd-font-size-lede` | `36px` | The message line under a title (`role: "lede"`, the slide's `lede`). |
 | `--sd-font-size-source` | `28px` | Source lines. |
 | `--sd-font-weight-body` | `400` | Body weight. |
 | `--sd-font-weight-title` | `600` | Titles, big numbers. |
@@ -53,7 +55,20 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-letter-spacing-cover` | `-0.05em` | Cover title tracking. Optional: falls back to `normal`. |
 | `--sd-measure` | `34em` | Comfortable line length for long text. |
 
-The minimum audience font, spacing, canvas and motion tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-duration`, `--sd-duration-fast`, `--sd-easing`). See that README for the table.
+The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`). See that README for the table.
+
+### Motion
+
+`modern` moves a little more than `academic-light`: elements rise into place by default, further, with a slightly longer gap between them. The durations and the easing are the same in both themes.
+
+| Token | Value | Use |
+|---|---|---|
+| `--sd-duration` | `400ms` | The base duration of every motion: entrances, exits, changes (charts draw over twice this). |
+| `--sd-duration-fast` | `200ms` | Quick changes: each half of a text crossfade, a highlight or badge colour change. |
+| `--sd-easing` | `cubic-bezier(0.65, 0, 0.35, 1)` | The easing of every motion (typing keeps a constant speed). |
+| `--sd-stagger` | `80ms` | The gap between the elements that enter on one step, and between the items of a build. (`academic-light`: 60ms.) |
+| `--sd-enter` | `rise` | How an element enters when its component has no build of its own. (`academic-light`: `fade`.) |
+| `--sd-motion-distance` | `24px` | How far a `rise` travels. (`academic-light`: 16px.) |
 
 ### Tuned values
 
@@ -87,6 +102,8 @@ cover's author line.
 | `[data-kind="cover"] .sd-title :is(.sd-text, .sd-markdown)` | Cover tracking (`--sd-letter-spacing-cover`). The size is not set here: core picks `--sd-font-size-cover`, or `--sd-font-size-cover-figure` when the `figure` region holds an element, and a `font-size` in theme.css would override both. |
 | `.sd-accent` | The accent phrase (`*phrase*` in a title): `--sd-color-accent`, `font-style: normal` (upright, not italic). |
 | `.sd-kicker .sd-text` | The kicker: `--sd-font-size-kicker`, 0.12em tracking, uppercase, `--sd-color-kicker`. The line height is restated because the size is set on the text, not inherited from the wrapper. |
+| `.sd-role-lede` | The message line under a title: `--sd-font-size-lede`, tight leading, `--sd-color-muted`. |
+| `.sd-role-badge` | A `text` badge: an inline pill, `--sd-font-size-label`, strong weight, 0.12em tracking, uppercase, `--sd-color-accent` (a `tone` overrides both colours inline: the border in the palette colour, the text in that colour darkened to 4.5:1), with a 2px border in `currentColor` and fully rounded corners. |
 | `.sd-region.sd-meta` | The author line's accent rule: a 4px `border-inline-start` along the whole meta block, transparent until a meta element is visible (`:has(> .sd-el:not(.sd-hidden, .sd-collapsed))`), so the meta text never moves. It is on the region only: core also puts `.sd-meta` on every wrapper inside it, and a border on the bare class would draw one rule per line. |
 | `.sd-big-number-value` | Tracking `-0.04em`. |
 

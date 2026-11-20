@@ -41,7 +41,7 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | [Quickstart](guide/quickstart.md) | Install, create a deck with `new`, serve and present it. |
 | [Your first deck](guide/first-deck.md) | Walk through the starter deck and turn it into your own slides. |
 | [The step model](guide/step-model.md) | Steps as patches, `set`/`replace`/`show`/`hide`/`only`, and the `from`, `at` and `advance` shortcuts. |
-| [Animation and motion](guide/animation-and-motion.md) | When motion plays, why a jump and a played step end in the same state, and reduced motion. |
+| [Animation and motion](guide/animation-and-motion.md) | The named motions elements enter and leave with, how one step's entrances follow each other, the theme's motion tokens, focus-dim, the message line, badges and ghost placeholders; when motion plays, why a jump and a played step end in the same state, and reduced motion. |
 | [Data and bindings](guide/data-and-bindings.md) | Data files in `data/`, bindings with a JSON pointer and an optional format, CSV column types. |
 | [Layouts and themes](guide/layouts-and-themes.md) | Choosing a layout, placing elements in regions, region variables, theme tokens and palettes. |
 | [Presenting](guide/presenting.md) | Serving a deck, keys, the presenter view, URL hashes and query flags. |

@@ -4,11 +4,13 @@
 //
 // dump(deckDir, { slide?, step?, size?, theme? }) -> Promise<Array<StepDump>>
 //   StepDump = { slide, step, stepId, elements: ElementDump[], changed: string[], errors: string[] }
-//   ElementDump = { id, type, visible, text, box: { x, y, w, h }, props }
+//   ElementDump = { id, type, visible, ghost?, text, box: { x, y, w, h }, props }
 //   step     index (number); stepId the step's id (its index as a string when it has none)
 //   visible  measured on the page (computed visibility/display), not read from the spec
+//   ghost    only while the element's ghost placeholder is on screen (the element is hidden): its label, or
+//            true for a ghost without one. Measured on the page too.
 //   text     the element's text nodes, each whitespace-collapsed, joined by one space (an accent title: its
-//            plain string, without the phrase marks; plainAccentText)
+//            plain string, without the phrase marks; plainAccentText). A ghost's label is not part of it.
 //   box      relative to the canvas, in canvas pixels (1920×1080, whatever the viewport), rounded
 //            to 1 px; a collapsed element is { 0, 0, 0, 0 }
 //   props    the resolved props (bindings applied) from STEPDECK.state()
@@ -22,6 +24,7 @@
 // formatDump(dumps) -> text, one block per step:
 //   trend · step 1 (regimens)
 //     visible  chart  chart.line  60,180 1240×700  "0 100 200 …"
+//     hidden   next   text        980,300 840×600  ghost "2 · Result"  "…"
 //     changed: chart
 import { withPage, deckTarget, withTimeout, describePageUrl, PAGE_TIMEOUT_MS } from "./browser.js";
 import { assertTheme, OPTIONAL_THEME_CSS } from "./engine.js";
@@ -136,6 +139,7 @@ export function measureInPage([canvasWidth, selector = ".sd-stage .sd-canvas"]) 
     let visible = false;
     let box = { x: 0, y: 0, w: 0, h: 0 };
     let text = "";
+    let ghost;
     if (node) {
       const cs = getComputedStyle(node);
       visible = cs.visibility !== "hidden" && cs.display !== "none";
@@ -143,16 +147,21 @@ export function measureInPage([canvasWidth, selector = ".sd-stage .sd-canvas"]) 
         const r = node.getBoundingClientRect();
         box = { x: toCanvas(r.left - c.left), y: toCanvas(r.top - c.top), w: toCanvas(r.width), h: toCanvas(r.height) };
       }
-      // Text nodes joined by one space, so "0" and "10,000" in separate tick labels stay apart.
+      // The ghost placeholder (core/layout.js), when it is on screen: its label, or true without one.
+      const g = node.querySelector(":scope > .sd-ghost");
+      if (g && getComputedStyle(g).display !== "none") ghost = g.querySelector(".sd-ghost-label")?.textContent ?? true;
+      // Text nodes joined by one space, so "0" and "10,000" in separate tick labels stay apart. The ghost's label
+      // is not the element's text.
       const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
       const parts = [];
       for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        if (g?.contains(t)) continue;
         const v = t.nodeValue.replace(/\s+/g, " ").trim();
         if (v) parts.push(v);
       }
       text = parts.join(" ");
     }
-    elements.push({ id, type: e.type, visible, text, box, props: e.props });
+    elements.push({ id, type: e.type, visible, ...(ghost === undefined ? {} : { ghost }), text, box, props: e.props });
   }
   return {
     slide: st?.slide ?? null,
@@ -251,6 +260,7 @@ export function formatDump(dumps) {
         String(e.type).padEnd(typeW),
         `${b.x},${b.y} ${b.w}×${b.h}`.padEnd(20),
       ];
+      if (e.ghost !== undefined) parts.push(e.ghost === true ? "ghost" : `ghost ${JSON.stringify(excerpt(String(e.ghost)))}`);
       if (e.text) parts.push(JSON.stringify(excerpt(e.text)));
       lines.push(`  ${parts.join("  ").trimEnd()}`);
     }

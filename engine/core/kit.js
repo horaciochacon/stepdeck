@@ -74,11 +74,46 @@ export const measureHeight = (node, ctx) => node.offsetHeight || ctx.size?.h || 
 /** Whether an update plays motion: the engine asked for it and the step was not aborted yet. */
 export const canAnimate = (info) => info.animate === true && !info.signal?.aborted;
 
-/** The { signal, duration } every ctx.animate helper takes (duration undefined: the helper's default). */
-export const motion = (info) => ({ signal: info.signal, duration: info.transition?.duration });
+/**
+ * The { duration, ease, signal, ... } every ctx.animate helper takes. With a `ctx` (the component's own) it is
+ * the theme's timing for this step (ctx.motion.timing(info, opts): `--sd-duration`, `--sd-easing`, ...,
+ * overridden by info.transition). Without one it is { signal, duration: info.transition?.duration }, where an
+ * undefined duration means the helper's default.
+ */
+export const motion = (info, ctx, opts) =>
+  ctx?.motion?.timing ? ctx.motion.timing(info, opts) : { signal: info.signal, duration: info.transition?.duration };
 
 /** The transition's duration, else `factor` x the theme's --sd-duration (400 ms when unknown). */
 export const motionMs = (info, ctx, factor = 1) => info.transition?.duration ?? factor * num(ctx.tokens?.["--sd-duration"], 400);
 
 /** Text color between the muted (p = 0) and the full ink (p = 1) theme color. */
 export const inkMix = (p) => `color-mix(in srgb, var(--sd-color-ink) ${p * 100}%, var(--sd-color-muted))`;
+
+/**
+ * The color a mark has when it is not in focus: the theme's `--sd-color-dim` (resolved, from ctx.tokens) when
+ * `dimmed`, else `color`. A theme without that token falls back to `--sd-color-rule`; without tokens the
+ * color is kept. Marks dim by color, never by opacity, so a dimmed mark stays opaque.
+ */
+export function focusPaint(ctx, color, dimmed) {
+  if (!dimmed) return color;
+  const t = ctx?.tokens;
+  return t?.["--sd-color-dim"]?.trim() || t?.["--sd-color-rule"]?.trim() || color;
+}
+
+/**
+ * Tweens a color from `from` to `to` in RGB (ctx.d3), calling set(color) each frame and last with `to` exactly
+ * as given, through ctx.animate.tween. `opts` is { duration, ease, signal }, as ctx.motion.timing returns.
+ * Equal colors set once. A value that is not a color ("none") counts as the other end's color at zero opacity,
+ * so a missing fill fades in and out. Two values that are not colors, zero duration and an abort set `to` at
+ * once. Always settles; rejects only when `set` throws.
+ */
+export async function tweenColor(ctx, from, to, set, opts = {}) {
+  if (from === to) return set(to);
+  const { d3 } = ctx;
+  const a = d3.color(from);
+  const b = d3.color(to);
+  if (!a && !b) return set(to);
+  const clear = (c) => Object.assign(c.copy(), { opacity: 0 });
+  const mix = d3.interpolateRgb(a ?? clear(b), b ?? clear(a));
+  return ctx.animate.tween(0, 1, (t) => set(t >= 1 ? to : mix(t)), opts);
+}

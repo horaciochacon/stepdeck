@@ -192,8 +192,9 @@ Returns the state of the slide on screen, or `null` when there is none (before t
       props: { … },          // resolved props (bindings applied); raw props for a failed element
       visible: true,
       collapse: false,
-      enter: undefined,      // copied from the element; inert
-      exit: undefined,       // copied from the element; inert
+      enter: undefined,      // copied from the element: its motion name or { motion, delay?, duration? }
+      exit: undefined,       // copied from the element, the same way
+      ghost: undefined,      // copied from the element: true or its label
       region: "main",        // present when the element sets one
       // box: { x, y, w, h } when the element sets one
     },

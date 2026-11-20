@@ -239,7 +239,7 @@ function splitTop(text, sep) {
   out.push(cur);
   return out.map((s) => s.trim()).filter(Boolean);
 }
-const HOOK_CLASS = /\.sd-(title|kicker|accent|subtitle|meta|statement)(?![\w-])/;
+const HOOK_CLASS = /\.sd-(title|kicker|lede|accent|subtitle|meta|statement)(?![\w-])/;
 const BOX_PROPERTY = /(?:^|[;{\s])(border[\w-]*|padding[\w-]*|margin[\w-]*|background[\w-]*|outline[\w-]*|box-shadow)\s*:/;
 /**
  * Rules in `css` that put a box property on a hook class that may sit on an element wrapper: core puts
@@ -321,5 +321,21 @@ test("a theme folder whose name breaks THEME_NAME is never offered as a theme or
     assert.notEqual(found.close, "My_Theme");
   } finally {
     rmSync(engine, { recursive: true, force: true });
+  }
+});
+
+test("both themes declare the six motion tokens, with the stagger, enter and distance each theme sets", () => {
+  const MOTION = {
+    modern: { tokens: modern, "--sd-stagger": "80ms", "--sd-enter": "rise", "--sd-motion-distance": "24px" },
+    "academic-light": { tokens: academic, "--sd-stagger": "60ms", "--sd-enter": "fade", "--sd-motion-distance": "16px" },
+  };
+  for (const [theme, { tokens, ...own }] of Object.entries(MOTION)) {
+    const expected = {
+      "--sd-duration": "400ms",
+      "--sd-duration-fast": "200ms",
+      "--sd-easing": "cubic-bezier(0.65, 0, 0.35, 1)",
+      ...own,
+    };
+    for (const [name, value] of Object.entries(expected)) assert.equal(tokens[name], value, `${theme} ${name}`);
   }
 });
