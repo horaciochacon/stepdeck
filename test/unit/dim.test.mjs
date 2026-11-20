@@ -54,12 +54,14 @@ const sample = async (from, to, opts) => {
 };
 
 test("tweenColor: RGB steps from the start colour to exactly the end colour", async () => {
-  const seen = await sample("#000000", "#c8c8c8", { duration: 80, ease: linear });
+  const seen = await sample("#000000", "#c8c8c8", { duration: 200, ease: linear });
   assert.equal(seen[0], "rgb(0, 0, 0)");
   assert.equal(seen.at(-1), "#c8c8c8", "the last value is the target as given");
-  assert.ok(seen.length >= 3, `intermediate frames (${seen.length})`);
+  // On a busy machine a frame can land right at either end and round to it (t = 0.998 is rgb(200, 200, 200)):
+  // the frames stay within the ends, at least one is strictly between them, and they never go back.
   const mid = seen.slice(1, -1).map((c) => Number(/\d+/.exec(c)[0]));
-  assert.ok(mid.every((v) => v > 0 && v < 200), `between the ends (${mid})`);
+  assert.ok(mid.some((v) => v > 0 && v < 200), `an intermediate frame (${mid})`);
+  assert.ok(mid.every((v) => v >= 0 && v <= 200), `within the ends (${mid})`);
   assert.deepEqual([...mid].sort((a, b) => a - b), mid, "monotonic");
 });
 
