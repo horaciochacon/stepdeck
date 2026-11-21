@@ -62,6 +62,12 @@ test("draw with a gap: an empty y splits the line", () => {
   assert.deepEqual(noX, [[2000, 2]]);
 });
 
+test("draw with a blank-looking cell: missing, never zero", () => {
+  const rows = [row(2000, "a", 1, 1), row(2005, "a", " ", 1), row(2010, "a", "\t3 ", 1), row(" ", "a", 5, 1), row(2015, "a", true, 1)];
+  const line = fanModel(rows, props(1), cols).bySeries.get("a").get("1");
+  assert.deepEqual(line, [[2000, 1], [2005, null], [2010, 3], [2015, null]], "a blank y breaks the line; a blank x has no place on it");
+});
+
 test("fanModel: errors over the limits and for shown beyond the draws", () => {
   const rows = [row(2000, "a", 1, 1), row(2000, "a", 2, 2), row(2000, "b", 3, 3)];
   assert.throws(() => fanModel(rows, props(4), cols), { message: "`draws.shown` is 4 but data/draws.csv has only 3 draws" });

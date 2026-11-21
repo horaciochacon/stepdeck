@@ -139,7 +139,7 @@ On the played step that adds `from` and changes `y`, each filled dot slides from
 - **Summary tick.** A vertical ink line (`line.sd-summary`) across the strip at the median of all its values, or at the mean with `summary: "mean"`. `summary: "none"` draws no tick. Out of focus (`highlight` on another category) the tick takes `--sd-color-dim`.
 - **Edges.** A strip with a single row has one dot on its centre line and its tick on that dot. Equal values stack across the band. A row with an empty value is not drawn, never at zero, and a strip with no value at all reads "no data". A row with an empty id is skipped.
 - **Ids.** An id appears at most once per category (a second one fails the element). The same id in several categories is the same item, which `focus` follows.
-- **Sorting.** `sort: "value"` and `"-value"` rank the strips by their summary statistic, the median when `summary` is `"none"`. `sort: { by }` reduces that column over each strip the same way (the median or the mean, numerically: a text column ranks as empty, so last).
+- **Sorting.** `sort: "value"` and `"-value"` rank the strips by their summary statistic, the median when `summary` is `"none"`. `sort: { by }` reduces a number column over each strip the same way (the median or the mean of its numbers); a text column ranks each strip by the text all its rows have, and a strip whose rows differ comes last.
 - **Overflow.** With a given `domain`, points outside it are not drawn. A box at that end of the row counts them: `‹ 3` between the category label and the plot, `3 ›` past the plot's right end, in `--sd-color-muted` at the label size, in a frame of `--sd-color-rule`. The margins keep room for the widest box of every step, so a step that sets `domain` does not resize the plot. The summary still counts every value; its tick is drawn only when it falls inside the domain. Without `domain` the axis covers every point, so nothing overflows.
 - **Focus.** `focus` names one id. Its dots get class `sd-focus` (an ink ring over the dot's colour) and are raised to the end of their strip. A thin ink line (`path.sd-focus-join`) joins them from strip to strip in row order; a strip without the item, or with it outside the domain, is skipped, and the line stops at each ring. Every other dot turns `--sd-color-dim` (never faded, so nothing loses contrast). An id the data does not have fails the element.
 - **Not drawn in strips.** `from`, `interval` and the value labels. `from` and `interval` do not widen the axis either.
@@ -159,10 +159,10 @@ On the played step that adds `from` and changes `y`, each filled dot slides from
 | `"none"`, or omitted | The data order. |
 | `"value"` | By `y`, lowest first. |
 | `"-value"` | By `y`, highest first. |
-| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A text column compares by code point. |
+| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A column with a number in any cell sorts by number, and its other cells (blank, `NA`) come last both ways; any other column is text, compared by code point. |
 | `["North", "South"]` | Those categories first, in that order, then the rest in data order. |
 
-Ties keep the data order. A row with no value (an empty cell, which reads "no data") comes last whichever way the order runs. Sorting changes the order and nothing else: the axis, the margins and every row's values are the same. Strips rank by their summary (see [Strips](#strips)).
+Ties keep the data order. A row with no value (an empty or blank cell, which reads "no data") comes last whichever way the order runs. Sorting changes the order and nothing else: the axis, the margins and every row's values are the same. Strips rank by their summary (see [Strips](#strips)).
 
 ```js
 { id: "points", region: "main", type: "chart.points",

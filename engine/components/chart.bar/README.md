@@ -34,8 +34,10 @@ Behaviour:
   days", keep both durations in one unit in two columns, switch `y` between them and set `domain` so the shrink is visible.
 - **Sorting.** `sort` orders the bands (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
   `y`, lowest first, and `"-value"` highest first; `{ by, order }` orders by another column (ascending unless `order`
-  is `"desc"`); a list of categories puts those first, in that order, and the rest after them in data order. Ties
-  keep the data order and a bar with no value comes last whichever way it runs. `sort` changes the order and nothing
+  is `"desc"`): a column with a number in any cell sorts by number, its other cells (blank, `NA`) last both ways, and
+  any other column is text, compared by code point (`sortColumns` in `core/chart-layout.js`); a list of categories
+  puts those first, in that order, and the rest after them in data order. Ties keep the data order and a bar with no
+  value (an empty or blank cell) comes last whichever way it runs. `sort` changes the order and nothing
   else: the value axis and the margins do not change with it. An unknown column or category fails the element with
   `rank`'s message.
 - **Hidden categories keep their band.** Bands follow the sorted order (the data order without `sort`) whether or not a
@@ -85,8 +87,8 @@ Behaviour:
     bar at each end). Value labels sit past the whisker, on the bar's own side, and show magnitudes.
   - `highlight` names a category (every other band dims, on both sides) or a group (the other side dims, and its title
     turns `--sd-color-muted`). A name that is both a category and a group is an element error.
-  - `sort` ranks the bands by the sum of the two sides; `{ by }` sums that column the same way (a text column, such as
-    the category itself, counts where both rows agree). A category with a side missing has no sum and comes last.
+  - `sort` ranks the bands by the sum of the two sides; `{ by }` sums a number column the same way (a text column, such
+    as the category itself, counts where both rows agree). A category with a side missing has no sum and comes last.
   - `shown` lists categories; a hidden category hides both its bars and keeps its band. An empty `y` cell draws no bar
     and no label on that side.
   - Every category needs one row for each group, and every value and drawn bound must be zero or more. Rows with an

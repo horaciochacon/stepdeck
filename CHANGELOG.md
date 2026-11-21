@@ -28,6 +28,10 @@ All notable changes to stepdeck are recorded here. The format follows
   They still end in the right state; drop the fade, or declare `"x-enter": "own"` and build on `info.entrance`.
   While a box moves, the engine writes inline `opacity`, `transform` and `clip-path` on it, so a slide `style` rule
   on those properties of the element box waits until the motion ends: style a node inside the box instead.
+- **A blank-looking cell is missing, never zero.** A CSV cell that holds only spaces keeps its column as text, and
+  `chart.bar` and `chart.line` drew it as 0: a bar labelled `0`, a line that dropped to the axis. Every chart now
+  reads it as missing, as an empty cell: no bar and no label (a waterfall reports the category as empty), no point on
+  the line, "no data" in `chart.points`. Decks with such cells change: they were drawn wrong.
 - **A step's `transition` has bounds.** `transition.stagger` is at most 1000 ms and `transition.duration` at most
   5000 ms (`validate` reports `spec-invalid` above them), like an element's own `delay` and `duration`.
 - **The engine lives in `engine/`.** `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/` moved

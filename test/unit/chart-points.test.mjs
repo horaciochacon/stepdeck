@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { d3 } from "#engine/core/d3.js";
 import { pointsModel, sizesOf } from "#engine/components/chart.points/model.js";
+import { parseCSV } from "#engine/core/data.js";
 
 const format = (spec) => d3.format(spec);
 const t = (key) => ({ noData: "no data" })[key] ?? key;
@@ -103,6 +104,20 @@ test("estimate with empty value shows no data", () => {
   const half = pointsModel([{ region: "A", rate: 5, low: null, high: 7 }, { region: "B", rate: 6, low: 5, high: 8 }], BASE, env());
   assert.deepEqual([half.rows[0].lo, half.rows[0].hi], [null, null]);
   assert.equal(half.rows[0].missing, false);
+});
+
+test("a blank-looking cell is missing: no data, never a dot at zero", () => {
+  // parseCSV keeps a column with a " " cell as text, so the chart reads a string that trims to nothing.
+  const rows = parseCSV('region,value,before,low,high\nA,3,2,1,4\nB, , ,1,4\nC,5," ",4," "\n');
+  const m = pointsModel(rows, { data: "d.csv", x: "region", y: "value", from: "before", interval: { lower: "low", upper: "high" } }, env());
+  const b = m.rows.find((r) => r.key === "B");
+  assert.deepEqual([b.value, b.missing, b.text, b.title, b.from], [null, true, "", "B: no data", null]);
+  const c = m.rows.find((r) => r.key === "C");
+  assert.deepEqual([c.value, c.from, c.lo, c.hi], [5, null, null, null], "a blank `from` or bound draws no pair and no whisker");
+  assert.deepEqual(m.domain, [1, 5], "zero is not in the data, so it is not on the axis");
+  const strips = pointsModel(parseCSV("g,id,v\nA,x1,3\nA,x2, \nA,x3,5\n"), { data: "s.csv", x: "g", y: "v", id: "id" }, env());
+  assert.deepEqual(strips.rows[0].points.map((q) => q.id), ["x1", "x3"], "a blank point is not drawn");
+  assert.equal(strips.rows[0].summary, 4, "nor counted");
 });
 
 test("pointsModel: errors", () => {

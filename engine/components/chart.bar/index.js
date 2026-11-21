@@ -47,9 +47,10 @@
 // Colors come from ctx.palette("categorical") (the first color; back-to-back, the first two), ctx.palette("diverging")
 // and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr, rank, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
+import { loadTable, tickFormat, opacityAttr, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
+import { cellValue } from "../../core/chart-layout.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
-import { waterfallSteps, waterfallDomain, backToBack, backToBackSpan, valueOf, categoriesOf, hasTotal } from "./modes.js";
+import { waterfallSteps, waterfallDomain, backToBack, backToBackSpan, barOrder, categoriesOf, hasTotal } from "./modes.js";
 import {
   TOTAL, signedSpec, waterfallColors, stack, totalBar, linksOf, placeSides, staticLinks, paintConnectors, placeFlowLabel,
   flowEnds, totalView, linksView, pairModel, paintSideTitles, staticSides, sideColors,
@@ -95,7 +96,7 @@ function barsExtent(rows, p) {
   const lower = p.interval?.lower;
   const upper = p.interval?.upper;
   const both = Boolean(lower && upper);
-  const all = rows.flatMap((r) => [valueOf(r, p.y), both ? valueOf(r, lower) : null, both ? valueOf(r, upper) : null]).filter((v) => v !== null);
+  const all = rows.flatMap((r) => [cellValue(r, p.y), both ? cellValue(r, lower) : null, both ? cellValue(r, upper) : null]).filter((v) => v !== null);
   return [Math.min(0, d3.min(all) ?? 0), Math.max(0, d3.max(all) ?? 0)];
 }
 
@@ -168,27 +169,25 @@ function buildModel(props, rows, ctx, el) {
     const made = categories.map((row) => {
       const raw = row[props.x];
       const key = String(raw);
-      const value = valueOf(row, props.y);
-      const lo = hasInterval ? valueOf(row, lower) : null;
-      const hi = hasInterval ? valueOf(row, upper) : null;
+      const value = cellValue(row, props.y);
+      const lo = hasInterval ? cellValue(row, lower) : null;
+      const hi = hasInterval ? cellValue(row, upper) : null;
       const dim = props.highlight != null && String(props.highlight) !== key;
       const label = fx && typeof raw === "number" ? fx(raw) : key;
       const text = value === null ? "" : fl(value);
       const range = value !== null && lo !== null && hi !== null ? ` (${fl(lo)} – ${fl(hi)})` : "";
       const color = flow ? (value !== null && value < 0 ? fall : rise) : fill;
       return {
-        bar: {
-          key, label, value, lo: value === null ? null : lo, hi: value === null ? null : hi,
-          text, title: `${label}: ${text}${range}`, shown: shown.has(key), dim,
-          fill: focusPaint(ctx, color, dim), labelFill: dim && muted ? muted : ink,
-        },
-        columns: row,
+        key, label, value, lo: value === null ? null : lo, hi: value === null ? null : hi,
+        text, title: `${label}: ${text}${range}`, shown: shown.has(key), dim,
+        fill: focusPaint(ctx, color, dim), labelFill: dim && muted ? muted : ink,
       };
     });
-    // The order: every category is ranked, shown or not, so a hidden one keeps its slot. The errors are rank's.
-    const byKey = new Map(made.map(({ bar }) => [bar.key, bar]));
+    // The order: every category is ranked, shown or not, so a hidden one keeps its slot (barOrder in ./modes.js). The
+    // errors are rank's.
+    const byKey = new Map(made.map((bar) => [bar.key, bar]));
     if (totalProps && byKey.has(TOTAL)) throw new Error(`category '${TOTAL}' in ${props.data} is the name the total bar uses: rename it`);
-    const bars = rank(made.map(({ bar, columns }) => ({ key: bar.key, value: bar.value, columns })), props.sort).map((key) => byKey.get(key));
+    const bars = barOrder(rows, props).map((key) => byKey.get(key));
     bars.forEach((b, i) => {
       b.slot = i;
     });
@@ -211,7 +210,7 @@ function buildModel(props, rows, ctx, el) {
   const columns = rows.length ? Object.keys(rows[0]).filter((c) => c !== props.x) : [];
   const widest = Math.max(
     ...frameDomains.flatMap((d) => [fw(d[0]).length, fw(d[1]).length]),
-    ...columns.flatMap((c) => rows.map((r) => valueOf(r, c)).filter((v) => v !== null).map((v) => fw(v).length)),
+    ...columns.flatMap((c) => rows.map((r) => cellValue(r, c)).filter((v) => v !== null).map((v) => fw(v).length)),
     ...bars.map((b) => b.text.length),
     ...flows.filter((f) => f.total).map((f) => fv(f.total.end).length),
   );

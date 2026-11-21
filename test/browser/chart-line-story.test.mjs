@@ -838,3 +838,22 @@ test("fan with a sweep", async () => {
     assert.deepEqual(ctx.errors, []);
   });
 });
+
+// A blank-looking cell (a quoted space) is missing: no dot there, and the line never drops to zero.
+test("a blank-looking cell is missing: no point at zero", async () => {
+  await withPage({ root, url: pages.url("blank", "step=start") }, async (page, ctx) => {
+    const s = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="chart"]');
+      const pair = (d) => d.split(/[ML]/).filter(Boolean).map((p) => p.split(",").map(Number));
+      return {
+        line: pair(el.querySelector("path.sd-line").getAttribute("d")),
+        dots: [...el.querySelectorAll("circle.sd-dot")].map((c) => Number(c.getAttribute("cy"))),
+        zero: Number([...el.querySelectorAll("g.sd-tick-y")].find((g) => g.querySelector("text").textContent === "0").getAttribute("transform").match(/translate\([-\d.]+,([-\d.]+)\)/)[1]),
+      };
+    });
+    assert.equal(s.dots.length, 3, "a dot for 2000, 2020 and 2030 only");
+    assert.equal(s.line.length, 3, "the line runs through those three points");
+    assert.ok([...s.line.map((p) => p[1]), ...s.dots].every((y) => y < s.zero - 1), `nothing sits at zero (${s.zero})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});

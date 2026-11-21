@@ -2,7 +2,88 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm } from "#engine/core/chart-layout.js";
+import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, cellValue, sortColumns } from "#engine/core/chart-layout.js";
+import { chartKit } from "#engine/core/chart.js";
+import { parseCSV } from "#engine/core/data.js";
+import { d3 } from "#engine/core/d3.js";
+import { pointsModel } from "#engine/components/chart.points/model.js";
+import { barOrder, waterfallSteps, backToBackOrder } from "#engine/components/chart.bar/modes.js";
+
+// cellValue
+
+test("cellValue: a finite number, or a string that trims to one; everything else is missing", () => {
+  const row = { n: 4.5, neg: -2, zero: 0, s: "12", padded: " 7.25\t", blank: " ", tab: "\t\n", empty: "", text: "NA", nan: NaN, inf: Infinity, sinf: "Infinity", none: null, yes: true, list: [3] };
+  const read = (c) => cellValue(row, c);
+  assert.deepEqual(["n", "neg", "zero", "s", "padded"].map(read), [4.5, -2, 0, 12, 7.25]);
+  for (const c of ["blank", "tab", "empty", "text", "nan", "inf", "sinf", "none", "yes", "list", "absent"]) assert.equal(read(c), null, c);
+  assert.equal(cellValue(row, undefined), null, "no column");
+  assert.equal(cellValue(null, "n"), null, "no row");
+});
+
+test("cellValue: a blank-looking CSV cell is missing, never zero", () => {
+  const rows = parseCSV('region,value\nA,3\nB, \nC,5\nD," "\n');
+  assert.deepEqual(rows.map((r) => r.value), ["3", " ", "5", " "], "the column stays text, so the cells are strings");
+  assert.deepEqual(rows.map((r) => cellValue(r, "value")), [3, null, 5, null]);
+});
+
+test("cellValue and sortColumns are internal: chartKit keeps its names", () => {
+  assert.equal(chartKit.cellValue, undefined);
+  assert.equal(chartKit.sortColumns, undefined);
+});
+
+// sortColumns
+
+test("sortColumns: a column with a number in any row is numeric; other cells of it are missing", () => {
+  const rows = parseCSV("region,rate,label\nA,10.5,pear\nB,9.2,apple\nC,NA,Zed\nD,2,\n");
+  const columns = sortColumns(rows, rows.map((r) => [r]));
+  assert.deepEqual(columns.map((c) => c.rate), [10.5, 9.2, null, 2], "numbers, not the strings parseCSV left");
+  assert.deepEqual(columns.map((c) => c.label), ["pear", "apple", "Zed", null], "text as written; a blank cell is missing");
+  assert.deepEqual(columns.map((c) => c.region), ["A", "B", "C", "D"]);
+  const items = rows.map((r, i) => ({ key: r.region, value: null, columns: columns[i] }));
+  assert.deepEqual(rank(items, { by: "rate" }), ["D", "B", "A", "C"]);
+  assert.deepEqual(rank(items, { by: "rate", order: "desc" }), ["A", "B", "D", "C"], "the missing one is last both ways");
+  assert.deepEqual(rank(items, { by: "label" }), ["C", "B", "A", "D"], "a text column by code point");
+});
+
+test("sortColumns: groups reduce a number column and keep the text all their rows have", () => {
+  const rows = [
+    { k: "a", v: 1, t: "x", u: " " }, { k: "a", v: "3", t: "x", u: "p" },
+    { k: "b", v: "n/a", t: "x", u: "q" }, { k: "b", v: 5, t: "y", u: "q" },
+    { k: "c", v: "", t: "z", u: "r" },
+  ];
+  const groups = [rows.slice(0, 2), rows.slice(2, 4), rows.slice(4)];
+  const sum = (vs) => (vs.every((v) => v !== null) ? vs.reduce((a, b) => a + b, 0) : null);
+  const columns = sortColumns(rows, groups, sum);
+  assert.deepEqual(columns.map((c) => c.v), [4, null, null], "a missing cell leaves no sum");
+  assert.deepEqual(columns.map((c) => c.t), ["x", null, "z"], "text where every row agrees");
+  assert.deepEqual(columns.map((c) => c.u), [null, "q", "r"], "a blank cell is not text");
+  assert.deepEqual(sortColumns(rows, groups).map((c) => c.v), [1, null, null], "the first cell by default");
+  assert.deepEqual(sortColumns([], []), []);
+});
+
+test("sort { by } reads a column the same in every chart and mode", () => {
+  // `rate` reads 10.5, 9.2, NA, 2: parseCSV leaves every cell a string, yet the column is numeric, NA missing.
+  const wide = parseCSV("region,value,rate,label\nA,4,10.5,pear\nB,3,9.2,apple\nC,2,NA,Zed\nD,1,2,\n");
+  const long = parseCSV([
+    "region,side,value,rate,label",
+    "A,l,4,10.5,pear", "A,r,5,10.5,pear", "B,l,3,9.2,apple", "B,r,2,9.2,apple",
+    "C,l,2,NA,Zed", "C,r,1,NA,Zed", "D,l,1,2,", "D,r,1,2,",
+  ].join("\n"));
+  const env = { font: 28, charW: 16.8, w: 1200, h: 700, format: d3.format, t: (k) => k };
+  const charts = {
+    estimates: (sort) => pointsModel(wide, { data: "w.csv", x: "region", y: "value", sort }, env).rows.map((r) => r.key),
+    bars: (sort) => barOrder(wide, { x: "region", y: "value", sort }),
+    waterfall: (sort) => waterfallSteps(wide, { data: "w.csv", mode: "waterfall", x: "region", y: "value", sort }, null)[0].bars.map((b) => b.key),
+    strips: (sort) => pointsModel(long, { data: "l.csv", x: "region", y: "value", id: "side", sort }, env).rows.map((r) => r.key),
+    "back-to-back": (sort) => backToBackOrder(long, { data: "l.csv", mode: "back-to-back", x: "region", y: "value", group: "side", sort }),
+  };
+  for (const [name, order] of Object.entries(charts)) {
+    assert.deepEqual(order({ by: "rate" }), ["D", "B", "A", "C"], `${name}: by number, the missing one last`);
+    assert.deepEqual(order({ by: "rate", order: "desc" }), ["A", "B", "D", "C"], `${name}: last both ways`);
+    assert.deepEqual(order({ by: "label" }), ["C", "B", "A", "D"], `${name}: a text column by code point, a blank one last`);
+    assert.deepEqual(order({ by: "region", order: "desc" }), ["D", "C", "B", "A"], `${name}: the category itself`);
+  }
+});
 
 // extentOf
 

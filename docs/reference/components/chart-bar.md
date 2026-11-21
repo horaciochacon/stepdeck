@@ -95,10 +95,10 @@ Keep the values you want to compare in one unit, in separate columns of the same
 | `"none"`, or omitted | The data order. |
 | `"value"` | By `y`, lowest first. |
 | `"-value"` | By `y`, highest first. |
-| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A text column compares by code point. |
+| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A column with a number in any cell sorts by number, and its other cells (blank, `NA`) come last both ways; any other column is text, compared by code point. |
 | `["North", "South"]` | Those categories first, in that order, then the rest in data order. |
 
-Ties keep the data order. A row with no value (an empty cell, which draws a bar of length zero and no label) comes last whichever way the order runs. Sorting changes the order and nothing else: the value axis, the margins and every bar's value are the same.
+Ties keep the data order. A row with no value (an empty or blank cell, which draws a bar of length zero and no label) comes last whichever way the order runs. Sorting changes the order and nothing else: the value axis, the margins and every bar's value are the same.
 
 ```js
 { id: "bars", region: "main", type: "chart.bar",
@@ -190,7 +190,7 @@ Women come first in the data, so they are on the left; `groups: ["Men", "Women"]
 | Whiskers | `interval` draws each bar's whisker in ink, as plain bars do, with no halo behind it (a halo would cut a notch in the bar at each end). A whisker needs a value and both bounds. |
 | Value labels | Past the bar's end, or its whisker's, on the bar's own side: left of the left bars, right of the right ones. They show magnitudes. An empty `y` cell draws no bar and no label on that side. |
 | `highlight` | A category dims every other band on both sides. A group dims the other side, and turns its title `--sd-color-muted`. A name that is both a category and a group is an element error. |
-| `sort` | Ranks the bands by the sum of the two sides. `{ by }` sums that column the same way; a text column (the category itself, for example) counts where the two rows agree. A category with a side missing has no sum and comes last. Both bars of a band slide together with its label. |
+| `sort` | Ranks the bands by the sum of the two sides. `{ by }` sums a number column the same way; a text column (the category itself, for example) counts where the two rows agree. A category with a side missing has no sum and comes last. Both bars of a band slide together with its label. |
 | `shown` | Lists categories. A hidden category hides both bars and keeps its band. |
 | Values | Every value and drawn interval bound must be zero or more: a bar that crossed the rule would read as the other group. |
 | Orientation | Horizontal only: `orient: "vertical"` fails the element, and `validate` reports it (`chart-orient`). |

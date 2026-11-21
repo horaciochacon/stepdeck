@@ -8,6 +8,9 @@
 // waterfallDomain(steps) -> [min, max]
 //   extentOf (core/chart-layout.js) over every start and end of every step's waterfall, the total and any `whiskers`
 //   included, with zero. `steps` are waterfall results; null entries are skipped. Not niced: the caller nices.
+// barOrder(rows, props) -> keys in display order
+//   Plain bars' and a waterfall's order: `rank` over the categories (rows with a category, in data order), each valued at
+//   its `y`; `{ by }` reads that column by `sortColumns` (core/chart-layout.js). The errors are rank's.
 // waterfallSteps(rows, props, stepProps) -> [{ bars, total, whiskers }]
 //   The waterfalls of the slide: the current props when they are a waterfall, then every other step (`stepProps`,
 //   null entries skipped) that is a waterfall over the same `data`, each with its own `y`, `sort`, `shown` and
@@ -26,16 +29,14 @@
 //   category and a group, or neither; a value or a drawn bound below zero.
 // backToBackOrder(rows, props) -> keys in display order
 //   `rank` over the categories, each valued at the sum of its two sides' `y` (none when either is not a number, which
-//   ranks last); `{ by }` reduces that column the same way: a column with a number in any row is summed (text in it is
-//   missing), and a text column counts where both rows agree, as the category's own text does. The errors are rank's.
+//   ranks last); `{ by }` reads that column by `sortColumns` and reduces it the same way: a number column is summed
+//   (text in it is missing), and a text column counts where both rows agree, as the category's own text does. The
+//   errors are rank's.
 // backToBackSpan(rows, props, stepProps) -> [0, max]
 //   extentOf with zero over every `y` and drawn interval bound of every back-to-back step of the slide over the same
 //   `data` (the current props when they are one, then `stepProps`, null entries skipped). Not niced or mirrored: the
 //   caller does both.
-import { extentOf, rank } from "../../core/chart-layout.js";
-
-/** A finite number, from a number or a numeric string; null for an empty cell or anything else. */
-export const valueOf = (row, col) => (row[col] == null || row[col] === "" ? null : Number.isFinite(Number(row[col])) ? Number(row[col]) : null);
+import { extentOf, rank, cellValue, sortColumns } from "../../core/chart-layout.js";
 
 /** The rows that name a category (a non-empty `x`), in data order. */
 export const categoriesOf = (rows, x) => rows.filter((r) => r[x] != null && r[x] !== "");
@@ -75,19 +76,30 @@ export function waterfallDomain(steps) {
   return extentOf(marks, ["start", "end"], { zero: true });
 }
 
+/**
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Record<string, any>} props
+ * @returns {string[]}
+ */
+export function barOrder(rows, props) {
+  const categories = categoriesOf(rows, props.x);
+  const columns = sortColumns(rows, categories.map((r) => [r]));
+  return rank(categories.map((r, i) => ({ key: String(r[props.x]), value: cellValue(r, props.y), columns: columns[i] })), props.sort);
+}
+
 /** One step's waterfall and the whisker spans of its shown bars, from the rows and that step's props. Throws. */
 function flowOf(rows, props) {
-  const items = categoriesOf(rows, props.x).map((r) => ({ key: String(r[props.x]), value: valueOf(r, props.y), columns: r }));
+  const items = categoriesOf(rows, props.x).map((r) => ({ key: String(r[props.x]), value: cellValue(r, props.y), row: r }));
   const byKey = new Map(items.map((it) => [it.key, it]));
   const shown = Array.isArray(props.shown) ? new Set(props.shown.map(String)) : null;
-  const order = rank(items, props.sort).map((key) => byKey.get(key));
+  const order = barOrder(rows, props).map((key) => byKey.get(key));
   const flow = waterfall(order.map((it) => ({ key: it.key, value: it.value, shown: shown ? shown.has(it.key) : true })), { total: hasTotal(props.total) });
   const { lower, upper } = props.interval ?? {};
   const whiskers = [];
   if (lower && upper) {
     flow.bars.forEach((b, i) => {
-      const lo = valueOf(order[i].columns, lower);
-      const hi = valueOf(order[i].columns, upper);
+      const lo = cellValue(order[i].row, lower);
+      const hi = cellValue(order[i].row, upper);
       if (b.shown && lo !== null && hi !== null) whiskers.push({ start: b.start + lo, end: b.start + hi });
     });
   }
@@ -169,9 +181,9 @@ export function backToBack(rows, props) {
     categories: categories.map(({ key, rows: pair }) => {
       const out = { key };
       pair.forEach((row, i) => {
-        const value = valueOf(row, props.y);
-        const lo = both && value !== null ? valueOf(row, lower) : null;
-        const hi = both && value !== null ? valueOf(row, upper) : null;
+        const value = cellValue(row, props.y);
+        const lo = both && value !== null ? cellValue(row, lower) : null;
+        const hi = both && value !== null ? cellValue(row, upper) : null;
         const drawn = lo !== null && hi !== null;
         for (const [col, v] of [[props.y, value], ...(drawn ? [[lower, lo], [upper, hi]] : [])]) {
           if (v === null || v >= 0) continue;
@@ -185,13 +197,8 @@ export function backToBack(rows, props) {
   };
 }
 
-/** The sum of two cells, or null unless both are numbers. */
-const sum = (a, b) => {
-  const [x, y] = [valueOf({ v: a }, "v"), valueOf({ v: b }, "v")];
-  return x !== null && y !== null ? x + y : null;
-};
-/** A text column's value for a category: the text both rows agree on, else none. */
-const agreed = (a, b) => (typeof a === "string" && a !== "" && a === b ? a : null);
+/** The sum of a pair's two values, or null unless both are numbers. */
+const sum = ([a, b]) => (a !== null && b !== null ? a + b : null);
 
 /**
  * @param {Array<Record<string, unknown>>} rows
@@ -200,14 +207,9 @@ const agreed = (a, b) => (typeof a === "string" && a !== "" && a === b ? a : nul
  */
 export function backToBackOrder(rows, props) {
   const { categories } = pairRows(rows, props);
-  const names = rows.length ? Object.keys(rows[0]) : [];
   // A number column (a number in any row) is summed, so text in it ("n/a") ranks as missing, never as a value.
-  const numeric = new Set(names.filter((c) => rows.some((r) => valueOf(r, c) !== null)));
-  const items = categories.map(({ key, rows: [a, b] }) => ({
-    key,
-    value: sum(a[props.y], b[props.y]),
-    columns: Object.fromEntries(names.map((c) => [c, numeric.has(c) ? sum(a[c], b[c]) : agreed(a[c], b[c])])),
-  }));
+  const columns = sortColumns(rows, categories.map((c) => c.rows), sum);
+  const items = categories.map(({ key, rows: pair }, i) => ({ key, value: sum(pair.map((r) => cellValue(r, props.y))), columns: columns[i] }));
   return rank(items, props.sort);
 }
 
@@ -217,10 +219,10 @@ function pairMarks(rows, p) {
   const marks = [];
   for (const r of categoriesOf(rows, p.x)) {
     if (blank(r[p.group])) continue;
-    const value = valueOf(r, p.y);
+    const value = cellValue(r, p.y);
     if (value === null) continue;
     marks.push({ v: value });
-    if (lower && upper && valueOf(r, lower) !== null && valueOf(r, upper) !== null) marks.push({ v: valueOf(r, lower) }, { v: valueOf(r, upper) });
+    if (lower && upper && cellValue(r, lower) !== null && cellValue(r, upper) !== null) marks.push({ v: cellValue(r, lower) }, { v: cellValue(r, upper) });
   }
   return marks;
 }

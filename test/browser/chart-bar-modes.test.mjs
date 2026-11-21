@@ -859,3 +859,20 @@ test("pyramid errors show on the slide", async () => {
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
+
+test("a blank-looking cell draws no bar and no label, never zero", async () => {
+  await withPage({ root, url: pages.url("blank", "step=data") }, async (page, ctx) => {
+    const south = () => page.evaluate(() => {
+      const g = document.querySelector('[data-el="bars"] g.sd-bar-group[data-key="South"]');
+      const rect = g.querySelector("rect.sd-bar");
+      return { width: Number(rect.getAttribute("width")), label: g.querySelector("text.sd-bar-label").textContent, title: g.querySelector("title").textContent };
+    });
+    assert.deepEqual(await south(), { width: 0, label: "", title: "South: " }, "no value: no length, no label, no 0 in the title");
+    assert.deepEqual(await order(page), ["North", "South", "East", "West"]);
+    await goTo(page, "blank", "low");
+    assert.deepEqual(await order(page), ["West", "North", "East", "South"], "lowest first, the bar with no value last (not as 0)");
+    assert.equal((await south()).label, "");
+    assert.equal(await elementHtml(page, "bars"), await htmlAfterJump(ctx, page, pages, "blank", "low", "bars"));
+    await errorsClean(page, ctx);
+  });
+});

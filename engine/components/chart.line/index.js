@@ -45,6 +45,7 @@
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, extentOf, drawOrder, frame, keyed, settle, halo, canvasLayer, paintLines, morph, entrance, undraw } from "../../core/chart.js";
+import { cellValue } from "../../core/chart-layout.js";
 import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots, cutAt } from "./parts.js";
 import { fanAlpha, fanWidth, fanModel, loadDraws } from "./fan.js";
 import { textColor } from "../../core/color.js";
@@ -106,7 +107,6 @@ function fanOf(props, rows, series, x, y) {
  * `draws.data` (null without `draws`) and `drawsExtent`.
  */
 function buildModel(props, rows, ctx, el, draws = null) {
-  const valueOf = (row, col) => (row[col] == null || row[col] === "" ? null : Number(row[col]));
   const seriesOf = (row) => (props.series ? String(row[props.series]) : NO_SERIES);
 
   // Series in order of first appearance; colors follow that order.
@@ -119,10 +119,10 @@ function buildModel(props, rows, ctx, el, draws = null) {
 
   const lower = props.interval?.lower;
   const upper = props.interval?.upper;
-  const xs = rows.map((r) => valueOf(r, props.x)).filter((v) => v !== null);
+  const xs = rows.map((r) => cellValue(r, props.x)).filter((v) => v !== null);
   // The y domain covers every series in the data (not only the shown ones) so the axis does not
   // jump as series appear; it always includes 0.
-  const ys = rows.flatMap((r) => [valueOf(r, props.y), lower ? valueOf(r, lower) : null, upper ? valueOf(r, upper) : null]).filter((v) => v !== null);
+  const ys = rows.flatMap((r) => [cellValue(r, props.y), lower ? cellValue(r, lower) : null, upper ? cellValue(r, upper) : null]).filter((v) => v !== null);
   if (draws?.extent) ys.push(...draws.extent); // and every draw any step can show
   const xDomain = xs.length ? d3.extent(xs) : [0, 1];
   if (xDomain[0] === xDomain[1]) xDomain[1] = xDomain[0] + 1;
@@ -170,15 +170,15 @@ function buildModel(props, rows, ctx, el, draws = null) {
   }
 
   const series = seriesList.map((name) => {
-    const own = d3.sort(rows.filter((r) => seriesOf(r) === name && valueOf(r, props.x) !== null && valueOf(r, props.y) !== null), (r) => valueOf(r, props.x));
+    const own = d3.sort(rows.filter((r) => seriesOf(r) === name && cellValue(r, props.x) !== null && cellValue(r, props.y) !== null), (r) => cellValue(r, props.x));
     const points = own.map((r) => {
-      const xv = valueOf(r, props.x);
-      const lo = lower ? valueOf(r, lower) : null;
-      const hi = upper ? valueOf(r, upper) : null;
+      const xv = cellValue(r, props.x);
+      const lo = lower ? cellValue(r, lower) : null;
+      const hi = upper ? cellValue(r, upper) : null;
       return {
         key: `${name}|${xv}`,
         px: x(xv),
-        py: y(valueOf(r, props.y)),
+        py: y(cellValue(r, props.y)),
         lo: lo === null ? null : y(lo),
         hi: hi === null ? null : y(hi),
       };

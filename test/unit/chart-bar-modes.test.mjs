@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { waterfall, waterfallDomain, waterfallSpan, waterfallSteps, backToBack, backToBackOrder, backToBackSpan } from "#engine/components/chart.bar/modes.js";
+import { waterfall, waterfallDomain, waterfallSpan, waterfallSteps, backToBack, backToBackOrder, backToBackSpan, barOrder } from "#engine/components/chart.bar/modes.js";
+import { parseCSV } from "#engine/core/data.js";
 
 const ROWS = [
   { item: "Opening", change: 40, later: 40, low: 38, high: 42 },
@@ -56,6 +57,17 @@ test("waterfall empty value errors", () => {
     );
   }
   assert.throws(() => waterfall([{ key: "Hidden", value: null, shown: false }]), { message: "waterfall needs a value for every category: 'Hidden' is empty" }, "a hidden category needs one too");
+});
+
+test("a blank-looking cell is missing in every mode, never a bar at zero", () => {
+  // parseCSV keeps a column with a " " cell as text: the chart reads a string that trims to nothing.
+  const plain = parseCSV('item,change\nOpening,40\nTaxes, \nOther,"  "\n');
+  assert.deepEqual(barOrder(plain, { x: "item", y: "change", sort: "value" }), ["Opening", "Taxes", "Other"], "no value ranks last, not as 0");
+  assert.throws(() => waterfallSteps(plain, { ...base, data: "data/plain.csv" }, null), { message: "waterfall needs a value for every category: 'Taxes' is empty" });
+  const pairs = parseCSV('age,sex,share\n0-14,Women,8\n0-14,Men, \n15+,Women," "\n15+,Men,9\n');
+  const { categories } = backToBack(pairs, { data: "data/pairs.csv", x: "age", y: "share", group: "sex", mode: "back-to-back" });
+  assert.deepEqual(categories.map((c) => [c.left.value, c.right.value]), [[8, null], [null, 9]], "no bar on a blank side");
+  assert.deepEqual(backToBackSpan(pairs, { data: "data/pairs.csv", x: "age", y: "share", group: "sex", mode: "back-to-back" }, null), [0, 9]);
 });
 
 test("waterfallDomain covers every step and includes zero", () => {

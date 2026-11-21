@@ -5,11 +5,11 @@
 // `waterfall-floor` and `waterfall-below`, whose labels sit under the plot), and `mode-switch` (with `-vertical` and
 // `-swing`) morphs bars into a waterfall and back in one frame. The pyramid slides set two groups back to back
 // (`pyramid`, with intervals; `pyramid-highlight`, a group then a category; `pyramid-sort`; `pyramid-switch`, to and
-// from plain bars). All data is synthetic. Slides that fail on purpose live in bar-modes-broken, so this deck stays
-// clean under `check --played`.
+// from plain bars), and `blank` has a blank-looking cell, which is missing. All data is synthetic. Slides that fail on
+// purpose live in bar-modes-broken, so this deck stays clean under `check --played`.
 export default {
   title: "Bar modes fixture",
   lang: "en",
   theme: "modern",
-  slides: ["resort", "resort-shown", "resort-vertical", "waterfall", "waterfall-sort", "waterfall-invert", "waterfall-vertical", "waterfall-enter", "waterfall-floor", "waterfall-below", "mode-switch", "mode-switch-vertical", "mode-switch-swing", "pyramid", "pyramid-highlight", "pyramid-sort", "pyramid-switch"],
+  slides: ["resort", "resort-shown", "resort-vertical", "waterfall", "waterfall-sort", "waterfall-invert", "waterfall-vertical", "waterfall-enter", "waterfall-floor", "waterfall-below", "mode-switch", "mode-switch-vertical", "mode-switch-swing", "pyramid", "pyramid-highlight", "pyramid-sort", "pyramid-switch", "blank"],
 };

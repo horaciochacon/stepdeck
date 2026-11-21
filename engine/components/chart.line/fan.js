@@ -2,6 +2,7 @@
 // of a draws file (every draw's points, by series and draw id) with its limits. Pure apart from `loadDraws`, which reads
 // the file through ctx.data; the painting and the motion are the component's (./index.js).
 import { loadTable } from "../../core/chart.js";
+import { cellValue } from "../../core/chart-layout.js";
 
 /** At most this many draws in a draws file (unique ids over every series), and this many x values per series. */
 export const FAN_MAX_DRAWS = 2000;
@@ -31,8 +32,6 @@ export function loadDraws(props, ctx) {
   ]);
 }
 
-const valueOf = (v) => (v == null || (typeof v === "string" && v.trim() === "") ? null : Number(v));
-
 /**
  * The draws of `rows` (a draws file) for `props.draws` read with the columns `{ x, y, series }`:
  * `{ ids, bySeries, count }`. `ids` are the draw ids (as strings) in order of first appearance and `count` how many
@@ -58,14 +57,14 @@ export function fanModel(rows, props, { x, y, series }) {
       known.add(draw);
       ids.push(draw);
     }
-    const xv = valueOf(row[x]);
-    if (xv === null || !Number.isFinite(xv)) continue;
-    const yv = valueOf(row[y]);
+    const xv = cellValue(row, x);
+    if (xv === null) continue;
+    const yv = cellValue(row, y);
     const name = series ? String(row[series]) : NO_SERIES;
     if (!bySeries.has(name)) bySeries.set(name, new Map());
     const own = bySeries.get(name);
     if (!own.has(draw)) own.set(draw, []);
-    own.get(draw).push([xv, Number.isFinite(yv) ? yv : null]);
+    own.get(draw).push([xv, yv]);
   }
   if (ids.length > FAN_MAX_DRAWS) throw new Error(`${data} has ${ids.length} draws (at most ${FAN_MAX_DRAWS})`);
   for (const [name, draws] of bySeries) {

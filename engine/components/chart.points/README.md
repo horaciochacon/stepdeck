@@ -49,7 +49,8 @@ Behaviour:
   with its tick on it; equal values stack in the band; a strip with no value reads "no data". A row with an empty
   value is not drawn (never at zero) and a row with an empty id is skipped. Ids are unique within a category; the
   same id in several categories is one item. `sort` ranks the strips by their summary (the median with `"none"`), and
-  `{ by }` reduces that column the same way (numerically: a text column ranks as empty). With a given `domain`, the
+  `{ by }` reduces a number column the same way (a text column ranks a strip by the text all its rows have, last when
+  they differ). With a given `domain`, the
   points outside it are not drawn and a box at that end of the row counts them (`‹ 3` left of the plot, `3 ›` right
   of it, muted, in a frame; the margins keep room for the widest at every step, so the plot never resizes). The
   summary still counts every value, but its tick is drawn only inside the domain. `focus` follows one id: its dots
@@ -59,8 +60,10 @@ Behaviour:
   in strips, and do not widen the axis there. The strip's `<title>` reads `Norte: 22 (n = 40)`.
 - **Sorting.** `sort` orders the rows (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
   `y`, lowest first, and `"-value"` highest first; `{ by, order }` orders by another column (ascending unless
-  `order` is `"desc"`); a list puts those categories first, in that order, and the rest after in data order. Ties
-  keep data order, rows without a value come last whichever way it runs, and text compares by code point. Every
+  `order` is `"desc"`): a column with a number in any cell sorts by number, its other cells (blank, `NA`) last both
+  ways, and any other column is text, compared by code point (`sortColumns` in `core/chart-layout.js`); a list puts
+  those categories first, in that order, and the rest after in data order. Ties keep data order, and rows without a
+  value (an empty or blank cell) come last whichever way it runs. Every
   category is ranked, shown or not, so a hidden row keeps its place in the order. The axis, margins and values do
   not change with `sort`. An unknown column or category fails the element with `rank`'s message.
 - **Rows keep their place.** Rows follow the sorted order (the data order without `sort`) whether or not they are shown; a hidden row is laid out

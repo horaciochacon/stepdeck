@@ -24,22 +24,14 @@
 // (`stepProps`, null entries skipped; steps that read another file do not count) plus every step's `reference`,
 // rounded outward to ticks; zero is not forced. Only what can be drawn counts: rows with a category, and the
 // interval bounds of a row that has an estimate at that step (with both bounds, as a whisker needs); in strips,
-// every point with an id (`from` and `interval` are not drawn there). `sort` orders the rows through `rank`
-// (core/chart-layout.js) and changes nothing else: not the domain, the margins nor any row's data. The margins come
-// from character counts and from every step too (its titles, its reference label, the tick labels of its own axis,
-// its overflow boxes), so nothing that appears later resizes the plot. A missing value is never zero: it gives
+// every point with an id (`from` and `interval` are not drawn there). `sort` orders the rows through `rank`, a
+// `{ by }` column read by `sortColumns` (both core/chart-layout.js), and changes nothing else: not the domain, the
+// margins nor any row's data. The margins come from character counts and from every step too (its titles, its
+// reference label, the tick labels of its own axis, its overflow boxes), so nothing that appears later resizes the
+// plot. Cells are read by `cellValue`: a missing value (an empty or blank cell, or text) is never zero: it gives
 // `missing: true` and no value (a strip with no value at all is `missing`).
 import { d3 } from "../../core/d3.js";
-import { extentOf, rank, wrapLabel, swarm } from "../../core/chart-layout.js";
-
-/** A cell as a number, or null when it is empty or not a number. */
-export const valueOf = (row, column) => {
-  if (column === undefined) return null;
-  const raw = row?.[column];
-  if (raw == null || raw === "") return null;
-  const v = Number(raw);
-  return Number.isFinite(v) ? v : null;
-};
+import { extentOf, rank, wrapLabel, swarm, cellValue, sortColumns } from "../../core/chart-layout.js";
 
 const isText = (v) => v != null && String(v) !== "";
 const validDomain = (d) => Array.isArray(d) && d.length === 2 && d.every((v) => Number.isFinite(v)) && d[0] < d[1];
@@ -83,11 +75,11 @@ function autoDomain(rows, steps) {
     for (const row of rows) {
       if (!isText(row[p.x]) || (strip && !isText(row[p.id]))) continue;
       if (strip) {
-        const y = valueOf(row, p.y);
+        const y = cellValue(row, p.y);
         if (y !== null) values.push(y);
         continue;
       }
-      const [y, from, lo, hi] = [p.y, p.from, p.interval?.lower, p.interval?.upper].map((c) => valueOf(row, c));
+      const [y, from, lo, hi] = [p.y, p.from, p.interval?.lower, p.interval?.upper].map((c) => cellValue(row, c));
       if (y === null) continue;
       values.push(y);
       if (from !== null) values.push(from);
@@ -152,26 +144,32 @@ const STATS = { median: d3.median, mean: d3.mean };
 
 /**
  * The strips of `categories` (rows with a category and an id), one per key in data order, with the column values
- * `sort: { by }` reads, each reduced over the strip's rows as the summary is (the median for "none"), numerically.
+ * `sort: { by }` reads (`sortColumns` over every row of the table, `rows`): a number column reduced over the strip's
+ * rows as the summary is (the median for "none"), a text column the text all of them have.
  * Points, overflow and summary as the header of this file says; `dy` is set later, once the plot is sized.
  */
-function stripRows(categories, keys, props, { domain, given, fValue, fCategory, noData, kind, shown, header }) {
+function stripRows(rows, categories, keys, props, { domain, given, fValue, fCategory, noData, kind, shown }) {
   const stat = STATS[kind] ?? d3.median;
   const focus = props.focus == null ? null : String(props.focus);
   const of = new Map(keys.map((k) => [k, []]));
   for (const row of categories) of.get(String(row[props.x])).push(row);
+  const reduce = (values) => {
+    const known = values.filter((v) => v !== null);
+    return known.length ? stat(known) : null;
+  };
+  const columns = sortColumns(rows, keys.map((k) => of.get(k)), reduce);
   return keys.map((key, slot) => {
     const members = of.get(key);
     const raw = members[0][props.x];
     const label = fCategory && typeof raw === "number" ? fCategory(raw) : key;
-    const values = members.map((row) => valueOf(row, props.y)).filter((v) => v !== null);
+    const values = members.map((row) => cellValue(row, props.y)).filter((v) => v !== null);
     const missing = values.length === 0;
     const value = missing ? null : stat(values) ?? null;
     const overflow = { low: 0, high: 0 };
     const dim = props.highlight != null && String(props.highlight) !== key;
     const points = [];
     for (const row of members) {
-      const v = valueOf(row, props.y);
+      const v = cellValue(row, props.y);
       if (v === null) continue; // an empty cell is never a point
       if (given && v < domain[0]) overflow.low += 1;
       else if (given && v > domain[1]) overflow.high += 1;
@@ -191,10 +189,7 @@ function stripRows(categories, keys, props, { domain, given, fValue, fCategory, 
         summary: kind !== "none" && inside ? value : null,
         points, overflow,
       },
-      columns: Object.fromEntries(header.map((c) => {
-        const vs = members.map((row) => valueOf(row, c)).filter((v) => v !== null);
-        return [c, vs.length ? stat(vs) : null];
-      })),
+      columns: columns[slot],
     };
   });
 }
@@ -210,7 +205,7 @@ function overflowRoom(rows, steps, font, charW) {
     const counts = new Map();
     for (const row of rows) {
       if (!isText(row[p.x]) || !isText(row[p.id])) continue;
-      const v = valueOf(row, p.y);
+      const v = cellValue(row, p.y);
       const side = v === null ? null : v < p.domain[0] ? "low" : v > p.domain[1] ? "high" : null;
       if (!side) continue;
       const at = `${side}\n${row[p.x]}`;
@@ -245,17 +240,19 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
   const lower = props.interval?.lower;
   const upper = props.interval?.upper;
   const shown = Array.isArray(props.shown) ? new Set(props.shown.map(String)) : null;
-  // Each made entry is a row and the columns `sort: { by }` reads: an estimate's own row, a strip's reduced columns.
+  // Each made entry is a row and the columns `sort: { by }` reads (`sortColumns`, core/chart-layout.js): an estimate's
+  // own cells, a strip's reduced columns.
+  const estimateColumns = strips ? null : sortColumns(rows, categories.map((row) => [row]));
   const made = strips
-    ? stripRows(categories, keys, props, { domain, given: props.domain !== undefined, fValue, fCategory, noData, kind, shown, header: rows.length ? Object.keys(rows[0]) : [] })
+    ? stripRows(rows, categories, keys, props, { domain, given: props.domain !== undefined, fValue, fCategory, noData, kind, shown })
     : categories.map((row, slot) => {
       const raw = row[props.x];
       const key = String(raw);
       const label = fCategory && typeof raw === "number" ? fCategory(raw) : key;
-      const value = valueOf(row, props.y);
+      const value = cellValue(row, props.y);
       const missing = value === null;
-      const from = missing ? null : valueOf(row, props.from); // the "before" of a pair: nothing for a row with no estimate
-      const [lo, hi] = [valueOf(row, lower), valueOf(row, upper)];
+      const from = missing ? null : cellValue(row, props.from); // the "before" of a pair: nothing for a row with no estimate
+      const [lo, hi] = [cellValue(row, lower), cellValue(row, upper)];
       const bounded = !missing && lo !== null && hi !== null; // a whisker needs a value and both bounds
       if (props.domain !== undefined && !missing && (value < domain[0] || value > domain[1])) {
         throw new Error(`estimate '${key}' (${value}) is outside \`domain\` [${domain[0]}, ${domain[1]}]`);
@@ -273,12 +270,12 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
           text, missing,
           title: missing ? `${label}: ${noData}` : `${label}: ${from === null ? "" : `${fValue(from)} → `}${text}${bounded ? ` (${fValue(lo)} – ${fValue(hi)})` : ""}`,
         },
-        columns: row,
+        columns: estimateColumns[slot],
       };
     });
 
   // The order: every category is ranked, shown or not, so a hidden one keeps its slot. An estimate's `value` is its
-  // `y` and its `columns` its row; a strip's are its summary (the median for "none") and its reduced columns. The
+  // `y` and its `columns` its cells; a strip's are its summary (the median for "none") and its reduced columns. The
   // errors are rank's.
   const byKey = new Map(made.map(({ row }) => [row.key, row]));
   const order = rank(made.map(({ row, columns }) => ({ key: row.key, value: row.value, columns })), props.sort);

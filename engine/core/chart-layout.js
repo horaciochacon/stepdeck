@@ -21,6 +21,51 @@ function byCodePoint(a, b) {
 }
 
 /**
+ * The cell `column` of `row` as a number: a finite number as it is, a string that trims to a finite number (`Number`),
+ * else null: an empty or blank cell, text, a non-finite number, anything else, and an undefined `column`. Every chart
+ * reads a value through it, so a blank-looking cell is missing and never drawn as zero. Not part of `ctx.chart`.
+ * @param {Record<string, unknown> | null | undefined} row
+ * @param {string | undefined} column
+ * @returns {number | null}
+ */
+export function cellValue(row, column) {
+  if (column === undefined) return null;
+  const raw = row?.[column];
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (text === "") return null;
+  const v = Number(text);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** A cell as text for `sort: { by }`: a string that is not blank, else null. */
+const cellText = (raw) => (typeof raw === "string" && raw.trim() !== "" ? raw : null);
+
+/**
+ * The `columns` that `rank` reads for `sort: { by }`, by one rule for every chart. A column is a number column when
+ * any row of `rows` has a number in it (`cellValue`); a cell of it that is not a number is missing, so it ranks last.
+ * Any other column is a text column, which `rank` compares by code point (a blank cell missing). `groups` holds the
+ * rows of each category: one row for a chart with a row per category, a strip's rows, a pair's two rows. A number
+ * column's value for a category is `reduce` of its cells (null where a cell is missing), the first cell by default; a
+ * text column's is the text every row of the category has, else missing. The column names are those of the first
+ * row. Not part of `ctx.chart`.
+ * @param {Array<Record<string, unknown>>} rows every row of the table
+ * @param {Array<Array<Record<string, unknown>>>} groups
+ * @param {(values: Array<number | null>) => number | null} [reduce]
+ * @returns {Array<Record<string, number | string | null>>} one entry per group
+ */
+export function sortColumns(rows, groups, reduce = (values) => values[0] ?? null) {
+  const names = rows?.length ? Object.keys(rows[0]) : [];
+  const numeric = new Set(names.filter((c) => rows.some((r) => cellValue(r, c) !== null)));
+  return groups.map((members) => Object.fromEntries(names.map((c) => {
+    if (numeric.has(c)) return [c, reduce(members.map((r) => cellValue(r, c)))];
+    const texts = members.map((r) => cellText(r?.[c]));
+    return [c, texts.length && texts.every((t) => t !== null && t === texts[0]) ? texts[0] : null];
+  })));
+}
+
+/**
  * The [min, max] of every finite number in `columns` across `rows`. `null`, blank strings, non-numbers and non-finite
  * values are missing; numeric strings count as numbers; undefined entries in `columns` are skipped. With
  * `zero`, 0 is included. No values: [0, 1]; a single value v: [v, v + 1]. The result is not niced: callers nice.
@@ -35,11 +80,8 @@ export function extentOf(rows, columns, { zero = false } = {}) {
   let any = zero;
   for (const row of rows ?? []) {
     for (const col of columns ?? []) {
-      if (col === undefined) continue;
-      const raw = row?.[col];
-      if (missing(raw) || (typeof raw !== "number" && typeof raw !== "string") || (typeof raw === "string" && raw.trim() === "")) continue;
-      const v = Number(raw);
-      if (!Number.isFinite(v)) continue;
+      const v = cellValue(row, col);
+      if (v === null) continue;
       if (v < lo) lo = v;
       if (v > hi) hi = v;
       any = true;
