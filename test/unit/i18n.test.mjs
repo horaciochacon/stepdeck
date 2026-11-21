@@ -12,3 +12,8 @@ test("forecast is localized in en and es", () => {
   assert.equal(t("en", "forecast"), "Forecast");
   assert.equal(t("es", "forecast"), "Proyección");
 });
+
+test("noData is localized in en and es", () => {
+  assert.equal(t("en", "noData"), "no data");
+  assert.equal(t("es", "noData"), "sin datos");
+});

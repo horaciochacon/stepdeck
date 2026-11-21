@@ -4,7 +4,7 @@
 // the message line and badges, ghost placeholders). All content is synthetic. `entries` also feeds the landing
 // page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
-const COMPONENTS = ["text", "chart.line", "chart.bar", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"];
+const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"];
 const MOTION = [
   ["motion-names", "named motions"],
   ["motion-choreography", "choreography"],

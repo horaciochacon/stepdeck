@@ -235,6 +235,7 @@ function buildMs(type, props, own, tokens, transition) {
   switch (type) {
     case "chart.line":
     case "chart.bar":
+    case "chart.points":
       return own ?? timing(tokens, { transition }, { factor: 2 }).duration;
     case "big-number":
       return own ?? timing(tokens, { transition }, { factor: 2.25 }).duration;

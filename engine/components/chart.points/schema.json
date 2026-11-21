@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chart.points",
+  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker and its value written beside it, against a value axis and an optional reference line. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero.",
+  "x-enter": "own",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file, relative to the deck root. One row per category.",
+      "examples": ["data/estimates.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "description": "Column holding the category of each row (its text labels the row). Each category appears in one row only.",
+      "examples": ["region"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "description": "Column holding the estimate of each row. An empty cell shows \"no data\" (never a dot at zero). Changing it moves every dot to its new value; the axis covers every step's column, so it stays put.",
+      "examples": ["rate", "rate_adjusted"],
+      "x-transition": "tween"
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": { "type": "string", "description": "Column with the lower bound.", "examples": ["low"] },
+        "upper": { "type": "string", "description": "Column with the upper bound.", "examples": ["high"] }
+      },
+      "description": "A whisker from the lower to the upper column through each dot (e.g. a 95% interval). A row without both bounds has no whisker. Changing it moves the whisker ends.",
+      "examples": [{ "lower": "low", "upper": "high" }],
+      "x-transition": "tween"
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "d3-format spec for category labels, applied when the category column is numeric (e.g. years).", "examples": ["d"] },
+        "y": { "type": "string", "description": "d3-format spec for value labels, ticks and the interval text.", "examples": [",.1f", ".0%"] }
+      },
+      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). Without `y`, ticks use a fixed precision from the tick step and value labels show the value as it is.",
+      "examples": [{ "y": ",.1f" }],
+      "x-transition": "snap"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "Title of the category axis, above the category labels.", "examples": ["Region"] },
+        "y": { "type": "string", "description": "Title of the value axis, under the ticks.", "examples": ["Cases per 1,000"] }
+      },
+      "description": "Axis titles: `x` names the categories, `y` the values. A title that appears, changes or goes fades; room for it is kept at every step, so the plot never resizes.",
+      "examples": [{ "y": "Cases per 1,000" }],
+      "x-transition": "fade"
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": { "enum": ["string", "number", "date"] },
+      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one.",
+      "examples": [{ "region": "string", "rate": "number" }],
+      "x-transition": "snap"
+    },
+    "domain": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Fixed value axis as [min, max], used as given. An estimate outside it is an element error; an interval past it is cut at the axis end. Without it the axis spans `y` and the interval columns of every step, and every step's `reference`, rounded outward to tick values (zero is not forced).",
+      "examples": [[0, 25]],
+      "x-transition": "tween"
+    },
+    "shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Categories to show, by name. Omit to show every category. A row that appears grows out of the reference line (else 0, else the axis start) and then draws its whisker; one that leaves does the reverse. Hidden rows keep their place. An unknown category is an element error naming it.",
+      "examples": [["North"], ["North", "South"]],
+      "x-transition": "draw"
+    },
+    "highlight": {
+      "type": "string",
+      "description": "Category to emphasize; the other rows' dots and whiskers turn the theme's dim color and their value labels the muted color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",
+      "examples": ["North"],
+      "x-transition": "fade"
+    },
+    "reference": {
+      "anyOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value"],
+          "properties": {
+            "value": { "type": "number", "description": "Where the line sits on the value axis.", "examples": [10.5] },
+            "label": { "type": "string", "description": "Text above the line, at the top of the plot.", "examples": ["National average"] }
+          }
+        }
+      ],
+      "description": "A dashed reference line across every row, at a value (a number) or with a label ({ value, label }), such as an average or a target. It fades in, out or across to a new value. It widens the default axis to reach it; past a given `domain` it is not drawn.",
+      "examples": [10.5, { "value": 10.5, "label": "National average" }],
+      "x-transition": "fade"
+    }
+  }
+}

@@ -40,10 +40,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-el { position: relative; min-width: 0; }
 .sd-el[data-box] { position: absolute; }
 /* Figures fill the room their region leaves after the other elements take their own height: chart.line, chart.bar,
-   diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck component: it
-   fills only when it is the only element of a filling region, or when it is placed with `box`. */
-.sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="diagram"], [data-type="image"],
-  [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+   chart.points, diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck
+   component: it fills only when it is the only element of a filling region, or when it is placed with `box`. */
+.sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="chart.points"], [data-type="diagram"],
+  [data-type="image"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 
 /* Visibility (spec §6.2): hidden keeps its space; collapse removes it. State rules are !important: an
    important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
@@ -240,6 +240,22 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-bar .sd-bar-label { font-weight: 600; }
 .sd-chart-bar .sd-whisker-line, .sd-chart-bar .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
 .sd-chart-bar .sd-bar-group[data-visible="false"], .sd-chart-bar .sd-band-label[data-visible="false"] { visibility: hidden !important; }
+
+/* chart.points component: one row per category, a dot with an interval whisker and a value label. Sizes and neutral
+   colours from tokens; the dot colour comes from the palette (a fill attribute), so no rule here sets the fill of a dot
+   or a value label. A whisker takes the stroke of its group (ink, or the dim colour out of focus) and sits on a narrow
+   background halo; hidden rows keep their place. */
+.sd-chart-points { display: block; overflow: visible; }
+.sd-chart-points text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
+.sd-chart-points .sd-axis-value text { fill: var(--sd-color-muted); }
+.sd-chart-points .sd-grid-line { stroke: var(--sd-color-grid, var(--sd-color-rule)); stroke-width: 1.5; }
+.sd-chart-points .sd-axis-line { stroke: var(--sd-color-muted); stroke-width: 2; }
+.sd-chart-points text.sd-axis-title, .sd-chart-points text.sd-points-label { fill: var(--sd-color-ink); }
+.sd-chart-points .sd-points-value { font-weight: 600; }
+.sd-chart-points text.sd-no-data { fill: var(--sd-color-muted); }
+.sd-chart-points .sd-whisker-line, .sd-chart-points .sd-whisker-cap { stroke: inherit; }
+.sd-chart-points .sd-halo-under { stroke-width: 9; }
+.sd-chart-points .sd-points-row[data-visible="false"], .sd-chart-points .sd-points-label[data-visible="false"] { visibility: hidden !important; }
 
 /* chart marks: shared by the charts and custom components (ctx.chart in core/chart.js). Theme tokens only. A mark's own
    colour is the caller's (a fill or stroke attribute); these rules give what the theme decides: the background

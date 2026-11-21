@@ -81,7 +81,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 
 **What they share:**
 - State props (`shown`, `done`, `active`, `progress`, `current`, `highlight`) are set per step with `advance` or `set`. The component renders them and never reads the step.
-- `list`, `diagram`, `chart.bar`, `chat` and `timeline` build their own entrance (`enter: own`): when the element appears on a forward step, it plays its build from nothing to that step's state (items rise in turn, nodes pop in and edges draw, bars grow, the track fills). Item motions use the shared names and the theme's timing.
+- `list`, `diagram`, `chart.bar`, `chart.points`, `chat` and `timeline` build their own entrance (`enter: own`): when the element appears on a forward step, it plays its build from nothing to that step's state (items rise in turn, nodes pop in and edges draw, bars grow, dots grow out of the reference line, the track fills). Item motions use the shared names and the theme's timing.
 - Hidden parts keep their space, so nothing reflows when a part appears.
 - Going backward undoes a step: a tick comes off, a fill retracts, a node hides, a bar shrinks back.
 - Author text (`text`, `label`, `sub`) is inline Markdown and wraps inside its box. Two labels are plain text instead: a diagram edge `label` and a chat message `label`. Every piece of audience text is at least 28px, so trim long labels rather than shrink them.
@@ -105,6 +105,13 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `shown` brings categories in one by one; hidden ones keep their band. `highlight` dims the other bars to a neutral grey.
 - It counts as a figure, so the slide needs a `role: "source"` line.
 - A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
+
+**`chart.points`** (`catalog chart.points`). Estimates from a CSV, one row per category: a dot, an optional interval whisker and the value beside it.
+- `interval` adds the whisker; `reference` (a number, or `{ value, label }`) draws a dashed line across every row, such as an average.
+- The value axis covers `y`, the interval columns and `reference` of every step of the slide, so switching `y` moves the dots and never the axis. Set `domain` only to fix the range yourself; an estimate outside it is an element error.
+- `shown` brings rows in one by one, each growing out of the reference line; hidden rows keep their place. `highlight` dims the other rows; use `only` so it lasts one step.
+- An empty `y` cell shows "no data" (`sin datos` in Spanish) beside the label, never a dot at zero.
+- It counts as a figure, so the slide needs a `role: "source"` line. It fills the room its region leaves, like `chart.bar`.
 
 **`chat`** (`catalog chat`). An exchange as bubbles, or a prompt or quote as a bordered card.
 - `style: "bubbles"` puts `user` on the right and `agent` and `note` on the left. `style: "card"` gives full-width cards with the label on top.

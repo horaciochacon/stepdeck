@@ -237,7 +237,7 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.data(path, { types })` | `Promise<any>` | Loads a deck file: `.json`, `.geojson` or `.csv`. Paths are relative to the deck folder. Results are cached and shared between elements: treat them as read-only and copy before sorting. For CSV, declared `types` (`string`, `number`, `date`) win. Errors: `data file not found: <path>`, `invalid data file <path>: …`, `unsupported data file type: …`. |
 | `ctx.assetUrl(path)` | `string` | The full URL of a deck file (an image, say) for the browser to fetch. Same path rules as `ctx.data`; nothing is read, so a missing file shows up only when the browser loads it. Throws `data path must be relative to the deck root: <path>` for an absolute, remote or `..` path, and `data path may not contain '%': <path>`. Used by `image`. |
 | `ctx.format(spec)` | `(n) => string` | A d3-format function localized to the deck language (`en`, `es`; unknown falls back to `en`). Negative numbers use U+2212. |
-| `ctx.t(key)` | `string` | An engine string in the deck language. Keys: `section`, `step`, `of`, `error`, `tasks`, `files`, `ci95`. An unknown key returns the key. |
+| `ctx.t(key)` | `string` | An engine string in the deck language. Keys: `section`, `step`, `of`, `error`, `tasks`, `files`, `ci95`, `forecast`, `noData`. An unknown key returns the key. |
 | `ctx.capture` | `boolean` | True when rendering for screenshots (`?capture`). Nothing animates then; `info.animate` is already false. |
 | `ctx.animate` | object | `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. See below. |
 | `ctx.motion` | object | The named motions with the theme's defaults: `in`, `out`, `timing`, `names`. See below. |
@@ -405,6 +405,6 @@ The starter's schema:
 - [Writing a custom component](../guide/custom-components.md): the tutorial.
 - [Animation and motion](../guide/animation-and-motion.md): when steps animate.
 - [Deck and slide spec](deck-and-slide.md): elements, steps, `advance` and `transition`.
-- [Built-in components](components/index.md): what the 11 built-ins render.
+- [Built-in components](components/index.md): what the 12 built-ins render.
 - [skill/references/custom-components.md](../../skill/references/custom-components.md): the agent version.
 - `schema/stepdeck.d.ts`: `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext`, `ChildHandle`.

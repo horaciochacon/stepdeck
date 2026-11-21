@@ -1,4 +1,4 @@
-// Helpers the built-in charts (chart.line, chart.bar) share, and `chartKit`: the same building blocks, frozen,
+// Helpers the built-in charts (chart.line, chart.bar, chart.points) share, and `chartKit`: the same building blocks, frozen,
 // which every component receives as `ctx.chart`. The pure layout maths is in ./chart-layout.js, the DOM marks,
 // frame, joins and canvas layer in ./chart-marks.js, the motion in ./chart-motion.js.
 import { d3 } from "./d3.js";

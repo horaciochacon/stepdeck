@@ -215,8 +215,8 @@ How long each motion lasts:
 | `text`: crossfade of a changed text | two halves of `--sd-duration-fast` (out, then in) | Is the whole crossfade |
 | `text`: a badge's colour change | `--sd-duration-fast` | Replaces it |
 | `markdown` and `image`: a changed `md`, `src` or `caption` fades in | `--sd-duration` | Replaces it |
-| `chart.line` and `chart.bar`: draw, morph, grow | 2 × `--sd-duration` | Replaces it (not doubled) |
-| `chart.line`, `chart.bar` and `diagram`: `highlight` colour change | `--sd-duration-fast` | Replaces it |
+| `chart.line`, `chart.bar` and `chart.points`: draw, morph, grow | 2 × `--sd-duration` | Replaces it (not doubled) |
+| `chart.line`, `chart.bar`, `chart.points` and `diagram`: `highlight` colour change | `--sd-duration-fast` | Replaces it |
 | `big-number` count-up | 2.25 × `--sd-duration` (900ms) | Replaces it |
 | Items: list and chat rises, terminal line fades, diagram parts, timeline fill | `--sd-duration` | Replaces it |
 | Stagger between entering elements and between items | `--sd-stagger` | `transition.stagger` replaces it; 0 when the duration is 0 |
@@ -252,9 +252,9 @@ Four devices built on the motion system, each a few keys in a slide.
 
 ### Focus-dim
 
-`highlight` on `chart.line`, `chart.bar` and `diagram` emphasises some marks and dims the rest the same way in all three:
+`highlight` on `chart.line`, `chart.bar`, `chart.points` and `diagram` emphasises some marks and dims the rest the same way in all four:
 
-- shapes out of focus (lines, bands, bars, node and group outlines, edges with their arrowheads) turn the theme's `--sd-color-dim`, a neutral grey, at full opacity (a diagram's arrowhead follows its line through `fill: context-stroke`, which Chromium supports; elsewhere it stays ink);
+- shapes out of focus (lines, bands, bars, dots and whiskers, node and group outlines, edges with their arrowheads) turn the theme's `--sd-color-dim`, a neutral grey, at full opacity (a diagram's arrowhead follows its line through `fill: context-stroke`, which Chromium supports; elsewhere it stays ink);
 - their text (series labels, value labels, node labels) turns `--sd-color-muted`, so it keeps its contrast;
 - the marks in focus keep their colour and are drawn above the dimmed ones.
 

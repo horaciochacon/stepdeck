@@ -158,7 +158,7 @@ An invalid specifier such as `format: "zz"` passes `validate` (the schema only a
 
 ## It counts as a figure
 
-`validate` treats `big-number` as a figure, like `chart.line` and `chart.bar`. A slide with a figure fails `figure-source` unless some element has `props.role === "source"` from the start (its initial props, before any step):
+`validate` treats `big-number` as a figure, like `chart.line`, `chart.bar` and `chart.points`. A slide with a figure fails `figure-source` unless some element has `props.role === "source"` from the start (its initial props, before any step):
 
 ```text
 bad/fmtd · figure-source · fmtd (big-number), nofmt (big-number), badci (big-number) without a source vs an element with role: "source" · add { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }

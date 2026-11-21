@@ -54,7 +54,7 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | Page | What it covers |
 | --- | --- |
 | [Deck and slide spec](reference/deck-and-slide.md) | Every key of `deck.js`, slide files, elements and steps. |
-| [Components](reference/components/index.md) | The 11 built-in components and what they share. |
+| [Components](reference/components/index.md) | The 12 built-in components and what they share. |
 | [Layouts](reference/layouts.md) | The five built-in layouts, their regions and variables. |
 | [Themes](reference/themes.md) | Theme files, tokens and palettes. |
 | [CLI](reference/cli.md) | Every command, option, output format and exit code. |
@@ -69,6 +69,7 @@ One page per built-in component, in the order of `components/index.json`:
 | [text](reference/components/text.md) | A paragraph in one of four roles: body, source, note, label. |
 | [chart.line](reference/components/chart-line.md) | Line chart from a CSV, with series, highlight, annotations and an interval band. |
 | [chart.bar](reference/components/chart-bar.md) | Bar chart from a CSV, one row per category. |
+| [chart.points](reference/components/chart-points.md) | Estimates with intervals from a CSV, one row per category, with a reference line. |
 | [terminal](reference/components/terminal.md) | A scripted terminal session revealed event by event. |
 | [markdown](reference/components/markdown.md) | A block of Markdown. |
 | [big-number](reference/components/big-number.md) | One number with a format, label and optional interval, counting up. |

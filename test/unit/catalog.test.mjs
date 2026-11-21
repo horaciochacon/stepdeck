@@ -152,7 +152,7 @@ test("cli: catalog on a deck writes <deck>/catalog/ with the deck's components",
 });
 
 test("catalog --json lists enter own for the components that own their entrance", () => {
-  const owners = ["big-number", "chart.bar", "chart.line", "chat", "diagram", "list", "terminal", "timeline"];
+  const owners = ["big-number", "chart.bar", "chart.line", "chart.points", "chat", "diagram", "list", "terminal", "timeline"];
   try {
     const res = cli(["catalog", throws, "--json"]);
     assert.equal(res.status, 0, res.stdout + res.stderr);
