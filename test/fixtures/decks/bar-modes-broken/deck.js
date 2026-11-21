@@ -4,5 +4,5 @@ export default {
   title: "Bar modes errors fixture",
   lang: "en",
   theme: "modern",
-  slides: ["sort-error", "waterfall-empty", "waterfall-reserved"],
+  slides: ["sort-error", "waterfall-empty", "waterfall-reserved", "pyramid-errors"],
 };

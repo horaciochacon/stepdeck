@@ -20,12 +20,13 @@
 //             folded with stateAt at every step k up to the first step whose set/replace/show/hide names an
 //             unknown element (a bad `only` skips its own step; a bad from/at/advance ref skips folding), and at each k every element's props must be an object,
 //             hold no remote URL (http(s):// or //host, R20) and no hex color, have bindings whose file,
-//             pointer and format exist, name CSV columns (x, y, id, from, series, interval.lower/upper) that exist,
+//             pointer and format exist, name CSV columns (x, y, id, from, series, group, interval.lower/upper) that exist,
 //             point at files that exist in that exact case, and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
 //             theme's tokens.css), and every element goes through chartProblems (core/chart-rules.js:
-//             chart-prop-unused, a warning). Each problem is reported once, at the first step where it appears.
+//             chart-prop-unused, a warning; chart-orient, an error). Each problem is reported once, at the first step
+//             where it appears.
 //   ghost     an element may not set ghost together with collapse: true (ghost-collapse, error).
 //   exit      an exit object with a delay is a warning (exit-delay-ignored): exits start at t = 0.
 //   budget    an element that enters on a step (k >= 1) must settle well inside the 10 s watchdog: its stagger
@@ -854,9 +855,9 @@ async function columnsOf(env, file, types, named, label, describe) {
   return out;
 }
 
-/** The chart's columns in its `data` CSV: `x`, `y`, `id`, `from`, `series` and the `interval` bounds. */
+/** The chart's columns in its `data` CSV: `x`, `y`, `id`, `from`, `series`, `group` and the `interval` bounds. */
 function checkColumns(env, props) {
-  const named = [["x", props.x], ["y", props.y], ["id", props.id], ["from", props.from], ["series", props.series]];
+  const named = [["x", props.x], ["y", props.y], ["id", props.id], ["from", props.from], ["series", props.series], ["group", props.group]];
   if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({
     measured: `${prop} = '${column}'`,

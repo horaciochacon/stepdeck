@@ -94,6 +94,16 @@ test("chart.points: a missing `id` column is reported at the step that names it,
   assert.equal(problems[0].fix, "set id to 'item'");
 });
 
+test("chart.bar back-to-back: a missing `group` column is reported at the step that names it, with the nearest column", async () => {
+  const problems = await validate(fixture("group-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+  assert.equal(problems[0].element, "bars");
+  assert.equal(problems[0].step, "two");
+  assert.equal(problems[0].measured, "group = 'groups'");
+  assert.equal(problems[0].limit, "columns of data/pyramid.csv: age, group, share");
+  assert.equal(problems[0].fix, "set group to 'group'");
+});
+
 test("chart.line draws: the draws file needs the chart's x, y and series and the draw column", async () => {
   const problems = await validate(fixture("draws-missing-column"));
   assert.deepEqual(rules(problems), ["missing-column", "missing-column"], show(problems));
@@ -338,6 +348,18 @@ test("chart-prop-unused: invert and total outside a waterfall are warnings", asy
   ]);
   assert.ok(problems.every((p) => /mode: "waterfall"/.test(p.fix)), show(problems));
   assert.deepEqual(errors(problems), [], "warnings only: the deck still builds");
+});
+
+test("chart-orient: back-to-back bars set vertical are an error", async () => {
+  const problems = await validate(fixture("back-to-back-vertical"));
+  assert.deepEqual(rules(problems), ["chart-orient"], show(problems));
+  const p = problems[0];
+  assert.notEqual(p.severity, "warning", "an error: the chart cannot draw it");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "bars");
+  assert.equal(p.measured, "back-to-back bars are horizontal only");
+  assert.match(p.fix, /orient/);
+  assert.deepEqual(errors(problems), problems);
 });
 
 test("a misspelt mode gets a did-you-mean", async () => {

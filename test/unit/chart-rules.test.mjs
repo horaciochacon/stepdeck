@@ -38,6 +38,23 @@ test("chartProblems: invert and total outside waterfall warn", () => {
   assert.deepEqual(chartProblems("chart.bar", { ...bar, invert: null, total: null }), [], "cleared, they say nothing");
 });
 
+test("chartProblems: back-to-back vertical is an error", () => {
+  const pyramid = { data: "data/pyramid.csv", x: "age", y: "share", mode: "back-to-back", group: "group" };
+  const found = chartProblems("chart.bar", { ...pyramid, orient: "vertical" });
+  assert.equal(found.length, 1);
+  const [item] = found;
+  assert.equal(item.rule, "chart-orient");
+  assert.equal(item.severity, "error");
+  assert.equal(item.message, "back-to-back bars are horizontal only");
+  assert.match(item.limit, /horizontal/);
+  assert.match(item.fix, /orient/);
+  assert.deepEqual(chartProblems("chart.bar", pyramid), [], "horizontal by default");
+  assert.deepEqual(chartProblems("chart.bar", { ...pyramid, orient: "horizontal" }), []);
+  assert.deepEqual(chartProblems("chart.bar", { ...pyramid, mode: "bars", orient: "vertical" }), [], "plain bars may stand up");
+  assert.deepEqual(chartProblems("chart.bar", { ...pyramid, mode: "waterfall", orient: "vertical" }), [], "and so may a waterfall");
+  assert.deepEqual(chartProblems("chart.points", { ...pyramid, orient: "vertical" }), [], "only chart.bar has the mode");
+});
+
 test("chartProblems: unknown types and odd props give nothing", () => {
   assert.deepEqual(chartProblems("text", { ticker: true }), []);
   assert.deepEqual(chartProblems("text", { invert: true, total: true }), []);

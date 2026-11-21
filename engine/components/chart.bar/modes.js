@@ -16,6 +16,22 @@
 //   another step that fails is skipped (its own update reports it).
 // waterfallSpan(rows, props, stepProps) -> [min, max]
 //   waterfallDomain(waterfallSteps(rows, props, stepProps)).
+//
+// backToBack(rows, props) -> { categories: [{ key, left: { value, lo, hi }, right: { value, lo, hi } }], groups: [left, right] }
+//   Long data: one row per category (`x`) and group (`group`). The `group` column needs exactly two values (rows with an
+//   empty category or group are skipped); `groups` orders them [left, right], else the data order. Categories are in
+//   data order. `value` is the row's `y`, null when empty; `lo` and `hi` its `interval` bounds, both null unless the row
+//   has a value and both bounds (a lone bound draws nothing). Throws, naming it: a `group` column without two values; a
+//   category with no row, or more than one, for a group; `groups` naming one group twice; a `highlight` that is both a
+//   category and a group, or neither; a value or a drawn bound below zero.
+// backToBackOrder(rows, props) -> keys in display order
+//   `rank` over the categories, each valued at the sum of its two sides' `y` (none when either is missing, which ranks
+//   last); `{ by }` reduces that column the same way (a number column is summed, a text column counts when both rows
+//   agree, as the category's own text does). The errors are rank's.
+// backToBackSpan(rows, props, stepProps) -> [0, max]
+//   extentOf with zero over every `y` and drawn interval bound of every back-to-back step of the slide over the same
+//   `data` (the current props when they are one, then `stepProps`, null entries skipped). Not niced or mirrored: the
+//   caller does both.
 import { extentOf, rank } from "../../core/chart-layout.js";
 
 /** A finite number, from a number or a numeric string; null for an empty cell or anything else. */
@@ -99,3 +115,120 @@ export function waterfallSteps(rows, props, stepProps) {
 
 /** @returns {[number, number]} */
 export const waterfallSpan = (rows, props, stepProps) => waterfallDomain(waterfallSteps(rows, props, stepProps));
+
+// --- Back-to-back ----------------------------------------------------------------------------------------------------
+
+const SIDES = ["left", "right"];
+const blank = (v) => v == null || v === "";
+
+/** The two group rows of every category, in data order, and the groups [left, right]. Throws naming the problem. */
+function pairRows(rows, props) {
+  const { x, group } = props;
+  const named = categoriesOf(rows, x).filter((r) => !blank(r[group]));
+  const values = [...new Set(named.map((r) => String(r[group])))];
+  if (values.length !== 2) throw new Error(`\`group\` column '${group}' has ${values.length} values (back-to-back needs exactly two)`);
+  const groups = Array.isArray(props.groups) ? props.groups.map(String) : values;
+  if (groups.length !== 2 || groups[0] === groups[1]) {
+    throw new Error(`\`groups\` must be two different values of the \`group\` column '${group}' (values: ${values.join(", ")})`);
+  }
+  const byKey = new Map();
+  for (const r of named) {
+    const key = String(r[x]);
+    if (!byKey.has(key)) byKey.set(key, {});
+    const pair = byKey.get(key);
+    const g = String(r[group]);
+    if (pair[g]) throw new Error(`category '${key}' has more than one '${g}' row`);
+    pair[g] = r;
+  }
+  const categories = [...byKey].map(([key, pair]) => {
+    for (const g of groups) if (!pair[g]) throw new Error(`category '${key}' has no '${g}' row`);
+    return { key, rows: groups.map((g) => pair[g]) };
+  });
+  return { categories, groups };
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Record<string, any>} props
+ * @returns {{ categories: Array<{ key: string, left: { value: number | null, lo: number | null, hi: number | null }, right: { value: number | null, lo: number | null, hi: number | null } }>, groups: [string, string] }}
+ */
+export function backToBack(rows, props) {
+  const { categories, groups } = pairRows(rows, props);
+  if (props.highlight != null) {
+    const name = String(props.highlight);
+    const isCategory = categories.some((c) => c.key === name);
+    if (isCategory && groups.includes(name)) throw new Error(`'${name}' in \`highlight\` is both a category and a group`);
+    if (!isCategory && !groups.includes(name)) {
+      const names = `categories: ${categories.map((c) => c.key).join(", ")}; groups: ${groups.join(", ")}`;
+      throw new Error(`category or group '${name}' in \`highlight\` not found in ${props.data} (${names})`);
+    }
+  }
+  const { lower, upper } = props.interval ?? {};
+  const both = Boolean(lower && upper);
+  return {
+    categories: categories.map(({ key, rows: pair }) => {
+      const out = { key };
+      pair.forEach((row, i) => {
+        const value = valueOf(row, props.y);
+        const lo = both && value !== null ? valueOf(row, lower) : null;
+        const hi = both && value !== null ? valueOf(row, upper) : null;
+        const drawn = lo !== null && hi !== null;
+        for (const [col, v] of [[props.y, value], ...(drawn ? [[lower, lo], [upper, hi]] : [])]) {
+          if (v === null || v >= 0) continue;
+          throw new Error(`category '${key}' has ${v} in '${col}' for '${groups[i]}' (back-to-back needs values of zero or more)`);
+        }
+        out[SIDES[i]] = { value, lo: drawn ? lo : null, hi: drawn ? hi : null };
+      });
+      return out;
+    }),
+    groups,
+  };
+}
+
+/** A column reduced over a category's two rows: numbers summed, text that both rows agree on, else none. */
+function reduce(a, b) {
+  const [x, y] = [valueOf({ v: a }, "v"), valueOf({ v: b }, "v")];
+  if (x !== null && y !== null) return x + y;
+  return typeof a === "string" && a !== "" && a === b && x === null ? a : null;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Record<string, any>} props
+ * @returns {string[]}
+ */
+export function backToBackOrder(rows, props) {
+  const { categories } = pairRows(rows, props);
+  const names = rows.length ? Object.keys(rows[0]) : [];
+  const items = categories.map(({ key, rows: [a, b] }) => ({
+    key,
+    value: reduce(a[props.y], b[props.y]),
+    columns: Object.fromEntries(names.map((c) => [c, reduce(a[c], b[c])])),
+  }));
+  return rank(items, props.sort);
+}
+
+/** One step's drawn values: every `y`, and both bounds where the row has a value and both. */
+function pairMarks(rows, p) {
+  const { lower, upper } = p.interval ?? {};
+  const marks = [];
+  for (const r of categoriesOf(rows, p.x)) {
+    if (blank(r[p.group])) continue;
+    const value = valueOf(r, p.y);
+    if (value === null) continue;
+    marks.push({ v: value });
+    if (lower && upper && valueOf(r, lower) !== null && valueOf(r, upper) !== null) marks.push({ v: valueOf(r, lower) }, { v: valueOf(r, upper) });
+  }
+  return marks;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {Record<string, any>} props the current props
+ * @param {ReadonlyArray<Record<string, any> | null> | null} stepProps
+ * @returns {[number, number]}
+ */
+export function backToBackSpan(rows, props, stepProps) {
+  const steps = [props, ...(stepProps ?? [])].filter((p) => p && p.mode === "back-to-back" && p.data === props.data);
+  return [0, extentOf(steps.flatMap((p) => pairMarks(rows, p)), ["v"], { zero: true })[1]];
+}

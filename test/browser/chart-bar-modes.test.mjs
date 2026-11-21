@@ -1,13 +1,14 @@
 // `chart.bar` re-sorts and modes in Chrome: `sort` orders the bands, and on a played step every bar, with its band label,
 // whisker and value label, slides to its new place. Hidden bars keep their place in the sorted order. `mode: "waterfall"`
 // stacks the shown bars into running totals, with dotted connectors and an optional total bar, and morphs from and to
-// plain bars. Run with:
+// plain bars. `mode: "back-to-back"` sets two groups' bars left and right of a centre rule, a population pyramid. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-bar-modes.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
-import { deckPages, goTo, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump, elementHtml, htmlAfterJump, sampleFrames, tokenRgb, paletteRoleRgb, colorMove } from "./helpers.mjs";
+import { deckPages, goTo, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump, elementHtml, htmlAfterJump, sampleFrames, tokenRgb, paletteRgb, paletteRoleRgb, colorMove } from "./helpers.mjs";
+import { contrast, luminance } from "#engine/core/color.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const pages = deckPages("test/fixtures/decks/bar-modes/");
@@ -587,6 +588,274 @@ test("waterfall error shows on the slide", async () => {
     const errors = await page.evaluate(() => window.STEPDECK.errors);
     assert.deepEqual(errors, ["waterfall-empty/bars: waterfall needs a value for every category: 'Growth' is empty"]);
     assert.match(await page.evaluate(() => document.querySelector('[data-el="bars"] .sd-error')?.textContent) ?? "", /'Growth' is empty/);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible");
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+// --- Back-to-back ----------------------------------------------------------------------------------------------------
+
+const PYRAMID_STEPS = {
+  pyramid: ["start", "all", "later"],
+  "pyramid-highlight": ["plain", "group", "category", "sort"],
+  "pyramid-sort": ["data", "total", "by", "list"],
+  "pyramid-switch": ["bars", "pyramid", "again"],
+};
+const PYRAMID_INTERRUPTS = [
+  ["pyramid", "start", "all", "later"],
+  ["pyramid", "all", "later", "start"],
+  ["pyramid-highlight", "plain", "group", "category"],
+  ["pyramid-highlight", "group", "category", "sort"],
+  ["pyramid-sort", "data", "total", "by"],
+  ["pyramid-sort", "by", "list", "data"],
+  ["pyramid-switch", "bars", "pyramid", "again"],
+];
+const AGES = ["0-14", "15-29", "30-44", "45-59", "60-74", "75+"];
+
+// Both sides of a back-to-back chart, read from the markup: the centre rule, each bar's ends, band centre, colour, value
+// label and whisker (and whether a halo copy of the whisker line sits just before it), the band labels, the ticks and
+// the side titles. Self-contained: sampleFrames sends its source to the page.
+const pairs = (el) => {
+  const num = (node, a) => Number(node.getAttribute(a));
+  const svg = el.querySelector("svg");
+  const rule = el.querySelector("line.sd-centre-rule");
+  const bars = {};
+  for (const g of el.querySelectorAll("g.sd-bar-group")) {
+    const rect = g.querySelector("rect.sd-bar");
+    const label = g.querySelector("text.sd-bar-label");
+    const line = g.querySelector("g.sd-whisker > line.sd-whisker-line");
+    const copy = line?.previousElementSibling;
+    const x = num(rect, "x");
+    const width = num(rect, "width");
+    (bars[g.dataset.key] ??= {})[g.dataset.side] = {
+      x, end: x + width, width, center: num(rect, "y") + num(rect, "height") / 2,
+      visible: g.dataset.visible, dim: g.dataset.dim, fill: getComputedStyle(rect).fill,
+      text: label.textContent, labelX: num(label, "x"), anchor: label.getAttribute("text-anchor"),
+      whisker: line ? [num(line, "x1"), num(line, "x2")].sort((a, b) => a - b) : null,
+      halo: Boolean(copy?.classList.contains("sd-halo-under")) && ["x1", "x2", "y1", "y2"].every((a) => copy.getAttribute(a) === line.getAttribute(a)),
+    };
+  }
+  const [, left, top] = el.querySelector("g.sd-plot").getAttribute("transform").match(/translate\(([-\d.]+),([-\d.]+)\)/).map(Number);
+  return {
+    mode: svg.dataset.mode ?? null,
+    plot: { left, top },
+    centre: rule && { x: num(rule, "x1"), x2: num(rule, "x2"), y1: num(rule, "y1"), y2: num(rule, "y2") },
+    bars,
+    bands: Object.fromEntries([...el.querySelectorAll("text.sd-band-label")].map((t) => [t.dataset.key, { y: num(t, "y"), visible: t.dataset.visible }])),
+    ticks: [...el.querySelectorAll("g.sd-axis-value g.tick")].map((t) => ({ x: Number(t.getAttribute("transform").match(/translate\(([-\d.]+)/)[1]), label: t.querySelector("text").textContent })),
+    titles: [...el.querySelectorAll("text.sd-side-title")].map((t) => ({ side: t.dataset.side, text: t.textContent, x: num(t, "x"), y: num(t, "y"), fill: getComputedStyle(t).fill })),
+  };
+};
+const readPairs = (page) => page.evaluate(`(${pairs})(document.querySelector('[data-el="bars"]'))`);
+/** The bands from the top of the plot down: the categories in the order they sit on the page. */
+const bandOrder = (s) => Object.keys(s.bands).sort((a, b) => s.bands[a].y - s.bands[b].y);
+
+const rgbOf = (css) => css.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => Number(v) / 255);
+const contrastOf = (a, b) => contrast(luminance(rgbOf(a)), luminance(rgbOf(b)));
+
+test("pyramid: left bars end left of the centre rule, right bars right of it, ticks absolute", async () => {
+  await withPage({ root, url: pages.url("pyramid", "step=all") }, async (page, ctx) => {
+    const s = await readPairs(page);
+    assert.equal(s.mode, "back-to-back");
+    const c = s.centre.x;
+    near(s.centre.x2, c, "the centre rule is upright");
+    assert.ok(s.centre.y2 - s.centre.y1 > 100, "and runs down the plot");
+    assert.deepEqual(Object.keys(s.bars), AGES, "one band per category, in data order");
+    assert.deepEqual(bandOrder(s), AGES);
+    for (const age of AGES) {
+      const { left, right } = s.bars[age];
+      near(left.end, c, `${age}: the left bar ends at the centre rule`);
+      assert.ok(left.x < c - 1, `${age}: and extends left of it`);
+      near(right.x, c, `${age}: the right bar starts at the centre rule`);
+      assert.ok(right.end > c + 1, `${age}: and extends right of it`);
+      near(left.center, right.center, `${age}: both bars sit in one band`);
+      near(s.bands[age].y, left.center, `${age}: level with its band label`);
+      assert.ok(left.whisker[1] < c && right.whisker[0] > c, `${age}: each whisker on its own side`);
+      assert.ok(left.whisker[0] < left.x && left.x < left.whisker[1], `${age}: the left whisker brackets its bar's end`);
+      assert.ok(right.whisker[0] < right.end && right.end < right.whisker[1], `${age}: and so does the right one`);
+      assert.ok(left.anchor === "end" && left.labelX < left.whisker[0], `${age}: the left value label sits past its whisker, to the left`);
+      assert.ok(right.anchor === "start" && right.labelX > right.whisker[1], `${age}: the right one past its whisker, to the right`);
+      assert.ok(left.halo && right.halo, `${age}: the whiskers sit on halos`);
+      assert.match(`${left.text} ${right.text}`, /^\d+\.\d \d+\.\d$/, `${age}: value labels are magnitudes`);
+    }
+    assert.deepEqual([s.bars["0-14"].left.text, s.bars["0-14"].right.text], ["8.1", "8.6"], "Women left (the first group in the data)");
+    // One scale for both sides: 30-44 Women (10.2) and 75+ Men (2.0) are drawn at the same pixels per unit.
+    near(s.bars["30-44"].left.width / 10.2, s.bars["75+"].right.width / 2, "both sides share one scale");
+    // Ticks: symmetric about the rule, each reading the same as its mirror, none negative, zero at the rule.
+    assert.ok(s.ticks.length >= 5, `${s.ticks.length} ticks`);
+    assert.equal(s.ticks.find((t) => Math.abs(t.x - c) < 0.01)?.label, "0.0", "a zero tick at the rule (in `format.y`)");
+    for (const t of s.ticks) {
+      const mirror = s.ticks.find((u) => Math.abs(u.x - c + (t.x - c)) < 0.01);
+      assert.ok(mirror, `tick ${t.label} at ${t.x} has a mirror`);
+      assert.equal(mirror.label, t.label, `the mirror of ${t.label} reads the same`);
+      assert.doesNotMatch(t.label, /[−-]/, "no tick reads negative");
+    }
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pyramid: the axis covers every step, so bands appearing and a y change never move it", async () => {
+  await withPage({ root, url: pages.url("pyramid", "step=start") }, async (page, ctx) => {
+    const seen = {};
+    for (const step of PYRAMID_STEPS.pyramid) {
+      await ctx.open(pages.url("pyramid", `step=${step}`));
+      seen[step] = await readPairs(page);
+    }
+    const axis = (s) => ({ plot: s.plot, centre: s.centre, ticks: s.ticks, bands: Object.values(s.bands).map((b) => b.y) });
+    assert.deepEqual(axis(seen.all), axis(seen.start), "start -> all: the same frame and ticks");
+    assert.deepEqual(axis(seen.later), axis(seen.start), "and at the later year");
+    assert.deepEqual(AGES.filter((a) => seen.start.bars[a].left.visible === "true"), ["0-14", "15-29", "30-44"], "start shows three bands");
+    assert.deepEqual(AGES.filter((a) => seen.start.bands[a].visible === "true"), ["0-14", "15-29", "30-44"], "and their labels");
+    // The widest whisker of the slide is 45-59 Women in the later year (up to 10.9): it stays inside the axis.
+    const ends = seen.later.ticks.map((t) => t.x);
+    assert.ok(seen.later.bars["45-59"].left.whisker[0] >= Math.min(...ends) - 0.01, "the left whisker ends within the axis");
+    assert.deepEqual([seen.later.bars["45-59"].left.text, seen.later.bars["45-59"].right.text], ["10.1", "9.7"], "y switched");
+    await errorsClean(page, ctx);
+  });
+});
+
+for (const theme of ["modern", "academic-light"]) {
+  test(`pyramid: side titles in group colours with text contrast (${theme})`, async () => {
+    await withPage({ root, url: pages.url("pyramid", `step=all&theme=${theme}`) }, async (page, ctx) => {
+      const s = await readPairs(page);
+      const background = await tokenRgb(page, "--sd-color-background");
+      assert.deepEqual(s.titles.map((t) => [t.side, t.text]), [["left", "Women"], ["right", "Men"]]);
+      let darkened = 0;
+      for (const [i, t] of s.titles.entries()) {
+        const palette = paletteRgb(theme, i);
+        for (const age of AGES) assert.equal(s.bars[age][t.side].fill, palette, `${age} ${t.side}: the bar takes palette colour ${i + 1}`);
+        const ratio = contrastOf(t.fill, background);
+        assert.ok(ratio >= 4.5, `the ${t.side} title reads at ${ratio.toFixed(2)}:1`);
+        if (contrastOf(palette, background) >= 4.5) assert.equal(t.fill, palette, `the ${t.side} title keeps a palette colour that reads`);
+        else {
+          darkened++;
+          assert.notEqual(t.fill, palette, `the ${t.side} title darkens a palette colour too light for text`);
+          rgbOf(t.fill).forEach((v, k) => assert.ok(v <= rgbOf(palette)[k] + 1e-9, `the ${t.side} title is the same colour, darker`));
+        }
+      }
+      if (theme === "academic-light") assert.equal(darkened, 1, "academic-light's second colour is too light for text on white");
+      // Each title is above its own half of the plot, centred on it.
+      const [left, right] = s.titles;
+      const c = s.plot.left + s.centre.x;
+      assert.ok(left.x < c && right.x > c, "the left title over the left half, the right over the right");
+      near(c - left.x, right.x - c, "both the same distance from the rule");
+      assert.ok(left.y < s.plot.top && right.y < s.plot.top, "above the plot");
+      await errorsClean(page, ctx);
+    });
+  });
+}
+
+test("pyramid: highlight dims the other side for a group, the other bands for a category", async () => {
+  await withPage({ root, url: pages.url("pyramid-highlight", "step=group") }, async (page, ctx) => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const muted = await tokenRgb(page, "--sd-color-muted");
+    const [women, men] = [paletteRgb("modern", 0), paletteRgb("modern", 1)];
+    let s = await readPairs(page);
+    for (const age of AGES) {
+      assert.deepEqual([s.bars[age].left.fill, s.bars[age].right.fill], [dim, men], `group: ${age}: Women dims, Men keeps its colour`);
+      assert.deepEqual([s.bars[age].left.dim, s.bars[age].right.dim], ["true", "false"]);
+    }
+    assert.deepEqual(s.titles.map((t) => t.fill), [muted, men], "the dimmed side's title turns muted");
+    await ctx.open(pages.url("pyramid-highlight", "step=category"));
+    s = await readPairs(page);
+    for (const age of AGES) {
+      const on = age === "45-59";
+      assert.deepEqual([s.bars[age].left.fill, s.bars[age].right.fill], on ? [women, men] : [dim, dim], `category: ${age}`);
+      assert.deepEqual([s.bars[age].left.dim, s.bars[age].right.dim], on ? ["false", "false"] : ["true", "true"]);
+    }
+    assert.deepEqual(s.titles.map((t) => t.fill), [women, men], "a category leaves the titles in their colours");
+
+    // Played, the bars and the title change colour through a tween, not a snap.
+    await ctx.open(pages.url("pyramid-highlight", "step=plain&motion=full"));
+    const r = await sampleFrames(page, "pyramid-highlight", "group", "bars", (el) => ({
+      color: getComputedStyle(el.querySelector('g.sd-bar-group[data-key="0-14"][data-side="left"] rect.sd-bar')).fill,
+      title: getComputedStyle(el.querySelector('text.sd-side-title[data-side="left"]')).fill,
+    }));
+    const bar = colorMove(r.frames);
+    assert.deepEqual([bar.from, bar.to], [women, dim]);
+    assert.ok(bar.moved >= 1, `the bar passes through a colour between the two (${bar.moved} frames)`);
+    const title = colorMove(r.frames.map((f) => ({ ms: f.ms, color: f.title })));
+    assert.deepEqual([title.from, title.to], [women, muted]);
+    assert.ok(title.moved >= 1, `and so does its title (${title.moved} frames)`);
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pyramid: sort ranks the bands by the sum of the two sides, both bars and the label sliding together", async () => {
+  await withPage({ root, url: pages.url("pyramid-sort", "step=data&motion=full") }, async (page, ctx) => {
+    const first = await readPairs(page);
+    assert.deepEqual(bandOrder(first), AGES);
+    assert.deepEqual(first.titles.map((t) => t.text), ["Men", "Women"], "`groups` puts Men on the left");
+    assert.deepEqual([first.bars["0-14"].left.text, first.bars["0-14"].right.text], ["8.6", "8.1"]);
+    const r = await sampleFrames(page, "pyramid-sort", "total", "bars", pairs);
+    assert.deepEqual(bandOrder(r.end), ["30-44", "15-29", "45-59", "0-14", "60-74", "75+"], "by the sum of the two sides, highest first");
+    const [a, b] = [first.bars["30-44"].left.center, r.end.bars["30-44"].left.center];
+    assert.ok(Math.abs(b - a) > 1, "30-44 changes band");
+    assert.ok(r.frames.some((f) => between(f.bars["30-44"].left.center, a, b)), "30-44 is seen part-way");
+    r.frames.forEach((f, i) => {
+      for (const age of AGES) {
+        near(f.bars[age].left.center, f.bars[age].right.center, `frame ${i}: both bars of ${age} stay level`);
+        near(f.bands[age].y, f.bars[age].left.center, `frame ${i}: and so does its label`);
+      }
+    });
+    assert.equal(await elementHtml(page, "bars"), await htmlAfterJump(ctx, page, pages, "pyramid-sort", "total", "bars"));
+    // `{ by }` sums that column (the later year); a band hidden on that step keeps its place.
+    await ctx.open(pages.url("pyramid-sort", "step=by"));
+    const by = await readPairs(page);
+    assert.deepEqual(bandOrder(by), ["45-59", "30-44", "15-29", "60-74", "0-14", "75+"]);
+    assert.deepEqual([by.bars["75+"].left.visible, by.bars["75+"].right.visible, by.bands["75+"].visible], ["false", "false", "false"]);
+    await ctx.open(pages.url("pyramid-sort", "step=list"));
+    assert.deepEqual(bandOrder(await readPairs(page)), ["75+", "60-74", "0-14", "15-29", "30-44", "45-59"]);
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pyramid: a mode change to or from back-to-back snaps", async () => {
+  await withPage({ root, url: pages.url("pyramid-switch", "step=bars&motion=full") }, async (page, ctx) => {
+    const svgOf = (el) => ({ html: el.querySelector("svg").outerHTML });
+    for (const [from, to] of [["bars", "pyramid"], ["pyramid", "again"]]) {
+      if (from !== "bars") await ctx.open(pages.url("pyramid-switch", `step=${from}&motion=full`));
+      const before = await page.evaluate(() => document.querySelector('[data-el="bars"] svg').outerHTML);
+      const r = await sampleFrames(page, "pyramid-switch", to, "bars", svgOf);
+      assert.notEqual(r.end.html, before, `${from} -> ${to}: the chart changes`);
+      assert.equal(r.frames.filter((f) => f.html !== before && f.html !== r.end.html).length, 0, `${from} -> ${to}: no frame in between`);
+      assert.equal(await elementHtml(page, "bars"), await htmlAfterJump(ctx, page, pages, "pyramid-switch", to, "bars"));
+    }
+    assert.equal((await readPairs(page)).mode, null, "plain bars again");
+    await errorsClean(page, ctx);
+  });
+});
+
+for (const [slide, steps] of Object.entries(PYRAMID_STEPS)) {
+  test(`pyramid: ${slide}: played, jumped and backward end the same`, async () => {
+    await withPage({ root, url: pages.url(slide, `step=${steps[0]}`) }, async (page, ctx) => {
+      await expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id: "bars" });
+      await expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id: "bars" });
+    });
+  });
+}
+for (const [slide, from, via, to] of PYRAMID_INTERRUPTS) {
+  test(`pyramid: ${slide}: '${from}' -> '${via}' interrupted by '${to}' ends as a jump`, async () => {
+    await withPage({ root, url: pages.url(slide, `step=${from}`) }, async (page, ctx) => {
+      await expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id: "bars" });
+    });
+  });
+}
+
+test("pyramid errors show on the slide", async () => {
+  await withPage({ root, url: broken.url("pyramid-errors", "") }, async (page, ctx) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual([...errors].sort(), [
+      "pyramid-errors/both: 'North' in `highlight` is both a category and a group",
+      "pyramid-errors/missing: category '30+' has no 'Group B' row",
+      "pyramid-errors/negative: category '0-29' has -2 in 'change' for 'Group B' (back-to-back needs values of zero or more)",
+      "pyramid-errors/three: `group` column 'group' has 3 values (back-to-back needs exactly two)",
+      "pyramid-errors/vertical: back-to-back bars are horizontal only",
+    ]);
+    for (const id of ["three", "missing", "both", "vertical", "negative"]) {
+      const shown = await page.evaluate((id) => document.querySelector(`[data-el="${id}"] .sd-error`)?.textContent ?? "", id);
+      assert.ok(shown.length > 0, `${id}: the error is on the slide`);
+    }
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible");
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });

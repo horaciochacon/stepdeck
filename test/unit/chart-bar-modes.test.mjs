@@ -1,9 +1,10 @@
 // chart.bar's pure mode maths (components/chart.bar/modes.js): the waterfall's running totals over the bars on screen,
-// its empty-value error, and the value domain over every waterfall step of a slide. No DOM.
+// its empty-value error, and the value domain over every waterfall step of a slide; the back-to-back pairs of group
+// rows, their errors, their order by the sum of the two sides, and their domain over every back-to-back step. No DOM.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { waterfall, waterfallDomain, waterfallSpan, waterfallSteps } from "#engine/components/chart.bar/modes.js";
+import { waterfall, waterfallDomain, waterfallSpan, waterfallSteps, backToBack, backToBackOrder, backToBackSpan } from "#engine/components/chart.bar/modes.js";
 
 const ROWS = [
   { item: "Opening", change: 40, later: 40, low: 38, high: 42 },
@@ -111,6 +112,107 @@ test("waterfallSteps: the slide's waterfalls; a current step in plain bars is le
   assert.deepEqual(waterfallSpan(gap, bars, [bars, later]), [0, 49], "the span of a plain step is its slide's waterfalls");
   assert.deepEqual(waterfallSpan(gap, bars, [bars]), [0, 1], "none: [0, 1]");
   assert.throws(() => waterfallSteps(gap, { ...base }, null), { message: "waterfall needs a value for every category: 'Taxes' is empty" });
+});
+
+// --- Back-to-back ----------------------------------------------------------------------------------------------------
+
+// Long data: one row per category and group. Men come first in the 15-29 rows, so the left group is the first one the
+// data names (Women), not the first row of each category; 30+ has no interval for Women and no value for Men.
+const PYRAMID = [
+  { age: "0-14", sex: "Women", share: 8, low: 7, high: 9, later: 7 },
+  { age: "0-14", sex: "Men", share: 8.5, low: 7.5, high: 9.5, later: 7.2 },
+  { age: "15-29", sex: "Men", share: 10, low: 9, high: 11, later: 9 },
+  { age: "15-29", sex: "Women", share: 9.5, low: 8.6, high: 10.4, later: 9.1 },
+  { age: "", sex: "Women", share: 99, low: 98, high: 100, later: 99 }, // no category: skipped
+  { age: "30+", sex: "Women", share: 30, low: "", high: "", later: 33 },
+  { age: "30+", sex: "", share: 50, low: 49, high: 51, later: 50 }, // no group: skipped
+  { age: "30+", sex: "Men", share: "", low: 27, high: 29, later: 31 },
+];
+const pyramid = { data: "data/pyramid.csv", x: "age", y: "share", mode: "back-to-back", group: "sex", interval: { lower: "low", upper: "high" } };
+const side = (value, lo = null, hi = null) => ({ value, lo, hi });
+
+test("backToBack: pairs each category's two group rows", () => {
+  assert.deepEqual(backToBack(PYRAMID, pyramid), {
+    categories: [
+      { key: "0-14", left: side(8, 7, 9), right: side(8.5, 7.5, 9.5) },
+      { key: "15-29", left: side(9.5, 8.6, 10.4), right: side(10, 9, 11) },
+      // An empty bound draws no whisker; a side with no value has no interval either (nothing is drawn at zero).
+      { key: "30+", left: side(30), right: side(null) },
+    ],
+    groups: ["Women", "Men"],
+  });
+  const swapped = backToBack(PYRAMID, { ...pyramid, groups: ["Men", "Women"] });
+  assert.deepEqual(swapped.groups, ["Men", "Women"], "`groups` orders the sides");
+  assert.deepEqual(swapped.categories[0], { key: "0-14", left: side(8.5, 7.5, 9.5), right: side(8, 7, 9) });
+  const plain = backToBack(PYRAMID, { ...pyramid, y: "later", interval: undefined });
+  assert.deepEqual(plain.categories.map((c) => [c.key, c.left, c.right]), [
+    ["0-14", side(7), side(7.2)], ["15-29", side(9.1), side(9)], ["30+", side(33), side(31)],
+  ], "no interval: no whiskers");
+  const numeric = [{ year: 2000, g: 1, v: 3 }, { year: 2000, g: 2, v: 4 }];
+  assert.deepEqual(backToBack(numeric, { x: "year", y: "v", group: "g" }), {
+    categories: [{ key: "2000", left: side(3), right: side(4) }], groups: ["1", "2"],
+  }, "numbers name categories and groups as text");
+  assert.deepEqual(backToBack(PYRAMID, { ...pyramid, highlight: "Men" }).groups, ["Women", "Men"], "a group may be highlighted");
+  assert.deepEqual(backToBack(PYRAMID, { ...pyramid, highlight: "15-29" }).groups, ["Women", "Men"], "and so may a category");
+});
+
+test("backToBack errors", () => {
+  assert.throws(() => backToBack([...PYRAMID, { age: "0-14", sex: "Other", share: 1 }], pyramid),
+    { message: "`group` column 'sex' has 3 values (back-to-back needs exactly two)" });
+  assert.throws(() => backToBack(PYRAMID.filter((r) => r.sex === "Women"), pyramid),
+    { message: "`group` column 'sex' has 1 values (back-to-back needs exactly two)" });
+  assert.throws(() => backToBack(PYRAMID.filter((r) => !(r.age === "15-29" && r.sex === "Men")), pyramid),
+    { message: "category '15-29' has no 'Men' row" });
+  assert.throws(() => backToBack(PYRAMID, { ...pyramid, groups: ["Women", "Male"] }),
+    { message: "category '0-14' has no 'Male' row" }, "a name in `groups` the data does not have");
+  const both = [...PYRAMID, { age: "Men", sex: "Women", share: 1 }, { age: "Men", sex: "Men", share: 2 }];
+  assert.throws(() => backToBack(both, { ...pyramid, highlight: "Men" }),
+    { message: "'Men' in `highlight` is both a category and a group" });
+});
+
+test("backToBack errors: a repeated row, `groups` twice the same, an unknown highlight, a negative value", () => {
+  assert.throws(() => backToBack([...PYRAMID, { age: "0-14", sex: "Women", share: 2 }], pyramid),
+    { message: "category '0-14' has more than one 'Women' row" });
+  assert.throws(() => backToBack(PYRAMID, { ...pyramid, groups: ["Men", "Men"] }),
+    { message: "`groups` must be two different values of the `group` column 'sex' (values: Women, Men)" });
+  assert.throws(() => backToBack(PYRAMID, { ...pyramid, highlight: "Nobody" }),
+    { message: "category or group 'Nobody' in `highlight` not found in data/pyramid.csv (categories: 0-14, 15-29, 30+; groups: Women, Men)" });
+  const negative = PYRAMID.map((r) => (r.age === "15-29" && r.sex === "Men" ? { ...r, low: -1 } : r));
+  assert.throws(() => backToBack(negative, pyramid),
+    { message: "category '15-29' has -1 in 'low' for 'Men' (back-to-back needs values of zero or more)" });
+  assert.doesNotThrow(() => backToBack(negative, { ...pyramid, interval: undefined }), "a column that is not drawn is not checked");
+  const hidden = PYRAMID.map((r) => (r.age === "30+" && r.sex === "Men" ? { ...r, low: -5 } : r));
+  assert.doesNotThrow(() => backToBack(hidden, pyramid), "nor are the bounds of a side with no value");
+});
+
+test("backToBackOrder: sort ranks by the sum of the two sides", () => {
+  // Sums of `share`: 0-14 16.5, 15-29 19.5, 30+ none (Men has no value): a missing side leaves no sum, which ranks last.
+  assert.deepEqual(backToBackOrder(PYRAMID, pyramid), ["0-14", "15-29", "30+"], "no sort: the data order");
+  assert.deepEqual(backToBackOrder(PYRAMID, { ...pyramid, sort: "-value" }), ["15-29", "0-14", "30+"]);
+  assert.deepEqual(backToBackOrder(PYRAMID, { ...pyramid, sort: "value" }), ["0-14", "15-29", "30+"]);
+  // `later` sums to 14.2, 18.1 and 64.
+  assert.deepEqual(backToBackOrder(PYRAMID, { ...pyramid, sort: { by: "later", order: "desc" } }), ["30+", "15-29", "0-14"], "{ by } sums that column");
+  assert.deepEqual(backToBackOrder(PYRAMID, { ...pyramid, sort: { by: "age", order: "desc" } }), ["30+", "15-29", "0-14"], "the category text sorts as text");
+  assert.deepEqual(backToBackOrder(PYRAMID, { ...pyramid, sort: ["30+"] }), ["30+", "0-14", "15-29"], "a list of categories");
+  assert.throws(() => backToBackOrder(PYRAMID, { ...pyramid, sort: { by: "pace" } }),
+    { message: "sort column 'pace' not found (columns: age, sex, share, low, high, later)" });
+  assert.throws(() => backToBackOrder(PYRAMID, { ...pyramid, sort: ["Men"] }),
+    { message: "category 'Men' in `sort` not found (categories: 0-14, 15-29, 30+)" });
+});
+
+test("backToBackSpan: [0, max] of every value and drawn interval over every back-to-back step of the slide", () => {
+  // The 30+ Men bounds (27..29) have no value to bracket, so they draw nothing and do not count.
+  assert.deepEqual(backToBackSpan(PYRAMID, pyramid, null), [0, 30], "no stepProps: the current props only");
+  const steps = [
+    pyramid,
+    { ...pyramid, y: "later", interval: undefined }, // up to 33
+    { ...pyramid, mode: "bars", y: "low" }, // not back-to-back: does not count
+    { ...pyramid, data: "data/other.csv", y: "later" }, // another file: does not count
+    null, // a step that does not fold
+  ];
+  assert.deepEqual(backToBackSpan(PYRAMID, pyramid, steps), [0, 33]);
+  assert.deepEqual(backToBackSpan(PYRAMID, { ...pyramid, mode: "bars" }, [steps[1]]), [0, 33], "a plain step's span is its slide's back-to-back steps");
+  assert.deepEqual(backToBackSpan([], pyramid, null), [0, 1], "no values: [0, 1]");
 });
 
 test("modes.js has no DOM and imports only the pure layout module", async () => {

@@ -3,7 +3,8 @@
 Horizontal or vertical bars from a CSV, one per category, with the value written at the end of each bar.
 Built for step-by-step reveals: the value axis stays put, categories can appear one by one, switching `y`
 shrinks or grows the bars, and an optional interval whisker is drawn after its bar. With `mode: "waterfall"` the
-same rows are contributions that add up to a running total (see Waterfall).
+same rows are contributions that add up to a running total (see Waterfall); with `mode: "back-to-back"` two groups'
+bars extend left and right of a centre rule, as in a population pyramid (see Back-to-back).
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
@@ -15,12 +16,14 @@ same rows are contributions that add up to a running total (see Waterfall).
 | `axes` | `{x?, y?}` | none | snap | Axis titles: `x` names the category axis, `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | Categories down the left (bars point right) or along the bottom (bars point up). |
 | `sort` | `"none"` \| `"value"` \| `"-value"` \| `{by, order?}` \| string[] | `"none"` | tween | Order of the bars: the data order, by `y` (lowest or highest first), by another column, or a list of categories first. See Sorting. |
-| `mode` | `"bars"` \| `"waterfall"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars stack into a running total over the shown bars. See Waterfall. A change morphs each bar. |
+| `mode` | `"bars"` \| `"waterfall"` \| `"back-to-back"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars stack into a running total over the shown bars. See Waterfall. A change between the two morphs each bar. `back-to-back`: two groups left and right of a centre rule (horizontal only); a change to or from it snaps. See Back-to-back. |
 | `total` | `true` \| string | none | fade | Waterfall only: a last bar from zero to the sum, labelled "Total" (`true`) or with the string. |
 | `invert` | boolean | `false` | fade | Waterfall only: swaps the colours of increases and decreases. |
+| `group` | string | none | snap | Back-to-back only: the column naming each row's group. Exactly two values, one row per category and group. |
+| `groups` | `[left, right]` | data order | snap | Back-to-back only: the two values of `group`, left side first. |
 | `shown` | string[] | all categories | draw | Categories to show, by name. A category that appears grows from zero, then draws its whisker. |
-| `highlight` | string | none | fade | One category emphasised; the other bars turn the theme's dim color (`--sd-color-dim`) and sit below it. Use `only` so it lasts one step. |
-| `domain` | `[min, max]` | from the data | tween | Fixed value axis, used as given. |
+| `highlight` | string | none | fade | One category emphasised; the other bars turn the theme's dim color (`--sd-color-dim`) and sit below it. Use `only` so it lasts one step. Back-to-back: a category or a group. |
+| `domain` | `[min, max]` | from the data | tween | Fixed value axis, used as given. Back-to-back: each side runs from zero to the larger magnitude of the two. |
 | `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). |
 
 Behaviour:
@@ -66,6 +69,29 @@ Behaviour:
   - A slide that is a waterfall at any step lays out like one at every step (the label room, the total's band, margins
     wide enough for every step's axis), so a `mode` change moves the bars and never the frame.
   - The total bar's key is `__total`: with a total, a category of that name is an element error naming it.
+- **Back-to-back** (`mode: "back-to-back"`, horizontal only). Long data: one row per category (`x`) and group (`group`),
+  as demographic data usually comes. `group` needs exactly two values; `groups: [left, right]` orders them (else the
+  data order). One band per category: the left group's bar extends left of a centre rule (`line.sd-centre-rule`, in
+  ink) and the right group's to the right.
+  - The value ticks run out from the rule on both sides and read as magnitudes (`10 5 0 5 10`). Without `domain` the
+    axis is mirrored, from zero to the largest value or drawn interval bound of **every back-to-back step of the
+    slide** (each with its own `y` and `interval`, from `ctx.stepProps`, over the same `data`), rounded outward to tick
+    values; with `domain`, each side runs from zero to its larger magnitude. So nothing a step shows, sorts or switches
+    moves the axis.
+  - Each side has a title above it (`text.sd-side-title[data-side]`), the group's name in its colour: the categorical
+    palette's first colour on the left and its second on the right, darkened (or lightened) as text until it reaches
+    4.5:1 on the background (`textColor` in `core/color.js`). The bars use the palette colours as they are.
+  - `interval` draws each bar's whisker on a narrow background halo (`halo` in `core/chart.js`), so it reads over the
+    bar's fill. Value labels sit past the whisker, on the bar's own side, and show magnitudes.
+  - `highlight` names a category (every other band dims, on both sides) or a group (the other side dims, and its title
+    turns `--sd-color-muted`). A name that is both a category and a group is an element error.
+  - `sort` ranks the bands by the sum of the two sides; `{ by }` sums that column the same way (a text column, such as
+    the category itself, counts where both rows agree). A category with a side missing has no sum and comes last.
+  - `shown` lists categories; a hidden category hides both its bars and keeps its band. An empty `y` cell draws no bar
+    and no label on that side.
+  - Every category needs one row for each group, and every value and drawn bound must be zero or more. Rows with an
+    empty category or group are skipped.
+  - A change of `mode` to or from `back-to-back`, or of `group` or `groups`, snaps: the data shapes differ.
 - **Entrance.** The chart builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
   an animated step, every shown bar grows from zero and then draws its whisker, over 2 × `--sd-duration` or the
   element's `enter.duration`, while its box stays still. It waits for its stagger slot like any entering element,
@@ -87,6 +113,8 @@ Behaviour:
     tweens the colours like `highlight`. The owned entrance grows the whole waterfall out of zero, so it stays joined.
   - `bars` ↔ `waterfall` morphs each bar between standing on zero and floating on its running total (whisker
     included), with the colours and the axis; the connectors and the total fade.
+  - back-to-back bars grow out of the centre rule, slide to a new band together on a `sort` change, and tween their
+    colours, and the side titles', on a `highlight` change.
   - Motion goes through `ctx.animate.tween` bound to `info.signal`: an aborted step snaps to its end state.
 - **Idempotent.** Every `update` ends by writing the target state from props and rows alone; the component writes
   attributes only (never inline styles), so the markup after playing equals the markup after jumping.
@@ -95,15 +123,20 @@ Behaviour:
   names wrap inside it. Everything is at least `--sd-min-audience-font` (it uses `--sd-font-size-label`). Margins come
   from character counts, not measured text; the room kept for value labels comes from the widest label over every
   numeric column but the category (and the domain ends), not from the current `y`, so switching `y` never resizes the plot.
-- **Colors.** Bars use the first color of `ctx.palette("categorical")` (a waterfall's, the diverging palette's roles). Dimmed bars use `--sd-color-dim` (`--sd-color-rule` in a
+- **Colors.** Bars use the first color of `ctx.palette("categorical")` (a waterfall's, the diverging palette's roles; back-to-back, its first two). Dimmed bars use `--sd-color-dim` (`--sd-color-rule` in a
   theme without it), dimmed labels `--sd-color-muted`; ink, grid and axis colors are theme tokens.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
   lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
   `shown`, `highlight` or a `sort` list that the data does not have, a `sort` column the data lacks, a `sort` of no
   valid form, a `domain` that is not `[min, max]` with min < max, an empty value in a waterfall, and a category named
-  `__total` in a chart with a total.
-  `validate` also checks the columns `x`, `y` and `interval` name, at every step, gives a misspelt `mode` a
-  did-you-mean, and warns (`chart-prop-unused`) when `invert` or `total` is set without `mode: "waterfall"`.
+  `__total` in a chart with a total. Back-to-back adds: `` `group` column '<g>' has <n> values (back-to-back needs
+  exactly two) ``, `category '<k>' has no '<group>' row` (also for a name in `groups` the data lacks), `category '<k>'
+  has more than one '<group>' row`, `` '<name>' in `highlight` is both a category and a group ``, a `highlight` that
+  is neither, `groups` naming one group twice, a value or drawn bound below zero, and `back-to-back bars are horizontal
+  only`.
+  `validate` also checks the columns `x`, `y`, `group` and `interval` name, at every step, gives a misspelt `mode` a
+  did-you-mean, warns (`chart-prop-unused`) when `invert` or `total` is set without `mode: "waterfall"`, and fails
+  (`chart-orient`) a back-to-back chart with `orient: "vertical"`.
 - **Accessibility.** Each bar carries a `<title>` with its category, value and interval, formatted like the labels
   (so a Spanish deck reads `12,5 (10,5 – 14,5)`).
 
@@ -111,6 +144,9 @@ Markup: `svg.sd-chart-bar[data-orient]`; each category is `g.sd-bar-group[data-k
 holding `rect.sd-bar`, `g.sd-whisker` and `text.sd-bar-label`; the value axis is `g.sd-axis-value > g.tick`, the
 category labels `text.sd-band-label[data-key]`. A waterfall adds `data-mode="waterfall"` on the svg,
 `g.sd-connectors > line.sd-connector[data-key]` (one per bar a connector leaves) before `g.sd-bars`, and the total
-as `g.sd-bar-group[data-key="__total"]` with its `text.sd-band-label[data-key="__total"]`.
+as `g.sd-bar-group[data-key="__total"]` with its `text.sd-band-label[data-key="__total"]`. Back-to-back adds
+`data-mode="back-to-back"`, two groups per category (`g.sd-bar-group[data-key][data-side="left|right"]`, each
+whisker line with a `line.sd-halo-under` copy before it), the class `sd-centre-rule` on `line.sd-axis-line`, and
+`text.sd-side-title[data-side]` after the axis titles.
 
 See `example.js` for a slide that uses it.

@@ -10,6 +10,8 @@
 //   chart-prop-unused (warning)   chart.line: `ticker` without `until` counts nothing.
 //                                 chart.bar: `invert` (true) and `total` (true or a label) without
 //                                 `mode: "waterfall"` change nothing on plain bars.
+//   chart-orient (error)          chart.bar: `mode: "back-to-back"` with `orient: "vertical"`; its two sides run left
+//                                 and right of a centre rule, so the component fails with the same message.
 
 const unused = (prop, needs) => ({
   rule: "chart-prop-unused",
@@ -29,6 +31,15 @@ export function chartProblems(type, props) {
   const found = [];
   if (type === "chart.line") {
     if (props.ticker === true && (props.until === undefined || props.until === null)) found.push(unused("ticker", "until"));
+  }
+  if (type === "chart.bar" && props.mode === "back-to-back" && props.orient === "vertical") {
+    found.push({
+      rule: "chart-orient",
+      severity: "error",
+      message: "back-to-back bars are horizontal only",
+      limit: '`orient: "horizontal"` with `mode: "back-to-back"`',
+      fix: 'remove `orient: "vertical"`, or choose another `mode`',
+    });
   }
   if (type === "chart.bar" && props.mode !== "waterfall") {
     if (props.invert === true) found.push(unused("invert", 'mode: "waterfall"'));

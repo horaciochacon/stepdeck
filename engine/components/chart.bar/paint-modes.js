@@ -12,14 +12,28 @@
 // appears grows from the running total before it while the later bases move up, and `bars` <-> `waterfall` lifts each
 // bar onto its base or sets it back on zero. Connectors follow their bar's end (`linksView`); new ones, and the total
 // (`totalView`), fade in.
+//
+// Back-to-back: one band per category, the left group's bar extending left of the centre rule (the baseline at zero)
+// and the right group's right. They are plain bars on a mirrored axis [-n, n]: a left bar carries its value negated and
+// its interval flipped (lo' = -hi, hi' = -lo), so the plain bars' paint and motion draw it, grow it out of the rule
+// and slide it on a re-sort, while its text, like the ticks', shows the magnitude. `pairModel` builds two marks per band
+// (keyed `<half>:<category>`, `half` "left" or "right"; index.js paints them with `data-key` = the category and
+// `data-side` = the half: not `side`, which is a waterfall label's place), one band label per
+// category, and the side titles (`paintSideTitles`), in the group colours (the categorical palette's first two; as
+// text through `textColor`, so they reach 4.5:1). `highlight` names a group (the other side's bars dim and its title
+// turns muted) or a category (the other bands dim on both sides); the titles' colours tween with the bars'
+// (`sideColors`).
 import { d3 } from "../../core/d3.js";
 import { fit } from "../../core/chart.js";
-import { lerp, focusPaint } from "../../core/kit.js";
-import { waterfall, hasTotal } from "./modes.js";
+import { textColor } from "../../core/color.js";
+import { lerp, focusPaint, tweenColor } from "../../core/kit.js";
+import { waterfall, hasTotal, backToBack, backToBackOrder, categoriesOf } from "./modes.js";
 
 export const TOTAL = "__total"; // the key of a waterfall's total bar
+const SIDES = ["left", "right"];
 
 const lerpNull = (a, b, t) => (a === null || b === null ? b : lerp(a, b, t));
+const tokenColor = (tokens, name) => tokens?.[name]?.trim() || null; // a value: var() does not work in a fill attribute
 
 // --- Waterfall: model ---------------------------------------------------------------------------------------------
 
@@ -189,4 +203,86 @@ export function linksView(from, to, view, { enterAll, t }) {
   }
   for (const [key, o] of was) if (!is.has(key)) links.push({ key, a: now(key).slot, b: now(o.next).slot, at: now(key).v, opacity: 1 - t });
   return links;
+}
+
+// --- Back-to-back -------------------------------------------------------------------------------------------------
+
+/**
+ * The marks of a back-to-back chart, from the rows and props alone (backToBack and backToBackOrder in ./modes.js throw
+ * naming the problem): two bars per band in display order, `bands` one per category (each pointing at a bar of its band,
+ * `bar`, for its slot and visibility), `sides` the titles [left, right] with their colours, and `pairing`: the `group`
+ * column and the groups in order, which a played change must keep (else it snaps).
+ */
+export function pairModel(rows, props, ctx, { fv, fx, ink, muted }) {
+  const pair = backToBack(rows, props);
+  const order = backToBackOrder(rows, props);
+  const raws = new Map();
+  for (const r of categoriesOf(rows, props.x)) if (!raws.has(String(r[props.x]))) raws.set(String(r[props.x]), r[props.x]);
+  const shown = Array.isArray(props.shown) ? new Set(props.shown.map(String)) : null;
+  const palette = ctx.palette?.("categorical")?.colors ?? [];
+  const accent = tokenColor(ctx.tokens, "--sd-color-accent");
+  const colors = [palette[0] ?? accent, palette[1] ?? palette[0] ?? accent];
+  const background = tokenColor(ctx.tokens, "--sd-color-background");
+  const name = props.highlight == null ? null : String(props.highlight);
+  const byGroup = name !== null && pair.groups.includes(name); // else a category (backToBack checked it is one)
+  const byKey = new Map(pair.categories.map((c) => [c.key, c]));
+  const bands = [];
+  const bars = [];
+  order.forEach((key, slot) => {
+    const raw = raws.get(key);
+    const label = fx && typeof raw === "number" ? fx(raw) : key;
+    bands.push({ key, label, bar: `right:${key}` });
+    SIDES.forEach((side, i) => {
+      const { value, lo, hi } = byKey.get(key)[side];
+      const group = pair.groups[i];
+      const dim = name !== null && (byGroup ? group !== name : key !== name);
+      const flip = side === "left";
+      const text = value === null ? "" : fv(value);
+      const range = lo !== null ? ` (${fv(lo)} – ${fv(hi)})` : "";
+      bars.push({
+        key: `${side}:${key}`, category: key, half: side, label, slot,
+        value: value === null ? null : flip ? -value : value, lo: lo === null ? null : flip ? -hi : lo, hi: hi === null ? null : flip ? -lo : hi,
+        text, title: `${label}, ${group}: ${text}${range}`, shown: shown ? shown.has(key) : true, dim,
+        fill: focusPaint(ctx, colors[i], dim), labelFill: dim && muted ? muted : ink,
+      });
+    });
+  });
+  const sides = pair.groups.map((group, i) => ({
+    side: SIDES[i], label: group, fill: byGroup && group !== name && muted ? muted : textColor(colors[i], background),
+  }));
+  return { bars, bands, total: null, links: [], sides, pairing: JSON.stringify([props.group, pair.groups]) };
+}
+
+/**
+ * The side titles, above the plot (in the svg, at the plot's margin), each centred over its half; none without
+ * `m.sides`. `view.sides` maps a side to its colour now (a fill attribute); `text` writes the label on a motion's first frame.
+ */
+export function paintSideTitles(svg, m, view, { scale, font, text }) {
+  const half = view.domain[1] / 2;
+  const titles = svg.selectAll("text.sd-side-title").data(m.sides ?? [], (d) => d.side)
+    .join((enter) => enter.append("text").attr("class", "sd-side-title"))
+    .attr("data-side", (d) => d.side)
+    .attr("x", (d) => view.margin.left + scale(d.side === "left" ? -half : half))
+    .attr("y", view.margin.top - font * 0.6)
+    .attr("text-anchor", "middle")
+    .attr("fill", (d) => view.sides.get(d.side));
+  text(titles, (d) => d.label);
+}
+
+/** The side titles' colours at rest: side -> colour, or null for a chart without sides. */
+export const staticSides = (m) => (m.sides ? new Map(m.sides.map((s) => [s.side, s.fill])) : null);
+
+/**
+ * The side titles' colours while a change from `from` to `to` plays: `live` (side -> colour, read by each frame) starts
+ * at the old colours, and `tweens` move each changed one to its new colour over `opts` (the bars' focus timing).
+ */
+export function sideColors(from, to, ctx, opts) {
+  const live = new Map();
+  const tweens = [];
+  for (const s of to.sides ?? []) {
+    const p = from?.sides?.find((x) => x.side === s.side) ?? s;
+    live.set(s.side, p.fill);
+    if (p.fill !== s.fill) tweens.push(tweenColor(ctx, p.fill, s.fill, (c) => { live.set(s.side, c); }, opts));
+  }
+  return { live, tweens };
 }

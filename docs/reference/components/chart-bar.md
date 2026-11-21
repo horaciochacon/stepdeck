@@ -1,8 +1,8 @@
 # chart.bar
 
-`chart.bar` draws one bar per category from a CSV file, horizontal or vertical, with the value written at the end of each bar and an optional interval whisker. It is built for step-by-step reveals: the value axis stays put, categories can appear one at a time, and switching `y` shrinks or grows the bars. With `mode: "waterfall"` the same rows become contributions that add up to a running total. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
+`chart.bar` draws one bar per category from a CSV file, horizontal or vertical, with the value written at the end of each bar and an optional interval whisker. It is built for step-by-step reveals: the value axis stays put, categories can appear one at a time, and switching `y` shrinks or grows the bars. With `mode: "waterfall"` the same rows become contributions that add up to a running total, and with `mode: "back-to-back"` two groups' bars extend left and right of a centre rule, as in a population pyramid. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`components/chart.bar/modes.js`](../../../engine/components/chart.bar/modes.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`components/chart.bar/modes.js`](../../../engine/components/chart.bar/modes.js), [`components/chart.bar/paint-modes.js`](../../../engine/components/chart.bar/paint-modes.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -66,12 +66,14 @@ To emphasize one bar for a single step, set `highlight` in the step's `only`, so
 | `axes` | `{ x?, y? }` | none | snap | Axis titles. `x` names the category axis and `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | `horizontal`: categories down the left, bars point right. `vertical`: categories along the bottom, bars point up. |
 | `sort` | `"none"` \| `"value"` \| `"-value"` \| `{ by, order? }` \| string[] | `"none"` | tween | Order of the bars. See [Sorting](#sorting). |
-| `mode` | `"bars"` \| `"waterfall"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars are contributions that stack into a running total over the shown bars. See [Waterfall](#waterfall). |
+| `mode` | `"bars"` \| `"waterfall"` \| `"back-to-back"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars are contributions that stack into a running total over the shown bars. See [Waterfall](#waterfall). `back-to-back`: two groups' bars left and right of a centre rule, horizontal only. See [Back-to-back](#back-to-back). |
 | `total` | `true` \| string | none | fade | Waterfall only. A last bar from zero to the sum of the shown bars, labelled `Total` (`true`) or with the string. |
 | `invert` | boolean | `false` | fade | Waterfall only. Swaps the colours of increases and decreases. |
+| `group` | string | none | snap | Back-to-back only. The column naming each row's group: exactly two values, and one row per category and group. |
+| `groups` | `[left, right]` | data order | snap | Back-to-back only. The two values of `group`, the left side first. |
 | `shown` | string[] | every category | draw | Categories to show, by name. A category that appears grows from zero, then its whisker draws. Hidden categories keep their band. |
-| `highlight` | string | none | fade | One category to emphasize. The other bars turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color; the emphasized bar is drawn after (above) the others. |
-| `domain` | `[min, max]` | from the data | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). |
+| `highlight` | string | none | fade | One category to emphasize. The other bars turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color; the emphasized bar is drawn after (above) the others. In back-to-back it may name a group instead. |
+| `domain` | `[min, max]` | from the data | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). In back-to-back each side runs from zero to the larger magnitude of the two. |
 | `types` | `{ column: "string" \| "number" \| "date" }` | guessed | snap | CSV column types for the data loader. An undeclared column is a number only when every non-empty value looks like one. |
 
 The transition column is the schema's `x-transition` annotation. It feeds the catalog; the motion itself is written in `index.js` and described in [Motion](#motion).
@@ -151,9 +153,52 @@ Other,3
 
 Switching `mode` between `bars` and `waterfall` on a step morphs each bar between standing on zero and floating on its running total. Plain bars keep their own value axis rule (below), so the axis tweens too. Clear `total` and `invert` when you switch back to `bars` (`total: null`): plain bars do not use them, and `validate` warns about them.
 
+## Back-to-back
+
+With `mode: "back-to-back"` the data is long: one row per category (`x`) and group (`group`), the shape demographic data usually comes in. Each category gets one band; the first group's bar extends left of a centre rule and the second group's to the right. A population pyramid with an interval on every bar, which emphasizes one side, then one band, then ranks the bands (`test/fixtures/decks/bar-modes/slides/pyramid-highlight.js`):
+
+```js
+{ id: "bars", region: "main", type: "chart.bar",
+  props: { data: "data/pyramid.csv", x: "age", y: "share", mode: "back-to-back", group: "group",
+           interval: { lower: "low", upper: "high" }, format: { y: ",.1f" } } },
+// ...
+steps: [
+  { id: "plain" },
+  { id: "group", only: { bars: { highlight: "Men" } } },
+  { id: "category", only: { bars: { highlight: "45-59" } } },
+  { id: "sort", set: { bars: { sort: "-value" } } },
+],
+```
+
+```text
+age,group,share,low,high,later,later_low,later_high
+0-14,Women,8.1,7.6,8.6,6.9,6.2,7.6
+0-14,Men,8.6,8.1,9.1,7.3,6.6,8.0
+15-29,Women,9.4,8.9,9.9,8.2,7.5,8.9
+15-29,Men,9.8,9.3,10.3,8.6,7.9,9.3
+...
+```
+
+Women come first in the data, so they are on the left; `groups: ["Men", "Women"]` would swap the sides.
+
+| Rule | What it means |
+| --- | --- |
+| Groups | `group` needs exactly two values. `groups: [left, right]` puts them on the sides; without it the first value in the data is on the left. Every category needs one row for each group. Rows with an empty category or group are skipped. |
+| Centre rule | Both sides grow from `line.sd-centre-rule` (the axis line at zero, in `--sd-color-ink`), over the full height of the plot. |
+| Value axis | The ticks run out from the rule on both sides and read as magnitudes: `10 5 0 5 10`. Without `domain` the axis is mirrored, from zero to the largest value or drawn interval bound of **every back-to-back step of the slide** (each with its own `y` and `interval`, read from `ctx.stepProps`, over the same `data`), rounded outward to tick values. With `domain`, each side runs from zero to the larger magnitude of the two. Nothing a step shows, sorts or switches moves the axis. |
+| Side titles | Above each side, `text.sd-side-title[data-side]` names its group in the group's colour: the categorical palette's first colour on the left and its second on the right. As text, the colour is darkened (lightened on a dark background) until it reaches 4.5:1 (`textColor` in `core/color.js`), so academic-light's amber title is darker than its bars. The bars use the palette colours as they are. |
+| Whiskers | `interval` draws each bar's whisker on a narrow background halo (`halo` in `core/chart.js`), so it reads over the bar's fill. A whisker needs a value and both bounds. |
+| Value labels | Past the bar's end, or its whisker's, on the bar's own side: left of the left bars, right of the right ones. They show magnitudes. An empty `y` cell draws no bar and no label on that side. |
+| `highlight` | A category dims every other band on both sides. A group dims the other side, and turns its title `--sd-color-muted`. A name that is both a category and a group is an element error. |
+| `sort` | Ranks the bands by the sum of the two sides. `{ by }` sums that column the same way; a text column (the category itself, for example) counts where the two rows agree. A category with a side missing has no sum and comes last. Both bars of a band slide together with its label. |
+| `shown` | Lists categories. A hidden category hides both bars and keeps its band. |
+| Values | Every value and drawn interval bound must be zero or more: a bar that crossed the rule would read as the other group. |
+| Orientation | Horizontal only: `orient: "vertical"` fails the element, and `validate` reports it (`chart-orient`). |
+| Mode changes | A change of `mode` to or from `back-to-back`, or of `group` or `groups`, snaps. The data shapes differ, so there is no bar to morph. |
+
 ## The value axis
 
-This section is about plain bars; a waterfall's axis is described under [Waterfall](#waterfall). With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans:
+This section is about plain bars; a waterfall's axis is described under [Waterfall](#waterfall), and a back-to-back axis under [Back-to-back](#back-to-back). With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans:
 
 ```text
 [ min(0, every value), max(0, every value) ]
@@ -183,6 +228,9 @@ Every animated change runs as a single `ctx.animate.tween` that lasts twice the 
 | Waterfall: `total` set or cleared | The total bar fades in or out in its band, with its connector. |
 | Waterfall: `invert` changes | The bar colors interpolate, as for `highlight`. |
 | `mode` changes between `bars` and `waterfall` | Each bar rises from zero to float on its running total (its whisker with it), or sinks back to zero. Connectors and the total fade; the colors and the axis tween. |
+| Back-to-back: a category enters or leaves `shown`, `y` or `sort` changes | As for plain bars, on both sides at once: both bars grow out of the centre rule (or shrink into it), change length, or slide to their new band with the band label. |
+| Back-to-back: `highlight` changes | The bars' colors and the side titles' colors interpolate over `--sd-duration-fast`. |
+| `mode` changes to or from `back-to-back`, or `group` or `groups` changes | Nothing moves: the new chart is drawn at once. |
 | `domain` changes, or the default axis changes with `y` or `interval` | The axis range tweens. Ticks that stay move with it; new ticks fade in and dropped ticks fade out. |
 | Plot size or margins change (for example an axis title is added) | The plot area tweens to its new size. |
 | The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown category grows from zero, then draws its whisker, while the box stays still (over the element's own `enter.duration` when set). A waterfall grows out of zero as a whole, so it stays joined while it grows. The bars are at zero the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the bars are at full length at once; with `enter: "none"` nothing moves. |
@@ -207,7 +255,7 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 | Aspect | Rule |
 | --- | --- |
 | Bar thickness | 65% of the band, capped at 4 times the label font size (`--sd-font-size-label`, 28px in academic-light, so at most 112px). |
-| Bar color | Waterfall: see [Waterfall](#waterfall). Otherwise the first color of the categorical palette (blue `#1d4ed8` in `modern`, the default; `#0072b2` in academic-light's `okabe-ito-dark`). If the theme has no categorical palette, `--sd-color-accent`. |
+| Bar color | Waterfall: see [Waterfall](#waterfall). Back-to-back: the categorical palette's first color on the left and its second on the right. Otherwise the first color of the categorical palette (blue `#1d4ed8` in `modern`, the default; `#0072b2` in academic-light's `okabe-ito-dark`). If the theme has no categorical palette, `--sd-color-accent`. |
 | Dimmed bar color | `--sd-color-dim` (`--sd-color-rule` in a theme without it); dimmed value labels use `--sd-color-muted`. |
 | Value labels | Past the bar's end, or past the whisker's end when there is one. On the right of a horizontal bar, above a vertical bar; on the other side for negative values. Weight 600, ink color. |
 | Category labels | On the band axis, in ink. Long names wrap. Horizontal: up to about a third of the chart width per line, and as many lines as fit the band. Vertical: the band width, up to 3 lines. A label that does not fit ends with `…`. |
@@ -244,7 +292,7 @@ Neither `validate` nor `check` reports a collapsed chart. Look at `dump` boxes o
 Inside its element wrapper (`div.sd-el[data-el][data-type="chart.bar"]`) the component renders one SVG:
 
 ```text
-svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall"]
+svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall|back-to-back"]
   g.sd-plot
     g.sd-axis.sd-axis-value
       g.tick > line.sd-grid-line, text
@@ -252,14 +300,15 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall"]
       text.sd-band-label[data-key][data-visible] > tspan (one per wrapped line)
     g.sd-connectors > line.sd-connector[data-key]          (waterfall only)
     g.sd-bars
-      g.sd-bar-group[data-key][data-visible][data-dim]
+      g.sd-bar-group[data-key][data-side][data-visible][data-dim]   (data-side: back-to-back only)
         title
         rect.sd-bar
         text.sd-bar-label
-        g.sd-whisker > line.sd-whisker-line, line.sd-whisker-cap.sd-whisker-cap-lower, line.sd-whisker-cap.sd-whisker-cap-upper
-    line.sd-axis-line
+        g.sd-whisker > line.sd-halo-under (back-to-back only), line.sd-whisker-line, line.sd-whisker-cap.sd-whisker-cap-lower, line.sd-whisker-cap.sd-whisker-cap-upper
+    line.sd-axis-line[.sd-centre-rule]                         (sd-centre-rule: back-to-back only)
   text.sd-axis-title.sd-axis-title-band
   text.sd-axis-title.sd-axis-title-value
+  text.sd-side-title[data-side]                                (back-to-back only, one per side)
 ```
 
 | Selector | Meaning |
@@ -274,6 +323,9 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall"]
 | `text.sd-band-label[data-key]` | The category label on the band axis. |
 | `g.sd-bar-group[data-key="__total"]` | A waterfall's total bar, with its band label `text.sd-band-label[data-key="__total"]` (set in weight 600). Present on every step of a slide that shows a total at some step; hidden (`data-visible="false"`) where it is off. |
 | `line.sd-connector[data-key]` | A waterfall connector, from the end of the bar named by `data-key` to the next shown bar (or the total). Dotted in `--sd-color-muted`. |
+| `g.sd-bar-group[data-side]` | Back-to-back: one group per category and side, `data-key` the category and `data-side` `left` or `right`. Its whisker line has a `line.sd-halo-under` copy just before it. |
+| `line.sd-centre-rule` | Back-to-back: the axis line at zero, both sides growing from it, in `--sd-color-ink`. |
+| `text.sd-side-title[data-side]` | Back-to-back: a side's title, the group's name. Its `fill` attribute is the group's color, readable as text. |
 
 Restyle one slide with slide `style` and these classes. Colors are written as `fill` attributes, so to override a bar color use a CSS `fill` rule, which takes precedence over the attribute.
 
@@ -296,10 +348,19 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `` `sort` must be "none", "value", "-value", { by, order } or a list of categories`` | `sort` is none of those forms. |
 | `waterfall needs a value for every category: '<k>' is empty` | `mode: "waterfall"` and a category's `y` cell is empty or not a number, shown or not. |
 | `category '__total' in <data> is the name the total bar uses: rename it` | The slide shows a waterfall `total` at some step and the data has a category named `__total`, the key of the total bar. |
+| ``chart.bar needs `group` (a column name)`` | `mode: "back-to-back"` without a `group`. |
+| `back-to-back bars are horizontal only` | `mode: "back-to-back"` with `orient: "vertical"`. |
+| `` `group` column '<g>' has <n> values (back-to-back needs exactly two) `` | The `group` column does not have exactly two values (empty cells aside). |
+| `` `groups` must be two different values of the `group` column '<g>' (values: …) `` | `groups` names the same group twice. |
+| `category '<k>' has no '<group>' row` | A category lacks the row of one group, or `groups` names a group the data does not have. |
+| `category '<k>' has more than one '<group>' row` | A category has two rows for the same group. |
+| `` '<name>' in `highlight` is both a category and a group `` | Back-to-back `highlight` names a value that is both. |
+| ``category or group '<name>' in `highlight` not found in <data> (categories: …; groups: …)`` | Back-to-back `highlight` names neither a category nor a group. |
+| `category '<k>' has <v> in '<column>' for '<group>' (back-to-back needs values of zero or more)` | A back-to-back value, or a bound of a drawn whisker, is below zero. |
 
 The file errors from the data loader also apply, such as `data file not found: <path>`. See [Data and bindings](../../guide/data-and-bindings.md).
 
-`validate` catches only some of these before you open the deck. It checks that `x`, `y` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix):
+`validate` catches only some of these before you open the deck. It checks that `x`, `y`, `group` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix):
 
 ```text
 squash/bars · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'
@@ -311,7 +372,13 @@ It also gives a misspelt `mode` a did-you-mean (`prop-invalid`, `set mode to "wa
 warning: flow/bars · chart-prop-unused · `total` does nothing without `mode: "waterfall"` vs `total` together with `mode: "waterfall"` · set `mode: "waterfall"`, or remove `total`
 ```
 
-It does not check `domain` order, `sort`, duplicate categories, names in `shown` and `highlight`, or empty waterfall values. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+A back-to-back chart set vertical is an error (`chart-orient`), as it is at render time:
+
+```text
+s/bars · chart-orient · back-to-back bars are horizontal only vs `orient: "horizontal"` with `mode: "back-to-back"` · remove `orient: "vertical"`, or choose another `mode`
+```
+
+It does not check `domain` order, `sort`, duplicate categories, names in `shown` and `highlight`, empty waterfall values, or back-to-back groups and rows. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 squash/bars: category 'Nope' in `highlight` not found in data/speed.csv (categories: Clean the data, Write the report)
