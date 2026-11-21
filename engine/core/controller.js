@@ -31,11 +31,13 @@
 //
 // ctx.size is { w, h } in canvas pixels (offsetWidth/offsetHeight, unaffected by the shell's scaling).
 // ctx.motion is makeMotion(tokens) (core/motion.js): the named motions with the theme's defaults.
+// ctx.chart is chartKit (core/chart.js): the one frozen chart-building-blocks object, the same for every component
+// and child.
 //
 // ctx.mount(type, el, props) -> Promise<handle>   (spec §6.3: built-ins inside a custom component)
 //   Resolves `type` through the same registry (deck components first, then built-ins; so a custom
 //   component can mount another deck component too), resolves bindings in `props`, and mounts the
-//   component into `el` with a child ctx (same d3/data/format/t/tokens/palette/animate/motion/capture; `size`
+//   component into `el` with a child ctx (same d3/data/format/t/tokens/palette/animate/motion/chart/capture; `size`
 //   measured from `el`; its own ctx.mount for deeper nesting). The handle is
 //     { instance, update(props, info), pause(), destroy() }
 //   update resolves bindings, then calls instance.update(props, info') where info' is the parent's
@@ -102,6 +104,7 @@ import { animate as animateHelpers, wait } from "./animate.js";
 import { MOTION_NAMES, makeMotion, timing } from "./motion.js";
 import { DEFAULT_ENTER, motionParts, resolveEntrance, resolveExit, slotDelays } from "./choreography.js";
 import { d3 as defaultD3 } from "./d3.js";
+import { chartKit } from "./chart.js";
 
 /** Default watchdog per mount/update call (ms): well above the longest built-in motion. */
 export const SETTLE_TIMEOUT_MS = 10_000;
@@ -256,6 +259,7 @@ export class SlideController {
       motion: (this.#motion ??= makeMotion(base.tokens ?? {})),
       tokens: base.tokens,
       palette: base.palette,
+      chart: chartKit,
       size: sizeOf(el),
       stepProps,
       mount: (type, target, props) => this.#mountChild(holder, type, target, props),

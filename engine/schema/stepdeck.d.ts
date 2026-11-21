@@ -346,6 +346,95 @@ export interface ChildHandle<P extends Props = Props> {
   destroy(): void;
 }
 
+/** A value, or an accessor `(d, i, nodes) => value` called per node, as d3 does. */
+export type PerNode<T> = T | ((d: any, i: number, nodes: any) => T);
+
+export interface ChartMargin {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** The plot frame `ctx.chart.frame` measures: canvas pixels, margins rounded, `pw` and `ph` at least 1. */
+export interface ChartFrame {
+  w: number;
+  h: number;
+  /** `--sd-font-size-label` (28 when the theme has none). */
+  font: number;
+  /** 0.6 x font: a character width for sizing margins from character counts. */
+  charW: number;
+  margin: ChartMargin;
+  pw: number;
+  ph: number;
+}
+
+export interface CanvasLine {
+  /** Plot pixels. A line with fewer than 2 points is skipped. */
+  points: Array<[number, number]>;
+  color: string;
+  alpha?: number;
+  width?: number;
+}
+
+/**
+ * The chart building blocks every component gets as `ctx.chart` (one frozen object). `Selection` is a d3
+ * selection. See the component contract for each one's behavior.
+ */
+export interface ChartKit {
+  /** Loads `props.data` (a CSV) and checks every column the props name: `columns` is `[prop, column, optional?]`. */
+  loadTable(props: Props, ctx: ComponentContext, name: string, columns: Array<[string, string | undefined, boolean?]>): Promise<any[]>;
+  /** A tick label formatter: the d3-format `spec`, else a fixed precision from the tick step. */
+  tickFormat(ctx: ComponentContext, spec: string | undefined, ticks: number[]): (value: number) => string;
+  /** The [min, max] of the finite numbers in `columns` across `rows`; `zero` includes 0. */
+  extentOf(rows: Array<Record<string, unknown>>, columns: Array<string | undefined>, options?: { zero?: boolean }): [number, number];
+  /** Category keys in display order (see the contract for `sort`). */
+  rank(items: Array<{ key: string; value: number | null; columns?: Record<string, number | string | null> }>, sort: unknown): string[];
+  /** Splits points sorted by x at `at` into an observed and a forecast part sharing the boundary point. */
+  splitAt<P>(points: P[], at: number, x?: (p: P) => number): { observed: P[]; forecast: P[] };
+  /** Pushes label positions at least `gap` apart, within `range` where it can. */
+  spread(ys: number[], gap: number, range?: [number, number]): number[];
+  /** Places a label `width` px wide for a mark from `start` to `end`: past the end, inside it, or past the start. */
+  fit(end: number, start: number, width: number, range?: [number, number], gap?: number): { x: number; anchor: "start" | "end"; inside: boolean };
+  /** Wraps text to at most `maxLines` lines of `maxChars` characters. */
+  wrapLabel(text: string, maxChars: number, maxLines: number): string[];
+  /** A fixed pseudo-random order of the unique ids, a function of the ids and the seed only. */
+  drawOrder(ids: Array<string | number>, seed?: number): string[];
+  /** A vertical offset per x (a beeswarm) that keeps nearby points apart. */
+  swarm(xs: number[], options: { r: number; maxDy: number }): number[];
+
+  /** The element's size, the label font and the margins: `margin` is an object or a function of `{ font, charW, w, h }`. */
+  frame(el: HTMLElement, ctx: ComponentContext, margin: ChartMargin | ((m: { font: number; charW: number; w: number; h: number }) => ChartMargin)): ChartFrame;
+  /** A keyed join: an update clears `.sd-exiting`, an exit sets it, nothing is removed. */
+  keyed(selection: any, data: any[], key: (d: any, i: number, nodes: any) => string | number, enter: (enter: any) => any): any;
+  /** The start of an end-state write: removes `.sd-exiting` nodes and `style`/`opacity` attributes under `root`. Pass the SVG root, never the element box. */
+  settle(root: Element | any): void;
+  dot(selection: any, options: { r: PerNode<number>; color: PerNode<string>; hollow?: PerNode<boolean> }): any;
+  whisker(selection: any, options: { at: PerNode<number>; lo: PerNode<number>; hi: PerNode<number>; cap: PerNode<number>; orient?: "horizontal" | "vertical" }): any;
+  /** The `d` of an interval band over `{ px, lo, hi }`; `null` when no point is defined. */
+  band(points: Array<{ px: number; lo: number | null; hi: number | null }>): string;
+  rule(selection: any, options: { x1: PerNode<number>; y1: PerNode<number>; x2: PerNode<number>; y2: PerNode<number>; label?: PerNode<string>; anchor?: PerNode<"start" | "middle" | "end"> }): void;
+  /** Adds class `sd-halo` (returns the selection), or with `under: true` ensures a `.sd-halo-under` copy before each node (returns the copies). */
+  halo(selection: any, options?: { under?: boolean }): any;
+  /** One `canvas.sd-canvas-layer` per element, placed on the plot; its context is scaled so you draw in plot pixels. */
+  canvasLayer(el: HTMLElement, plot: { left: number; top: number; pw: number; ph: number }): HTMLCanvasElement;
+  /** Clears the canvas and strokes the lines; returns a signature (hex) of what was painted. */
+  paintLines(canvas: HTMLCanvasElement, lines: CanvasLine[], defaults?: { width?: number; alpha?: number }): string;
+  /** `ctx.animate.tween(0, 1, frame)` over the step's duration (else `factor` x --sd-duration), the theme's easing and the step's signal. */
+  morph(info: Partial<UpdateInfo>, ctx: ComponentContext, frame: (t: number) => void, options?: { factor?: number; duration?: number }): Promise<void>;
+  /** What an owned entrance needs: `draw` (a draw entrance that is not aborted), `duration`, `ease`, `signal`. */
+  entrance(info: Partial<UpdateInfo>, ctx: ComponentContext, options?: { factor?: number }): { draw: boolean; duration: number; ease: (t: number) => number; signal: AbortSignal | undefined };
+  /** Hides an SVG path along its length: the start state of a draw. */
+  undraw(path: SVGGeometryElement): void;
+
+  /** The theme's `--sd-color-dim` for a mark out of focus, else `color`. */
+  focusPaint(ctx: ComponentContext, color: string, dimmed: boolean): string;
+  /** Tweens a colour in RGB through `ctx.animate.tween`, calling `set(color)` each frame. */
+  tweenColor(ctx: ComponentContext, from: string, to: string, set: (color: string) => void, options?: MotionTiming | { duration?: number; ease?: (t: number) => number; signal?: AbortSignal }): Promise<void>;
+  /** `color` darkened (or lightened on a dark background) until it has 4.5:1 contrast with `background`, for text. */
+  textColor(color: string, background: string, min?: number): string;
+}
+
 export interface ComponentContext {
   /** d3 v7. */
   d3: any;
@@ -387,6 +476,8 @@ export interface ComponentContext {
    * skip `null` entries. The whole value is `null` for a child mounted with `ctx.mount`.
    */
   stepProps: ReadonlyArray<Props | null> | null;
+  /** The shared chart building blocks (marks, joins, motion, canvas layer): one frozen object. */
+  chart: ChartKit;
 }
 
 // ---------------------------------------------------------------------------------------------

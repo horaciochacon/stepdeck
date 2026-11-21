@@ -230,6 +230,20 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-bar .sd-whisker-line, .sd-chart-bar .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
 .sd-chart-bar .sd-bar-group[data-visible="false"], .sd-chart-bar .sd-band-label[data-visible="false"] { visibility: hidden !important; }
 
+/* chart marks: shared by the charts and custom components (ctx.chart in core/chart.js). Theme tokens only. A mark's own
+   colour is the caller's (a fill or stroke attribute); these rules give what the theme decides: the background
+   outline of a filled dot, the background fill of a hollow one, the ink of a whisker, the halos. They set no property
+   a caller's attribute sets: a filled dot has no `fill` rule and a hollow one no `stroke` rule. */
+.sd-dot:not(.sd-dot-hollow) { stroke: var(--sd-color-background); stroke-width: 3; }
+.sd-dot-hollow { fill: var(--sd-color-background); stroke-width: 4; }
+.sd-whisker-line, .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
+.sd-rule { stroke: var(--sd-color-muted); stroke-width: 2; stroke-dasharray: 8 8; }
+.sd-rule-label { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
+.sd-halo { stroke: var(--sd-color-background); stroke-width: 6; stroke-linejoin: round; paint-order: stroke; }
+.sd-halo-under { fill: none; stroke: var(--sd-color-background); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.sd-canvas-layer { position: absolute; pointer-events: none; }
+.sd-canvas-layer ~ svg { position: relative; }
+
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the
    component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */

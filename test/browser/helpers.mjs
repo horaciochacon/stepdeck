@@ -5,6 +5,7 @@
 //   pages.url(slide, "step=a&motion=full")                    // bare-shell url for withPage / ctx.open
 //   await goTo(page, slide, step)                             // STEPDECK.goTo, then settled()
 //   await elementHtml(page, id)                               // outerHTML of [data-el=id]
+//   await canvasPixels(page, id)                              // toDataURL() of every canvas inside [data-el=id]
 //   await htmlAfterJump(ctx, page, pages, slide, step, id)    // fresh load at `step`
 //   await expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id })
 //   await expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id })
@@ -34,6 +35,10 @@ export async function goTo(page, slide, step) {
 
 export const elementHtml = (page, id) =>
   page.evaluate((id) => document.querySelector(`[data-el="${id}"]`)?.outerHTML ?? null, id);
+
+/** `toDataURL()` of every canvas inside the element: equal strings are equal pixels. */
+export const canvasPixels = (page, id) =>
+  page.evaluate((id) => [...document.querySelectorAll(`[data-el="${id}"] canvas`)].map((c) => c.toDataURL()), id);
 
 /** outerHTML of the element after loading the slide directly at `step` (no motion). */
 export async function htmlAfterJump(ctx, page, pages, slide, step, id) {
@@ -74,7 +79,7 @@ export async function expectBackwardEqualsJump(ctx, page, { pages, slide, steps,
 
 /**
  * Start an animated move from -> via, re-target to `to` 100 ms in, settle: the html equals a jump to `to`
- * and no element inside it keeps an inline style.
+ * and no element inside it keeps an inline style (a canvas layer's own size and position excepted).
  */
 export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id }) {
   const jumped = await htmlAfterJump(ctx, page, pages, slide, to, id);
@@ -89,7 +94,8 @@ export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from,
   );
   await settled(page);
   assert.equal(await elementHtml(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
-  const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]`).length, id);
+  // A canvas layer keeps its inline size and position (it is placed, not animated).
+  const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]:not(.sd-canvas-layer)`).length, id);
   assert.equal(styled, 0, "no inline styles are left inside the element");
   assert.deepEqual(ctx.errors, []);
 }

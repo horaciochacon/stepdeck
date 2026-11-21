@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.marks",
+  "description": "Test fixture: draws one of each shared chart mark (dots, whisker, rule, halos) and a canvas layer, using only ctx.chart.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y"],
+  "properties": {
+    "data": { "type": "string", "description": "A CSV file of the deck.", "examples": ["data/marks.csv"] },
+    "x": { "type": "string", "description": "The x column.", "examples": ["t"] },
+    "y": { "type": "string", "description": "The y column.", "examples": ["v"] },
+    "k": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0,
+      "description": "How far the marks have moved, 0 to 2.",
+      "examples": [0, 1, 2],
+      "x-transition": "tween"
+    }
+  }
+}

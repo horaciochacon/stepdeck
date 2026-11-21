@@ -246,6 +246,7 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.size` | `{ w, h }` | `el`'s `offsetWidth` and `offsetHeight` in canvas pixels (unaffected by the shell's scaling), measured once when `ctx` is built at mount. It is `{ w: 0, h: 0 }` when the element has no layout. Read `el.offsetWidth` and `el.offsetHeight` again in `update` if you need the current size. |
 | `ctx.mount(type, el, props)` | `Promise<ChildHandle>` | Mounts a built-in or deck component inside yours. See below. |
 | `ctx.stepProps` | `ReadonlyArray<Props \| null> \| null` | This element's resolved props at every step of its slide. A frozen array, computed once before `mount`; `null` for a child mounted with `ctx.mount`. See [`ctx.stepProps`](#ctxstepprops). |
+| `ctx.chart` | `ChartKit` | The chart building blocks (layout maths, marks, joins, motion, canvas layer): one frozen object, the same for every component and child. See [`ctx.chart`](#ctxchart). |
 
 ### `ctx.animate`
 
@@ -316,6 +317,50 @@ const all = (ctx.stepProps ?? [props]).flatMap((p) => p?.values ?? []);
 const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 ```
 
+### `ctx.chart`
+
+`ctx.chart` is the set of building blocks the built-in charts are made of, for a component that draws its own chart. A component that reads only `ctx.chart` needs no `import`, so it keeps working wherever the engine's files live. The object is frozen and is the same one for every component and child. The marks take d3 selections and write attributes; their colours and sizes are yours, from theme tokens and `ctx.palette()`, and the theme styles what it decides (the background outline of a dot, the ink of a whisker, the halos) through the generic classes listed below the table. Where an option says "value or accessor", a function is called per node as `(d, i, nodes)`.
+
+| Name | Signature | What it does |
+|---|---|---|
+| `loadTable` | `loadTable(props, ctx, name, columns) → Promise<rows>` | Loads `props.data` and checks every column the props name (`columns` is `[prop, column, optional]`); throws the first problem. |
+| `tickFormat` | `tickFormat(ctx, spec, ticks) → (n) => string` | The d3-format `spec`, else a fixed precision from the tick step. |
+| `extentOf` | `extentOf(rows, columns, { zero }) → [min, max]` | The extent of the finite numbers in `columns`; blank cells are missing. |
+| `rank` | `rank(items, sort) → keys` | Category keys in display order; missing values last. |
+| `splitAt` | `splitAt(points, at, x) → { observed, forecast }` | Splits points sorted by x at `at`; the boundary point ends one part and starts the other. |
+| `spread` | `spread(ys, gap, [min, max]) → ys` | Pushes label positions at least `gap` apart. |
+| `fit` | `fit(end, start, width, [lo, hi], gap) → { x, anchor, inside }` | Places a label past a mark's end, inside it, or past its start. |
+| `wrapLabel` | `wrapLabel(text, maxChars, maxLines) → lines` | Wraps a label. |
+| `drawOrder` | `drawOrder(ids, seed) → ids` | A fixed pseudo-random order that depends only on the ids and the seed. |
+| `swarm` | `swarm(xs, { r, maxDy }) → offsets` | A vertical offset per x that keeps nearby points apart. |
+| `frame` | `frame(el, ctx, margin) → { w, h, font, charW, margin, pw, ph }` | The element's size and the plot inside it. `font` is `--sd-font-size-label` (28 without it), `charW` is 0.6 × `font`. `margin` is `{ left, right, top, bottom }` or a function of `{ font, charW, w, h }` returning it; each side is rounded. `pw` and `ph` are at least 1. |
+| `keyed` | `keyed(selection, data, key, enter) → selection` | A keyed join: an update clears `.sd-exiting`, an exit sets it, nothing is removed. |
+| `settle` | `settle(root)` | The start of an end-state write: removes `.sd-exiting` nodes and every `style` and `opacity` attribute under `root`, and marks what remains as already on screen. Pass the SVG root, never the element box: the canvas layer keeps its inline size and position. |
+| `dot` | `dot(selection, { r, color, hollow })` | Class `sd-dot` (`sd-dot-hollow` when hollow) and `r`. Filled: `fill` is `color`, and the theme outlines it in the background colour. Hollow: `stroke` is `color`, and the theme fills it with the background colour. Options are values or accessors; positions are yours. |
+| `whisker` | `whisker(selection, { at, lo, hi, cap, orient })` | On each `g`, class `sd-whisker` and the lines `sd-whisker-line`, `sd-whisker-cap-lower` and `sd-whisker-cap-upper`, placed from `lo` to `hi` across `at` (`orient`: `"horizontal"`, the default, or `"vertical"`). The theme draws them in the ink colour. |
+| `band` | `band(points) → d` | The `d` of an interval band over `{ px, lo, hi }`, defined where both bounds are not null; `null` when none is. |
+| `rule` | `rule(selection, { x1, y1, x2, y2, label, anchor })` | On each `g`, a `line.sd-rule` and, while `label` is not empty, a `text.sd-rule-label` at the rule's `"start"` (default), `"middle"` or `"end"`. |
+| `halo` | `halo(selection, { under }) → selection` | Default: class `sd-halo`, a background-colour outline for text and dots. `under: true`: a `.sd-halo-under` copy of each line or path before it (a wider background stroke), returned. Call it again after the geometry changes or the node moves. |
+| `canvasLayer` | `canvasLayer(el, { left, top, pw, ph }) → canvas` | One `canvas.sd-canvas-layer` per `el`, its first child, at `left`/`top` and `pw` × `ph` in CSS pixels, with a backing store of that size × min(3, `devicePixelRatio`) and a scaled context: you draw in plot pixels. The SVG you append after it paints above it. Idempotent. |
+| `paintLines` | `paintLines(canvas, lines, { width, alpha }) → signature` | Clears the canvas and strokes each `{ points, color, alpha?, width? }`; a line with fewer than 2 points is skipped. The signature (hex) is the same for the same picture, so a component can write it to a `data-*` attribute of the canvas. |
+| `morph` | `morph(info, ctx, frame, { factor, duration }) → Promise` | Plays `frame(t)` for t from 0 to 1 over `duration`, else the step's transition, else `factor` (default 2) × `--sd-duration`, with the theme's easing and the step's `signal`. |
+| `entrance` | `entrance(info, ctx, { factor }) → { draw, duration, ease, signal }` | For a component that owns its entrance: `draw` is true for a draw entrance that is not aborted; `duration` is `info.entrance.duration`, else as `morph`'s. |
+| `undraw` | `undraw(path)` | Hides an SVG path along its length: the start state of `ctx.animate.drawPath`. |
+| `focusPaint` | `focusPaint(ctx, color, dimmed) → color` | The theme's `--sd-color-dim` for a mark out of focus. |
+| `tweenColor` | `tweenColor(ctx, from, to, set, opts) → Promise` | An RGB colour tween. |
+| `textColor` | `textColor(color, background) → color` | A palette colour darkened (or lightened) until it has 4.5:1 contrast, for text. |
+
+The generic mark classes are styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events). Write an update as `settle(svg)`, then every attribute, so a played step ends exactly where a jump does:
+
+```js
+async update(props, info = {}) {
+  const f = ctx.chart.frame(el, ctx, ({ font, charW }) => ({ left: charW * 4, right: font, top: font, bottom: font * 2 }));
+  if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => draw(f, ctx.d3.interpolateNumber(last.k, props.k)(t)));
+  ctx.chart.settle(svg.node());
+  draw(f, props.k); // the end state, every attribute
+}
+```
+
 ## Helpers inside the engine
 
 The built-ins import small helpers from three engine modules. They are internal: they may change without notice, and a deck component should not import them, because the engine's path differs between the repository and a deck's `stepdeck/` copy. Use `ctx` instead, and copy a one-liner if you need it.
@@ -325,7 +370,7 @@ The built-ins import small helpers from three engine modules. They are internal:
 | `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
 | `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
 | `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
-| `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`. Used by `chart.line` and `chart.bar`. |
+| `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`, and `chartKit`, which is `ctx.chart` (built from `core/chart-layout.js`, `core/chart-marks.js` and `core/chart-motion.js`). Use `ctx.chart`, not an import. |
 
 ## `schema.json`
 
