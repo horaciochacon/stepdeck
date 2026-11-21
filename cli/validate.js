@@ -854,9 +854,9 @@ async function columnsOf(env, file, types, named, label, describe) {
   return out;
 }
 
-/** The chart's columns in its `data` CSV: `x`, `y`, `series` and the `interval` bounds. */
+/** The chart's columns in its `data` CSV: `x`, `y`, `from`, `series` and the `interval` bounds. */
 function checkColumns(env, props) {
-  const named = [["x", props.x], ["y", props.y], ["series", props.series]];
+  const named = [["x", props.x], ["y", props.y], ["from", props.from], ["series", props.series]];
   if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({
     measured: `${prop} = '${column}'`,

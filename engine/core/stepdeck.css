@@ -244,7 +244,8 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* chart.points component: one row per category, a dot with an interval whisker and a value label. Sizes and neutral
    colours from tokens; the dot colour comes from the palette (a fill attribute), so no rule here sets the fill of a dot
    or a value label. A whisker takes the stroke of its group (ink, or the dim colour out of focus) and sits on a narrow
-   background halo; hidden rows keep their place. */
+   background halo; hidden rows keep their place. The connector of a before and after pair is a thin line behind its
+   dots; its colour (muted, or the dim colour out of focus) is a stroke attribute. */
 .sd-chart-points { display: block; overflow: visible; }
 .sd-chart-points text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
 .sd-chart-points .sd-axis-value text { fill: var(--sd-color-muted); }
@@ -255,6 +256,7 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-points text.sd-no-data { fill: var(--sd-color-muted); }
 .sd-chart-points .sd-whisker-line, .sd-chart-points .sd-whisker-cap { stroke: inherit; }
 .sd-chart-points .sd-halo-under { stroke-width: 9; }
+.sd-chart-points .sd-pair-connector { fill: none; stroke-width: 3; }
 .sd-chart-points .sd-points-row[data-visible="false"], .sd-chart-points .sd-points-label[data-visible="false"] { visibility: hidden !important; }
 
 /* chart marks: shared by the charts and custom components (ctx.chart in core/chart.js). Theme tokens only. A mark's own

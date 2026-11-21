@@ -202,7 +202,7 @@ test("pointsModel: sort by a column and by a list", () => {
 });
 
 test("pointsModel: the left margin keeps half of a wide tick label inside the svg", () => {
-  // One-letter categories leave little room on the left; the first tick label ("120.0") is centred on the plot's left end.
+  // One-letter categories leave little room on the left; the tick labels are centred on the plot's ends, so half of the widest one (here "120.0") must fit left of the plot.
   const rows = [{ g: "A", v: 10 }, { g: "B", v: 20 }];
   const props = { data: "d.csv", x: "g", y: "v", format: { y: ",.1f" }, domain: [0, 120] };
   const m = pointsModel(rows, props, env());
@@ -218,4 +218,78 @@ test("pointsModel: the left margin keeps half of a wide tick label inside the sv
   // Long category labels still decide it when they are wider.
   const long = pointsModel([{ g: "Northern district", v: 10 }, { g: "B", v: 20 }], props, env());
   assert.ok(long.margin.left > m.margin.left);
+});
+
+// Pairs: `from` is the "before" of each row. The hollow dot sits at `from`, the filled one at `y`.
+const PAIRS = [
+  { region: "North", before: 14.2, now: 10.1, lo: 8, hi: 12.5 },
+  { region: "South", before: 11.8, now: 9.6, lo: 7, hi: 11 },
+  { region: "East", before: 16.5, now: 21.0, lo: 19, hi: 24 },
+];
+const PAIR_STEPS = [{ data: "d.csv", x: "region", y: "before", format: { y: ",.1f" } }, { data: "d.csv", x: "region", y: "now", from: "before", format: { y: ",.1f" } }];
+
+test("pointsModel: pairs carry from and the domain covers both columns at every step", () => {
+  const [first, second] = PAIR_STEPS.map((p) => pointsModel(PAIRS, p, env({ stepProps: PAIR_STEPS })));
+  assert.deepEqual(first.rows.map((r) => r.from), [null, null, null], "no `from` at the first step");
+  assert.deepEqual(second.rows.map((r) => [r.key, r.from, r.value]), [["North", 14.2, 10.1], ["South", 11.8, 9.6], ["East", 16.5, 21]]);
+  assert.equal(second.rows[0].title, "North: 14.2 → 10.1");
+  // The axis covers `before` and `now` at both steps (14.2 and 21 are in different columns), so it never moves.
+  assert.ok(first.domain[0] <= 9.6 && first.domain[1] >= 21, `${first.domain}`);
+  assert.deepEqual(first.domain, second.domain);
+  assert.deepEqual(first.ticks, second.ticks);
+  assert.deepEqual([first.margin, first.pw, first.ph], [second.margin, second.pw, second.ph]);
+  assert.deepEqual(first.domain, d3.scaleLinear().domain([9.6, 21]).nice(5).domain());
+  // Without the other step the `from` column still counts at its own step, and a given domain wins.
+  const alone = pointsModel(PAIRS, PAIR_STEPS[1], env({ stepProps: null }));
+  assert.deepEqual(alone.domain, first.domain);
+  assert.deepEqual(pointsModel(PAIRS, { ...PAIR_STEPS[1], domain: [0, 30] }, env({ stepProps: PAIR_STEPS })).domain, [0, 30]);
+  // A `from` in a later step counts at the current one.
+  const later = [{ data: "d.csv", x: "region", y: "now" }, { data: "d.csv", x: "region", y: "now", from: "far" }];
+  const wide = pointsModel([...PAIRS.map((r) => ({ ...r, far: 40 }))], later[0], env({ stepProps: later }));
+  assert.ok(wide.domain[1] >= 40, `${wide.domain}`);
+  // A `from` outside a given domain is an error, as an estimate is.
+  const low = [{ region: "North", before: 5, now: 12 }];
+  assert.throws(() => pointsModel(low, { ...PAIR_STEPS[1], domain: [10, 30] }, env()), { message: "`from` of 'North' (5) is outside `domain` [10, 30]" });
+  assert.doesNotThrow(() => pointsModel([{ region: "North", before: null, now: 12 }], { ...PAIR_STEPS[1], domain: [10, 30] }, env()));
+});
+
+test("pair without from value", () => {
+  const rows = [...PAIRS, { region: "West", before: null, now: 8.3, lo: 6, hi: 10 }, { region: "Centre", before: "", now: 9, lo: 7, hi: 11 }];
+  const m = pointsModel(rows, PAIR_STEPS[1], env({ stepProps: PAIR_STEPS }));
+  for (const key of ["West", "Centre"]) {
+    const row = m.rows.find((r) => r.key === key);
+    assert.equal(row.from, null, `${key}: no hollow dot, never one at zero`);
+    assert.equal(row.missing, false, `${key}: its end dot shows`);
+    assert.ok(row.value > 0 && !row.title.includes("→"), `${key}: ${row.title}`);
+  }
+  assert.equal(m.rows.find((r) => r.key === "West").title, "West: 8.3");
+  // An empty value hides the pair: the row says "no data" and carries no `from` either.
+  const blank = pointsModel([{ region: "A", before: 5, now: null }, { region: "B", before: 6, now: 7 }], PAIR_STEPS[1], env());
+  assert.deepEqual([blank.rows[0].missing, blank.rows[0].from, blank.rows[0].value], [true, null, null]);
+  assert.equal(blank.rows[0].title, "A: no data");
+  // A missing `from` does not reach the domain as zero.
+  const far = pointsModel([{ region: "A", before: null, now: 50 }, { region: "B", before: "", now: 52 }], { data: "d.csv", x: "region", y: "now", from: "before" }, env());
+  assert.ok(far.domain[0] > 40, `${far.domain}`);
+  // A `from` column that is not set draws no pair.
+  assert.ok(pointsModel(PAIRS, PAIR_STEPS[0], env()).rows.every((r) => r.from === null));
+});
+
+test("pointsModel: the domain counts displayed categories and the bounds of rows with an estimate", () => {
+  const steps = [BASE, { ...BASE, y: "later", interval: { lower: "lo2", upper: "hi2" } }];
+  const reach = (rows, p = BASE, stepProps = [p]) => pointsModel(rows, p, env({ stepProps })).domain;
+  const plain = reach(ROWS);
+  // A row with no category is not shown, so its values do not widen the axis.
+  assert.deepEqual(reach([...ROWS, { region: "", rate: 90, low: 80, high: 99 }]), plain);
+  assert.deepEqual(reach([...ROWS, { region: null, rate: 90, low: 80, high: 99 }]), plain);
+  // A row with no estimate shows "no data": its bounds are not drawn, so they do not count.
+  assert.deepEqual(reach([...ROWS, { region: "West", rate: null, low: 80, high: 99 }]), plain);
+  assert.deepEqual(reach([...ROWS, { region: "West", rate: "", low: 80, high: 99 }]), plain);
+  // The same at every step: a bound counts only at a step where its row has an estimate.
+  const rows = [...ROWS, { region: "West", rate: 5, low: 4, high: 6, later: null, lo2: 70, hi2: 99 }];
+  assert.ok(reach(rows, steps[0], steps)[1] < 40, "West's bounds at `later` do not count: it has no estimate there");
+  assert.deepEqual(reach(rows, steps[0], steps), reach(rows, steps[1], steps));
+  // A bound counts when the whisker can be drawn: with a value and both bounds.
+  assert.deepEqual(reach([...ROWS, { region: "West", rate: 10, low: null, high: 99 }]), plain);
+  // A row that is shown or hidden counts alike (the axis does not move when `shown` changes).
+  assert.deepEqual(reach(ROWS, { ...BASE, shown: ["North"] }), plain);
 });

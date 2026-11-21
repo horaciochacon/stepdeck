@@ -2,13 +2,15 @@
 
 Estimates by category from a CSV, one row each: a dot with an optional interval whisker and its value written
 beside it, against a value axis and an optional reference line. Built for step-by-step stories: the axis stays put,
-rows can appear one by one out of the reference line, one row can be emphasized, and an empty cell reads "no data".
+rows can appear one by one out of the reference line, one row can be emphasized, a row can show before and after
+as a pair, and an empty cell reads "no data".
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
 | `data` | string | (required) | snap | CSV path relative to the deck root. One row per category. |
 | `x` | string | (required) | snap | Category column. Its text labels the row. A category may appear in one row only. |
 | `y` | string | (required) | tween | Estimate column. A change moves every dot to its new value. An empty cell shows "no data". |
+| `from` | string | none | tween | Column with the earlier value of each row: a hollow dot at it, a connector, and the filled dot at `y`. See Pairs. |
 | `interval` | `{lower, upper}` | none | tween | Columns of a whisker through each dot (e.g. a 95% interval). A row without both bounds has none. |
 | `format` | `{x?, y?}` | see below | snap | d3-format specs, localized by the deck language: `y` for value labels, ticks and the interval text, `x` for numeric categories. |
 | `axes` | `{x?, y?}` | none | fade | Axis titles: `x` above the category labels, `y` under the value axis. |
@@ -20,10 +22,21 @@ rows can appear one by one out of the reference line, one row can be emphasized,
 | `reference` | number \| `{value, label?}` | none | fade | A dashed line across every row, such as an average or a target, with an optional label above the plot. |
 
 Behaviour:
-- **Fixed value axis.** With `domain` the axis is exactly that. Without it the axis spans `y` and both interval
-  columns of **every step** of the slide (the props each step resolves to, read from the same data file), plus every
-  step's `reference`, rounded outward to tick values. Zero is not forced. So switching `y` between steps moves the
-  dots and never the axis.
+- **Fixed value axis.** With `domain` the axis is exactly that. Without it the axis spans `y`, `from` and both
+  interval columns of **every step** of the slide (the props each step resolves to, read from the same data file),
+  plus every step's `reference`, rounded outward to tick values. Only what can be drawn counts: a row with an
+  empty category is not shown, and a row with no `y` at a step shows "no data", so its `from` and interval bounds
+  do not widen the axis. Zero is not forced. So switching `y` between steps moves the dots and never the axis.
+- **Pairs.** With `from`, each row with a value in `y` and in `from` draws a hollow dot at `from` (the theme's
+  background colour inside, the dot colour as its outline), a thin connector in the muted colour (`--sd-color-dim`
+  out of focus) from it to the filled dot at `y`, and the value label of `y` beyond the filled dot, on the side away
+  from the hollow one when it fits. A row whose `from` cell is empty shows its end dot alone: no hollow dot and no
+  connector, never one at zero. A row whose `y` cell is empty shows "no data" and no pair. The title of a pair row
+  reads `North: 14.2 → 10.1`. A `from` outside a given `domain` is an element error, as an estimate is. The story
+  is two steps on one slide: the first has `y: "before"`, the second `set: { y: "now", from: "before" }`; played, each
+  filled dot slides from its old value to the new one while the connector grows behind it and the hollow dot stays
+  where the value was. A pair that appears (in `shown` or in the entrance) grows out of its `from`: the hollow dot
+  grows there, the filled dot slides out to `y` and the connector follows it.
 - **Sorting.** `sort` orders the rows (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
   `y`, lowest first, and `"-value"` highest first; `{ by, order }` orders by another column (ascending unless
   `order` is `"desc"`); a list puts those categories first, in that order, and the rest after in data order. Ties
@@ -44,7 +57,10 @@ Behaviour:
 - **Motion** (forward by exactly one step only; any other move renders directly):
   - a changed `y`, `interval` or `domain` tweens the dots, whiskers and value labels, and the axis (ticks that stay
     move, new ones fade in, dropped ones fade out);
-  - a row that appears grows out of the origin, as in the entrance; a row that leaves does the reverse;
+  - a row that appears grows out of the origin, as in the entrance (out of its `from`, for a pair); a row that
+    leaves does the reverse;
+  - a step that adds `from` while `y` changes slides each filled dot to its new value while the connector grows
+    behind it; the hollow dot is at `from` from the first frame; one that removes it folds the pair into the dot;
   - a changed `sort` slides every row, with its category label, from its old place to its new one in the same motion;
     a row that appears at the same step is already at its final place while it grows;
   - a value that becomes empty shrinks where it is while "no data" fades in, and the reverse;
@@ -63,20 +79,21 @@ Behaviour:
   `--sd-font-size-label`). Margins come from character counts, not measured text; the left one keeps half of the widest tick label inside the chart.
 - **Layout.** The chart fills the room its region leaves (like `chart.line` and `chart.bar`), so a source line can
   share the region.
-- **Colors.** Dots use the first color of `ctx.palette("categorical")`; whiskers and value labels the ink color.
-  Out of focus, dots and whiskers use `--sd-color-dim` (`--sd-color-rule` in a theme without it) and value labels
+- **Colors.** Dots (the hollow one too, as its outline) use the first color of `ctx.palette("categorical")`;
+  whiskers and value labels the ink color; a pair's connector the muted color.
+  Out of focus, dots, whiskers and connectors use `--sd-color-dim` (`--sd-color-rule` in a theme without it) and value labels
   `--sd-color-muted`.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
   lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
   `shown` or `highlight` that the data does not have, an estimate outside a given `domain`
-  (``estimate '<k>' (<value>) is outside `domain` [<a>, <b>]``), and a `domain` that is not `[min, max]` with
-  min < max. `validate` also checks the columns `x`, `y` and `interval` name, at every step. An interval bound
+  (``estimate '<k>' (<value>) is outside `domain` [<a>, <b>]``; the same for a `from`, ``\`from\` of '<k>' (<value>) is outside `domain` [<a>, <b>]``), and a `domain` that is not `[min, max]` with
+  min < max. `validate` also checks the columns `x`, `y`, `from` and `interval` name, at every step. An interval bound
   past a given `domain` is not an error: the whisker is cut at the axis end. A `reference` past it is not drawn.
 - **Accessibility.** Each row carries a `<title>` with its category, value and interval, formatted like the labels
   (so a Spanish deck reads `12,4 (9,8 – 15,1)`), or "no data".
 
 Markup: `svg.sd-chart-points`; each category is `g.sd-points-row[data-key][data-visible][data-dim]` (placed by
-`transform`) holding `title`, `g.sd-whisker` (its line on a `.sd-halo-under` copy), `circle.sd-dot` and
+`transform`) holding `title`, `g.sd-whisker` (its line on a `.sd-halo-under` copy), `path.sd-pair-connector` and `circle.sd-dot-hollow` (only a pair with a `from` value), `circle.sd-dot` and
 `text.sd-points-value`, or `text.sd-no-data`; the category labels are `g.sd-points-labels > text.sd-points-label[data-key]`;
 the value axis is `g.sd-axis-value > g.tick`; the reference is `g.sd-references > g.sd-reference` (`line.sd-rule`,
 `text.sd-rule-label`).

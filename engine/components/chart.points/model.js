@@ -3,23 +3,23 @@
 // pointsModel(rows, props, { stepProps, font, charW, w, h, format, t }) ->
 //   { w, h, font, charW, lineH, margin, pw, ph, domain, ticks, rows, reference, origin, axes, noData }
 //   rows       one per category, in display order (`sort`; the data order without it):
-//              { key, label, lines, slot, value, lo, hi, shown, dim, text, title, missing }
-//              `slot` is the place in that order; a hidden category has its slot too
+//              { key, label, lines, slot, value, from, lo, hi, shown, dim, text, title, missing }
+//              `slot` is the place in that order; a hidden category has its slot too; `from` is the "before" of a
+//              pair (the hollow dot), null without a `from` column, for an empty cell and for a row without a value
 //   reference  { key, value, label }, or null without one or when it is past a given `domain` (it is not drawn);
 //              `origin` is the value rows grow out from
 //   margin     { left, right, top, bottom } around the plot (pw x ph), rounded as `frame` rounds them
 // `format(spec)` gives a formatter (ctx.format) and `t(key)` an engine string (ctx.t).
 //
-// The value domain is `domain` as given, else the extent of `y` and the interval columns of every step's props
+// The value domain is `domain` as given, else the extent of every step's `y`, `from` and interval columns
 // (`stepProps`, null entries skipped; steps that read another file do not count) plus every step's `reference`,
-// rounded outward to ticks; zero is not forced. `sort` orders the rows through `rank` (core/chart-layout.js) and
-// changes nothing else: not the domain, the margins nor any row's data. The margins come from character counts and from every step too
+// rounded outward to ticks; zero is not forced. Only what can be drawn counts: rows with a category, and the
+// interval bounds of a row that has an estimate at that step (with both bounds, as a whisker needs). `sort` orders
+// the rows through `rank` (core/chart-layout.js) and changes nothing else: not the domain, the margins nor any row's data. The margins come from character counts and from every step too
 // (its titles, its reference label, the tick labels of its own axis), so nothing that appears later resizes the plot. A missing value is never zero:
 // it gives `missing: true` and no value.
 import { d3 } from "../../core/d3.js";
 import { extentOf, rank, wrapLabel } from "../../core/chart-layout.js";
-
-const REF = Symbol("reference"); // the column of the pseudo-rows that carry reference values into extentOf
 
 /** A cell as a number, or null when it is empty or not a number. */
 export const valueOf = (row, column) => {
@@ -32,9 +32,6 @@ export const valueOf = (row, column) => {
 
 const isText = (v) => v != null && String(v) !== "";
 const validDomain = (d) => Array.isArray(d) && d.length === 2 && d.every((v) => Number.isFinite(v)) && d[0] < d[1];
-
-/** The value columns one step's props draw: `y` and the interval bounds. */
-export const valueColumns = (p) => [p.y, p.interval?.lower, p.interval?.upper].filter((c) => typeof c === "string" && c !== "");
 
 /** `reference` as { value, label }, or null when it is not set (or not a number). */
 export function referenceOf(p) {
@@ -49,11 +46,26 @@ export function referenceOf(p) {
 /** The props of every step that read the same file as `props` (and `props` itself), skipping null entries. */
 const stepsOf = (props, stepProps) => [props, ...(stepProps ?? [])].filter((p) => p && p.data === props.data);
 
-/** The domain of a step without `domain`: every step's columns and references, niced. */
+/**
+ * The domain of a step without `domain`: what every step can draw, niced. A step draws the rows with a category: a
+ * `from` value, and an estimate with its interval bounds (a row without an estimate shows "no data" and draws no
+ * interval). Its reference counts too.
+ */
 function autoDomain(rows, steps) {
-  const columns = [...new Set(steps.flatMap(valueColumns))];
-  const refs = steps.map(referenceOf).filter(Boolean).map((r) => ({ [REF]: r.value }));
-  return d3.scaleLinear().domain(extentOf([...rows, ...refs], [...columns, REF])).nice(5).domain();
+  const values = [];
+  for (const p of steps) {
+    for (const row of rows) {
+      if (!isText(row[p.x])) continue;
+      const [y, from, lo, hi] = [p.y, p.from, p.interval?.lower, p.interval?.upper].map((c) => valueOf(row, c));
+      if (y === null) continue;
+      values.push(y);
+      if (from !== null) values.push(from);
+      if (lo !== null && hi !== null) values.push(lo, hi);
+    }
+    const ref = referenceOf(p);
+    if (ref) values.push(ref.value);
+  }
+  return d3.scaleLinear().domain(extentOf(values.map((v) => ({ v })), ["v"])).nice(5).domain();
 }
 
 /** The ticks of a domain with one step's labels: `format.y`, else a fixed precision from the tick step. */
@@ -114,19 +126,23 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
     const label = fCategory && typeof raw === "number" ? fCategory(raw) : key;
     const value = valueOf(row, props.y);
     const missing = value === null;
+    const from = missing ? null : valueOf(row, props.from); // the "before" of a pair: nothing for a row with no estimate
     const [lo, hi] = [valueOf(row, lower), valueOf(row, upper)];
     const bounded = !missing && lo !== null && hi !== null; // a whisker needs a value and both bounds
     if (props.domain !== undefined && !missing && (value < domain[0] || value > domain[1])) {
       throw new Error(`estimate '${key}' (${value}) is outside \`domain\` [${domain[0]}, ${domain[1]}]`);
     }
+    if (props.domain !== undefined && from !== null && (from < domain[0] || from > domain[1])) {
+      throw new Error(`\`from\` of '${key}' (${from}) is outside \`domain\` [${domain[0]}, ${domain[1]}]`);
+    }
     const text = missing ? "" : fValue(value);
     return {
-      key, label, lines: [label], slot, value,
+      key, label, lines: [label], slot, value, from,
       lo: bounded ? lo : null, hi: bounded ? hi : null,
       shown: shown ? shown.has(key) : true,
       dim: props.highlight != null && String(props.highlight) !== key,
       text, missing,
-      title: missing ? `${label}: ${noData}` : `${label}: ${text}${bounded ? ` (${fValue(lo)} – ${fValue(hi)})` : ""}`,
+      title: missing ? `${label}: ${noData}` : `${label}: ${from === null ? "" : `${fValue(from)} → `}${text}${bounded ? ` (${fValue(lo)} – ${fValue(hi)})` : ""}`,
     };
   });
 

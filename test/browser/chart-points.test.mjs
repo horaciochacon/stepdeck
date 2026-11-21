@@ -34,6 +34,8 @@ const STEPS = {
   entrance: ["start", "go", "more"],
   resort: ["data", "desc", "list", "later"],
   "resort-shown": ["start", "both", "all", "flip", "less"],
+  pairs: ["before", "now"],
+  "pairs-entrance": ["start", "go"],
 };
 
 // Per row, in the svg's own pixels (attributes) and on screen (boxes, for overflow).
@@ -126,6 +128,8 @@ const INTERRUPTS = [
   ["resort-shown", "start", "both", "all"],
   ["resort-shown", "both", "all", "flip"],
   ["resort-shown", "flip", "less", "all"],
+  ["pairs", "before", "now", "before"],
+  ["pairs", "now", "before", "now"],
 ];
 for (const [slide, steps] of Object.entries(STEPS)) {
   test(`${slide}: played, jumped and backward end the same`, async () => {
@@ -501,6 +505,135 @@ test("the start state is written before update awaits its data", async () => {
     assert.deepEqual(r.sync, r.before.map(() => ({ cx: r.ref, r: 0, span: 0 })), "dots on the reference, not grown, no whisker, before the data arrives");
     assert.ok(r.ms >= 100 && r.ms < 600, `entrance.duration (120 ms) wins over 2 x --sd-duration (took ${r.ms.toFixed(0)} ms)`);
     assert.deepEqual(r.end, r.before);
+  });
+});
+
+// Pairs: a hollow dot at `from`, a connector, a filled dot at `y`. Read from the markup of one row.
+const pairOf = (el, key) => {
+  const g = el.querySelector(`g.sd-points-row[data-key="${key}"]`);
+  const num = (node, a) => (node ? Number(node.getAttribute(a)) : null);
+  const hollow = g.querySelector(":scope > circle.sd-dot-hollow");
+  const filled = g.querySelector(":scope > circle.sd-dot:not(.sd-dot-hollow)");
+  const link = g.querySelector(":scope > path.sd-pair-connector");
+  return { from: num(hollow, "cx"), fromR: num(hollow, "r"), cx: num(filled, "cx"), r: num(filled, "r"), length: link ? link.getTotalLength() : 0, link: link !== null, hollow: hollow !== null };
+};
+
+// sampleFrames sends its probe to the page as source, so a probe over pairOf is built as source too.
+const pairsProbe = (...keys) => ({ toString: () => `(el) => { const pairOf = ${pairOf}; return Object.fromEntries(${JSON.stringify(keys)}.map((k) => [k, pairOf(el, k)])); }` });
+
+test("pairs: a hollow dot, a connector and a filled dot; an empty from shows only the end dot", async () => {
+  await withPage({ root, url: pages.url("pairs", "step=before") }, async (page, ctx) => {
+    const none = await page.evaluate(() => document.querySelectorAll('[data-el="points"] .sd-dot-hollow, [data-el="points"] .sd-pair-connector').length);
+    assert.equal(none, 0, "no pair marks before `from` is set");
+    await ctx.open(pages.url("pairs", "step=now"));
+    const at = await page.evaluate(`(${(pairOf)})(document.querySelector('[data-el="points"]'), "Norte")`);
+    assert.ok(at.hollow && at.link && at.from > at.cx, `Norte: hollow at 14.2 (${at.from}), filled at 10.1 (${at.cx})`);
+    assert.ok(Math.abs(at.length - (at.from - at.cx)) < 0.5, `the connector spans the two dots (${at.length})`);
+    const look = await page.evaluate(() => {
+      const g = document.querySelector('[data-el="points"] g.sd-points-row[data-key="Norte"]');
+      const hollow = g.querySelector("circle.sd-dot-hollow");
+      const filled = g.querySelector("circle.sd-dot:not(.sd-dot-hollow)");
+      const link = g.querySelector("path.sd-pair-connector");
+      const cs = (n, p) => getComputedStyle(n)[p];
+      return {
+        order: [...g.children].map((n) => n.tagName + "." + [...n.classList].join(".")),
+        hollow: { fill: cs(hollow, "fill"), stroke: cs(hollow, "stroke"), r: hollow.getAttribute("r") },
+        filled: { fill: cs(filled, "fill"), r: filled.getAttribute("r") },
+        link: { fill: cs(link, "fill"), stroke: cs(link, "stroke"), width: cs(link, "strokeWidth") },
+        label: g.querySelector("text.sd-points-value").textContent,
+        title: g.querySelector("title").textContent,
+      };
+    });
+    const bg = await tokenRgb(page, "--sd-color-background");
+    const muted = await tokenRgb(page, "--sd-color-muted");
+    assert.equal(look.hollow.fill, bg, "the hollow dot is filled with the background");
+    assert.equal(look.hollow.stroke, look.filled.fill, "and outlined in the colour of the filled dot");
+    assert.equal(look.hollow.r, look.filled.r);
+    assert.equal(look.link.fill, "none");
+    assert.equal(look.link.stroke, muted, "the connector is quiet: the muted colour");
+    assert.ok(parseFloat(look.link.width) <= 4, `and thin (${look.link.width})`);
+    const parts = look.order.filter((o) => /circle|path/.test(o));
+    assert.deepEqual(parts.map((o) => o.split(".")[0] + (o.includes("hollow") ? "h" : "")), ["path", "circleh", "circle"], `connector, hollow, filled: ${look.order}`);
+    assert.equal(look.label, "10,1", "the value label is the end value");
+    assert.equal(look.title, "Norte: 14,2 → 10,1");
+    // Oeste has no `before`: only its end dot, no connector, no hollow dot (never one at zero).
+    const oeste = await page.evaluate(`(${(pairOf)})(document.querySelector('[data-el="points"]'), "Oeste")`);
+    assert.deepEqual([oeste.hollow, oeste.link, oeste.cx > 0], [false, false, true]);
+    assert.equal(await page.evaluate(() => document.querySelectorAll('[data-el="points"] g.sd-points-row[data-key="Oeste"] circle').length), 1);
+    // A pair that goes up reads the other way: hollow left of the filled dot.
+    const up = await page.evaluate(`(${(pairOf)})(document.querySelector('[data-el="points"]'), "Centro")`);
+    assert.ok(up.from < up.cx && Math.abs(up.length - (up.cx - up.from)) < 0.5);
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pairs: the dot slides and the connector grows", async () => {
+  await withPage({ root, url: pages.url("pairs", "step=before&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "pairs", "now", "points", pairsProbe("Norte", "Centro", "Oeste"));
+    const { end } = r;
+    const start = r.frames[0];
+    for (const key of ["Norte", "Centro"]) {
+      const a = start[key].cx;
+      const b = end[key].cx;
+      const [lo, hi] = [Math.min(a, b), Math.max(a, b)];
+      assert.ok(Math.abs(a - b) > 20, `${key} really moves (${a} -> ${b})`);
+      const mid = r.frames.filter((f) => f[key].cx > lo + 1 && f[key].cx < hi - 1);
+      assert.ok(mid.length >= 3, `${key}: seen between the two values in several frames (${mid.length})`);
+      assert.ok(r.frames.every((f) => f[key].cx >= lo - 0.01 && f[key].cx <= hi + 0.01), `${key}: never past either value`);
+      assert.ok(end[key].length > 20 && Math.abs(end[key].length - Math.abs(a - b)) < 0.5, `${key}: the connector ends spanning both dots (${end[key].length})`);
+      const grown = r.frames.filter((f) => f[key].link);
+      assert.ok(grown.some((f) => f[key].length > 1 && f[key].length < end[key].length - 1), `${key}: the connector is seen growing`);
+      assert.ok(grown.every((f) => Math.abs(f[key].length - Math.abs(f[key].cx - f[key].from)) < 0.5), `${key}: it trails the dot, from the hollow dot to the filled one`);
+      const lengths = grown.map((f) => f[key].length);
+      assert.ok(lengths.every((l, i) => i === 0 || l >= lengths[i - 1] - 0.01), `${key}: and only grows`);
+      const holes = r.frames.filter((f) => f[key].hollow).map((f) => f[key].from);
+      assert.ok(holes.length > 0 && holes.every((h) => h === holes[0]) && Math.abs(holes[0] - a) < 0.5, `${key}: the hollow dot stays at its value (${[...new Set(holes)]})`);
+    }
+    // Oeste has no `before`: its end dot grows where it is, with no connector and no hollow dot at any frame.
+    assert.ok(r.frames.every((f) => !f.Oeste.link && !f.Oeste.hollow), "Oeste: never a connector or a hollow dot");
+    assert.ok(r.frames.some((f) => f.Oeste.r > 0 && f.Oeste.r < end.Oeste.r), "Oeste: its dot is seen growing");
+    const moving = r.frames.filter((f) => f.Norte.cx !== start.Norte.cx && f.Norte.cx !== end.Norte.cx);
+    const spanMs = moving.at(-1).ms - moving[0].ms;
+    assert.ok(spanMs >= 150 && spanMs < 4000, `a motion, not a snap (${spanMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "pairs", "now", "points"));
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pairs: the axis is the same at before and now", async () => {
+  await withPage({ root, url: pages.url("pairs", "step=before") }, async (page, ctx) => {
+    const base = await axis(page);
+    const first = await rows(page);
+    assert.ok(base.ticks.length >= 3, JSON.stringify(base.ticks));
+    await ctx.open(pages.url("pairs", "step=now"));
+    assert.deepEqual(await axis(page), base, "jumped: the same ticks at the same places, and the same plot");
+    await ctx.open(pages.url("pairs", "step=before&motion=full"));
+    await goTo(page, "pairs", "now");
+    assert.deepEqual(await axis(page), base, "played: the same");
+    // The domain covers both columns: the largest `before` (16.5) and the smallest `now` (8.3) are inside it.
+    const ticks = base.ticks.map(([label]) => Number(label.replace(",", ".")));
+    assert.ok(Math.min(...ticks) <= 8.3 && Math.max(...ticks) >= 16.5, `ticks ${ticks}`);
+    const after = await rows(page);
+    assert.deepEqual(Object.values(after).map((r) => r.transform), Object.values(first).map((r) => r.transform), "the rows keep their bands");
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pairs: the entrance draws from the old value to the new one", async () => {
+  await withPage({ root, url: pages.url("pairs-entrance", "step=start&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "pairs-entrance", "go", "points", pairsProbe("Norte"));
+    const shown = r.frames.filter((f) => f.visible).map((f) => ({ ...f.Norte, style: f.style }));
+    const first = shown[0];
+    const end = r.end.Norte;
+    assert.ok(Math.abs(end.cx - end.from) > 20, `the pair has length at rest (${end.from} -> ${end.cx})`);
+    assert.ok(Math.abs(first.cx - end.from) < 1, `the first frame shown has the filled dot on the old value (${first.cx} vs ${end.from})`);
+    assert.equal(first.length, 0, "with no connector yet");
+    assert.ok(shown.some((f) => f.cx < end.from - 1 && f.cx > end.cx + 1), "the dot passes between the two values");
+    assert.ok(shown.some((f) => f.length > 1 && f.length < end.length - 1), "the connector grows behind it");
+    assert.ok(shown.filter((f) => f.from !== null).every((f) => Math.abs(f.from - end.from) < 0.5), "the hollow dot stays at the old value");
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the chart builds itself");
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "pairs-entrance", "go", "points"));
+    await errorsClean(page, ctx);
   });
 });
 

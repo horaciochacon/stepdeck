@@ -1,6 +1,7 @@
 // Built-in `chart.points`: one estimate per category from a CSV, as a dot with an optional interval whisker and a
 // direct value label, one row per category down the left, a value axis at the bottom and an optional reference
-// line across every row.
+// line across every row. With `from` each row is a before and after pair: a hollow dot at `from`, a quiet connector
+// and the filled dot at `y`; a row whose `from` is empty has its end dot alone.
 //
 // Everything on screen is a pure function of (model, view):
 //   - the model (./model.js) comes from props, rows and every step's props alone: the domain, ticks, margins and
@@ -15,10 +16,13 @@
 //
 // Motion (a forward step by exactly one):
 //   - a changed `y`, `interval` or `domain` tweens the dots, whiskers and value labels, and the axis (ticks that
-//     stay move, new ones fade in, dropped ones fade out);
+//     stay move, new ones fade in, dropped ones fade out); a step that adds `from` puts the hollow dot where the
+//     value was while the filled dot slides to its new `y` and the connector grows behind it;
 //   - a row that appears in `shown` grows out of the origin (the reference, else 0, else the domain's start): its
 //     dot slides out as it grows (GROW is that share of the motion), then its whisker draws outward; a row that
-//     leaves does the reverse. A value that turns missing shrinks where it is while "no data" fades in, and back;
+//     leaves does the reverse. A pair grows out of its `from` instead: the hollow dot grows there and the filled
+//     dot slides to `y` with the connector behind it. A value that turns missing shrinks where it is while "no data"
+//     fades in, and back;
 //   - `sort` orders the rows (rank, in ./model.js); when it changes, every row, with its category label, slides from
 //     its old slot to its new one in the same motion, and a row that appears is already at its final slot as it
 //     grows. A value label keeps the side of its mark it ends at (the side it started at, for a row that goes) and
@@ -28,7 +32,7 @@
 //   - `reference` and the axis titles fade: one that appears fades in, one that changes fades out as the new one
 //     fades in.
 // Entrance: the chart owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" every shown row
-// grows out of the origin as above, over info.entrance.duration (else 2 x --sd-duration), while the box stays still
+// grows out of the origin (its `from`, for a pair) as above, over info.entrance.duration (else 2 x --sd-duration), while the box stays still
 // and the axes, labels and reference show at once. The start state is written before the first await, in the same
 // task as the engine shows the element. Any other entrance renders the end state at once.
 import { d3 } from "../../core/d3.js";
@@ -37,7 +41,11 @@ import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../cor
 import { pointsModel } from "./model.js";
 
 const GROW = 0.6; // share of a row's growth in which its dot slides out and grows; its whisker draws in the rest
-const ROW_PARTS = [":scope > title", ":scope > g.sd-whisker", ":scope > circle.sd-dot", ":scope > text.sd-points-value", ":scope > text.sd-no-data"];
+const FILLED = ":scope > circle.sd-dot:not(.sd-dot-hollow)"; // the dot at `y`; the hollow one at `from` is `.sd-dot-hollow`
+const LINK = ":scope > path.sd-pair-connector";
+const HOLLOW = ":scope > circle.sd-dot-hollow";
+// Back to front: the whisker, the connector, the hollow dot, the filled dot, then the labels.
+const ROW_PARTS = [":scope > title", ":scope > g.sd-whisker", LINK, HOLLOW, FILLED, ":scope > text.sd-points-value", ":scope > text.sd-no-data"];
 
 const token = (ctx, name) => ctx.tokens?.[name]?.trim() || null; // a value: var() does not work in an attribute
 const mix = (a, b, t) => (a === null ? b : b === null ? a : lerp(a, b, t));
@@ -47,7 +55,7 @@ const byKey = (d) => d.key;
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
   loadTable(props, ctx, "chart.points", [
-    ["x", props.x], ["y", props.y], ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
+    ["x", props.x], ["y", props.y], ["from", props.from, true], ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
   ]);
 
 /** The model of ./model.js for this element's box, with each row's colours. Throws the model's errors. */
@@ -58,7 +66,7 @@ function buildModel(props, rows, ctx, el) {
   const ink = token(ctx, "--sd-color-ink") ?? "currentColor";
   const muted = token(ctx, "--sd-color-muted");
   for (const r of m.rows) {
-    Object.assign(r, { fill: focusPaint(ctx, color, r.dim), stroke: focusPaint(ctx, ink, r.dim), labelFill: r.dim && muted ? muted : ink });
+    Object.assign(r, { fill: focusPaint(ctx, color, r.dim), stroke: focusPaint(ctx, ink, r.dim), labelFill: r.dim && muted ? muted : ink, link: focusPaint(ctx, muted ?? ink, r.dim) });
   }
   return m;
 }
@@ -70,11 +78,12 @@ function sizes(m) {
 }
 
 /**
- * Which side of its mark a row's value label takes, decided once from the row at rest (its whole whisker, its dot at
- * full size, the model's own axis) and then kept through a motion, so it never flips part-way: `edge` is the end of
- * the mark it sits against (`top` the upper end, `bottom` the lower) and `anchor` its `text-anchor`. Past the upper
- * end when the label fits in the svg, else past the lower end, and only when neither fits inside the whisker. Null
- * for a row without a value.
+ * Which side of its mark a row's value label takes, decided once from the row at rest (its whole whisker and pair, its
+ * dots at full size, the model's own axis) and then kept through a motion, so it never flips part-way: `edge` is the
+ * end of the mark it sits against (`top` the upper end, `bottom` the lower) and `anchor` its `text-anchor`. Past the
+ * upper end when the label fits in the svg, else past the lower end, and only when neither fits inside the mark; a
+ * pair whose end dot is the lower one starts from the lower end instead, so the label sits on the far side of the
+ * end dot from the hollow one. Null for a row without a value.
  */
 const sides = new WeakMap();
 function sideOf(m, row) {
@@ -87,16 +96,19 @@ function sideOf(m, row) {
     const [d0, d1] = m.domain;
     const clamped = (v) => x(Math.min(Math.max(v, Math.min(d0, d1)), Math.max(d0, d1)));
     const at = x(row.value);
-    const top = Math.max(row.hi === null ? at : clamped(row.hi), at + r);
-    const bottom = Math.min(row.lo === null ? at : clamped(row.lo), at - r);
+    const pair = row.from === null ? null : x(row.from);
+    const top = Math.max(row.hi === null ? at : clamped(row.hi), at + r, pair === null ? -Infinity : pair + r);
+    const bottom = Math.min(row.lo === null ? at : clamped(row.lo), at - r, pair === null ? Infinity : pair - r);
     const width = row.text.length * m.charW;
     const range = [0, m.pw + m.margin.right];
     const gap = m.font * 0.4;
-    const right = fit(top, bottom, width, range, gap);
-    const left = right.inside ? fit(bottom, top, width, range, gap) : null;
-    const spot = left && !left.inside && left.anchor === "end" ? left : right;
-    const lower = spot === left || (!spot.inside && spot.anchor === "end"); // past the lower end, not against the upper
-    own.set(row.key, { edge: lower ? "bottom" : "top", anchor: spot.anchor });
+    const down = pair !== null && pair > at; // the end dot is the lower one: its label goes below the mark
+    const [first, second] = down ? [bottom, top] : [top, bottom];
+    const one = fit(first, second, width, range, gap);
+    const other = one.inside ? fit(second, first, width, range, gap) : null;
+    const spot = other && !other.inside && other.anchor === (down ? "start" : "end") ? other : one; // past the other end, outside
+    // Against or past the upper end: an outside label anchored "start", or an inside one anchored "end".
+    own.set(row.key, { edge: spot.inside === (spot.anchor === "end") ? "top" : "bottom", anchor: spot.anchor });
   }
   return own.get(row.key);
 }
@@ -106,7 +118,10 @@ function sideOf(m, row) {
  * `v` is where the dot is (data units), `grow` its size (0..1), `whisker` how far its whisker is drawn out of it
  * (0..1), `label` the opacity of its value label and `noData` that of its "no data" mark. A row slides from its old
  * slot to its new one; one that was hidden has no old place, so it is at its new one from the start. `leaving` is
- * true while a row that is drawn goes away (its label keeps the side it had).
+ * true while a row that is drawn goes away (its label keeps the side it had). A pair adds `from` (where the hollow
+ * dot is, data units; null without one), `fromGrow` (its size) and `reach` (how far the connector runs from the dot
+ * towards it): the hollow dot is at once where the filled one was, and a row that appears or goes grows or shrinks
+ * out of its `from` (the origin, for a row without one).
  */
 function rowAt(p, b, t, enterAll, origin) {
   const was = enterAll ? null : p;
@@ -119,6 +134,7 @@ function rowAt(p, b, t, enterAll, origin) {
     visible: Boolean(was?.shown) || b.shown,
     leaving: drawn0 && !drawn1,
     v: b.value ?? p?.value ?? null, lo: b.lo ?? p?.lo ?? null, hi: b.hi ?? p?.hi ?? null,
+    from: b.from ?? p?.from ?? null, fromGrow: 1, reach: 1,
     grow: 1, whisker: 1, label: 1,
     noData: blank0 === blank1 ? 1 : blank1 ? t : 1 - t,
   };
@@ -127,15 +143,17 @@ function rowAt(p, b, t, enterAll, origin) {
     s.lo = mix(p.lo, b.lo, t);
     s.hi = mix(p.hi, b.hi, t);
     s.whisker = hasWhisker(p) === hasWhisker(b) ? 1 : hasWhisker(b) ? t : 1 - t;
+    s.from = mix(p.from, b.from, t);
+    if (b.from === null && p.from !== null) Object.assign(s, { fromGrow: 1 - t, reach: 1 - t }); // the pair folds into the dot
   } else if (drawn1) {
-    // A row that appears grows out of the origin; a value that was missing grows where it is (never from zero).
+    // A row that appears grows out of the origin (out of its `from`, for a pair); a value that was missing grows where it is (never from zero).
     const g = clamp01(t / GROW);
-    s.v = g >= 1 ? b.value : lerp(blank0 ? b.value : origin, b.value, g);
-    Object.assign(s, { grow: g, whisker: clamp01((t - GROW) / (1 - GROW)), label: g });
+    s.v = g >= 1 ? b.value : lerp(blank0 ? b.value : b.from ?? origin, b.value, g);
+    Object.assign(s, { grow: g, fromGrow: g, reach: blank0 ? g : 1, whisker: clamp01((t - GROW) / (1 - GROW)), label: g });
   } else if (drawn0) {
     const g = 1 - clamp01((t - (1 - GROW)) / GROW);
-    s.v = g >= 1 ? p.value : lerp(blank1 ? p.value : origin, p.value, g);
-    Object.assign(s, { lo: p.lo, hi: p.hi, grow: g, whisker: 1 - clamp01(t / (1 - GROW)), label: g });
+    s.v = g >= 1 ? p.value : lerp(blank1 ? p.value : p.from ?? origin, p.value, g);
+    Object.assign(s, { lo: p.lo, hi: p.hi, from: p.from, grow: g, fromGrow: g, reach: blank1 ? g : 1, whisker: 1 - clamp01(t / (1 - GROW)), label: g });
   }
   return s;
 }
@@ -159,7 +177,7 @@ function viewAt(from, to, t, enterAll, live = null) {
       return [b.key, {
         ...s,
         side: s.leaving ? sideOf(from, prev.get(b.key)) : sideOf(to, b),
-        ...(live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill }),
+        ...(live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill, link: b.link }),
       }];
     })),
   };
@@ -198,7 +216,9 @@ export default {
       }).each(function (d) {
         const row = d3.select(this);
         keyed(row.selectAll(":scope > g.sd-whisker"), hasWhisker(d) ? [d] : [], () => "whisker", (enter) => enter.append("g").attr("class", "sd-whisker"));
-        keyed(row.selectAll(":scope > circle.sd-dot"), d.missing ? [] : [d], () => "dot", (enter) => enter.append("circle").attr("class", "sd-dot"));
+        keyed(row.selectAll(LINK), d.from === null ? [] : [d], () => "link", (enter) => enter.append("path").attr("class", "sd-pair-connector"));
+        keyed(row.selectAll(HOLLOW), d.from === null ? [] : [d], () => "from", (enter) => enter.append("circle").attr("class", "sd-dot-hollow"));
+        keyed(row.selectAll(FILLED), d.missing ? [] : [d], () => "dot", (enter) => enter.append("circle").attr("class", "sd-dot"));
         keyed(row.selectAll(":scope > text.sd-points-value"), d.missing ? [] : [d], () => "value", (enter) => enter.append("text").attr("class", "sd-points-value"));
         keyed(row.selectAll(":scope > text.sd-no-data"), d.missing ? [d] : [], () => "none", (enter) => enter.append("text").attr("class", "sd-no-data"));
         for (const part of ROW_PARTS) row.selectAll(part).raise();
@@ -276,11 +296,18 @@ export default {
             whisker(wg, { at: 0, lo, hi, cap, orient: "horizontal" });
             halo(wg.select(".sd-whisker-line"), { under: true });
           }
-          dot(row.selectAll(":scope > circle.sd-dot").attr("cx", at).attr("cy", 0), { r: r * s.grow, color: s.fill });
+          // A pair: the connector runs from the hollow dot to the filled one (shortened by `reach`), both dots on it.
+          if (s.from !== null) {
+            const start = x(s.from);
+            row.selectAll(LINK).attr("d", `M${s.reach >= 1 ? start : lerp(at, start, s.reach)},0L${at},0`).attr("stroke", s.link);
+            dot(row.selectAll(HOLLOW).attr("cx", start).attr("cy", 0), { r: r * s.fromGrow, color: s.fill, hollow: true });
+          }
+          dot(row.selectAll(FILLED).attr("cx", at).attr("cy", 0), { r: r * s.grow, color: s.fill });
           // The value label: against the end of the mark its side names (see sideOf), which follows the mark through a
           // motion; only its x changes.
-          const top = Math.max(hi ?? at, at + r * s.grow);
-          const bottom = Math.min(lo ?? at, at - r * s.grow);
+          const pair = s.from === null ? null : x(s.from);
+          const top = Math.max(hi ?? at, at + r * s.grow, pair === null ? -Infinity : pair + r * s.fromGrow);
+          const bottom = Math.min(lo ?? at, at - r * s.grow, pair === null ? Infinity : pair - r * s.fromGrow);
           const gap = f * 0.4;
           const side = s.side ?? { edge: "top", anchor: "start" };
           halo(row.selectAll(":scope > text.sd-points-value").each(function (own) {
@@ -306,7 +333,7 @@ export default {
     const comparable = (a, b) => a && b && a.rows.map(byKey).sort().join("\n") === b.rows.map(byKey).sort().join("\n");
     const signature = (m) => JSON.stringify([
       m.domain, m.margin, m.pw, m.ph, m.ticks.map((k) => k.label), m.reference?.key ?? null, m.axes,
-      m.rows.map((r) => [r.slot, r.value, r.lo, r.hi, r.shown, r.dim, r.missing, r.text, r.lines]),
+      m.rows.map((r) => [r.slot, r.value, r.from, r.lo, r.hi, r.shown, r.dim, r.missing, r.text, r.lines]),
     ]);
 
     /**
@@ -323,13 +350,13 @@ export default {
       const prev = new Map((from?.rows ?? []).map((r) => [r.key, r]));
       const live = new Map(to.rows.map((b) => {
         const p = prev.get(b.key) ?? b;
-        return [b.key, { fill: p.fill, stroke: p.stroke, labelFill: p.labelFill }];
+        return [b.key, { fill: p.fill, stroke: p.stroke, labelFill: p.labelFill, link: p.link }];
       }));
       const fast = motion(info, ctx, { fast: true });
       const recolor = to.rows.flatMap((b) => {
         const p = prev.get(b.key);
         const now = live.get(b.key);
-        return p ? ["fill", "stroke", "labelFill"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
+        return p ? ["fill", "stroke", "labelFill", "link"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
       });
       await Promise.all([morph(info, ctx, (t) => place(to, viewAt(from, to, t, enterAll, live)), { duration }), ...recolor]);
     }

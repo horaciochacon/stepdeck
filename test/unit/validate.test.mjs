@@ -74,6 +74,16 @@ test("chart.bar: a missing interval column is reported at the step that names it
   assert.match(problems[0].fix, /'hi'/);
 });
 
+test("chart.points: a missing `from` column is reported at the step that names it, with the nearest column", async () => {
+  const problems = await validate(fixture("from-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+  assert.equal(problems[0].element, "pairs");
+  assert.equal(problems[0].step, "two");
+  assert.equal(problems[0].measured, "from = 'befor'");
+  assert.equal(problems[0].limit, "columns of data/rows.csv: group, before, after");
+  assert.equal(problems[0].fix, "set from to 'before'");
+});
+
 test("chart.line draws: the draws file needs the chart's x, y and series and the draw column", async () => {
   const problems = await validate(fixture("draws-missing-column"));
   assert.deepEqual(rules(problems), ["missing-column", "missing-column"], show(problems));

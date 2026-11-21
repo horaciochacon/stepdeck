@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.points",
-  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker and its value written beside it, against a value axis and an optional reference line. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero.",
+  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker (or a before and after pair) and its value written beside it, against a value axis and an optional reference line. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero.",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -23,6 +23,12 @@
       "type": "string",
       "description": "Column holding the estimate of each row. An empty cell shows \"no data\" (never a dot at zero). Changing it moves every dot to its new value; the axis covers every step's column, so it stays put.",
       "examples": ["rate", "rate_adjusted"],
+      "x-transition": "tween"
+    },
+    "from": {
+      "type": "string",
+      "description": "Column holding the earlier value of each row, for a before and after pair: a hollow dot at it, a quiet connector, and the filled dot at `y`. An empty cell shows the end dot alone (no hollow dot, no connector). Setting it on a step slides each filled dot from its old value to `y` while the connector grows; the axis covers `from` at every step, so it stays put.",
+      "examples": ["before", "rate_2020"],
       "x-transition": "tween"
     },
     "interval": {
@@ -71,7 +77,7 @@
       "items": { "type": "number" },
       "minItems": 2,
       "maxItems": 2,
-      "description": "Fixed value axis as [min, max], used as given. An estimate outside it is an element error; an interval past it is cut at the axis end. Without it the axis spans `y` and the interval columns of every step, and every step's `reference`, rounded outward to tick values (zero is not forced).",
+      "description": "Fixed value axis as [min, max], used as given. An estimate outside it is an element error; an interval past it is cut at the axis end. Without it the axis spans `y`, `from` and the interval columns of every step, and every step's `reference`, rounded outward to tick values (zero is not forced).",
       "examples": [[0, 25]],
       "x-transition": "tween"
     },
