@@ -21,14 +21,11 @@
 //     order without it): every category is ranked, then the hidden ones are hidden, so a hidden category keeps its
 //     slot (`slot` on each model bar). A hidden category is laid out at its final length (a waterfall's at no length,
 //     on the running total of its slot) and hidden with CSS visibility, so nothing reflows.
-// Waterfall: each bar runs from `start` to `end` (the running totals over the shown bars, ./modes.js); dotted
-// connectors (`m.links`) join each shown bar's end to the next shown bar, and the last to the total bar (`m.total`,
-// key "__total", in the last band; a category of that name is an element error). A slide that is a waterfall at any
-// step keeps the total's band, the signed label room on both sides of the plot (the band axis set back by it) and
-// margins for every step's axis at every step, so a mode or `total` change never reflows the frame. Value labels are
-// signed; their side (past the end, inside against it, or past the start) is chosen once from the model at rest with
-// `fit` and kept through a motion; with the label room, every label within the axis lands past its end. Colours: increases the diverging palette's `high` role, decreases its
-// `low` role (`invert` swaps them), the total in ink.
+// Waterfall: the stack, the total bar (`m.total`, key "__total", in the last band; a category of that name is an
+// element error), the connectors (`m.links`), the label sides and their motion are in ./paint-modes.js. A slide that is
+// a waterfall at any step keeps the total's band, the signed label room on both sides of the plot (the band axis set
+// back by it) and margins for every step's axis at every step, so a mode or `total` change never reflows the frame;
+// with the label room, every label within the axis lands past its end.
 // Motion: a category that appears grows from zero and then its whisker is drawn (GROW is the share of the
 // motion given to the bar); a category that leaves does it in reverse; a changed value tweens the bar, its
 // whisker and its label; a changed `sort` slides every bar, with its band label, whisker and value label, from its old
@@ -36,9 +33,7 @@
 // its final slot from the start); `highlight` tweens the other bars to the theme's --sd-color-dim over
 // --sd-duration-fast (never opacity, which would lower the contrast of the labels) and draws the highlighted
 // bar after (above) them. When a waterfall is involved (either end of the change) every bar's start and end tween
-// from where it was to where it goes: a hidden bar is already a point on the running total, so a category that
-// appears grows from the running total before it while the later bases move up, and `bars` <-> `waterfall` lifts each
-// bar onto its base or sets it back on zero. Connectors follow their bar's end; new ones, and the total, fade in.
+// from where it was to where it goes (./paint-modes.js).
 // Entrance: the chart owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" every shown
 // bar grows from zero and then draws its whisker (a waterfall grows out of zero as a whole, so it stays joined), over
 // info.entrance.duration (else 2 x --sd-duration), while the box stays still. The zero-length bars are written before
@@ -47,14 +42,17 @@
 // Colors come from ctx.palette("categorical") (the first color), ctx.palette("diverging") and theme tokens; sizes
 // from the label token.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr, rank, fit, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
+import { loadTable, tickFormat, opacityAttr, rank, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
-import { waterfall, waterfallSteps, waterfallDomain, valueOf, categoriesOf, hasTotal } from "./modes.js";
+import { waterfallSteps, waterfallDomain, valueOf, categoriesOf, hasTotal } from "./modes.js";
+import {
+  TOTAL, signedSpec, waterfallColors, stack, totalBar, linksOf, placeSides, staticLinks, paintConnectors, placeFlowLabel,
+  flowEnds, totalView, linksView,
+} from "./paint-modes.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
 const THICK = 0.65; // bar thickness as a share of its band
 const THICK_MAX = 4; // ... and its cap, in label font sizes
-const TOTAL = "__total"; // the key of a waterfall's total bar
 
 const lerpNull = (a, b, t) => (a === null || b === null ? b : lerp(a, b, t));
 const tokenColor = (tokens, name) => tokens?.[name]?.trim() || null; // a value: var() does not work in a fill attribute
@@ -94,24 +92,6 @@ function barsExtent(rows, p) {
 /** An extent rounded outward to tick values (an empty one first widened to one unit). */
 function niceDomain([lo, hi]) {
   return d3.scaleLinear().domain([lo, lo < hi ? hi : lo + 1]).nice(5).domain();
-}
-
-/** The format spec with a `+` for positive values (unless it already names a sign), for a waterfall's contributions. */
-function signedSpec(spec) {
-  const parsed = d3.formatSpecifier(spec);
-  if (parsed.sign === "-") parsed.sign = "+";
-  return String(parsed);
-}
-
-/**
- * Where a waterfall bar's value label sits, decided once from the model at rest: "end" (past its end, or its
- * whisker's), "inside" (inside the bar, against its end) or "start" (past its start), by `fit` along the bar's own
- * direction (`dir`, so a bar of no length still points the way its value does) within `range` (plot pixels).
- */
-function sideOf(b, scale, [lo, hi], dir, gap, width) {
-  const tip = b.lo !== null && b.hi !== null ? (b.up ? Math.max(b.end, b.start + b.hi) : Math.min(b.end, b.start + b.lo)) : b.end;
-  const spot = fit(dir * scale(tip), dir * scale(b.start), width, dir > 0 ? [lo, hi] : [-hi, -lo], gap);
-  return spot.inside ? "inside" : spot.anchor === "start" ? "end" : "start";
 }
 
 /** The target state, from props and rows alone. Pixel positions are derived from it by `geometry`. */
@@ -157,12 +137,8 @@ function buildModel(props, rows, ctx, el) {
   const fill = colors[0] ?? tokenColor(ctx.tokens, "--sd-color-accent");
   const ink = tokenColor(ctx.tokens, "--sd-color-ink");
   const muted = tokenColor(ctx.tokens, "--sd-color-muted");
-  // A waterfall's increases and decreases: the diverging palette's high and low roles (its last and first colours
-  // in a palette without roles), swapped by `invert`.
-  const diverging = flow ? ctx.palette?.("diverging") : null;
-  const high = diverging?.roles?.high ?? diverging?.colors?.at(-1) ?? fill;
-  const low = diverging?.roles?.low ?? diverging?.colors?.[0] ?? fill;
-  const [rise, fall] = props.invert === true ? [low, high] : [high, low];
+  // A waterfall's increases and decreases (./paint-modes.js).
+  const [rise, fall] = flow ? waterfallColors(ctx, fill, props.invert) : [fill, fill];
   const made = categories.map((row) => {
     const raw = row[props.x];
     const key = String(raw);
@@ -193,26 +169,10 @@ function buildModel(props, rows, ctx, el) {
 
   // A waterfall's bars run between running totals over the shown bars (an empty value throws here); its total bar,
   // in the band after the categories, is kept on every step of a slide that shows one at some step.
-  let sum = 0;
-  if (flow) {
-    const stack = waterfall(bars, { total: true });
-    stack.bars.forEach((s, i) => Object.assign(bars[i], { start: s.start, end: s.end, up: bars[i].value >= 0 }));
-    sum = stack.total.end;
-  }
-  let total = null;
-  if (totalProps) {
-    const label = totalProps.total === true ? (ctx.t?.("total") ?? "Total") : String(totalProps.total);
-    const dim = props.highlight != null;
-    total = {
-      key: TOTAL, label, slot: bars.length, value: sum, lo: null, hi: null, start: 0, end: sum, up: sum >= 0,
-      text: fv(sum), title: `${label}: ${fv(sum)}`, shown: flow && hasTotal(props.total), dim,
-      fill: focusPaint(ctx, ink, dim), labelFill: dim && muted ? muted : ink,
-    };
-  }
+  const sum = flow ? stack(bars) : 0;
+  const total = totalProps ? totalBar({ totalProps, props, ctx, slot: bars.length, sum, flow, fv, ink, muted }) : null;
   const bands = total ? [...bars, total] : bars;
-  const visible = bars.filter((b) => b.shown);
-  const links = !flow ? [] : visible.slice(0, -1).map((b, i) => ({ key: b.key, next: visible[i + 1].key, at: b.end }));
-  if (flow && total?.shown && visible.length) links.push({ key: visible.at(-1).key, next: TOTAL, at: visible.at(-1).end });
+  const links = linksOf(bars, total, flow);
 
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
   // Room for a value label at a bar's end. It must not depend on the current `y`, or the plot would resize (and the
@@ -267,13 +227,7 @@ function buildModel(props, rows, ctx, el) {
       bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (flowSlide ? labelRoom : below ? font * 1.4 : 0),
     };
   });
-  if (flow) {
-    // The value labels' room along the value axis: the plot and the label room on either side of it (horizontal), or
-    // the room above it under the axis title and the room kept below it (vertical).
-    const scale = d3.scaleLinear().domain(domain).range(horizontal ? [0, pw] : [ph, 0]);
-    const range = horizontal ? [-labelRoom, pw + margin.right] : [-(margin.top - (hasY ? font * 1.2 : 0)), ph + labelRoom];
-    for (const b of bands) b.side = sideOf(b, scale, range, (horizontal ? 1 : -1) * (b.up ? 1 : -1), font * 0.4, horizontal ? b.text.length * charW : font);
-  }
+  if (flow) placeSides(bands, domain, { horizontal, pw, ph, margin, labelRoom, hasY, font, charW });
   return {
     w, h, font, lineH, orient, mode, flowSlide, margin, pw, ph, domain, ticks, bars, total, links, labelRoom, hasInterval,
     axes: { x: hasX ? String(props.axes.x) : "", y: hasY ? String(props.axes.y) : "" },
@@ -300,9 +254,8 @@ const staticView = (m) => ({
   domain: m.domain, pw: m.pw, ph: m.ph, margin: { left: m.margin.left, top: m.margin.top },
   ticks: m.ticks.map((t) => ({ ...t, opacity: 1 })),
   bars: new Map(marksOf(m).map((b) => [b.key, { ...restOf(m, b), whisker: 1, visible: b.shown, labelOpacity: 1, fill: b.fill, labelFill: b.labelFill }])),
-  links: m.mode === "waterfall" ? m.links.map((l) => ({ key: l.key, a: slotOf(m, l.key), b: slotOf(m, l.next), at: l.at, opacity: 1 })) : null,
+  links: m.mode === "waterfall" ? staticLinks(m) : null,
 });
-const slotOf = (m, key) => (key === TOTAL ? m.total.slot : m.bars.find((b) => b.key === key).slot);
 
 /** The start of an entrance: every shown bar at zero length, with no whisker and no label (as a morph's t = 0). */
 const emptyView = (m) => {
@@ -378,23 +331,8 @@ export default {
             .attr("x", x).attr("dy", (_l, j) => (j > 0 ? m.lineH : horizontal ? "0.35em" : "0.71em")), (l) => l);
         });
 
-      // Waterfall connectors, under the bars (at a fixed place in the plot, so the markup does not depend on how
-      // many frames were painted): each runs straight across the bands from its bar's end to the next bar's edge.
-      const connectors = plot.selectAll("g.sd-connectors").data(view.links ? [0] : [])
-        .join((enter) => enter.insert("g", "g.sd-bars").attr("class", "sd-connectors"));
-      connectors.selectAll("line.sd-connector").data(view.links ?? [], (d) => d.key)
-        .join((enter) => enter.append("line").attr("class", "sd-connector"))
-        .attr("data-key", (d) => d.key)
-        .order()
-        .each(function (d) {
-          const [a, b] = [centerOf(d.a), centerOf(d.b)];
-          const half = (b >= a ? 1 : -1) * (thick / 2);
-          const at = scale(d.at);
-          d3.select(this)
-            .attr("x1", horizontal ? at : a + half).attr("x2", horizontal ? at : b - half)
-            .attr("y1", horizontal ? a + half : at).attr("y2", horizontal ? b - half : at)
-            .attr("opacity", d.opacity === 1 ? null : d.opacity);
-        });
+      // Waterfall connectors, under the bars (none on plain bars).
+      paintConnectors(plot, view, { centerOf, thick, scale, horizontal });
 
       // Bars: rect, whisker and value label per category, keyed by category.
       const groups = gBars.selectAll("g.sd-bar-group").data(marks, (d) => d.key).join((enter) => {
@@ -442,16 +380,7 @@ export default {
           const label = text(sel.select("text"), d.text);
           if (m.mode === "waterfall") {
             // On the side the model chose at rest, following the bar's ends (and whisker) as they move.
-            const dir = (horizontal ? 1 : -1) * (d.up ? 1 : -1); // the bar's direction in pixels
-            const tip = hasWhisker ? scale(d.up ? Math.max(v, lerp(v, s.hi, s.whisker)) : Math.min(v, lerp(v, s.lo, s.whisker))) : end;
-            const side = s.side ?? "end";
-            const at = side === "end" ? tip + dir * gap : side === "inside" ? end - dir * gap : base - dir * gap;
-            const forward = side === "end" ? dir > 0 : dir < 0; // the text runs towards higher pixel values from `at`
-            label
-              .attr("x", horizontal ? at : center)
-              .attr("y", horizontal ? center : at)
-              .attr("dy", horizontal ? "0.35em" : forward ? "0.71em" : atBaseline)
-              .attr("text-anchor", horizontal ? (forward ? "start" : "end") : "middle");
+            placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, center, hasWhisker, gap, atBaseline });
           } else {
             // The value label sits past the bar's end, or past the whisker's when there is one.
             const positive = v >= 0;
@@ -509,9 +438,6 @@ export default {
         const now = live.get(b.key);
         return p ? ["fill", "labelFill"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
       });
-      // A bar's ends at rest, and the point it grows out of (plain bars: zero; a waterfall's: its start).
-      const rest = (m, b) => (m.mode === "waterfall" ? [b.start, b.end] : [0, b.value ?? 0]);
-      const point = (m, b) => (m.mode === "waterfall" ? [b.start, b.start] : [0, 0]);
       let first = true;
       const paintAt = (t) => {
         const view = {
@@ -556,49 +482,15 @@ export default {
             });
             continue;
           }
-          // Both ends tween over the whole motion: from its ends (a bar that was hidden: the point it grows out of; an
-          // entrance: zero, so the whole waterfall grows out of zero and stays joined) to its new ends (or its point).
-          const fromModel = prev.has(b.key) ? from : to;
-          const [s0, e0] = enterAll ? [0, 0] : wasShown ? rest(fromModel, p) : point(fromModel, p);
-          const [s1, e1] = b.shown ? rest(to, b) : point(to, b);
-          const start = lerp(s0, s1, t);
-          const lo = lerpNull(p.lo, b.lo, t);
-          const hi = lerpNull(p.hi, b.hi, t);
+          // Both ends tween over the whole motion, from where the bar was to where it goes (./paint-modes.js).
+          const ends = flowEnds(from, to, p, b, { known: prev.has(b.key), enterAll, wasShown, t });
           view.bars.set(b.key, {
-            slot, start, v: lerp(e0, e1, t), lo: lo === null ? null : start + lo, hi: hi === null ? null : start + hi,
-            whisker, visible: from01 > 0 || to01 > 0, labelOpacity, side: (from01 > to01 ? p.side : b.side) ?? b.side, ...live1,
+            slot, ...ends, whisker, visible: from01 > 0 || to01 > 0, labelOpacity, side: (from01 > to01 ? p.side : b.side) ?? b.side, ...live1,
           });
         }
-        if (to.total) {
-          // The total stays in its band: it tweens its end while it stays, and fades in or out where it is.
-          const a = enterAll ? null : prev.get(TOTAL) ?? null;
-          const b = to.total;
-          const [was, is] = [Boolean(a?.shown), b.shown];
-          let v = b.end;
-          let opacity = 1;
-          let labelOpacity = 1;
-          if (enterAll) [v, labelOpacity] = [b.end * t, t];
-          else if (was && is) v = lerp(a.end, b.end, t);
-          else if (is) opacity = t;
-          else if (was) [v, opacity] = [a.end, 1 - t];
-          view.bars.set(TOTAL, {
-            slot: b.slot, start: 0, v, lo: null, hi: null, whisker: 1, visible: was || is, labelOpacity, opacity,
-            side: was && !is ? a.side : b.side, ...live.get(TOTAL),
-          });
-        }
-        if (flow) {
-          // A connector leaves its bar's current end. One that stays turns to its new next bar; a new one fades in, and
-          // one that goes fades out.
-          const now = (key) => view.bars.get(key);
-          const was = new Map((enterAll || !from ? [] : from.links).map((l) => [l.key, l]));
-          const is = new Map(to.links.map((l) => [l.key, l]));
-          view.links = [];
-          for (const [key, l] of is) {
-            const o = was.get(key);
-            view.links.push({ key, a: now(key).slot, b: o ? lerp(now(o.next).slot, now(l.next).slot, t) : now(l.next).slot, at: now(key).v, opacity: o ? 1 : t });
-          }
-          for (const [key, o] of was) if (!is.has(key)) view.links.push({ key, a: now(key).slot, b: now(o.next).slot, at: now(key).v, opacity: 1 - t });
-        }
+        // The total stays in its band; the connectors leave their bars' current ends.
+        if (to.total) view.bars.set(TOTAL, totalView(enterAll ? null : prev.get(TOTAL) ?? null, to.total, { enterAll, t, live: live.get(TOTAL) }));
+        if (flow) view.links = linksView(from, to, view, { enterAll, t });
         paint(to, view, first);
         first = false;
       };
