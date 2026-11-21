@@ -31,7 +31,8 @@ All notable changes to stepdeck are recorded here. The format follows
 - **A blank-looking cell is missing, never zero.** A CSV cell that holds only spaces keeps its column as text, and
   `chart.bar` and `chart.line` drew it as 0: a bar labelled `0`, a line that dropped to the axis. Every chart now
   reads it as missing, as an empty cell: no bar and no label (a waterfall reports the category as empty), no point on
-  the line, "no data" in `chart.points`. Decks with such cells change: they were drawn wrong.
+  the line, "no data" in `chart.points`. Decks with such cells change: they were drawn wrong. `chart.line` also
+  leaves out a cell that is not a number, such as `NA`, instead of drawing a broken point.
 - **`chart.line` keeps its last x tick label inside the element.** A chart without `series` kept one font size of
   room on the right, less than half a four-character tick label such as `2050`, which then overhung the element.
   The right margin is now at least half the widest x tick label, so in such decks the plot is about 13 px narrower.

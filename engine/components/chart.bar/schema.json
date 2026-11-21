@@ -74,7 +74,7 @@
           "additionalProperties": false,
           "required": ["by"],
           "properties": {
-            "by": { "type": "string", "description": "Column to order by.", "examples": ["agent_days"] },
+            "by": { "type": "string", "description": "Column to order by. A column with a number in any cell sorts by number, its other cells last; any other column sorts as text, by code point.", "examples": ["agent_days"] },
             "order": { "enum": ["asc", "desc"], "description": "Ascending (the default) or descending.", "examples": ["desc"] }
           }
         },

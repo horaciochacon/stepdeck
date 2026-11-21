@@ -75,11 +75,11 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 
 The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval`, `forecast` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
 
-Rows whose x or y cell is empty are left out of the line; the line joins the points on either side. The band is broken where `lower` or `upper` is empty. `annotate` entries whose `x` is not a finite number are dropped.
+Rows whose x or y cell is empty, blank or not a number (such as `NA`) are left out of the line; the line joins the points on either side. The band is broken where `lower` or `upper` is missing in the same way. `annotate` entries whose `x` is not a finite number are dropped.
 
 ## Scales and ticks
 
-- **x domain**: the extent of the x column over every row. Rows with an x but an empty y still widen the x domain, so a trailing x with no y stretches the axis past the end of the line. If all x values are equal, the domain is widened to `[x, x + 1]`.
+- **x domain**: the extent of the x column over every row. Rows with an x but a missing y still widen the x domain, so a trailing x with no y stretches the axis past the end of the line. If all x values are equal, the domain is widened to `[x, x + 1]`.
 - **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not, plus every `y` value of every draws file that a step of the slide with the same `y` names in `draws`. It always includes 0, and is rounded out with `nice(5)`. Because hidden series and draws not yet shown count, the y axis does not jump when a series or the fan appears; it changes only when `y`, `interval` or the data change.
 - **Ticks**: 5 y ticks and 6 x ticks (d3 tick counts, so the exact number can differ by one or two). Y ticks carry horizontal grid lines.
 - **Margins** are computed from character counts, not measured text, so the layout never depends on font loading. The left margin fits the longest y tick label; the right margin fits the longest shown series name, and is never less than half the widest x tick label (the last tick is centred on the plot's end).
