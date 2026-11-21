@@ -227,12 +227,35 @@ export function canvasLayer(el, { left, top, pw, ph }) {
   return canvas;
 }
 
-/** 32-bit FNV-1a of a string's UTF-16 code units, as 8 hex digits. */
-function fnv1a(text) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
-  return (h >>> 0).toString(16).padStart(8, "0");
+// 32-bit FNV-1a over UTF-16 code units, fed piece by piece so the signature text is never built: `feed` hashes a
+// string's code units into `h`, `feedTenth` the characters of `${Math.round(v * 10) / 10}`. `hex` gives 8 hex digits.
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+const feed = (h, text) => {
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), FNV_PRIME);
+  return h;
+};
+const DIGITS = new Uint8Array(16);
+function feedTenth(h, v) {
+  const k = Math.round(v * 10);
+  // A tenth is written as its integer digits, then "." and one digit unless it is zero; "-" first when negative
+  // (-0 is written "0", as String does). Beyond 1e15 tenths, String's own spelling.
+  if (!(Math.abs(k) < 1e15)) return feed(h, String(k / 10));
+  if (k < 0) h = Math.imul(h ^ 45, FNV_PRIME); // "-"
+  const n = Math.abs(k);
+  const tenth = n % 10;
+  let whole = (n - tenth) / 10;
+  let count = 0;
+  do {
+    const d = whole % 10;
+    DIGITS[count++] = d;
+    whole = (whole - d) / 10;
+  } while (whole > 0);
+  while (count > 0) h = Math.imul(h ^ (48 + DIGITS[--count]), FNV_PRIME);
+  if (tenth) h = Math.imul(Math.imul(h ^ 46, FNV_PRIME) ^ (48 + tenth), FNV_PRIME); // "." and the digit
+  return h;
 }
+const hex = (h) => (h >>> 0).toString(16).padStart(8, "0");
 
 /** The runs of consecutive points whose coordinates are both finite numbers: a point that is not breaks the line. */
 function runsOf(points) {
@@ -273,14 +296,23 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
     g.lineJoin = "round";
     g.lineCap = "round";
   }
-  const tenth = (v) => Math.round(v * 10) / 10;
-  let signature = "";
+  // The signature hashes, line by line, `${color}|${width}|${alpha}|` and the stretches (each point `${x},${y}`, points
+  // joined by ";", stretches by "/"), then "\n", without building that text.
+  let h = FNV_OFFSET;
   for (const line of lines) {
     const runs = runsOf(line.points);
     if (!runs.length) continue;
-    const w = tenth(line.width ?? width);
+    const w = Math.round((line.width ?? width) * 10) / 10;
     const a = Math.round((line.alpha ?? alpha) * 1000) / 1000;
-    signature += `${line.color}|${w}|${a}|${runs.map((run) => run.map(([x, y]) => `${tenth(x)},${tenth(y)}`).join(";")).join("/")}\n`;
+    h = feed(h, `${line.color}|${w}|${a}|`);
+    runs.forEach((run, r) => {
+      if (r) h = Math.imul(h ^ 47, FNV_PRIME); // "/"
+      run.forEach(([x, y], i) => {
+        if (i) h = Math.imul(h ^ 59, FNV_PRIME); // ";"
+        h = feedTenth(Math.imul(feedTenth(h, x) ^ 44, FNV_PRIME), y); // x "," y
+      });
+    });
+    h = Math.imul(h ^ 10, FNV_PRIME); // "\n"
     if (!g) continue;
     g.beginPath();
     for (const run of runs) run.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
@@ -290,5 +322,5 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
     g.stroke();
   }
   if (g) g.globalAlpha = 1;
-  return fnv1a(signature);
+  return hex(h);
 }
