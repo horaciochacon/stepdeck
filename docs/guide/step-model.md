@@ -172,6 +172,10 @@ node cli/index.js dump examples/spike --slide trend
 
 `dump` needs a browser: set `STEPDECK_PLAYWRIGHT` to a playwright package folder (see the README). It lists, per step, which elements are visible and which ids changed since the previous step (`changed: chart, n1` at `annotate`, `changed: chart, big` at `total`).
 
+### Charts keep one scale across steps
+
+A figure that builds up must not rescale when a step shows more of it. So a chart sizes its axis from every step of the slide, not from the step on screen. `chart.points`, a `chart.bar` in `waterfall` or `back-to-back` mode, and the draw fan of `chart.line` read the props every step resolves to (a component gets them as [`ctx.stepProps`](../reference/component-contract.md#ctxstepprops)) and fit the widest of them, so a new `y`, `sort` or `shown` that appears later is already inside the axis. `chart.line` and plain `chart.bar` fit every row of the data, shown or not, and move the axis only when the column they plot changes. A `domain` prop is used exactly as given. The axes of `chart.points` and of a waterfall or back-to-back `chart.bar` count only the steps that read the same `data` file, so when a step switches `data`, set `domain` on both steps. Each component's reference page says what its axis covers.
+
 ## `only`: a change for one step
 
 `only` is a merge patch, like `set`, applied on top of the folded state of its own step. It is never folded, so the next step starts from the state before it. Use it for a highlight or emphasis that should last one click. `only` changes props only; it cannot show or hide an element (use `at` for a one-step appearance).

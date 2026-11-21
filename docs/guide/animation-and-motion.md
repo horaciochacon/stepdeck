@@ -106,7 +106,8 @@ A component whose content has a natural build declares `"x-enter": "own"` at the
 | Component | Its build |
 |---|---|
 | `chart.line` | The lines draw along their length. |
-| `chart.bar` | The bars grow from zero, then the whiskers draw. |
+| `chart.bar` | The bars grow from zero, then the whiskers draw. A waterfall grows out of zero as a whole. |
+| `chart.points` | The dots grow out of the reference line (out of their `from`, for a pair) and their whiskers draw; strips fade in from left to right. |
 | `big-number` | The figure fades in and counts up from 0. |
 | `list` | The visible items rise in, one after another; done ticks draw. |
 | `chat` | The visible messages rise in, one after another; with `typing`, the newest is then typed. |
@@ -232,8 +233,9 @@ How long each motion lasts:
 | [markdown](../reference/components/markdown.md) | Its box plays `--sd-enter` | A changed `md` fades in |
 | [image](../reference/components/image.md) | Its box plays `--sd-enter` | A new `src` fades in once loaded; a new caption fades in |
 | [big-number](../reference/components/big-number.md) | Fades in and counts up from 0 | Counts from the previous value; a changed `label`, `ci`, `prefix`, `suffix` or `format` fades that part |
-| [chart.line](../reference/components/chart-line.md) | The lines draw | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` dims the others; annotations fade |
-| [chart.bar](../reference/components/chart-bar.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `highlight` dims the others |
+| [chart.line](../reference/components/chart-line.md) | The lines draw | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` dims the others; annotations fade; `points` and `forecast` fade in or out; a changed `until` sweeps the lines along x behind a cursor, with a counting `ticker`; `draws.shown` fades draws in and out on a canvas |
+| [chart.bar](../reference/components/chart-bar.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `sort` slides the bars to their new bands; `highlight` dims the others; in `waterfall` the bars and bases tween together, and `bars` to `waterfall` morphs; in `back-to-back` both sides move together |
+| [chart.points](../reference/components/chart-points.md) | Dots grow out of the reference line, then whiskers draw; strips fade in from left to right | `y`, `from`, `interval` and `domain` tween (a `from` adds a connector that grows behind the sliding dot); rows added to `shown` grow in, removed ones shrink back; `sort` slides the rows; `highlight` and `focus` dim the others |
 | [terminal](../reference/components/terminal.md) | Types the command (with `typing`), then the lines fade in | When `shown` grows, new lines fade in, staggered; the command types only from `shown: 0` |
 | [list](../reference/components/list.md) | The visible items rise in, staggered | Newly shown items rise in, staggered; a newly done tick draws; `active` tweens text color |
 | [chat](../reference/components/chat.md) | The visible messages rise in, staggered; the newest types (with `typing`) | Newly shown messages rise in, staggered; with `typing`, the newest is then typed |
@@ -243,7 +245,7 @@ How long each motion lasts:
 Notes:
 
 - **Changing `items` or `marker` on a list**, and any change that makes list, chat, diagram or timeline rebuild their markup, renders directly with no motion.
-- **chart.bar skips motion when the bars are not comparable**: when `orient` changes, or when the set or order of categories changes. The new state is drawn directly.
+- **chart.bar and chart.points skip motion when the marks are not comparable**: when `orient` changes (bar), when the set of categories changes (`data` or `x` points at different rows), when `id` is set or removed (points), or when `mode` changes to or from `back-to-back`, or `group` or `groups` changes (bar). The new state is drawn directly. A new order of the same categories, from `sort`, slides.
 - **Text that appears and changes on the same step** is shown with its new text; only a change while it stays visible crossfades.
 
 ## Slide devices

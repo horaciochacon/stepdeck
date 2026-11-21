@@ -311,7 +311,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | --- | --- |
 | ``chart.points needs a `data` path`` | `data` is missing or empty. |
 | `<data> is not a table (use a .csv file)` | `data` points at a file that does not load as a list of rows. |
-| ``chart.points needs `<prop>` (a column name)`` | `x` or `y` is missing or not a non-empty string, or an `interval` key is empty or not a string. |
+| ``chart.points needs `<prop>` (a column name)`` | `<prop>` is `x`, `y`, `id`, `from`, `interval.lower` or `interval.upper`. `x` and `y` must be non-empty strings; `id`, `from` and the interval keys are optional, but when set, an empty string (or a value that is not a string) is this error. |
 | `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y`, `id`, `from` or `interval` is not in the CSV header. |
 | ``\`domain\` must be [min, max] with min < max`` | `domain` is not two finite numbers in increasing order. |
 | ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category, without `id`. |

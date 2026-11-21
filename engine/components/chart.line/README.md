@@ -19,7 +19,7 @@ annotations fade in, changing `y` morphs every line point by point, point marker
 | `interval` | `{lower, upper}` | none | tween | Shaded band between two columns around each series. |
 | `points` | boolean | `false` | fade | A dot on every data point of every shown series; dots after `forecast.from` are hollow and slightly larger. |
 | `forecast` | `{from, label?}` | none | fade | From the x value `from` on, each line is dotted, its points hollow and its band lighter; the plot from there to its end is shaded, with a labelled divider (`label`, default the deck language's "Forecast"). |
-| `until` | number | none | tween | Shows lines, bands, points and the forecast only up to this x, cut exactly there; the x axis never changes. Played forward, the lines extend from the old value to the new one behind a vertical cursor; a jump or a backward move snaps. |
+| `until` | number | none | tween | Shows lines, bands, points and the forecast only up to this x, cut exactly there; the x axis never changes. Played forward, the lines sweep from the old value to the new one (extending, or retracting when `until` is lowered) behind a vertical cursor; a jump or a backward move snaps. |
 | `ticker` | boolean | `false` | snap | With `until`, a large label of the current x (`format.x`) in the plot's upper left, counting through the sweep and resting on `until`. Without `until` it does nothing (`validate` warns). |
 | `draws` | `{data, id, shown, seed?}` | none | tween | A fan of uncertainty draws from the CSV `data` (the chart's `x`, `y`, `series` columns and the draw column `id`): the first `shown` of a fixed order of the ids (`seed`, default 1), painted on a canvas under the lines in their series' color and cut at `until`. A played change of `shown` fades draws in and out. |
 
@@ -31,7 +31,7 @@ Behaviour:
   while its box stays still; axes, labels, bands and annotations show at once. It waits for its stagger slot like
   any entering element, and the lines are undrawn the moment it shows. With `enter: "none"`, or a box motion such
   as `enter: "rise"`, the chart is drawn at once (the box moves instead).
-- **Morph** (spec §6.3): the component's own keyed join. Series are keyed by name, points by
+- **Morph**: the component's own keyed join. Series are keyed by name, points by
   series and x, ticks by value, annotations by x. With `info.animate` it interpolates from the
   previous state; all motion runs through `ctx.animate` bound to `info.signal`, so an aborted
   step snaps to its end state.

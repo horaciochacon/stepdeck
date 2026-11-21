@@ -8,8 +8,8 @@ bars extend left and right of a centre rule, as in a population pyramid (see Bac
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
-| `data` | string | (required) | snap | CSV path relative to the deck root. One row per category. |
-| `x` | string | (required) | snap | Category column. Its text labels the band. A category may appear in one row only. |
+| `data` | string | (required) | snap | CSV path relative to the deck root. One row per category; with `mode: "back-to-back"`, one row per category and group. |
+| `x` | string | (required) | snap | Category column. Its text labels the band. A category may appear in one row only, except in back-to-back, where it has one row per group. |
 | `y` | string | (required) | tween | Numeric value column. A change tweens every bar to its new length. |
 | `interval` | `{lower, upper}` | none | tween | Columns of a whisker at each bar's end (e.g. an uncertainty interval). Drawn after its bar. |
 | `format` | `{x?, y?}` | see below | snap | d3-format specs, localized by the deck language: `y` for value labels, ticks and the interval text, `x` for numeric categories. |
@@ -17,7 +17,7 @@ bars extend left and right of a centre rule, as in a population pyramid (see Bac
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | Categories down the left (bars point right) or along the bottom (bars point up). |
 | `sort` | `"none"` \| `"value"` \| `"-value"` \| `{by, order?}` \| string[] | `"none"` | tween | Order of the bars: the data order, by `y` (lowest or highest first), by another column, or a list of categories first. See Sorting. |
 | `mode` | `"bars"` \| `"waterfall"` \| `"back-to-back"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars stack into a running total over the shown bars. See Waterfall. A change between the two morphs each bar. `back-to-back`: two groups left and right of a centre rule (horizontal only); a change to or from it snaps. See Back-to-back. |
-| `total` | `true` \| string | none | fade | Waterfall only: a last bar from zero to the sum, labelled "Total" (`true`) or with the string. |
+| `total` | boolean \| string | `false` | fade | Waterfall only: a last bar from zero to the sum, labelled "Total" (`true`) or with the string; `false` adds none. |
 | `invert` | boolean | `false` | fade | Waterfall only: swaps the colours of increases and decreases. |
 | `group` | string | none | snap | Back-to-back only: the column naming each row's group. Exactly two values, one row per category and group. |
 | `groups` | `[left, right]` | data order | snap | Back-to-back only: the two values of `group`, left side first. |

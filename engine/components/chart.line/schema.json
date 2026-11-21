@@ -120,7 +120,7 @@
     },
     "until": {
       "type": "number",
-      "description": "Shows lines, bands, points and the forecast only up to this x value, cut exactly there (the last segment is interpolated). The x axis never changes. Played forward, the lines extend continuously from the old value to the new one behind a vertical cursor; backward or jumped to, it snaps. Before the first x nothing is drawn; after the last x the whole chart is. Series labels sit after each line's visible end.",
+      "description": "Shows lines, bands, points and the forecast only up to this x value, cut exactly there (the last segment is interpolated). The x axis never changes. Played forward, the lines sweep continuously from the old value to the new one (extending, or retracting when `until` is lowered) behind a vertical cursor; backward or jumped to, it snaps. Before the first x nothing is drawn; after the last x the whole chart is. Series labels sit after each line's visible end.",
       "examples": [2023, 2050],
       "x-transition": "tween"
     },

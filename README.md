@@ -14,7 +14,7 @@ stepdeck is an engine for step-by-step HTML presentations. Slides are plain data
 
 This page is the front door. It shows what you get, a quick start and one slide, then points deck authors, agent operators and contributors to the right page in [docs/](docs/index.md).
 
-**Status.** First public release (0.1.0), with a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The built-in kit has 11 components and 5 layouts. The default theme is `modern`, and `academic-light` is the plain alternative; see the [changelog](CHANGELOG.md). PDF export is not implemented.
+**Status.** First public release (0.1.0), with a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The built-in kit has 12 components and 5 layouts. The default theme is `modern`, and `academic-light` is the plain alternative; see the [changelog](CHANGELOG.md). PDF export is not implemented.
 
 ## What you get
 

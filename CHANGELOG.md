@@ -75,6 +75,31 @@ All notable changes to stepdeck are recorded here. The format follows
   turns to the new optional theme token `--sd-color-dim` (opacity stays 1, text turns `--sd-color-muted`), the
   focused marks are drawn above the dimmed ones, and the change tweens over `--sd-duration-fast`. A theme
   without `--sd-color-dim` falls back to `--sd-color-rule`.
+- **`chart.points`, a twelfth built-in.** Estimates from a CSV, one row per category: a dot, an optional interval
+  whisker and the value beside it, against an optional `reference` line. `from` turns each row into a before and
+  after pair (a hollow dot, a connector that grows, the filled dot); `shown`, `highlight` and `sort` work as in
+  `chart.bar`; an empty value reads "no data", never a dot at zero. With `id` it draws beeswarm strips of many
+  points per category, with a summary tick and one item followed across the strips (`focus`). It builds its own
+  entrance, like the other charts.
+- **`chart.line` for data stories.** `points` puts a dot on every data point. `forecast: { from, label? }` dots the
+  lines from an x on and shades the plot from there. `until` sweeps the lines along the x axis behind a cursor,
+  with `ticker: true` for a large counting label of the x, so a story can run from data into forecast. `draws`
+  paints a fan of uncertainty draws on a canvas under the lines; `shown` raises or lowers how many.
+- **`chart.bar` re-sorts and takes two new modes.** `sort` orders the bars by value, by another column or by a
+  list, and a change slides the bars to their new places. `mode: "waterfall"` stacks the bars into a running
+  total (`total`, `invert`); `mode: "back-to-back"` puts two groups left and right of a centre rule, as in a
+  population pyramid (`group`, `groups`).
+- **Charts keep one scale across steps.** `chart.points`, a waterfall or back-to-back `chart.bar`, and the draw
+  fan size their axis from every step of the slide, so a step that shows more never moves the axis. `domain`
+  is still used as given.
+- **For component authors:** `ctx.stepProps` (the element's props at every step) and `ctx.chart`, 26 building
+  blocks of the built-in charts: table loading, extents, the plot frame, keyed joins, dots, whiskers, rules,
+  halos, a canvas layer, morph and entrance helpers, and colour helpers. The guide has a new section, "Build a
+  chart from the engine's pieces", and the contract an example per group.
+- `validate` warns `chart-prop-unused` for `ticker` without `until` and for `invert` or `total` outside a
+  waterfall, and reports `chart-orient` for a back-to-back chart with `orient: "vertical"`. `dump` reports a
+  chart's canvas layer, and `check --played` compares it. The engine strings gain `forecast`, `total` and
+  `noData`.
 
 ## [0.1.0] · 2026-11-19 · first public release
 

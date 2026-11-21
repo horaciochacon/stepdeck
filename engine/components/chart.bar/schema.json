@@ -9,13 +9,13 @@
   "properties": {
     "data": {
       "type": "string",
-      "description": "Path to a CSV file, relative to the deck root. One row per category.",
+      "description": "Path to a CSV file, relative to the deck root. One row per category; with `mode: \"back-to-back\"`, one row per category and group.",
       "examples": ["data/durations.csv"],
       "x-transition": "snap"
     },
     "x": {
       "type": "string",
-      "description": "Column holding the category of each row (its text labels the band). Each category appears in one row only.",
+      "description": "Column holding the category of each row (its text labels the band). Each category appears in one row only, except with `mode: \"back-to-back\"`, where it has one row per group.",
       "examples": ["task"],
       "x-transition": "snap"
     },
@@ -93,7 +93,7 @@
     },
     "total": {
       "anyOf": [{ "type": "boolean" }, { "type": "string", "minLength": 1 }],
-      "description": "With `mode: \"waterfall\"`, a last bar from zero to the sum of the shown bars, in the theme's ink, joined to the last bar by a connector. `true` labels it with the engine string (\"Total\"), a string with that text. Its band is kept on every step of the slide, so it fades in and out without moving the other bars.",
+      "description": "With `mode: \"waterfall\"`, a last bar from zero to the sum of the shown bars, in the theme's ink, joined to the last bar by a connector. `true` labels it with the engine string (\"Total\"), a string with that text, and `false` (the default) adds none. Its band is kept on every step of the slide, so it fades in and out without moving the other bars.",
       "examples": [true, "Net change"],
       "x-transition": "fade"
     },
