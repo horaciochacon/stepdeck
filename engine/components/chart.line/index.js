@@ -35,15 +35,23 @@
 // each line's visible end. Every part is derived from a series' points by `partsOf` (./parts.js), in the final state and in
 // every frame of a played change alike.
 //
+// `draws` paints a fan of uncertainty draws (./fan.js) on a canvas layer under the SVG: the first `shown` ids of a fixed
+// order (`drawOrder`, by `seed`), each a thin line in its series' color (ink without series; dimmed with the series), cut at
+// `until`, with an opacity and a width that fall as more are shown. The summary lines then sit on a halo. A played change
+// repaints the canvas every frame of the element's morph (new draws fade in, kept ones go to their new opacity, removed ones
+// fade out); the end state is painted from props like everything else, so a played arrival equals a jump pixel for pixel.
+//
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, frame, keyed, settle, morph, entrance, undraw } from "../../core/chart.js";
-import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots } from "./parts.js";
+import { loadTable, tickFormat, extentOf, drawOrder, frame, keyed, settle, halo, canvasLayer, paintLines, morph, entrance, undraw } from "../../core/chart.js";
+import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots, cutAt } from "./parts.js";
+import { fanAlpha, fanWidth, fanModel, loadDraws } from "./fan.js";
 import { textColor } from "../../core/color.js";
 import { SVG_NS, num, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const NO_SERIES = "all"; // series key when props.series is absent
+const LINE_WIDTH = 5; // the stroke width of path.sd-line in core/stepdeck.css, when no line can be read
 
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
 
@@ -54,8 +62,50 @@ const loadRows = (props, ctx) =>
     ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
   ]);
 
-/** The target state, in canvas pixels, computed from props alone. */
-function buildModel(props, rows, ctx, el) {
+/**
+ * The [min, max] of `y` over every draws file a step of the slide with the current `y` names, each read with that step's
+ * own columns (`ctx.stepProps`; the current props alone without it), so the y axis has room for the fan before it is
+ * shown. Steps with another `y` do not count: a `y` change rescales the axis as it always did. A step whose draws do not
+ * load is skipped: its own update reports the problem. Null when no such step names draws.
+ */
+async function drawsExtent(props, ctx) {
+  const named = new Map();
+  for (const p of [props, ...(ctx.stepProps ?? [])]) {
+    if (p?.draws && p.y === props.y) named.set(JSON.stringify([p.draws.data, p.x, p.y, p.series ?? null, p.draws.id, p.types ?? null]), p);
+  }
+  const found = (await Promise.all([...named.values()].map((p) => loadDraws(p, ctx).then((rows) => extentOf(rows, [p.y]), () => null)))).filter(Boolean);
+  return found.length ? [Math.min(...found.map((e) => e[0])), Math.max(...found.map((e) => e[1]))] : null;
+}
+
+/**
+ * The fan of the model: `{ shown, seed, alpha, order, geometry, lines }`. `lines` are the painted draws in paint order
+ * (series below the focused ones first, as the summary lines stack, then by `order`), each `{ key, series, id, points }`
+ * with `points` `{ x, px, py }` in plot pixels (`py` null where the value is missing). `geometry` names what the pixel
+ * positions depend on: two fans with the same geometry place a draw the same.
+ */
+function fanOf(props, rows, series, x, y) {
+  const { ids, bySeries } = fanModel(rows, props, { x: props.x, y: props.y, series: props.series });
+  const { shown } = props.draws;
+  const seed = props.draws.seed ?? 1;
+  const order = drawOrder(ids, seed);
+  const painted = order.slice(0, shown);
+  const lines = [];
+  for (const s of [...series.filter((d) => d.dimmed), ...series.filter((d) => !d.dimmed)]) {
+    const own = bySeries.get(s.name);
+    for (const id of own ? painted : []) {
+      const points = own.get(id);
+      if (points) lines.push({ key: `${s.name}|${id}`, series: s.name, id, points: points.map(([xv, yv]) => ({ x: xv, px: x(xv), py: yv === null ? null : y(yv) })) });
+    }
+  }
+  const geometry = JSON.stringify([props.draws.data, props.x, props.y, props.series ?? null, props.types ?? null, x.domain(), x.range(), y.domain(), y.range()]);
+  return { shown, seed, alpha: fanAlpha(shown), order, geometry, lines };
+}
+
+/**
+ * The target state, in canvas pixels, computed from props alone. `draws` is `{ rows, extent }`: the rows of
+ * `draws.data` (null without `draws`) and `drawsExtent`.
+ */
+function buildModel(props, rows, ctx, el, draws = null) {
   const valueOf = (row, col) => (row[col] == null || row[col] === "" ? null : Number(row[col]));
   const seriesOf = (row) => (props.series ? String(row[props.series]) : NO_SERIES);
 
@@ -63,6 +113,7 @@ function buildModel(props, rows, ctx, el) {
   const order = [...new Set(rows.map(seriesOf))];
   const colors = ctx.palette?.("categorical")?.colors ?? [];
   const background = ctx.tokens?.["--sd-color-background"];
+  const ink = ctx.tokens?.["--sd-color-ink"]?.trim() || null;
   const muted = ctx.tokens?.["--sd-color-muted"]?.trim() || null; // a value: var() does not work in a fill attribute
   const shown = new Set(Array.isArray(props.series_shown) ? props.series_shown.map(String) : order);
 
@@ -72,6 +123,7 @@ function buildModel(props, rows, ctx, el) {
   // The y domain covers every series in the data (not only the shown ones) so the axis does not
   // jump as series appear; it always includes 0.
   const ys = rows.flatMap((r) => [valueOf(r, props.y), lower ? valueOf(r, lower) : null, upper ? valueOf(r, upper) : null]).filter((v) => v !== null);
+  if (draws?.extent) ys.push(...draws.extent); // and every draw any step can show
   const xDomain = xs.length ? d3.extent(xs) : [0, 1];
   if (xDomain[0] === xDomain[1]) xDomain[1] = xDomain[0] + 1;
   const yScale0 = d3.scaleLinear().domain([Math.min(0, d3.min(ys) ?? 0), Math.max(0, d3.max(ys) ?? 1) || 1]).nice(5);
@@ -138,6 +190,8 @@ function buildModel(props, rows, ctx, el) {
       dimmed,
       // A series out of focus turns to the theme's dim color (opacity stays 1) and is drawn below the focused ones.
       paint: focusPaint(ctx, color, dimmed),
+      // Its draws (`draws`): the series color, or the ink when the chart has no series; dimmed with the series.
+      fanPaint: focusPaint(ctx, props.series ? color : ink, dimmed),
       // Labels are text: their color changes, so a dimmed series' label switches to the muted text color.
       labelColor: dimmed && muted ? muted : colors.length ? textColor(color, background) : null,
       points,
@@ -157,6 +211,7 @@ function buildModel(props, rows, ctx, el) {
     w, h, font, margin, pw, ph,
     xDomain: x.domain(), xRange: x.range(), yDomain: y.domain(), yRange: y.range(),
     xTicks, yTicks, series, annotations, forecast, until, cut, ticker, avoid, fmtX: fx,
+    fan: draws?.rows ? fanOf(props, draws.rows, series, x, y) : null,
     showPoints: Boolean(props.points),
     hasSeriesLabels: Boolean(props.series),
     hasInterval: Boolean(lower && upper),
@@ -183,6 +238,7 @@ export default {
 
     let last = null; // the last fully applied model
     await loadRows(props, ctx); // fail early (the controller shows the error) when a column is missing
+    if (props.draws) await loadDraws(props, ctx);
 
     const scalesAt = (from, to, t) => ({
       x: d3.scaleLinear().domain(lerpArr(from.xDomain, to.xDomain, t)).range(lerpArr(from.xRange, to.xRange, t)),
@@ -239,6 +295,95 @@ export default {
       plot.selectAll("g.sd-points circle.sd-dot:not(.sd-exiting)").data(dotData(m), (d) => d.key).order().filter(focused).raise();
     }
 
+    /** The stroke width of the summary lines (the draws' widths are multiples of it). */
+    function lineWidth() {
+      const node = gLines.select("path.sd-line").node();
+      return num(node && doc.defaultView?.getComputedStyle(node).strokeWidth, LINE_WIDTH);
+    }
+
+    /** The fan's canvas layer, over the plot at `origin` (`{ left, top }`) with the plot's size `pw` x `ph`. */
+    const fanCanvas = (origin, pw, ph) => canvasLayer(el, { left: origin.left, top: origin.top, pw, ph });
+
+    /** paintLines input for a fan line: its points cut at `cut` (plot pixels; null for no cut), as [x, y] pairs. */
+    const fanPoints = (points, cut) => (cut === null ? points : cutAt(points, cut)).map((p) => [p.px, p.py]);
+
+    /** The fan of `m` at rest: every painted draw, cut at `until`, at the fan's opacity (times `fade`) and width. */
+    function restingFan(m, fade = 1) {
+      const paint = new Map(m.series.map((s) => [s.name, s.fanPaint]));
+      const width = fanWidth(m.fan.shown, lineWidth());
+      return m.fan.lines.map((l) => ({ points: fanPoints(l.points, m.cut), color: paint.get(l.series), alpha: m.fan.alpha * fade, width }));
+    }
+
+    /** The summary lines, solid and dotted: over a fan, each sits on a halo (`halo` with `under`). */
+    const summaryLines = () => plot.selectAll("g.sd-lines path.sd-line, g.sd-forecast path.sd-forecast-line");
+
+    /**
+     * Writes the fan of `m`: the canvas over the plot, painted, with its state attributes (`data-draws`, `data-until`,
+     * `data-seed`, `data-signature`, always in this order), and the halos. Without `draws` there is no canvas and no halo.
+     */
+    function writeFan(m) {
+      if (!m.fan) {
+        el.querySelector(":scope > canvas.sd-canvas-layer")?.remove();
+        plot.selectAll(".sd-halo-under").remove();
+        summaryLines().each(function () { delete this.__sdHaloUnder; });
+        return;
+      }
+      halo(summaryLines(), { under: true }); // after stackFocus: each copy goes back just before its line
+      const canvas = fanCanvas(m.margin, m.pw, m.ph);
+      const signature = paintLines(canvas, restingFan(m));
+      canvas.setAttribute("data-draws", String(m.fan.shown));
+      canvas.setAttribute("data-until", m.until === null ? "" : String(m.until));
+      canvas.setAttribute("data-seed", String(m.fan.seed));
+      canvas.setAttribute("data-signature", signature);
+    }
+
+    /**
+     * The frames of a played change of the fan, `from` -> `to`: `paint(t, cut, origin, pw, ph, colorOf)` repaints the
+     * canvas at time t. Every draw painted in either state takes part, keyed by series and id, in the paint order of `to`
+     * (series in its stacking, then its draw order), so the first and the last frames are the two states' own pictures.
+     * A draw in both goes from the old opacity and width to the new ones (and from its old place to its new one when the
+     * scales or columns change), a new one fades in from 0 and a removed one fades out where it was.
+     */
+    function fanMotion(from, to) {
+      const [a, b] = [from.fan, to.fan];
+      const old = new Map((a?.lines ?? []).map((l) => [l.key, l]));
+      const now = new Map((b?.lines ?? []).map((l) => [l.key, l]));
+      const rank = (keys) => {
+        const r = new Map();
+        for (const k of keys) if (!r.has(k)) r.set(k, r.size);
+        return r;
+      };
+      const seriesRank = rank([...now.values(), ...old.values()].map((l) => l.series));
+      const idRank = rank([...(b?.order ?? []), ...(a?.order ?? [])]);
+      const keys = [...new Set([...now.keys(), ...old.keys()])].map((k) => now.get(k) ?? old.get(k))
+        .sort((p, q) => seriesRank.get(p.series) - seriesRank.get(q.series) || idRank.get(p.id) - idRank.get(q.id))
+        .map((l) => l.key);
+      const moves = a && b && a.geometry !== b.geometry; // a kept draw moves only when its pixel places change
+      const draws = keys.map((k) => {
+        const [p, q] = [old.get(k), now.get(k)];
+        return { p, q, line: q ?? p, byX: p && q && moves ? new Map(p.points.map((pt) => [pt.x, pt])) : null };
+      });
+      const lw = lineWidth();
+      const [wa, wb] = [a ? fanWidth(a.shown, lw) : 0, b ? fanWidth(b.shown, lw) : 0];
+      return (t, cut, origin, pw, ph, colorOf) => {
+        const lines = draws.map(({ p, q, line, byX }) => {
+          const points = byX
+            ? q.points.map((pt) => {
+                const o = byX.get(pt.x) ?? pt;
+                return { px: lerp(o.px, pt.px, t), py: o.py === null || pt.py === null ? pt.py : lerp(o.py, pt.py, t) };
+              })
+            : line.points;
+          return {
+            points: fanPoints(points, cut),
+            color: colorOf(line.series),
+            alpha: p && q ? lerp(a.alpha, b.alpha, t) : q ? b.alpha * t : a.alpha * (1 - t),
+            width: p && q ? lerp(wa, wb, t) : q ? wb : wa,
+          };
+        });
+        paintLines(fanCanvas(origin, pw, ph), lines);
+      };
+    }
+
     /** Writes the model exactly: the end state of every update, animated or not. */
     function renderStatic(m) {
       join(m);
@@ -274,6 +419,7 @@ export default {
       gy.selectAll("g.tick").order();
       gx.selectAll("g.tick").order();
       baseline.raise();
+      writeFan(m);
     }
 
     /** Axes, titles and annotations for scales x, y (interpolated while animating). */
@@ -326,7 +472,10 @@ export default {
       const counting = cutting && t0 !== t1;
       const cursor = sweeping ? plot.insert("line", "g.sd-lines").attr("class", "sd-sweep-cursor") : null;
       // Colors change on their own, faster tween (a focus change takes --sd-duration-fast); the frame reads them.
-      const live = new Map(to.series.map((s) => [s.name, { paint: prevSeries.get(s.name)?.paint ?? s.paint, label: prevSeries.get(s.name)?.labelColor ?? s.labelColor }]));
+      const live = new Map(to.series.map((s) => {
+        const was = prevSeries.get(s.name);
+        return [s.name, { paint: was?.paint ?? s.paint, label: was?.labelColor ?? s.labelColor, fan: was?.fanPaint ?? s.fanPaint }];
+      }));
       const fast = motion(info, ctx, { fast: true });
       const recolor = to.series.flatMap((s) => {
         const was = prevSeries.get(s.name);
@@ -334,8 +483,12 @@ export default {
         return was ? [
           was.paint !== s.paint && tweenColor(ctx, was.paint, s.paint, (c) => { now.paint = c; }, fast),
           was.labelColor !== s.labelColor && tweenColor(ctx, was.labelColor, s.labelColor, (c) => { now.label = c; }, fast),
+          was.fanPaint !== s.fanPaint && tweenColor(ctx, was.fanPaint, s.fanPaint, (c) => { now.fan = c; }, fast),
         ].filter(Boolean) : [];
       });
+      // The fan: repainted every frame. A series that leaves keeps its draws' color while they fade out.
+      const fanFrame = from.fan || to.fan ? fanMotion(from, to) : null;
+      const fanColor = (name) => live.get(name)?.fan ?? prevSeries.get(name)?.fanPaint ?? null;
       const fadeOf = (sel, t) => sel.attr("opacity", function () {
         return this.classList.contains("sd-exiting") ? 1 - t : this.__sdEnter ? t : null;
       });
@@ -353,7 +506,11 @@ export default {
       const lines = gLines.selectAll("path.sd-line:not(.sd-exiting)").data(to.series, (d) => d.name);
       const toShaped = toAt !== null || to.cut !== null;
       lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineAttr(partsOf(d.points, toAt, to.cut).observed, toShaped)).attr("stroke", (d) => d.paint);
-      const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
+      // With a fan on either side the lines sit on halos (they fade in or out with the fan); an entering line's draws with it.
+      const halos = () => (fanFrame ? halo(summaryLines(), { under: true }) : null);
+      halos();
+      const draws = lines.filter((d) => entering.has(d.name)).nodes().flatMap((n) => [n, n.__sdHaloUnder].filter(Boolean))
+        .map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
 
       const paintAt = (t) => {
         const { x, y } = scalesAt(from, to, t);
@@ -399,6 +556,15 @@ export default {
         svg.selectAll("path.sd-line.sd-exiting, .sd-band.sd-exiting, .sd-series-label.sd-exiting").attr("opacity", 1 - t);
         if (to.ticker) placeTicker(plot, to, counting ? to.fmtX(lerp(t0, t1, t)) : to.ticker.text);
         cursor?.attr("x1", x(u)).attr("x2", x(u)).attr("y1", 0).attr("y2", y.range()[0]);
+        if (fanFrame) {
+          // A halo fades with the fan and with its own line (a line that leaves, a dotted line that fades in or out).
+          const fade = from.fan && to.fan ? 1 : to.fan ? t : 1 - t;
+          halos().attr("opacity", function () {
+            const o = fade * num(this.nextSibling?.getAttribute("opacity"), 1);
+            return o === 1 ? null : o;
+          });
+          fanFrame(t, cut, margin, x.range()[1], y.range()[0], fanColor);
+        }
       };
       try {
         await Promise.all([morph(info, ctx, paintAt, { duration }), ...draws, ...recolor]);
@@ -410,18 +576,21 @@ export default {
     return {
       async update(props, info = {}) {
         const { draw, duration, ease, signal } = entrance(info, ctx);
-        // The start state of the entrance, before the first await: the lines of the last render are undrawn.
-        if (draw) gLines.selectAll("path.sd-line").each(function () { undraw(this); });
+        // The start state of the entrance, before the first await: the lines of the last render (and their halos) are undrawn.
+        if (draw) gLines.selectAll("path.sd-line, .sd-halo-under").each(function () { undraw(this); });
         const rows = await loadRows(props, ctx);
-        const model = buildModel(props, rows, ctx, el);
+        const draws = { rows: props.draws ? await loadDraws(props, ctx) : null, extent: await drawsExtent(props, ctx) };
+        const model = buildModel(props, rows, ctx, el, draws);
         if (draw && !info.signal?.aborted) {
           // The entrance: every line draws in from its final shape.
           renderStatic(model);
-          // The dotted line and the dots cannot draw along their length: they fade in while the solid lines draw.
-          const late = plot.selectAll("g.sd-points, path.sd-forecast-line").attr("opacity", 0);
+          // The dotted line and the dots cannot draw along their length: they fade in while the solid lines draw, and so does the fan.
+          const late = plot.selectAll("g.sd-points, path.sd-forecast-line, g.sd-forecast .sd-halo-under").attr("opacity", 0);
+          const fanAt = (t) => model.fan && paintLines(fanCanvas(model.margin, model.pw, model.ph), restingFan(model, t));
+          fanAt(0);
           await Promise.all([
-            ...gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })),
-            late.empty() ? undefined : morph(info, ctx, (t) => late.attr("opacity", t), { duration }),
+            ...gLines.selectAll("path.sd-line, .sd-halo-under").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })),
+            late.empty() && !model.fan ? undefined : morph(info, ctx, (t) => { late.attr("opacity", t); fanAt(t); }, { duration }),
           ]);
         } else if (info.animate && last && !info.entered && !info.signal?.aborted) {
           // A change while the chart stays shown. An element that just appeared without a draw snaps.
@@ -449,6 +618,7 @@ export default {
       },
       destroy() {
         svg.remove();
+        el.querySelector(":scope > canvas.sd-canvas-layer")?.remove();
       },
     };
   },

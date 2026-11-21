@@ -789,6 +789,10 @@ async function validateSlide(spec, env) {
     if (typeof props.data === "string" && /\.csv$/i.test(props.data) && env.exact(env.deckRoot, props.data).ok) {
       for (const p of await checkColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
     }
+    const draws = isObject(props.draws) ? props.draws.data : undefined;
+    if (typeof draws === "string" && /\.csv$/i.test(draws) && env.exact(env.deckRoot, draws).ok) {
+      for (const p of await checkDrawsColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
+    }
 
     const validate = validator.get(id);
     if (!validate || bindingFailed) return;
@@ -841,6 +845,33 @@ async function checkColumns(env, props) {
     if (typeof column !== "string" || parseBinding(column) || header.includes(column)) continue;
     const close = didYouMean(column, header);
     out.push({ rule: "missing-column", measured: `${prop} = '${column}'`, limit: `columns of ${props.data}: ${header.join(", ")}`, fix: close ? `set ${prop} to '${close}'` : `set ${prop} to one of ${quote(header)}, or add the column to ${props.data}` });
+  }
+  return out;
+}
+
+/**
+ * chart.line `draws`: the draws file (`draws.data`) needs the chart's `x`, `y` and `series` (when set) and the
+ * `draws.id` column. A column of the chart that the draws file lacks is added to that file; `draws.id` is set.
+ */
+async function checkDrawsColumns(env, props) {
+  const file = props.draws.data;
+  let text;
+  try {
+    text = await readFile(join(env.deckRoot, file), "utf8");
+    await env.load(file, isObject(props.types) ? { types: props.types } : undefined);
+  } catch (e) {
+    return [{ rule: "data-invalid", measured: `draws.data ${file}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${file} or the declared types` }];
+  }
+  const header = csvHeader(text);
+  const named = [["x", props.x], ["y", props.y], ["series", props.series], ["draws.id", props.draws.id]];
+  const out = [];
+  for (const [prop, column] of named) {
+    if (typeof column !== "string" || parseBinding(column) || header.includes(column)) continue;
+    const close = didYouMean(column, header);
+    const fix = prop === "draws.id"
+      ? close ? `set draws.id to '${close}'` : `set draws.id to one of ${quote(header)}, or add the column to ${file}`
+      : `add the column '${column}' to ${file} (the chart's ${prop})${close ? `, or rename its column '${close}' to '${column}'` : ""}`;
+    out.push({ rule: "missing-column", measured: `${prop} = '${column}' in draws.data`, limit: `columns of ${file}: ${header.join(", ")}`, fix });
   }
   return out;
 }

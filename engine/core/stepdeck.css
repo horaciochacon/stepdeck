@@ -230,6 +230,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* time sweep: the ticker is a large tabular x label in the plot's upper left (the size is a theme token); the cursor leads the sweep while it plays */
 .sd-chart-line text.sd-ticker { fill: var(--sd-color-ink); font-size: var(--sd-font-size-heading); font-weight: var(--sd-font-weight-title); }
 .sd-chart-line .sd-sweep-cursor { stroke: var(--sd-color-muted); stroke-width: 3; }
+/* draw fan: the draws are on a canvas layer under the svg (.sd-canvas-layer ~ svg below); each summary line sits on a narrow
+   background halo over them, and a forecast region over them tints them (the same 5% of ink over the background) instead of hiding them */
+.sd-chart-line .sd-halo-under { stroke-width: 9; }
+.sd-canvas-layer ~ .sd-chart-line .sd-forecast-region { fill: var(--sd-color-forecast, color-mix(in srgb, var(--sd-color-ink) 5%, transparent)); }
 
 .sd-chart-bar .sd-axis-value text { fill: var(--sd-color-muted); }
 .sd-chart-bar .sd-band-label { fill: var(--sd-color-ink); }

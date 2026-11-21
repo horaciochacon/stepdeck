@@ -74,6 +74,23 @@ test("chart.bar: a missing interval column is reported at the step that names it
   assert.match(problems[0].fix, /'hi'/);
 });
 
+test("chart.line draws: the draws file needs the chart's x, y and series and the draw column", async () => {
+  const problems = await validate(fixture("draws-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column", "missing-column"], show(problems));
+  const [series, id] = ["series", "draws.id"].map((prop) => problems.find((p) => p.measured.startsWith(`${prop} = `)));
+  assert.ok(series && id, show(problems));
+  for (const p of [series, id]) {
+    assert.equal(p.element, "chart");
+    assert.match(p.measured, /in draws\.data$/, "the problem names draws.data");
+    assert.equal(p.limit, "columns of data/draws.csv: x, y, grp, draw");
+  }
+  assert.equal(series.measured, "series = 'group' in draws.data");
+  assert.match(series.fix, /add the column 'group' to data\/draws\.csv/);
+  assert.match(series.fix, /'grp'/, "the nearest column is named");
+  assert.equal(id.measured, "draws.id = 'drw' in draws.data");
+  assert.match(id.fix, /set draws\.id to 'draw'/);
+});
+
 test("remote URLs, including protocol-relative //host, are rejected in props", async () => {
   const problems = await validate(fixture("remote-url"));
   assert.deepEqual(rules(problems), ["remote-url", "remote-url"], show(problems));

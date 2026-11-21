@@ -16,7 +16,8 @@
 //   easeAgainstTime(samples)                                  // how far a sampled 0..1 progress is from linear in time
 //
 // The expect* helpers throw an assertion error naming the step that differs. "Equal" is strict
-// outerHTML equality: after settling, a component leaves no inline animation styles behind.
+// outerHTML equality (after settling, a component leaves no inline animation styles behind) and, for an
+// element with a canvas, equal canvas pixels (`canvasPixels`), the jump read in the same browser.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -46,6 +47,22 @@ export async function htmlAfterJump(ctx, page, pages, slide, step, id) {
   return elementHtml(page, id);
 }
 
+/** The element's markup and canvas pixels as they are now. */
+const stateOf = async (page, id) => ({ html: await elementHtml(page, id), pixels: await canvasPixels(page, id) });
+
+/** stateOf after loading the slide directly at `step` (no motion). */
+async function stateAfterJump(ctx, page, pages, slide, step, id) {
+  await ctx.open(pages.url(slide, `step=${step}`));
+  return stateOf(page, id);
+}
+
+/** Asserts two stateOf results are equal: the markup first, then the canvas pixels (compared whole, reported short). */
+function assertSameState(actual, expected, message) {
+  assert.equal(actual.html, expected.html, message);
+  assert.equal(actual.pixels.length, expected.pixels.length, `${message} (number of canvases)`);
+  actual.pixels.forEach((px, i) => assert.ok(px === expected.pixels[i], `${message} (pixels of canvas ${i})`));
+}
+
 /** Loads the slide at `step` with motion on and checks that the page really animates. */
 async function openAnimated(ctx, page, pages, slide, step) {
   await ctx.open(pages.url(slide, `step=${step}&motion=full`));
@@ -55,12 +72,12 @@ async function openAnimated(ctx, page, pages, slide, step) {
 /** Playing forward one step at a time (motion=full) ends at the same html as jumping, at every step. */
 export async function expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id }) {
   const jumped = [];
-  for (const step of steps) jumped.push(await htmlAfterJump(ctx, page, pages, slide, step, id));
+  for (const step of steps) jumped.push(await stateAfterJump(ctx, page, pages, slide, step, id));
   await openAnimated(ctx, page, pages, slide, steps[0]);
-  assert.equal(await elementHtml(page, id), jumped[0], `${slide}/${id}: first step`);
+  assertSameState(await stateOf(page, id), jumped[0], `${slide}/${id}: first step`);
   for (let i = 1; i < steps.length; i++) {
     await goTo(page, slide, steps[i]);
-    assert.equal(await elementHtml(page, id), jumped[i], `${slide}/${id}: played to step '${steps[i]}' differs from a jump`);
+    assertSameState(await stateOf(page, id), jumped[i], `${slide}/${id}: played to step '${steps[i]}' differs from a jump`);
   }
   assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
   assert.deepEqual(ctx.errors, []);
@@ -69,10 +86,10 @@ export async function expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, i
 /** Arriving at step i-1 from step i (backward, so no motion) ends at the same html as a jump. */
 export async function expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id }) {
   for (let i = 1; i < steps.length; i++) {
-    const jumped = await htmlAfterJump(ctx, page, pages, slide, steps[i - 1], id);
+    const jumped = await stateAfterJump(ctx, page, pages, slide, steps[i - 1], id);
     await openAnimated(ctx, page, pages, slide, steps[i]);
     await goTo(page, slide, steps[i - 1]);
-    assert.equal(await elementHtml(page, id), jumped, `${slide}/${id}: back from '${steps[i]}' to '${steps[i - 1]}' differs from a jump`);
+    assertSameState(await stateOf(page, id), jumped, `${slide}/${id}: back from '${steps[i]}' to '${steps[i - 1]}' differs from a jump`);
   }
   assert.deepEqual(ctx.errors, []);
 }
@@ -82,7 +99,7 @@ export async function expectBackwardEqualsJump(ctx, page, { pages, slide, steps,
  * and no element inside it keeps an inline style (a canvas layer's own size and position excepted).
  */
 export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id }) {
-  const jumped = await htmlAfterJump(ctx, page, pages, slide, to, id);
+  const jumped = await stateAfterJump(ctx, page, pages, slide, to, id);
   await openAnimated(ctx, page, pages, slide, from);
   await page.evaluate(
     async ([sl, via, to]) => {
@@ -93,7 +110,7 @@ export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from,
     [slide, via, to],
   );
   await settled(page);
-  assert.equal(await elementHtml(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
+  assertSameState(await stateOf(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
   // A canvas layer keeps its inline size and position (it is placed, not animated).
   const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]:not(.sd-canvas-layer)`).length, id);
   assert.equal(styled, 0, "no inline styles are left inside the element");

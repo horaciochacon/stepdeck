@@ -1,11 +1,11 @@
-// chart.line points, forecast segment and time sweep in Chrome. Run with:
+// chart.line points, forecast segment, time sweep and draw fan in Chrome. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-line-story.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { checkPlayed } from "../../cli/check.js";
-import { deckPages, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump, expectAnimatedStepMoves, sampleFrames, tokenRgb } from "./helpers.mjs";
+import { deckPages, goTo, canvasPixels, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump, expectAnimatedStepMoves, sampleFrames, tokenRgb, paletteRgb } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const deck = fileURLToPath(new URL("../fixtures/decks/line-story/", import.meta.url));
@@ -525,6 +525,272 @@ test("no cursor at rest after any arrival", async () => {
       await page.evaluate(() => window.STEPDECK.settled());
       assert.equal((await boxes(page)).cursors, 0, `${step}: no cursor after a jump back`);
     }
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// The draw fan (`draws`): uncertainty draws painted on a canvas under the lines.
+const FAN = ["none", "one", "few", "many", "fewer"];
+const SHOWN = { none: 0, one: 1, few: 20, many: 200, fewer: 20 };
+const FAN_SWEEP = ["start", "fan", "swept", "focus"];
+const fanRun = { pages, slide: "fan", id: "chart" };
+const fanSweepRun = { pages, slide: "fan-sweep", id: "chart" };
+
+/** The fan's canvas in the page: its data-* attributes, its place in the element and how much of it is painted. */
+const fanState = (page) =>
+  page.evaluate(() => {
+    const el = document.querySelector('[data-el="chart"]');
+    const c = el.querySelector("canvas.sd-canvas-layer");
+    if (!c) return null;
+    const alpha = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    const counts = new Map();
+    let painted = 0;
+    for (let i = 3; i < alpha.length; i += 4) {
+      if (!alpha[i]) continue;
+      painted++;
+      counts.set(alpha[i], (counts.get(alpha[i]) ?? 0) + 1);
+    }
+    const mode = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+    return { attrs: { ...c.dataset }, painted, mode, first: el.firstElementChild === c, canvases: el.querySelectorAll("canvas").length };
+  });
+
+/** The y axis: tick labels and their places, one string. */
+const yTicks = (page) => page.evaluate(() => [...document.querySelectorAll('[data-el="chart"] g.sd-tick-y')].map((g) => `${g.textContent}@${g.getAttribute("transform")}`).join("|"));
+
+test("fan zero and one", async () => {
+  await withPage({ root, url: pages.url("fan", "step=none") }, async (page, ctx) => {
+    const zero = await fanState(page);
+    assert.ok(zero, "at 0 draws the canvas is there");
+    assert.equal(zero.first, true, "as the element's first child");
+    assert.deepEqual(zero.attrs, { draws: "0", until: "", seed: "1", signature: zero.attrs.signature }, "with its state attributes, and no others");
+    assert.match(zero.attrs.signature, /^[0-9a-f]{8}$/);
+    assert.equal(zero.painted, 0, "and blank");
+    await ctx.open(pages.url("fan", "step=one"));
+    const one = await fanState(page);
+    assert.equal(one.attrs.draws, "1");
+    assert.notEqual(one.attrs.signature, zero.attrs.signature, "the signature changes with what is painted");
+    assert.ok(one.painted > 500, `one draw per series is painted (${one.painted} pixels)`);
+    // A single draw takes the opacity cap, 0.85: the pixels a line covers whole are that opaque.
+    assert.ok(Math.abs(one.mode - Math.round(0.85 * 255)) <= 2, `the cores of the lines are 0.85 opaque (alpha ${one.mode})`);
+    assert.equal(one.canvases, 1);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("fan: jump equals played at every step, markup and canvas pixels", async () => {
+  await withPage({ root, url: pages.url("fan", "step=none") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { ...fanRun, steps: FAN });
+    await expectJumpEqualsPlayed(ctx, page, { ...fanSweepRun, steps: FAN_SWEEP });
+    for (const step of FAN) {
+      await ctx.open(pages.url("fan", `step=${step}`));
+      assert.equal((await fanState(page)).attrs.draws, String(SHOWN[step]), `${step}: data-draws is draws.shown`);
+    }
+  });
+});
+
+test("fan lower shown equals jump", async () => {
+  await withPage({ root, url: pages.url("fan", "step=many") }, async (page, ctx) => {
+    // 200 -> 20, played forward on its own: the fewer draws, pixel for pixel.
+    await ctx.open(pages.url("fan", "step=fewer"));
+    const jumped = { html: await page.evaluate(() => document.querySelector('[data-el="chart"]').outerHTML), pixels: await canvasPixels(page, "chart") };
+    assert.equal(jumped.pixels.length, 1, "one canvas");
+    await ctx.open(pages.url("fan", "step=many&motion=full"));
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true);
+    await goTo(page, "fan", "fewer");
+    assert.equal(await page.evaluate(() => document.querySelector('[data-el="chart"]').outerHTML), jumped.html, "200 -> 20 played: the markup of a jump");
+    assert.ok((await canvasPixels(page, "chart"))[0] === jumped.pixels[0], "200 -> 20 played: the pixels of a jump");
+    // Every backward move and an interrupted rise.
+    await expectBackwardEqualsJump(ctx, page, { ...fanRun, steps: FAN });
+    await expectInterruptEqualsJump(ctx, page, { ...fanRun, from: "few", via: "many", to: "fewer" });
+    await expectInterruptEqualsJump(ctx, page, { ...fanRun, from: "none", via: "one", to: "few" });
+    await expectBackwardEqualsJump(ctx, page, { ...fanSweepRun, steps: FAN_SWEEP });
+    await expectInterruptEqualsJump(ctx, page, { ...fanSweepRun, from: "start", via: "fan", to: "swept" });
+  });
+});
+
+test("fan: a played change of shown fades the draws in", async () => {
+  await withPage({ root, url: pages.url("fan", "step=few&motion=full") }, async (page, ctx) => {
+    const painted = (el) => {
+      const c = el.querySelector("canvas.sd-canvas-layer");
+      const a = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < a.length; i += 4) if (a[i]) n++;
+      return { painted: n };
+    };
+    const r = await sampleFrames(page, "fan", "many", "chart", painted);
+    const [start, end] = [r.frames[0].painted, r.end.painted];
+    assert.ok(end > start * 1.5, `more draws cover more of the plot (${start} -> ${end})`);
+    assert.ok(r.frames.some((f) => f.painted > start + 1000 && f.painted < end - 1000), "the canvas was seen between the two states");
+    assert.ok(r.settledMs >= 400, `the change plays over the morph's duration (${r.settledMs.toFixed(0)} ms)`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("fan: raising shown keeps the earlier draws", async () => {
+  // The draws painted at 20 are the first 20 of the order of 200, so they are still there at 200. Thinner and lighter (the
+  // width tier and the opacity fall with n): a pixel at the anti-aliased rim of a line at 20 can round to 0 at 200, so the
+  // check is on the pixels a line at 20 covers whole (alpha at least 0.9 of one draw's), which a kept draw covers at 200 too.
+  for (const [from, to] of [["one", "few"], ["few", "many"]]) {
+    await withPage({ root, url: pages.url("fan", `step=${from}`) }, async (page, ctx) => {
+      const r = await page.evaluate(async ([from, to, n]) => {
+        const read = () => {
+          const c = document.querySelector('[data-el="chart"] canvas.sd-canvas-layer');
+          return c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+        };
+        const before = read();
+        await window.STEPDECK.goTo("fan", to);
+        await window.STEPDECK.settled();
+        const after = read();
+        const core = 0.9 * Math.round(Math.min(0.85, 1.9 / Math.sqrt(n)) * 255);
+        let checked = 0;
+        let lost = 0;
+        for (let i = 3; i < before.length; i += 4) {
+          if (before[i] < core) continue;
+          checked++;
+          if (!after[i]) lost++;
+        }
+        return { checked, lost, same: before.length === after.length };
+      }, [from, to, SHOWN[from]]);
+      assert.equal(r.same, true, "the canvas keeps its size");
+      assert.ok(r.checked > 1000, `${from} -> ${to}: enough pixels checked (${r.checked})`);
+      assert.equal(r.lost, 0, `${from} -> ${to}: every pixel a draw covered is still painted`);
+      assert.deepEqual(ctx.errors, []);
+    });
+  }
+});
+
+test("fan dims with highlight", async () => {
+  await withPage({ root, url: pages.url("fan-sweep", "step=focus") }, async (page, ctx) => {
+    // The brightest pixel of the draws near each line's end (at 2050, past the forecast start, the two series are far apart).
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="chart"]');
+      const c = el.querySelector("canvas.sd-canvas-layer");
+      const ratio = c.width / parseFloat(c.style.width);
+      const g = c.getContext("2d");
+      const at = (series) => {
+        const d = el.querySelector(`path.sd-forecast-line[data-forecast="${series}"]`).getAttribute("d");
+        const [px, py] = d.split(/[ML]/).filter(Boolean).at(-1).split(",").map(Number);
+        const [x0, y0, w, h] = [Math.round((px - 14) * ratio), Math.round((py - 16) * ratio), Math.round(10 * ratio), Math.round(32 * ratio)];
+        const a = g.getImageData(x0, y0, w, h).data;
+        let best = 3;
+        for (let i = 3; i < a.length; i += 4) if (a[i] > a[best]) best = i;
+        return { rgb: [a[best - 3], a[best - 2], a[best - 1]], alpha: a[best] };
+      };
+      return { north: at("north"), south: at("south") };
+    });
+    const rgb = (s) => s.match(/\d+/g).slice(0, 3).map(Number);
+    const far = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+    const [dim, north, south] = [rgb(await tokenRgb(page, "--sd-color-dim")), rgb(paletteRgb("modern", 0)), rgb(paletteRgb("modern", 1))];
+    assert.ok(probe.north.alpha > 120 && probe.south.alpha > 120, `opaque enough to read a colour (${probe.north.alpha}, ${probe.south.alpha})`);
+    assert.ok(far(probe.north.rgb, dim) <= 12, `the dimmed series' draws are --sd-color-dim (${probe.north.rgb} vs ${dim})`);
+    assert.ok(far(probe.north.rgb, north) > 40, `not the series colour (${probe.north.rgb} vs ${north})`);
+    assert.ok(far(probe.south.rgb, south) <= 12, `the highlighted series' draws keep its colour (${probe.south.rgb} vs ${south})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("fan: the axis does not move when the fan appears", async () => {
+  await withPage({ root, url: pages.url("fan", "step=none") }, async (page, ctx) => {
+    const seen = [];
+    for (const [slide, steps] of [["fan", FAN], ["fan-sweep", FAN_SWEEP]]) {
+      for (const step of steps) {
+        await ctx.open(pages.url(slide, `step=${step}`));
+        seen.push(await yTicks(page));
+      }
+    }
+    assert.ok(seen[0].includes("translate"), "the y ticks were read");
+    assert.equal(new Set(seen).size, 1, `the y axis is the same at every step: ${[...new Set(seen)].join(" / ")}`);
+    // The draws reach past the trend's own range: the axis made room for them before they were shown.
+    const top = Number(seen[0].split("|").at(-1).split("@")[0]);
+    assert.ok(top >= 77, `the axis covers the highest draw (top tick ${top})`);
+    // And it stays put while the fan appears in a played step.
+    await ctx.open(pages.url("fan-sweep", "step=start&motion=full"));
+    const r = await sampleFrames(page, "fan-sweep", "fan", "chart", (el) => ({ ticks: [...el.querySelectorAll("g.sd-tick-y")].map((g) => `${g.textContent}@${g.getAttribute("transform")}`).join("|") }));
+    assert.deepEqual([...new Set(r.frames.map((f) => f.ticks))], [seen[0]], "no frame moves the axis");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("fan: summary lines paint above the fan", async () => {
+  await withPage({ root, url: pages.url("fan", "step=many") }, async (page, ctx) => {
+    const probe = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="chart"]');
+      const canvas = el.querySelector("canvas.sd-canvas-layer");
+      const svg = el.querySelector("svg.sd-chart-line");
+      const out = { canvasFirst: el.firstElementChild === canvas && canvas.nextElementSibling === svg, svgPosition: getComputedStyle(svg).position, hits: {}, halos: {} };
+      // A canvas ignores the pointer, so let it take it: the hit test then shows what is on top.
+      canvas.style.pointerEvents = "auto";
+      for (const line of el.querySelectorAll("path.sd-line")) {
+        const p = line.getPointAtLength(line.getTotalLength() * 0.37);
+        const m = line.getScreenCTM();
+        const hit = document.elementFromPoint(m.a * p.x + m.c * p.y + m.e, m.b * p.x + m.d * p.y + m.f);
+        out.hits[line.dataset.series] = hit === line;
+        const halo = line.previousElementSibling;
+        out.halos[line.dataset.series] = halo?.classList.contains("sd-halo-under") && halo.getAttribute("d") === line.getAttribute("d");
+      }
+      canvas.style.pointerEvents = "";
+      return out;
+    });
+    assert.equal(probe.canvasFirst, true, "the canvas comes before the svg");
+    assert.equal(probe.svgPosition, "relative", "and the svg is positioned, so it paints above the canvas");
+    assert.deepEqual(probe.hits, { north: true, south: true }, "a point of each summary line hits its path.sd-line");
+    assert.deepEqual(probe.halos, { north: true, south: true }, "each summary line sits on a halo of its own shape");
+    assert.deepEqual(ctx.errors, []);
+  });
+  // Without draws there is no canvas and no halo: the markup is the one the chart always had.
+  await withPage({ root, url: pages.url("fan-sweep", "step=start") }, async (page) => {
+    const none = await page.evaluate(() => [...document.querySelectorAll('[data-el="chart"] canvas, [data-el="chart"] .sd-halo-under')].length);
+    assert.equal(none, 0);
+  });
+});
+
+test("fan errors show on the slide", async () => {
+  const broken = deckPages("test/fixtures/decks/line-story-broken/");
+  await withPage({ root, url: broken.url("fan-errors", "") }, async (page, ctx) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual(errors, ["fan-errors/chart: `draws.shown` is 5 but data/draws.csv has only 3 draws"]);
+    const shown = await page.evaluate(() => document.querySelector('[data-el="chart"] .sd-error')?.textContent);
+    assert.match(shown ?? "", /`draws\.shown` is 5 but data\/draws\.csv has only 3 draws/);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible", "the sibling carries on");
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("fan with a sweep", async () => {
+  /** The canvas right of the cut: how many pixels are painted there (the cut in plot pixels, plus `slack`). */
+  const rightOf = (el, cut, slack) => {
+    const c = el.querySelector("canvas.sd-canvas-layer");
+    const ratio = c.width / parseFloat(c.style.width);
+    const x0 = Math.ceil((cut + slack) * ratio);
+    if (x0 >= c.width) return 0;
+    const a = c.getContext("2d").getImageData(x0, 0, c.width - x0, c.height).data;
+    let n = 0;
+    for (let i = 3; i < a.length; i += 4) if (a[i]) n++;
+    return n;
+  };
+  await withPage({ root, url: pages.url("fan-sweep", "step=fan") }, async (page, ctx) => {
+    const s = await read(page);
+    const at = await page.evaluate(`(${rightOf})(document.querySelector('[data-el="chart"]'), ${s.xOf(2020)}, 3)`);
+    assert.equal(at, 0, "no draw is painted right of until");
+    const before = await page.evaluate(`(${rightOf})(document.querySelector('[data-el="chart"]'), ${s.xOf(2020) - 40}, 0)`);
+    assert.ok(before > 100, `the draws reach the cut (${before} pixels in the last 40 px)`);
+    assert.equal((await fanState(page)).attrs.until, "2020");
+    // Over a fan the forecast region tints the draws instead of covering them.
+    const region = await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="chart"] rect.sd-forecast-region')).fill);
+    const alpha = Number(/[\d.]+(?=\)$)/.exec(region.replace(/\s/g, ""))?.[0] ?? 1);
+    assert.ok(/\/|rgba/.test(region) && alpha < 0.5, `a translucent fill (${region})`);
+    // Every frame of the played sweep cuts the draws where the cursor is.
+    await ctx.open(pages.url("fan-sweep", "step=fan&motion=full"));
+    const r = await sampleFrames(page, "fan-sweep", "swept", "chart", `(el) => {
+      const cursor = el.querySelector("line.sd-sweep-cursor");
+      if (!cursor) return { cursor: null };
+      const cut = Number(cursor.getAttribute("x1"));
+      return { cursor: cut, beyond: (${rightOf})(el, cut, 3) };
+    }`);
+    const swept = r.frames.filter((f) => f.cursor !== null);
+    assert.ok(swept.length >= 3, `the sweep was seen (${swept.length} frames)`);
+    for (const f of swept) assert.equal(f.beyond, 0, `nothing painted right of the cursor at ${f.cursor.toFixed(1)}`);
+    assert.equal((await fanState(page)).attrs.until, "2050");
     assert.deepEqual(ctx.errors, []);
   });
 });
