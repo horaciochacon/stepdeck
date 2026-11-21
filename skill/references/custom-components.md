@@ -129,7 +129,7 @@ For a bespoke chart, build on `ctx.chart` instead of drawing everything yourself
 5. **Motion.** `await ctx.chart.morph(info, ctx, (t) => place(t))` only when `info.animate && last && !info.entered && !info.signal?.aborted`; a component that owns its entrance reads `ctx.chart.entrance(info, ctx)`. Write the end state after, from props alone.
 6. **Layout is deterministic.** `rank`, `drawOrder` and `swarm` are pure functions of data and props: no `Math.random`. A missing value is a gap (a `null` point breaks a `paintLines` line), never a zero. `halo` on a dot does nothing (a dot already has its outline).
 
-`test/fixtures/decks/chart-kit/components/fixture.marks/index.js` uses every mark and the canvas layer; the guide `docs/guide/custom-components.md` ("Build a chart from the engine's pieces") walks a small chart through the order above.
+The stepdeck gallery's slope chart, `gallery.slope` (`site/gallery/components/gallery.slope/`, the `custom-slope` slide), is a whole chart built in this order from `ctx.chart` alone, with no `import`: `loadTable`, `frame` and `tickFormat`, one scale over every step with `extentOf`, `keyed` joins then `settle`, `dot` and `halo`, labels ranked with `rank` and kept apart with `spread`, one `morph` for a played change, `focusPaint` and `tweenColor` for `highlight`, `textColor` for its labels, and an owned entrance with `entrance`, `undraw` and `ctx.animate.drawPath`. The guide `docs/guide/custom-components.md` ("Build a chart from the engine's pieces") describes it and walks a smaller chart through the order above.
 
 ### Styling
 

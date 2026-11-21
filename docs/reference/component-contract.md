@@ -395,7 +395,10 @@ The same order, step by step, in a component of its own: [Build a chart from the
 
 ```js
 const e = ctx.chart.entrance(info, ctx); // { draw, duration, ease, signal }
-if (e.draw) { ctx.chart.undraw(line.node()); await ctx.animate.drawPath(line.node(), { duration: e.duration, signal: e.signal }); }
+if (e.draw) ctx.chart.undraw(line.node()); // before the first await: the element is shown in this same task, undrawn
+const rows = await ctx.chart.loadTable(props, ctx, "my.chart", columns);
+// … the joins, settle and the end state, every attribute …
+if (e.draw) await ctx.animate.drawPath(line.node(), { duration: e.duration, signal: e.signal });
 else if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => place(t));
 ```
 
