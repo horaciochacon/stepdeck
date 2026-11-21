@@ -24,7 +24,8 @@
 //             point at files that exist in that exact case, and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
-//             theme's tokens.css). Each problem is reported once, at the first step where it appears.
+//             theme's tokens.css), and every element goes through chartProblems (core/chart-rules.js:
+//             chart-prop-unused, a warning). Each problem is reported once, at the first step where it appears.
 //   ghost     an element may not set ghost together with collapse: true (ghost-collapse, error).
 //   exit      an exit object with a delay is a warning (exit-delay-ignored): exits start at t = 0.
 //   budget    an element that enters on a step (k >= 1) must settle well inside the 10 s watchdog: its stagger
@@ -52,6 +53,7 @@ import { createRegistry, suggest } from "#engine/core/registry.js";
 import { makeFormat } from "#engine/core/format.js";
 import { problem, componentProblem } from "./problems.js";
 import { diagramProblems, diagramSpacing } from "#engine/components/diagram/place.js";
+import { chartProblems } from "#engine/core/chart-rules.js";
 import { DEFAULT_ENTER, motionParts, resolveEntrance, slotDelays } from "#engine/core/choreography.js";
 import { MOTION_NAMES, timing } from "#engine/core/motion.js";
 import { TYPE_MAX_MS, typingMs } from "#engine/core/animate.js";
@@ -800,6 +802,7 @@ async function validateSlide(spec, env) {
       if (type === "diagram") {
         for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
       }
+      for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
       return;
     }
     for (const e of schemaErrors(validate.errors, resolved)) {

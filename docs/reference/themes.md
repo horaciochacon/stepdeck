@@ -156,7 +156,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-font-size-cover-figure` *(optional)* | `88px` | `96px` | The cover title while the `figure` region holds an element. Falls back to the cover size. | `core/stepdeck.css` (cover rule) |
 | `--sd-font-size-statement` | `64px` | `=` | Text in the `main` region of a `statement` slide. | `core/stepdeck.css` (`.sd-statement`) |
 | `--sd-font-size-title` | `64px` | `=` | Slide titles (the `title` region). | `core/stepdeck.css`, reveal shell |
-| `--sd-font-size-heading` | `48px` | `=` | Subtitles. | `core/stepdeck.css` (`.sd-subtitle`) |
+| `--sd-font-size-heading` | `48px` | `=` | Subtitles; the `chart.line` ticker. | `core/stepdeck.css` (`.sd-subtitle`, `.sd-ticker`) |
 | `--sd-font-size-body` | `40px` | `=` | Body text, the default text role. | `core/stepdeck.css` |
 | `--sd-font-size-note` | `32px` | `=` | Notes (`role: "note"`), meta lines, big-number labels, diagram and timeline labels, captions. | `core/stepdeck.css` |
 | `--sd-font-size-label` | `28px` | `=` | Axis ticks, legends, terminal text, inline code. | `core/stepdeck.css`, `chart.line`, `chart.bar`, `diagram` |

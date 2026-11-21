@@ -1,5 +1,5 @@
 // Built-in `chart.line`: one line per series over a numeric x, with direct series labels, optional
-// highlight, vertical annotations, an interval band, point markers and a forecast segment.
+// highlight, vertical annotations, an interval band, point markers, a forecast segment and a time sweep with a ticker.
 //
 // Rendering is a pure function of props: every update ends by writing the target state directly
 // (renderStatic), so the DOM after settled() is the same whether a state was jumped to or played.
@@ -26,16 +26,22 @@
 // `points` puts a dot on every data point. `forecast.from` cuts every series at an x value (core/chart.js `splitAt`, in
 // pixels): the observed part keeps the solid line and the band, the forecast part is a dotted line, a lighter band and
 // hollow dots, over a shaded region from a labelled divider to the plot's end. The cut adds a boundary point, shared by
-// both parts, so the solid line ends exactly where the dotted one starts. Every part is derived from a series' points
-// by `partsOf`, in the final state and in every frame of a played change alike. Both props fade in and out with the
-// element's morph, and their markup exists only while they are set.
+// both parts, so the solid line ends exactly where the dotted one starts. Both props fade in and out with the element's
+// morph, and their markup exists only while they are set.
+//
+// `until` cuts every line, band, dot and forecast part at an x value, whatever `forecast` does, without moving the x axis;
+// `ticker` shows that x in the plot's upper left. A played forward change of `until` is one morph: each frame cuts the
+// tweened points at the sweep's position and draws a cursor there, which only the motion has. Series labels then sit after
+// each line's visible end. Every part is derived from a series' points by `partsOf` (./parts.js), in the final state and in
+// every frame of a played change alike.
+//
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw } from "../../core/chart.js";
-import { partsOf, dOr, lineD, forecastSeries, dotData, placeDots, placeForecast } from "./parts.js";
+import { loadTable, tickFormat, frame, keyed, settle, morph, entrance, undraw } from "../../core/chart.js";
+import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots } from "./parts.js";
 import { textColor } from "../../core/color.js";
-import { SVG_NS, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
+import { SVG_NS, num, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const NO_SERIES = "all"; // series key when props.series is absent
 
@@ -93,6 +99,23 @@ function buildModel(props, rows, ctx, el) {
   const at = from == null || from === "" ? NaN : x(Number(from));
   const forecast = Number.isFinite(at) && at < pw ? { at, label: props.forecast.label ?? ctx.t("forecast") } : null;
 
+  // The sweep's cut in pixels (null without `until`): lines, bands, dots and forecast parts end there. It never reaches
+  // the margins or the scales: the x axis does not move while it sweeps.
+  const untilValue = props.until == null || props.until === "" ? NaN : Number(props.until);
+  const until = Number.isFinite(untilValue) ? untilValue : null;
+  const cut = until === null ? null : x(until);
+  // The ticker (a large x label in the plot's upper left, only with `until`): its box keeps the series labels clear of it.
+  // The width comes from character counts, like the margins, so layout never depends on font timing.
+  let ticker = null;
+  let avoid = null;
+  if (props.ticker === true && until !== null) {
+    const size = num(ctx.tokens?.["--sd-font-size-heading"], 48);
+    const text = fx(until);
+    const chars = Math.max(text.length, ...xTicks.map((t) => t.label.length), fx(xDomain[0]).length, fx(xDomain[1]).length);
+    ticker = { text, x: font * 0.3, y: font * 0.3, w: chars * size * 0.62, h: size * 1.3 };
+    avoid = { right: ticker.x + ticker.w, bottom: ticker.y + ticker.h + font * 0.65 };
+  }
+
   const series = seriesList.map((name) => {
     const own = d3.sort(rows.filter((r) => seriesOf(r) === name && valueOf(r, props.x) !== null && valueOf(r, props.y) !== null), (r) => valueOf(r, props.x));
     const points = own.map((r) => {
@@ -121,14 +144,10 @@ function buildModel(props, rows, ctx, el) {
     };
   });
 
-  // Direct labels at each line's end, nudged apart so they never overlap and never pass the plot's bottom.
-  // An end that is NaN (a non-numeric y cell) takes no part: its label keeps y NaN, and while one is present
-  // the other labels are not lifted off the plot's bottom.
-  const labelled = series.filter((s) => s.points.length);
-  const placed = labelled.filter((s) => !Number.isNaN(s.points.at(-1).py));
-  const lys = spread(placed.map((s) => s.points.at(-1).py), font * 1.15, [-Infinity, placed.length < labelled.length ? Infinity : ph]);
-  const labelY = new Map(placed.map((s, i) => [s.name, lys[i]]));
-  for (const s of series) s.ly = labelY.get(s.name) ?? (s.points.length ? NaN : 0);
+  // Direct labels: at each line's end in the right margin, or, while a sweep cuts the lines, after each line's visible
+  // end. Nudged apart so they never overlap and never pass the plot's bottom.
+  const spots = labelSpots(series, { font, pw, ph, cut, avoid });
+  for (const s of series) s.label = spots.get(s.name);
 
   const annotations = (Array.isArray(props.annotate) ? props.annotate : [])
     .filter((a) => a && Number.isFinite(Number(a.x)))
@@ -137,7 +156,7 @@ function buildModel(props, rows, ctx, el) {
   return {
     w, h, font, margin, pw, ph,
     xDomain: x.domain(), xRange: x.range(), yDomain: y.domain(), yRange: y.range(),
-    xTicks, yTicks, series, annotations, forecast,
+    xTicks, yTicks, series, annotations, forecast, until, cut, ticker, avoid, fmtX: fx,
     showPoints: Boolean(props.points),
     hasSeriesLabels: Boolean(props.series),
     hasInterval: Boolean(lower && upper),
@@ -184,7 +203,7 @@ export default {
       tickJoin(gy, m.yTicks, "sd-tick-y");
       tickJoin(gx, m.xTicks, "sd-tick-x");
       keyed(gLines.selectAll("path.sd-line"), m.series, byName, (enter) => enter.append("path").attr("class", "sd-line").attr("data-series", byName));
-      keyed(gLabels.selectAll("text.sd-series-label"), m.hasSeriesLabels ? m.series : [], byName, (enter) => enter.append("text").attr("class", "sd-series-label").attr("data-label", byName));
+      keyed(gLabels.selectAll("text.sd-series-label"), labelled(m), byName, (enter) => enter.append("text").attr("class", "sd-series-label").attr("data-label", byName));
       keyed(gBands.selectAll("path.sd-band:not(.sd-band-forecast)"), m.hasInterval ? m.series : [], byName, (enter) => enter.append("path").attr("class", "sd-band").attr("data-band", byName));
       keyed(gBands.selectAll("path.sd-band-forecast"), m.hasInterval ? forecastSeries(m) : [], byName, (enter) => enter.append("path").attr("class", "sd-band sd-band-forecast").attr("data-band-forecast", byName));
       keyed(gNotes.selectAll("g.sd-annotation"), m.annotations, (d) => d.key, (enter) => {
@@ -206,6 +225,8 @@ export default {
       const pointsG = keyed(plot.selectAll("g.sd-points"), m.showPoints ? [m.showPoints] : [], () => "points", (enter) => enter.append("g").attr("class", "sd-points"));
       if (!pointsG.empty()) gLabels.node().before(pointsG.node());
       if (m.showPoints) keyed(pointsG.selectAll("circle.sd-dot"), dotData(m), (d) => d.key, (enter) => enter.append("circle").attr("class", "sd-dot").attr("data-series", (d) => d.series));
+      // The ticker: one text over the plot, while it is on (`ticker` with `until`).
+      keyed(plot.selectAll("text.sd-ticker"), m.ticker ? [m.ticker] : [], () => "ticker", (enter) => enter.append("text").attr("class", "sd-ticker sd-halo"));
     }
 
     /** Draws the focused series after (above) the dimmed ones: the data order, with the dimmed first. */
@@ -221,6 +242,7 @@ export default {
     /** Writes the model exactly: the end state of every update, animated or not. */
     function renderStatic(m) {
       join(m);
+      svg.selectAll(".sd-sweep-cursor").remove(); // the sweep's cursor lives only while it plays, whatever ended the play
       settle(svg); // leavers go, the leftovers of drawPath and fades too; what remains is seen (not entering) by a later change
       svg.attr("width", m.w).attr("height", m.h).attr("viewBox", `0 0 ${m.w} ${m.h}`);
       plot.attr("transform", `translate(${m.margin.left},${m.margin.top})`);
@@ -228,24 +250,26 @@ export default {
       const y = d3.scaleLinear().domain(m.yDomain).range(m.yRange);
       placeMarks(m, x, y);
       const at = m.forecast?.at ?? null;
-      const keep = at !== null; // with a forecast a part can be empty: it keeps an empty `d`, so the markup does not depend on the way here
+      const shaped = at !== null || m.cut !== null; // with a forecast or a sweep a part can be empty: it keeps an empty `d`, so the markup does not depend on the way here
+      const parts = partsByName(m.series, (s) => s.points, at, m.cut);
       gLines.selectAll("path.sd-line").data(m.series, (d) => d.name)
-        .attr("d", (d) => dOr(lineD(partsOf(d.points, at).observed), keep)).attr("stroke", (d) => d.paint);
+        .attr("d", (d) => lineAttr(parts.get(d.name).observed, shaped)).attr("stroke", (d) => d.paint);
       gBands.selectAll("path.sd-band:not(.sd-band-forecast)").data(m.hasInterval ? m.series : [], (d) => d.name)
-        .attr("d", (d) => dOr(band(partsOf(d.points, at).observed), keep)).attr("fill", (d) => d.paint);
+        .attr("d", (d) => bandAttr(parts.get(d.name).observed, shaped)).attr("fill", (d) => d.paint);
       gBands.selectAll("path.sd-band-forecast").data(m.hasInterval ? forecastSeries(m) : [], (d) => d.name)
-        .attr("d", (d) => band(partsOf(d.points, at).forecast) ?? "").attr("fill", (d) => d.paint);
+        .attr("d", (d) => bandAttr(parts.get(d.name).forecast, true)).attr("fill", (d) => d.paint);
       if (m.forecast) {
-        placeForecast(plot, m, at, x, y);
+        placeForecast(plot, m, at, x, y, m.cut);
         plot.selectAll("g.sd-forecast path.sd-forecast-line").data(forecastSeries(m), (d) => d.name)
-          .attr("d", (d) => lineD(partsOf(d.points, at).forecast)).attr("stroke", (d) => d.paint);
+          .attr("d", (d) => lineAttr(parts.get(d.name).forecast, true)).attr("stroke", (d) => d.paint);
       }
       placeDots(plot.selectAll("g.sd-points circle.sd-dot").data(dotData(m), (d) => d.key), m, (d) => d, at, (d) => d.paint);
       stackFocus(m);
-      gLabels.selectAll("text.sd-series-label").data(m.hasSeriesLabels ? m.series : [], (d) => d.name)
-        .attr("x", m.pw + m.font * 0.4).attr("y", (d) => d.ly).attr("dy", "0.35em")
+      gLabels.selectAll("text.sd-series-label").data(labelled(m), (d) => d.name)
+        .attr("x", (d) => d.label.x).attr("y", (d) => d.label.y).attr("dy", "0.35em")
         .attr("fill", (d) => d.labelColor).text((d) => d.name)
         .attr("opacity", null).order();
+      if (m.ticker) placeTicker(plot, m, m.ticker.text);
       gNotes.selectAll("g.sd-annotation").data(m.annotations, (d) => d.key).order();
       gy.selectAll("g.tick").order();
       gx.selectAll("g.tick").order();
@@ -291,6 +315,13 @@ export default {
         const mix = (a, b) => (a === null || b === null ? b : lerp(a, b, t));
         return { px: lerp(q.px, p.px, t), py: lerp(q.py, p.py, t), lo: mix(q.lo, p.lo), hi: mix(q.hi, p.hi) };
       };
+      // The sweep: the cut moves in data space from the old `until` to the new one (the end of the x domain when a state has
+      // none), so it keeps its place when the scales move. A state with the same `until` on both sides only holds the cut.
+      const clampedUntil = (m) => (m.until === null ? m.xDomain[1] : Math.min(Math.max(m.until, m.xDomain[0]), m.xDomain[1]));
+      const [u0, u1] = [clampedUntil(from), clampedUntil(to)];
+      const cutting = from.until !== null || to.until !== null;
+      const sweeping = cutting && u0 !== u1;
+      const cursor = sweeping ? plot.insert("line", "g.sd-lines").attr("class", "sd-sweep-cursor") : null;
       // Colors change on their own, faster tween (a focus change takes --sd-duration-fast); the frame reads them.
       const live = new Map(to.series.map((s) => [s.name, { paint: prevSeries.get(s.name)?.paint ?? s.paint, label: prevSeries.get(s.name)?.labelColor ?? s.labelColor }]));
       const fast = motion(info, ctx, { fast: true });
@@ -315,43 +346,60 @@ export default {
       // Entering series draw at their final shape while everything else morphs.
       const toAt = to.forecast?.at ?? null;
       const lines = gLines.selectAll("path.sd-line:not(.sd-exiting)").data(to.series, (d) => d.name);
-      lines.filter((d) => entering.has(d.name)).attr("d", (d) => dOr(lineD(partsOf(d.points, toAt).observed), toAt !== null)).attr("stroke", (d) => d.paint);
+      const toShaped = toAt !== null || to.cut !== null;
+      lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineAttr(partsOf(d.points, toAt, to.cut).observed, toShaped)).attr("stroke", (d) => d.paint);
       const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
 
       const paintAt = (t) => {
         const { x, y } = scalesAt(from, to, t);
         // The forecast start moves with the points; a forecast that appears or leaves is cut at its own place all along (the group fades).
         const at = from.forecast && to.forecast ? lerp(from.forecast.at, to.forecast.at, t) : toAt;
-        const keep = at !== null;
-        const pts = (s) => s.points.map((p) => ({ ...p, ...tween(p, t) }));
+        const u = lerp(u0, u1, t);
+        const cut = cutting ? x(u) : null;
+        const shaped = at !== null || cut !== null;
+        // Every series' tweened points and their parts, once for the frame.
+        const pts = new Map(to.series.map((s) => [s.name, s.points.map((p) => ({ ...p, ...tween(p, t) }))]));
+        const parts = partsByName(to.series, (s) => pts.get(s.name), at, cut);
         // The plot origin moves with the y tick label width; interpolate it so nothing jumps at t=0.
         const margin = { left: lerp(from.margin.left, to.margin.left, t), top: lerp(from.margin.top, to.margin.top, t) };
         plot.attr("transform", `translate(${margin.left},${margin.top})`);
         placeMarks(to, x, y, margin);
         fadeOf(svg.selectAll(".tick, g.sd-annotation, .sd-points, .sd-forecast"), t);
         lines.filter((d) => !entering.has(d.name))
-          .attr("d", (d) => dOr(lineD(partsOf(pts(d), at).observed), keep))
+          .attr("d", (d) => lineAttr(parts.get(d.name).observed, shaped))
           .attr("stroke", (d) => live.get(d.name).paint);
         gBands.selectAll("path.sd-band:not(.sd-band-forecast):not(.sd-exiting)").data(to.hasInterval ? to.series : [], (d) => d.name)
-          .attr("d", (d) => dOr(band(partsOf(pts(d), at).observed), keep))
+          .attr("d", (d) => bandAttr(parts.get(d.name).observed, shaped))
           .attr("fill", (d) => live.get(d.name).paint).attr("opacity", (d) => (entering.has(d.name) ? t : 1));
         fadeOf(gBands.selectAll("path.sd-band-forecast"), t);
         gBands.selectAll("path.sd-band-forecast:not(.sd-exiting)").data(to.hasInterval ? forecastSeries(to) : [], (d) => d.name)
-          .attr("d", (d) => band(partsOf(pts(d), at).forecast) ?? "").attr("fill", (d) => live.get(d.name).paint);
+          .attr("d", (d) => bandAttr(parts.get(d.name).forecast, true)).attr("fill", (d) => live.get(d.name).paint);
         if (to.forecast) {
-          placeForecast(plot, to, at, x, y);
+          placeForecast(plot, to, at, x, y, cut);
           plot.selectAll("g.sd-forecast:not(.sd-exiting) path.sd-forecast-line:not(.sd-exiting)").data(forecastSeries(to), (d) => d.name)
-            .attr("d", (d) => lineD(partsOf(pts(d), at).forecast)).attr("stroke", (d) => live.get(d.name).paint);
+            .attr("d", (d) => lineAttr(parts.get(d.name).forecast, true)).attr("stroke", (d) => live.get(d.name).paint);
         }
         placeDots(plot.selectAll("g.sd-points:not(.sd-exiting) circle.sd-dot:not(.sd-exiting)").data(dotData(to), (d) => d.key), to, (d) => tween(d, t), at, (d) => live.get(d.series).paint);
+        // A dot shows once the cut has reached it (a dot that is leaving stays where it was).
+        if (cutting) plot.selectAll("circle.sd-dot").style("display", function (d) { return (this.classList.contains("sd-exiting") ? d : tween(d, t)).px > cut ? "none" : null; });
         fadeOf(plot.selectAll("circle.sd-dot, path.sd-forecast-line"), t);
-        gLabels.selectAll("text.sd-series-label:not(.sd-exiting)").data(to.hasSeriesLabels ? to.series : [], (d) => d.name)
-          .attr("x", x.range()[1] + to.font * 0.4).attr("y", (d) => lerp(prevSeries.get(d.name)?.ly ?? d.ly, d.ly, t))
+        // Labels: with a sweep on either side they ride the visible end of each line, else they move from where they were.
+        const spots = cutting ? labelSpots(to.series.map((s) => ({ name: s.name, points: pts.get(s.name) })), { font: to.font, pw: x.range()[1], ph: y.range()[0], cut, avoid: to.avoid }) : null;
+        const spotOf = (d) => spots?.get(d.name) ?? (spots ? d.label : { x: x.range()[1] + to.font * 0.4, y: lerp(prevSeries.get(d.name)?.label?.y ?? d.label.y, d.label.y, t) });
+        gLabels.selectAll("text.sd-series-label:not(.sd-exiting)").data(labelled(to), (d) => d.name)
+          .attr("x", (d) => spotOf(d).x).attr("y", (d) => spotOf(d).y)
           .attr("dy", "0.35em").attr("fill", (d) => live.get(d.name).label).text((d) => d.name)
-          .attr("opacity", (d) => (entering.has(d.name) ? t : 1));
+          .attr("opacity", (d) => (entering.has(d.name) ? t : 1))
+          .style("display", (d) => (spots && !spots.get(d.name) ? "none" : null));
         svg.selectAll("path.sd-line.sd-exiting, .sd-band.sd-exiting, .sd-series-label.sd-exiting").attr("opacity", 1 - t);
+        if (to.ticker) placeTicker(plot, to, sweeping ? to.fmtX(u) : to.ticker.text);
+        cursor?.attr("x1", x(u)).attr("x2", x(u)).attr("y1", 0).attr("y2", y.range()[0]);
       };
-      await Promise.all([morph(info, ctx, paintAt, { duration }), ...draws, ...recolor]);
+      try {
+        await Promise.all([morph(info, ctx, paintAt, { duration }), ...draws, ...recolor]);
+      } finally {
+        cursor?.remove();
+      }
     }
 
     return {
@@ -368,7 +416,7 @@ export default {
           const late = plot.selectAll("g.sd-points, path.sd-forecast-line").attr("opacity", 0);
           await Promise.all([
             ...gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })),
-            morph(info, ctx, (t) => late.attr("opacity", t), { duration }),
+            late.empty() ? undefined : morph(info, ctx, (t) => late.attr("opacity", t), { duration }),
           ]);
         } else if (info.animate && last && !info.entered && !info.signal?.aborted) {
           // A change while the chart stays shown. An element that just appeared without a draw snaps.

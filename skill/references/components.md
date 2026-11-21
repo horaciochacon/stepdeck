@@ -47,7 +47,8 @@ The element with id `title` is styled as the slide title. When it appears its bo
   - `series_shown` grows, and new series draw in;
   - `annotate` adds vertical rules with labels;
   - `highlight` dims the others to a neutral grey (opacity stays 1, labels turn muted), set with `only` so it lasts one step, or with `set` to move the focus step by step;
-  - changing `y` morphs the lines to another column.
+  - changing `y` morphs the lines to another column;
+  - `until` sweeps the lines along the x axis, cut exactly at that x (the axis never moves), with `ticker: true` for a large counting label of the x; `ticker` without `until` does nothing, and `validate` warns.
 - **Year axes.** Use `format: { x: "d" }` so years print as `2020`, not `2,020`.
 - **The `axes` prop is required.** It gives the axis titles.
 

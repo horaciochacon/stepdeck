@@ -2,7 +2,7 @@
 
 A line chart of one or more series over a numeric x, labelled directly at the end of each line.
 Built for step-by-step reveals: series draw in, one series can be highlighted for a step,
-annotations fade in, changing `y` morphs every line point by point, and point markers and a dotted forecast segment fade in.
+annotations fade in, changing `y` morphs every line point by point, point markers and a dotted forecast segment fade in, and `until` sweeps the lines along the x axis behind a cursor with a counting ticker.
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
@@ -19,6 +19,8 @@ annotations fade in, changing `y` morphs every line point by point, and point ma
 | `interval` | `{lower, upper}` | none | tween | Shaded band between two columns around each series. |
 | `points` | boolean | `false` | fade | A dot on every data point of every shown series; dots after `forecast.from` are hollow and slightly larger. |
 | `forecast` | `{from, label?}` | none | fade | From the x value `from` on, each line is dotted, its points hollow and its band lighter; the plot from there to its end is shaded, with a labelled divider (`label`, default the deck language's "Forecast"). |
+| `until` | number | none | tween | Shows lines, bands, points and the forecast only up to this x, cut exactly there; the x axis never changes. Played forward, the lines extend from the old value to the new one behind a vertical cursor; a jump or a backward move snaps. |
+| `ticker` | boolean | `false` | snap | With `until`, a large label of the current x (`format.x`) in the plot's upper left, counting through the sweep and resting on `until`. Without `until` it does nothing (`validate` warns). |
 
 Behaviour:
 - **Idempotent.** Every `update` ends by writing the target state straight from props, so the DOM
@@ -40,6 +42,14 @@ Behaviour:
   line is forecast; at or after the last x there is no forecast part and no shaded region. `points` and `forecast` add
   markup only while they are set, and both fade in and out. The region's color is `--sd-color-forecast` when the theme
   sets it, else a faint mix of `--sd-color-ink` and the background.
+- **Sweep.** `until` cuts every line, band, dot and forecast part at that x (the last segment interpolated; a data point on it
+  is shown once). Before the first x nothing is drawn and there is no error; after the last x the whole chart is. A line or band
+  of fewer than two points draws nothing. A played forward change of `until` runs one morph: each frame cuts the tweened points at
+  the sweep's position, from the old `until` (the x axis's end when there is none) to the new one, and draws
+  `line.sd-sweep-cursor` there; it exists only during the motion. The ticker, `text.sd-ticker`, shows `format.x` of the position,
+  and of `until` at rest, in `--sd-font-size-heading`. Series labels sit after each line's visible end (in the right margin once
+  it reaches the plot's end), and a label that would start under the ticker moves below it. With a forecast, the shaded region
+  runs from the divider to the cut.
 - **Colors** come from `ctx.palette("categorical")` in order of first appearance in the data, so a
   series keeps its color at every step. Palette colors promise 3:1 against the background (enough
   for lines); a series label is text, so it is drawn in its series color darkened (lightened on a
@@ -53,6 +63,6 @@ Markup: `svg.sd-chart-line`; each line is `path.sd-line[data-series="<name>"]`, 
 `g.tick > text`, annotations `g.sd-annotation`, labels `text.sd-series-label[data-label]`. With `points`: `g.sd-points` holding
 `circle.sd-dot[data-series]` (`.sd-dot-hollow` after the forecast start). With `forecast`: `g.sd-forecast` holding
 `rect.sd-forecast-region`, `g.sd-forecast-divider` (the rule and its label) and `path.sd-forecast-line[data-forecast]`;
-the band's forecast part is `path.sd-band.sd-band-forecast`.
+the band's forecast part is `path.sd-band.sd-band-forecast`. With `ticker`: `text.sd-ticker`; while a sweep plays: `line.sd-sweep-cursor`.
 
 See `example.js` for a slide that uses it.

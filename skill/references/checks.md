@@ -91,6 +91,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `accent-empty` | Warning. The title has an empty accent phrase `**` (markdown bold habit); it renders as two asterisks. | Write one `*phrase*`, or `\*\*`. |
 | `diagram-id` | A `diagram` (props that pass its schema) has an edge `from`/`to`, a group `contains`, or a `shown` or `highlight` entry that names an unknown id; an id used twice across nodes, groups and edges (two edges between the same pair need explicit ids); or a group that contains itself. | Correct the id, or give the edge an explicit `id`. |
 | `diagram-overlap` | A `diagram` (props that pass its schema) has sibling groups that share grid cells; a node that is not a member sitting inside a group's cells; or a theme `--sd-diagram-gap` less than twice `--sd-diagram-pad`. | Move the group or node, or put the node in the group (`contains`). For the gap, change the theme tokens. |
+| `chart-prop-unused` | Warning. A `chart.line` has `ticker: true` and no `until`, so the ticker has no sweep to count. | Set `until`, or remove `ticker`. |
 
 ### Lint
 

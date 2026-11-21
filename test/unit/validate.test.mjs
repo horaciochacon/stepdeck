@@ -280,6 +280,17 @@ test("diagram: sibling groups that share a cell are diagram-overlap", async () =
   assert.match(problems[0].measured, /wide/);
 });
 
+test("chart-prop-unused: ticker without until is a warning", async () => {
+  const problems = await validate(fixture("ticker-without-until"));
+  assert.deepEqual(rules(problems), ["chart-prop-unused"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "warning");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "chart");
+  assert.match(p.measured, /`ticker` does nothing without `until`/);
+  assert.match(p.fix, /until/);
+});
+
 // Kicker and accent phrase (default-theme spec §5.4, §10.4, §10.5).
 test("title-accent: an unmatched * in a title is a warning", async () => {
   const problems = await validate(fixture("title-accent"));

@@ -11,7 +11,7 @@ The order is the order of `components/index.json`. **Required** lists the props 
 | Component | What it shows | Required props | Animated props | Entrance | Page |
 | --- | --- | --- | --- | --- | --- |
 | `text` | One paragraph of plain text: body copy, a source line, a note, a label, the message line under a title or a badge. | `text` | `text`, `tone` | box | [text](text.md) |
-| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval` | own: the lines draw | [chart.line](chart-line.md) |
+| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval`, `points`, `forecast`, `until` | own: the lines draw | [chart.line](chart-line.md) |
 | `chart.bar` | Bars from a CSV, one per category, horizontal or vertical. Each bar has a value label and an optional interval whisker. | `data`, `x`, `y` | `y`, `interval`, `shown`, `highlight`, `domain` | own: the bars grow | [chart.bar](chart-bar.md) |
 | `terminal` | A recorded agent session in a terminal window: a typed command, an activity log, a task list and a file list. | `script`, `shown` | `shown`, `typing` | own: types, then the lines fade in | [terminal](terminal.md) |
 | `markdown` | A block of Markdown: paragraphs, headings, lists, emphasis, code and links. | `md` | `md` | box | [markdown](markdown.md) |
