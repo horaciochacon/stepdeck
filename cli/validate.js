@@ -790,7 +790,7 @@ async function validateSlide(spec, env) {
     await Promise.all(fileChecks);
 
     if (typeof props.data === "string" && /\.csv$/i.test(props.data) && env.exact(env.deckRoot, props.data).ok) {
-      for (const p of await checkColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
+      for (const p of await checkColumns(env, props, type)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
     }
     const draws = isObject(props.draws) ? props.draws.data : undefined;
     if (typeof draws === "string" && /\.csv$/i.test(draws) && env.exact(env.deckRoot, draws).ok) {
@@ -857,11 +857,13 @@ async function columnsOf(env, file, types, named, label, describe) {
 }
 
 /**
- * The chart's columns in its `data` CSV: `x`, `y`, `id`, `from`, `series`, the `interval` bounds, and `group` where it is
- * read (`mode: "back-to-back"`; a `group` left on plain bars does nothing).
+ * The chart's columns in its `data` CSV: `x`, `y`, `series`, the `interval` bounds, `id` and `from` on `chart.points`
+ * (another component's `id` or `from` may mean something else), and `group` where it is read (`mode: "back-to-back"`;
+ * a `group` left on plain bars does nothing).
  */
-function checkColumns(env, props) {
-  const named = [["x", props.x], ["y", props.y], ["id", props.id], ["from", props.from], ["series", props.series]];
+function checkColumns(env, props, type) {
+  const points = type === "chart.points" ? [["id", props.id], ["from", props.from]] : [];
+  const named = [["x", props.x], ["y", props.y], ...points, ["series", props.series]];
   if (props.mode === "back-to-back") named.push(["group", props.group]);
   if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({

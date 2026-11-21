@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validate } from "../../cli/validate.js";
 import { copyEngine } from "../../cli/engine.js";
 import { formatProblem } from "../../cli/problems.js";
-import { cpSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -92,6 +92,39 @@ test("chart.points: a missing `id` column is reported at the step that names it,
   assert.equal(problems[0].measured, "id = 'items'");
   assert.equal(problems[0].limit, "columns of data/rows.csv: group, item, value");
   assert.equal(problems[0].fix, "set id to 'item'");
+});
+
+test("`id` and `from` are checked as columns only on chart.points", async () => {
+  // A deck component may take a CSV `data` and an `id` or `from` that means something else (here, a label): no
+  // missing-column for it, while chart.points over the same CSV still reports its `id`.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-id-")));
+  try {
+    cpSync(fixture("id-missing-column"), tmp, { recursive: true });
+    mkdirSync(join(tmp, "components", "fixture.tagged"), { recursive: true });
+    writeFileSync(join(tmp, "components", "fixture.tagged", "index.js"), "export default { mount() { return { update() {} }; } };\n");
+    writeFileSync(join(tmp, "components", "fixture.tagged", "schema.json"), JSON.stringify({
+      $schema: "https://json-schema.org/draft/2020-12/schema", title: "fixture.tagged", description: "Test fixture: a CSV and a label.",
+      type: "object", additionalProperties: false, required: ["data"],
+      properties: {
+        data: { type: "string", description: "A CSV file of the deck.", examples: ["data/rows.csv"] },
+        id: { type: "string", description: "A label, not a column.", examples: ["first"] },
+        from: { type: "string", description: "Where the label comes from, not a column.", examples: ["survey"] },
+      },
+    }));
+    writeFileSync(join(tmp, "deck.js"), `export default { title: "validate fixture", lang: "en", theme: "academic-light", components: ["fixture.tagged"], slides: ["s", "t"] };\n`);
+    const slide = (id, type, props) => `export default { id: "${id}", layout: "figure-notes", title: "Tagged", elements: [
+      { id: "el", region: "main", type: "${type}", props: ${JSON.stringify(props)} },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`;
+    writeFileSync(join(tmp, "slides", "s.js"), slide("s", "fixture.tagged", { data: "data/rows.csv", id: "items", from: "survey" }));
+    writeFileSync(join(tmp, "slides", "t.js"), slide("t", "chart.points", { data: "data/rows.csv", x: "group", y: "value", id: "items" }));
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+    assert.equal(problems[0].slide, "t", "chart.points only, not the deck component");
+    assert.equal(problems[0].measured, "id = 'items'");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test("chart.bar back-to-back: a missing `group` column is reported at the step that names it, with the nearest column", async () => {
