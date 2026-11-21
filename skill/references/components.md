@@ -47,7 +47,11 @@ The element with id `title` is styled as the slide title. When it appears its bo
   - `series_shown` grows, and new series draw in;
   - `annotate` adds vertical rules with labels;
   - `highlight` dims the others to a neutral grey (opacity stays 1, labels turn muted), set with `only` so it lasts one step, or with `set` to move the focus step by step;
-  - changing `y` morphs the lines to another column.
+  - changing `y` morphs the lines to another column;
+  - `points: true` puts a dot on every data point;
+  - `forecast: { from, label? }` dots every line from the x `from` on (hollow points, a lighter band) and shades the plot from there, with a labelled divider (default "Forecast"). A `from` between two data points adds an interpolated boundary point, so the solid line ends where the dotted one starts; before the first x the whole line is forecast, after the last x there is none;
+  - `until` sweeps the lines along the x axis, cut exactly at that x (the axis never moves), with `ticker: true` for a large counting label of the x; `ticker` without `until` does nothing, and `validate` warns. Played forward, the lines sweep behind a cursor (extending, or retracting when `until` is lowered), into the forecast too; a jump or a backward move snaps;
+  - `draws: { data, id, shown, seed? }` paints a fan of uncertainty draws from a second CSV (the chart's `x`, `y` and `series` columns, plus the draw `id` column) on a canvas under the lines. `shown` is how many; raise or lower it step by step and the draws already shown stay (`seed` picks the fixed order). Keep it to a few hundred (at most 2000 draws and 500 x values per series), and the y axis already covers every draw, so it does not move when the fan appears.
 - **Year axes.** Use `format: { x: "d" }` so years print as `2020`, not `2,020`.
 - **The `axes` prop is required.** It gives the axis titles.
 
@@ -80,7 +84,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 
 **What they share:**
 - State props (`shown`, `done`, `active`, `progress`, `current`, `highlight`) are set per step with `advance` or `set`. The component renders them and never reads the step.
-- `list`, `diagram`, `chart.bar`, `chat` and `timeline` build their own entrance (`enter: own`): when the element appears on a forward step, it plays its build from nothing to that step's state (items rise in turn, nodes pop in and edges draw, bars grow, the track fills). Item motions use the shared names and the theme's timing.
+- `list`, `diagram`, `chart.bar`, `chart.points`, `chat` and `timeline` build their own entrance (`enter: own`): when the element appears on a forward step, it plays its build from nothing to that step's state (items rise in turn, nodes pop in and edges draw, bars grow, dots grow out of the reference line, the track fills). Item motions use the shared names and the theme's timing.
 - Hidden parts keep their space, so nothing reflows when a part appears.
 - Going backward undoes a step: a tick comes off, a fill retracts, a node hides, a bar shrinks back.
 - Author text (`text`, `label`, `sub`) is inline Markdown and wraps inside its box. Two labels are plain text instead: a diagram edge `label` and a chat message `label`. Every piece of audience text is at least 28px, so trim long labels rather than shrink them.
@@ -98,12 +102,25 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else: outlines and lines turn a neutral grey, labels turn muted.
 - A diagram takes the height the other elements in its region leave, so a source line can share the region.
 
-**`chart.bar`** (`catalog chart.bar`). Horizontal or vertical bars from a CSV, one row per category, each with its value at the end of the bar.
+**`chart.bar`** (`catalog chart.bar`). Horizontal or vertical bars from a CSV, one row per category (back-to-back: one row per category and group), each with its value at the end of the bar.
 - Switching `y` between columns grows or shrinks the bars. Set an explicit `domain: [min, max]` then, so the axis stays put and the change is visible.
 - `interval` adds a whisker from a lower to an upper column.
 - `shown` brings categories in one by one; hidden ones keep their band. `highlight` dims the other bars to a neutral grey.
+- `sort` orders the bands: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden bars keep their place, empty values come last, and changing it on a step slides every bar, with its label and whisker, to its new band.
+- `mode: "waterfall"` stacks the rows, in display order, into a running total over the shown bars only, with dotted connectors and signed labels; increases take the diverging palette's high colour and decreases its low colour (`invert: true` swaps them). `total: true` (or a label) adds a last bar from zero to the sum. A category that appears grows from the running total before it and the later bases move up; the axis covers every step's running totals. Every category needs a value: an empty one is an element error. Switching `mode` between `"bars"` and `"waterfall"` on a step morphs the bars; clear `total` and `invert` (`null`) when you switch back.
+- `mode: "back-to-back"` (horizontal only) takes long data: one row per category and `group`, a column with exactly two values (`groups: [left, right]` orders them). The left group's bars extend left of a centre rule and the right group's right, the ticks read as magnitudes, each side has a title in its group's colour, and `interval` whiskers sit on halos. `highlight` names a category or a group (the other side dims); `sort` ranks bands by the sum of the two sides. The axis covers every back-to-back step of the slide. A category missing a group row, a `group` without two values, a negative value or a name that is both a category and a group is an element error. A change of `mode` to or from it snaps. `orient: "vertical"` with it is a `validate` error (`chart-orient`); `invert` or `total` outside a waterfall only warns (`chart-prop-unused`).
 - It counts as a figure, so the slide needs a `role: "source"` line.
 - A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
+
+**`chart.points`** (`catalog chart.points`). Estimates from a CSV, one row per category: a dot, an optional interval whisker and the value beside it.
+- `interval` adds the whisker; `reference` (a number, or `{ value, label }`) draws a dashed line across every row, such as an average.
+- `from` (a column) makes each row a before and after pair: a hollow dot at `from`, a quiet connector and the filled dot at `y`. Put `y: "before"` on one step and `y: "now", from: "before"` on the next: the dots slide while the connectors grow. An empty `from` shows the end dot alone.
+- The value axis covers `y`, `from`, the interval columns and `reference` of every step of the slide, so switching `y` moves the dots and never the axis. Set `domain` only to fix the range yourself; an estimate outside it is an element error.
+- `shown` brings rows in one by one, each growing out of the reference line; hidden rows keep their place. `highlight` dims the other rows; use `only` so it lasts one step.
+- `sort` orders the rows: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden rows keep their place, empty values come last, and changing it on a step slides every row to its new place.
+- An empty `y` cell shows "no data" (`sin datos` in Spanish) beside the label, never a dot at zero.
+- `id` (a column) turns it into strips: one row per point, each category a beeswarm strip with a summary tick (`summary`: `"median"`, `"mean"` or `"none"`). `focus: "<id>"` rings that item in every strip, joins it with a line and dims the rest; `sort` ranks strips by their summary. With `domain`, points outside it are not drawn and a box at that end counts them.
+- It counts as a figure, so the slide needs a `role: "source"` line. It fills the room its region leaves, like `chart.bar`.
 
 **`chat`** (`catalog chat`). An exchange as bubbles, or a prompt or quote as a bordered card.
 - `style: "bubbles"` puts `user` on the right and `agent` and `note` on the left. `style: "card"` gives full-width cards with the label on top.

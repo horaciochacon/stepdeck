@@ -11,6 +11,8 @@ import { formatProblem } from "../../cli/problems.js";
 const repo = fileURLToPath(new URL("../../", import.meta.url));
 const spike = fileURLToPath(new URL("../../examples/spike/", import.meta.url));
 const fixture = fileURLToPath(new URL("../fixtures/decks/played-mismatch/", import.meta.url));
+const canvasFixture = fileURLToPath(new URL("../fixtures/decks/played-mismatch-canvas/", import.meta.url));
+const lineStory = fileURLToPath(new URL("../fixtures/decks/line-story/", import.meta.url));
 const cli = (...args) => spawnSync(process.execPath, ["cli/index.js", ...args], { cwd: repo, encoding: "utf8", env: process.env });
 
 test("played equals jumped on spike deck", async () => {
@@ -38,6 +40,20 @@ test("played catches a non-idempotent component", async () => {
   assert.match(p.measured, /text/);
   assert.match(p.fix, /idempotent/);
   assert.match(formatProblem(p), /^log\/log\/one · played-mismatch · .+ vs .+ · .*idempotent/);
+});
+
+test("check --played catches a canvas that differs", async () => {
+  const problems = await checkPlayed(canvasFixture);
+  assert.equal(problems.length, 1, JSON.stringify(problems, null, 2));
+  const [p] = problems;
+  assert.equal(p.rule, "played-mismatch");
+  assert.equal(p.element, "counter");
+  assert.match(p.measured, /^canvas n [2-9] \(n=[2-9]\) arriving from /, "the attribute that differs, the arrival's value and its layer: more updates ran than for the jump");
+  assert.equal(p.limit, "n 1 (n=1) when jumped to", "the jump's");
+});
+
+test("check --played is clean on line-story", async () => {
+  assert.deepEqual(await checkPlayed(lineStory), []);
 });
 
 test("cli: check --played exits 0 on the spike and 1 with problems; --json prints problems", () => {

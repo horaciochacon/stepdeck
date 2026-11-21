@@ -28,6 +28,13 @@ All notable changes to stepdeck are recorded here. The format follows
   They still end in the right state; drop the fade, or declare `"x-enter": "own"` and build on `info.entrance`.
   While a box moves, the engine writes inline `opacity`, `transform` and `clip-path` on it, so a slide `style` rule
   on those properties of the element box waits until the motion ends: style a node inside the box instead.
+- **A blank-looking cell is missing, never zero.** A CSV cell that holds only spaces keeps its column as text, and
+  `chart.bar` and `chart.line` drew it as 0: a bar labelled `0`, a line that dropped to the axis. Every chart now
+  reads it as missing, as an empty cell: no bar and no label (a waterfall reports the category as empty), no point on
+  the line, "no data" in `chart.points`. Decks with such cells change: they were drawn wrong.
+- **`chart.line` keeps its last x tick label inside the element.** A chart without `series` kept one font size of
+  room on the right, less than half a four-character tick label such as `2050`, which then overhung the element.
+  The right margin is now at least half the widest x tick label, so in such decks the plot is about 13 px narrower.
 - **A step's `transition` has bounds.** `transition.stagger` is at most 1000 ms and `transition.duration` at most
   5000 ms (`validate` reports `spec-invalid` above them), like an element's own `delay` and `duration`.
 - **The engine lives in `engine/`.** `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/` moved
@@ -54,8 +61,8 @@ All notable changes to stepdeck are recorded here. The format follows
 - **Theme motion tokens.** `--sd-stagger` (80ms in `modern`, 60ms in `academic-light`), `--sd-enter` (`rise`,
   `fade`) and `--sd-motion-distance` (24px, 16px). `--sd-duration-fast` and `--sd-easing`, unused before, now
   time quick changes and ease every motion.
-- **Components that build themselves.** `chart.line`, `chart.bar`, `big-number`, `list`, `chat`, `diagram`,
-  `terminal` and `timeline` declare `"x-enter": "own"`: when they appear they play their build (lines draw, bars
+- **Components that build themselves.** `chart.line`, `chart.bar`, `chart.points`, `big-number`, `list`, `chat`,
+  `diagram`, `terminal` and `timeline` declare `"x-enter": "own"`: when they appear they play their build (lines draw, bars
   grow, items rise in turn, the figure counts up) while their box stays still, in their stagger slot. A list that
   appears with its items already shown now builds them. `catalog` shows each entry's `enter` (`own` or `box`).
 - **For component authors:** `ctx.motion` (`in`, `out`, `timing`), `info.entrance`, and `"x-enter": "own"` in a
@@ -63,8 +70,11 @@ All notable changes to stepdeck are recorded here. The format follows
 - **Ghost placeholders.** `ghost: true` or `ghost: "<label>"` on an element shows a dashed frame, with the label,
   in its space while it is hidden (`false`, the default, shows none). `dump` reports it; `validate` reports `ghost-collapse` for a ghost on a
   collapsing element.
-- **The gallery** ends with five motion slides: the named motions, a step's choreography, focus-dim, the message
+- **The gallery** has five motion slides: the named motions, a step's choreography, focus-dim, the message
   line with a badge, and ghost placeholders.
+- **Data stories in the gallery.** Seven more slides, in a landing-page group "Data stories", play the new chart
+  moves on synthetic data: a forecast and sweep, the draw fan, estimates with a re-sort, before and after pairs, strips
+  with a followed item, a waterfall with a total, and a back-to-back pyramid.
 - **Message line and badges.** A slide `lede` string is a muted line under the title (the `text` role `lede`, sized
   by the new theme token `--sd-font-size-lede`: 36px in `modern`, 32px in `academic-light`); a step can change it
   and the text crossfades; its box carries the new hook class `sd-lede`. The `text` component also has a `badge`
@@ -75,6 +85,33 @@ All notable changes to stepdeck are recorded here. The format follows
   turns to the new optional theme token `--sd-color-dim` (opacity stays 1, text turns `--sd-color-muted`), the
   focused marks are drawn above the dimmed ones, and the change tweens over `--sd-duration-fast`. A theme
   without `--sd-color-dim` falls back to `--sd-color-rule`.
+- **`chart.points`, a twelfth built-in.** Estimates from a CSV, one row per category: a dot, an optional interval
+  whisker and the value beside it, against an optional `reference` line. `from` turns each row into a before and
+  after pair (a hollow dot, a connector that grows, the filled dot); `shown`, `highlight` and `sort` work as in
+  `chart.bar`; an empty value reads "no data", never a dot at zero. With `id` it draws beeswarm strips of many
+  points per category, with a summary tick and one item followed across the strips (`focus`). Its dots grow out of the
+  reference value, or out of the `from` value of a pair.
+- **`chart.line` for data stories.** `points` puts a dot on every data point. `forecast: { from, label? }` dots the
+  lines from an x on and shades the plot from there. `until` sweeps the lines along the x axis behind a cursor,
+  with `ticker: true` for a large counting label of the x, so a story can run from data into forecast. `draws`
+  paints a fan of uncertainty draws on a canvas under the lines; `shown` raises or lowers how many.
+- **`chart.bar` re-sorts and takes two new modes.** `sort` orders the bars by value, by another column or by a
+  list, and a change slides the bars to their new places. `mode: "waterfall"` stacks the bars into a running
+  total (`total`, `invert`); `mode: "back-to-back"` puts two groups left and right of a centre rule, as in a
+  population pyramid (`group`, `groups`).
+- **Charts keep one scale across steps.** `chart.points`, a waterfall or back-to-back `chart.bar`, and the draw
+  fan size their axis from every step of the slide, so a step that shows more never moves the axis. `domain`
+  is still used as given.
+- **For component authors:** `ctx.stepProps` (the element's props at every step) and `ctx.chart`, 26 building
+  blocks of the built-in charts: table loading, extents, the plot frame, keyed joins, dots, whiskers, rules,
+  halos, a canvas layer, morph and entrance helpers, and colour helpers. The guide has a new section, "Build a
+  chart from the engine's pieces", and the contract an example per group. The gallery shows them at work in a
+  group of its own, "Custom components": `gallery.slope`, a slope chart of about 100 lines with no `import`,
+  whose labels slide to their new rank, whose `highlight` dims the rest and whose lines draw in as its entrance.
+- `validate` warns `chart-prop-unused` for `ticker` without `until` and for `invert` or `total` outside a
+  waterfall, and reports `chart-orient` for a back-to-back chart with `orient: "vertical"`. `dump` reports a
+  chart's canvas layer, and `check --played` compares it. The engine strings gain `forecast`, `total` and
+  `noData`.
 
 ## [0.1.0] · 2026-11-19 · first public release
 

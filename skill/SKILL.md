@@ -1,6 +1,6 @@
 ---
 name: stepdeck
-description: Build, validate, check and screenshot step-by-step HTML presentations (decks) with stepdeck. Slides are declarative JS specs (a layout, elements, steps) with built-in components (line chart, bar chart, big number, terminal session, text, markdown, list, diagram, chat, timeline, image), data bindings and custom components. Use when asked to create or edit a stepdeck deck or slide, to make an HTML presentation or slide deck with stepdeck, or to write a stepdeck component.
+description: Build, validate, check and screenshot step-by-step HTML presentations (decks) with stepdeck. Slides are declarative JS specs (a layout, elements, steps) with built-in components (line chart, bar chart, points chart, big number, terminal session, text, markdown, list, diagram, chat, timeline, image), data bindings and custom components. Use when asked to create or edit a stepdeck deck or slide, to make an HTML presentation or slide deck with stepdeck, or to write a stepdeck component.
 ---
 
 # stepdeck

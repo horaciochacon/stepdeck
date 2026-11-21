@@ -83,3 +83,18 @@ test("cli: dump --json prints machine output; unknown command prints usage and e
   assert.equal(unknown.status, 2);
   assert.match(unknown.stderr, /unknown slide 'nope'/);
 });
+
+test("dump: the fan's canvas state", async () => {
+  const lineStory = fileURLToPath(new URL("../fixtures/decks/line-story/", import.meta.url));
+  const [fan] = await dump(lineStory, { slide: "fan", step: 2 });
+  const chart = fan.elements.find((e) => e.id === "chart");
+  assert.equal(chart.canvas.length, 1);
+  assert.deepEqual(Object.keys(chart.canvas[0]).sort(), ["draws", "seed", "signature", "until"]);
+  assert.match(chart.canvas[0].signature, /\S/);
+  assert.deepEqual(chart.canvas[0], { draws: "20", until: "", seed: "1", signature: chart.canvas[0].signature });
+  // An element without a canvas layer has no field.
+  assert.equal("canvas" in fan.elements.find((e) => e.id === "src"), false);
+  // The text listing carries it.
+  const line = formatDump([fan]).split("\n").find((l) => l.includes(" chart "));
+  assert.match(line, new RegExp(`canvas draws=20 seed=1 signature=${chart.canvas[0].signature}`));
+});

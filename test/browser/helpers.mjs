@@ -5,6 +5,7 @@
 //   pages.url(slide, "step=a&motion=full")                    // bare-shell url for withPage / ctx.open
 //   await goTo(page, slide, step)                             // STEPDECK.goTo, then settled()
 //   await elementHtml(page, id)                               // outerHTML of [data-el=id]
+//   await canvasPixels(page, id)                              // toDataURL() of every canvas inside [data-el=id]
 //   await htmlAfterJump(ctx, page, pages, slide, step, id)    // fresh load at `step`
 //   await expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id })
 //   await expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id })
@@ -12,10 +13,12 @@
 //   await expectAnimatedStepMoves(ctx, page, { pages, slide, from, to, id, probe? })
 //   await sampleFrames(page, slide, step, id, probe?)         // the element once per frame while a step plays
 //   paletteRgb(theme, index)                                  // `rgb(...)` of a theme's categorical palette colour
+//   paletteRoleRgb(theme, kind, role)                         // `rgb(...)` of a role of a theme's default palette of a kind
 //   easeAgainstTime(samples)                                  // how far a sampled 0..1 progress is from linear in time
 //
 // The expect* helpers throw an assertion error naming the step that differs. "Equal" is strict
-// outerHTML equality: after settling, a component leaves no inline animation styles behind.
+// outerHTML equality (after settling, a component leaves no inline animation styles behind) and, for an
+// element with a canvas, equal canvas pixels (`canvasPixels`), the jump read in the same browser.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -35,10 +38,30 @@ export async function goTo(page, slide, step) {
 export const elementHtml = (page, id) =>
   page.evaluate((id) => document.querySelector(`[data-el="${id}"]`)?.outerHTML ?? null, id);
 
+/** `toDataURL()` of every canvas inside the element: equal strings are equal pixels. */
+export const canvasPixels = (page, id) =>
+  page.evaluate((id) => [...document.querySelectorAll(`[data-el="${id}"] canvas`)].map((c) => c.toDataURL()), id);
+
 /** outerHTML of the element after loading the slide directly at `step` (no motion). */
 export async function htmlAfterJump(ctx, page, pages, slide, step, id) {
   await ctx.open(pages.url(slide, `step=${step}`));
   return elementHtml(page, id);
+}
+
+/** The element's markup and canvas pixels as they are now. */
+const stateOf = async (page, id) => ({ html: await elementHtml(page, id), pixels: await canvasPixels(page, id) });
+
+/** stateOf after loading the slide directly at `step` (no motion). */
+async function stateAfterJump(ctx, page, pages, slide, step, id) {
+  await ctx.open(pages.url(slide, `step=${step}`));
+  return stateOf(page, id);
+}
+
+/** Asserts two stateOf results are equal: the markup first, then the canvas pixels (compared whole, reported short). */
+function assertSameState(actual, expected, message) {
+  assert.equal(actual.html, expected.html, message);
+  assert.equal(actual.pixels.length, expected.pixels.length, `${message} (number of canvases)`);
+  actual.pixels.forEach((px, i) => assert.ok(px === expected.pixels[i], `${message} (pixels of canvas ${i})`));
 }
 
 /** Loads the slide at `step` with motion on and checks that the page really animates. */
@@ -50,12 +73,12 @@ async function openAnimated(ctx, page, pages, slide, step) {
 /** Playing forward one step at a time (motion=full) ends at the same html as jumping, at every step. */
 export async function expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id }) {
   const jumped = [];
-  for (const step of steps) jumped.push(await htmlAfterJump(ctx, page, pages, slide, step, id));
+  for (const step of steps) jumped.push(await stateAfterJump(ctx, page, pages, slide, step, id));
   await openAnimated(ctx, page, pages, slide, steps[0]);
-  assert.equal(await elementHtml(page, id), jumped[0], `${slide}/${id}: first step`);
+  assertSameState(await stateOf(page, id), jumped[0], `${slide}/${id}: first step`);
   for (let i = 1; i < steps.length; i++) {
     await goTo(page, slide, steps[i]);
-    assert.equal(await elementHtml(page, id), jumped[i], `${slide}/${id}: played to step '${steps[i]}' differs from a jump`);
+    assertSameState(await stateOf(page, id), jumped[i], `${slide}/${id}: played to step '${steps[i]}' differs from a jump`);
   }
   assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
   assert.deepEqual(ctx.errors, []);
@@ -64,20 +87,20 @@ export async function expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, i
 /** Arriving at step i-1 from step i (backward, so no motion) ends at the same html as a jump. */
 export async function expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id }) {
   for (let i = 1; i < steps.length; i++) {
-    const jumped = await htmlAfterJump(ctx, page, pages, slide, steps[i - 1], id);
+    const jumped = await stateAfterJump(ctx, page, pages, slide, steps[i - 1], id);
     await openAnimated(ctx, page, pages, slide, steps[i]);
     await goTo(page, slide, steps[i - 1]);
-    assert.equal(await elementHtml(page, id), jumped, `${slide}/${id}: back from '${steps[i]}' to '${steps[i - 1]}' differs from a jump`);
+    assertSameState(await stateOf(page, id), jumped, `${slide}/${id}: back from '${steps[i]}' to '${steps[i - 1]}' differs from a jump`);
   }
   assert.deepEqual(ctx.errors, []);
 }
 
 /**
  * Start an animated move from -> via, re-target to `to` 100 ms in, settle: the html equals a jump to `to`
- * and no element inside it keeps an inline style.
+ * and no element inside it keeps an inline style (a canvas layer's own size and position excepted).
  */
 export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id }) {
-  const jumped = await htmlAfterJump(ctx, page, pages, slide, to, id);
+  const jumped = await stateAfterJump(ctx, page, pages, slide, to, id);
   await openAnimated(ctx, page, pages, slide, from);
   await page.evaluate(
     async ([sl, via, to]) => {
@@ -88,8 +111,9 @@ export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from,
     [slide, via, to],
   );
   await settled(page);
-  assert.equal(await elementHtml(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
-  const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]`).length, id);
+  assertSameState(await stateOf(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
+  // A canvas layer keeps its inline size and position (it is placed, not animated).
+  const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]:not(.sd-canvas-layer)`).length, id);
   assert.equal(styled, 0, "no inline styles are left inside the element");
   assert.deepEqual(ctx.errors, []);
 }
@@ -193,9 +217,23 @@ export function easeAgainstTime(samples) {
  * read from the file, so a test compares what the page painted with what the theme declares.
  */
 export function paletteRgb(theme, index) {
-  const file = new URL(`../../engine/themes/${theme}/palettes.json`, import.meta.url);
-  const { default: dflt, palettes } = JSON.parse(readFileSync(file, "utf8"));
-  const hex = palettes[dflt.categorical].colors[index].value;
+  const { default: dflt, palettes } = palettesOf(theme);
+  return hexRgb(palettes[dflt.categorical].colors[index].value);
+}
+
+/**
+ * The computed `rgb(...)` of the colour a role names (`high`, `low`) in a theme's default palette of `kind`
+ * (`diverging`), read from themes/<theme>/palettes.json.
+ */
+export function paletteRoleRgb(theme, kind, role) {
+  const { default: dflt, palettes } = palettesOf(theme);
+  const palette = palettes[dflt[kind]];
+  const id = palette.roles[role];
+  return hexRgb(palette.colors.find((c) => c.id === id).value);
+}
+
+const palettesOf = (theme) => JSON.parse(readFileSync(new URL(`../../engine/themes/${theme}/palettes.json`, import.meta.url), "utf8"));
+const hexRgb = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return `rgb(${r}, ${g}, ${b})`;
-}
+};

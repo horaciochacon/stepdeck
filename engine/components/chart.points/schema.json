@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chart.points",
+  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker (or a before and after pair) and its value written beside it, against a value axis and an optional reference line; or, with `id`, a beeswarm strip of many points per category with a summary tick and one item followed across the strips. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero.",
+  "x-enter": "own",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`).",
+      "examples": ["data/estimates.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "description": "Column holding the category of each row (its text labels the row). Each category appears in one row only, unless `id` makes it a strip.",
+      "examples": ["region"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "description": "Column holding the estimate of each row. An empty cell shows \"no data\" (never a dot at zero). Changing it moves every dot to its new value; the axis covers every step's column, so it stays put.",
+      "examples": ["rate", "rate_adjusted"],
+      "x-transition": "tween"
+    },
+    "from": {
+      "type": "string",
+      "description": "Column holding the earlier value of each row, for a before and after pair: a hollow dot at it, a quiet connector, and the filled dot at `y`. An empty cell shows the end dot alone (no hollow dot, no connector). Setting it on a step slides each filled dot from its old value to `y` while the connector grows; the axis covers `from` at every step, so it stays put.",
+      "examples": ["before", "rate_2020"],
+      "x-transition": "tween"
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {
+        "lower": { "type": "string", "description": "Column with the lower bound.", "examples": ["low"] },
+        "upper": { "type": "string", "description": "Column with the upper bound.", "examples": ["high"] }
+      },
+      "description": "A whisker from the lower to the upper column through each dot (e.g. a 95% interval). A row without both bounds has no whisker. Changing it moves the whisker ends.",
+      "examples": [{ "lower": "low", "upper": "high" }],
+      "x-transition": "tween"
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "d3-format spec for category labels, applied when the category column is numeric (e.g. years).", "examples": ["d"] },
+        "y": { "type": "string", "description": "d3-format spec for value labels, ticks and the interval text.", "examples": [",.1f", ".0%"] }
+      },
+      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). Without `y`, ticks use a fixed precision from the tick step and value labels show the value as it is.",
+      "examples": [{ "y": ",.1f" }],
+      "x-transition": "snap"
+    },
+    "axes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "string", "description": "Title of the category axis, above the category labels.", "examples": ["Region"] },
+        "y": { "type": "string", "description": "Title of the value axis, under the ticks.", "examples": ["Cases per 1,000"] }
+      },
+      "description": "Axis titles: `x` names the categories, `y` the values. A title that appears, changes or goes fades; room for it is kept at every step, so the plot never resizes.",
+      "examples": [{ "y": "Cases per 1,000" }],
+      "x-transition": "fade"
+    },
+    "types": {
+      "type": "object",
+      "additionalProperties": { "enum": ["string", "number", "date"] },
+      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one.",
+      "examples": [{ "region": "string", "rate": "number" }],
+      "x-transition": "snap"
+    },
+    "domain": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Fixed value axis as [min, max], used as given. An estimate outside it is an element error; an interval past it is cut at the axis end. In strips, points outside it are not drawn: a box at that end of the row counts them. Without it the axis spans `y`, `from` and the interval columns of every step, and every step's `reference`, rounded outward to tick values (zero is not forced).",
+      "examples": [[0, 25]],
+      "x-transition": "tween"
+    },
+    "shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Categories to show, by name. Omit to show every category. A row that appears grows out of the reference line (else 0, else the axis start) and then draws its whisker; one that leaves does the reverse. Hidden rows keep their place. An unknown category is an element error naming it.",
+      "examples": [["North"], ["North", "South"]],
+      "x-transition": "draw"
+    },
+    "sort": {
+      "anyOf": [
+        { "enum": ["none", "value", "-value"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by"],
+          "properties": {
+            "by": { "type": "string", "description": "Column to order by.", "examples": ["rate_adjusted"] },
+            "order": { "enum": ["asc", "desc"], "description": "Ascending (the default) or descending.", "examples": ["desc"] }
+          }
+        },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Order of the rows. \"none\" (the default) keeps the data order; \"value\" orders by `y`, lowest first, and \"-value\" highest first; { by, order } orders by another column (ascending unless `order` is \"desc\"); a list of categories puts those first, in that order, and the rest after them in data order. Strips rank by their summary (the median with `summary: \"none\"`) and { by } reduces that column the same way. Ties keep data order and rows without a value come last, whichever way it runs. Hidden rows keep their place in the order. When it changes on a played step, every row slides to its new place; a row that appears grows in at its place. An unknown column or category is an element error naming it.",
+      "examples": ["-value", { "by": "rate_adjusted", "order": "desc" }, ["North", "South"]],
+      "x-transition": "tween"
+    },
+    "id": {
+      "type": "string",
+      "description": "Column naming each point, for strips: with it every row is one point, and a category's rows become a beeswarm strip in its band (each point keeps its place apart from its neighbours), with a summary tick. Ids are unique within a category; the same id in several categories is the same item, which `focus` follows. A row with an empty value is not drawn (never at zero), and a row with an empty id is skipped. `from` and `interval` are not drawn in strips.",
+      "examples": ["id", "school"],
+      "x-transition": "snap"
+    },
+    "summary": {
+      "enum": ["median", "mean", "none"],
+      "description": "Strips: the summary tick across each strip, at the median (the default) or the mean of all its values; \"none\" draws no tick. `sort` ranks strips by it (by the median with \"none\"), and `sort: { by }` reduces that column the same way. A change fades the old tick out and the new one in.",
+      "examples": ["mean"],
+      "x-transition": "fade"
+    },
+    "focus": {
+      "type": "string",
+      "description": "Strips: one item (an `id`) followed across the strips: its dots are ringed in ink and raised, a line joins them from strip to strip in row order (skipping a strip without it), and every other dot turns the theme's dim color (never faded). An id the data does not have is an element error.",
+      "examples": ["p07"],
+      "x-transition": "fade"
+    },
+    "highlight": {
+      "type": "string",
+      "description": "Category to emphasize; the other rows' dots and whiskers turn the theme's dim color and their value labels the muted color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",
+      "examples": ["North"],
+      "x-transition": "fade"
+    },
+    "reference": {
+      "anyOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value"],
+          "properties": {
+            "value": { "type": "number", "description": "Where the line sits on the value axis.", "examples": [10.5] },
+            "label": { "type": "string", "description": "Text above the line, at the top of the plot.", "examples": ["National average"] }
+          }
+        }
+      ],
+      "description": "A dashed reference line across every row, at a value (a number) or with a label ({ value, label }), such as an average or a target. It fades in, out or across to a new value. It widens the default axis to reach it; past a given `domain` it is not drawn.",
+      "examples": [10.5, { "value": 10.5, "label": "National average" }],
+      "x-transition": "fade"
+    }
+  }
+}

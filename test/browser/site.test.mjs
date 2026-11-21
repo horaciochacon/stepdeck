@@ -139,7 +139,7 @@ test("landing page under /stepdeck/: content, gallery list, live deck, no failed
         assert.ok(links.includes(`site/gallery/#/${e.slide}/0`), `gallery link for ${e.slide}`);
         assert.ok(links.includes(`site/docs/?p=${e.doc}`), `doc link for ${e.doc}`);
       }
-      assert.match(await page.locator("main").innerText(), /Layouts[\s\S]*Components[\s\S]*Motion/);
+      assert.match(await page.locator("main").innerText(), /Layouts[\s\S]*Components[\s\S]*Motion[\s\S]*Data stories[\s\S]*Custom components/);
 
       // The live deck inside the iframe boots, and nothing failed.
       const frame = page.frames().find((f) => new URL(f.url()).pathname === "/stepdeck/examples/kit/");

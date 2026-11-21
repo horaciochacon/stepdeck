@@ -4,7 +4,7 @@
 //
 // dump(deckDir, { slide?, step?, size?, theme? }) -> Promise<Array<StepDump>>
 //   StepDump = { slide, step, stepId, elements: ElementDump[], changed: string[], errors: string[] }
-//   ElementDump = { id, type, visible, ghost?, text, box: { x, y, w, h }, props }
+//   ElementDump = { id, type, visible, ghost?, text, box: { x, y, w, h }, canvas?, props }
 //   step     index (number); stepId the step's id (its index as a string when it has none)
 //   visible  measured on the page (computed visibility/display), not read from the spec
 //   ghost    only while the element's ghost placeholder is on screen (the element is hidden): its label, or
@@ -13,6 +13,10 @@
 //            plain string, without the phrase marks; plainAccentText). A ghost's label is not part of it.
 //   box      relative to the canvas, in canvas pixels (1920×1080, whatever the viewport), rounded
 //            to 1 px; a collapsed element is { 0, 0, 0, 0 }
+//   canvas   one object per canvas.sd-canvas-layer in the element, in DOM order: its data-* attributes, named
+//            without the prefix (a fan: draws, until, seed, signature). It is what the draw fan has painted,
+//            so a dump and `check --played` compare the canvas state without reading pixels. Omitted when the
+//            element has no canvas layer. Measured on the page.
 //   props    the resolved props (bindings applied) from STEPDECK.state()
 //   changed  ids whose resolved props or visibility differ from the previous step; at step 0 every id
 //   errors   STEPDECK.errors plus console/page errors seen while showing that step
@@ -23,7 +27,7 @@
 //
 // formatDump(dumps) -> text, one block per step:
 //   trend · step 1 (regimens)
-//     visible  chart  chart.line  60,180 1240×700  "0 100 200 …"
+//     visible  chart  chart.line  60,180 1240×700  "0 100 200 …"  canvas draws=20 seed=1 signature=1a2b3c4d
 //     hidden   next   text        980,300 840×600  ghost "2 · Result"  "…"
 //     changed: chart
 import { withPage, deckTarget, withTimeout, describePageUrl, PAGE_TIMEOUT_MS } from "./browser.js";
@@ -140,6 +144,7 @@ export function measureInPage([canvasWidth, selector = ".sd-stage .sd-canvas"]) 
     let box = { x: 0, y: 0, w: 0, h: 0 };
     let text = "";
     let ghost;
+    let canvasLayers = [];
     if (node) {
       const cs = getComputedStyle(node);
       visible = cs.visibility !== "hidden" && cs.display !== "none";
@@ -160,8 +165,21 @@ export function measureInPage([canvasWidth, selector = ".sd-stage .sd-canvas"]) 
         if (v) parts.push(v);
       }
       text = parts.join(" ");
+      // Each canvas layer's data-* attributes, without the prefix: the state its owner painted (core/chart-marks.js).
+      canvasLayers = [...node.querySelectorAll("canvas.sd-canvas-layer")].map((cv) =>
+        Object.fromEntries([...cv.attributes].filter((a) => a.name.startsWith("data-")).map((a) => [a.name.slice(5), a.value])),
+      );
     }
-    elements.push({ id, type: e.type, visible, ...(ghost === undefined ? {} : { ghost }), text, box, props: e.props });
+    elements.push({
+      id,
+      type: e.type,
+      visible,
+      ...(ghost === undefined ? {} : { ghost }),
+      text,
+      box,
+      ...(canvasLayers.length ? { canvas: canvasLayers } : {}),
+      props: e.props,
+    });
   }
   return {
     slide: st?.slide ?? null,
@@ -262,6 +280,11 @@ export function formatDump(dumps) {
       ];
       if (e.ghost !== undefined) parts.push(e.ghost === true ? "ghost" : `ghost ${JSON.stringify(excerpt(String(e.ghost)))}`);
       if (e.text) parts.push(JSON.stringify(excerpt(e.text)));
+      // One `canvas k=v …` group per layer; an empty value (a fan without `until`) is left out.
+      for (const layer of e.canvas ?? []) {
+        const pairs = Object.entries(layer).filter(([, v]) => v !== "");
+        parts.push(["canvas", ...pairs.map(([k, v]) => `${k}=${v}`)].join(" "));
+      }
       lines.push(`  ${parts.join("  ").trimEnd()}`);
     }
     for (const err of d.errors) lines.push(`  error: ${err}`);

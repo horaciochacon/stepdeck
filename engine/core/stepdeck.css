@@ -40,10 +40,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-el { position: relative; min-width: 0; }
 .sd-el[data-box] { position: absolute; }
 /* Figures fill the room their region leaves after the other elements take their own height: chart.line, chart.bar,
-   diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck component: it
-   fills only when it is the only element of a filling region, or when it is placed with `box`. */
-.sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="diagram"], [data-type="image"],
-  [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+   chart.points, diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck
+   component: it fills only when it is the only element of a filling region, or when it is placed with `box`. */
+.sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="chart.points"], [data-type="diagram"],
+  [data-type="image"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 
 /* Visibility (spec §6.2): hidden keeps its space; collapse removes it. State rules are !important: an
    important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
@@ -223,12 +223,70 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-line .sd-series-label { font-weight: 600; }
 .sd-chart-line .sd-annotation-rule { stroke: var(--sd-color-muted); stroke-width: 2; stroke-dasharray: 8 8; }
 .sd-chart-line text.sd-annotation-label { fill: var(--sd-color-ink); }
+/* forecast: a dotted line (zero-length dashes with round caps are dots), a lighter band, a faint region from the divider to the plot's end */
+.sd-chart-line .sd-forecast-line { fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 0 12; }
+.sd-chart-line .sd-band-forecast { fill-opacity: 0.08; }
+.sd-chart-line .sd-forecast-region { stroke: none; fill: var(--sd-color-forecast, color-mix(in srgb, var(--sd-color-ink) 5%, var(--sd-color-background))); }
+/* time sweep: the ticker is a large tabular x label in the plot's upper left (the size is a theme token); the cursor leads the sweep while it plays */
+.sd-chart-line text.sd-ticker { fill: var(--sd-color-ink); font-size: var(--sd-font-size-heading); font-weight: var(--sd-font-weight-title); }
+.sd-chart-line .sd-sweep-cursor { stroke: var(--sd-color-muted); stroke-width: 3; }
+/* draw fan: the draws are on a canvas layer under the svg (.sd-canvas-layer ~ svg below); each summary line sits on a narrow
+   background halo over them, and a forecast region over them tints them (the same 5% of ink over the background) instead of hiding them */
+.sd-chart-line .sd-halo-under { stroke-width: 9; }
+.sd-canvas-layer ~ .sd-chart-line .sd-forecast-region { fill: var(--sd-color-forecast, color-mix(in srgb, var(--sd-color-ink) 5%, transparent)); }
 
 .sd-chart-bar .sd-axis-value text { fill: var(--sd-color-muted); }
 .sd-chart-bar .sd-band-label { fill: var(--sd-color-ink); }
 .sd-chart-bar .sd-bar-label { font-weight: 600; }
 .sd-chart-bar .sd-whisker-line, .sd-chart-bar .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
 .sd-chart-bar .sd-bar-group[data-visible="false"], .sd-chart-bar .sd-band-label[data-visible="false"] { visibility: hidden !important; }
+/* A waterfall's connectors: quiet dots from one bar's end to the next bar. Its total bar's label is set like a sum. */
+.sd-chart-bar .sd-connector { stroke: var(--sd-color-muted); stroke-width: 2.5; stroke-dasharray: 0 6; stroke-linecap: round; fill: none; }
+.sd-chart-bar .sd-band-label[data-key="__total"] { font-weight: 600; }
+/* Back-to-back: the centre rule both sides grow from, in ink; a side title is set like a value label, its colour a fill
+   attribute (its group's, readable as text), so no rule here sets it. */
+.sd-chart-bar .sd-centre-rule { stroke: var(--sd-color-ink); }
+.sd-chart-bar text.sd-side-title { font-weight: 600; }
+
+/* chart.points component: one row per category, a dot with an interval whisker and a value label. Sizes and neutral
+   colours from tokens; the dot colour comes from the palette (a fill attribute), so no rule here sets the fill of a dot
+   or a value label. A whisker takes the stroke of its group (ink, or the dim colour out of focus) and sits on a narrow
+   background halo; hidden rows keep their place. The connector of a before and after pair is a thin line behind its
+   dots; its colour (muted, or the dim colour out of focus) is a stroke attribute. */
+.sd-chart-points { display: block; overflow: visible; }
+.sd-chart-points text { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
+.sd-chart-points .sd-axis-value text { fill: var(--sd-color-muted); }
+.sd-chart-points .sd-grid-line { stroke: var(--sd-color-grid, var(--sd-color-rule)); stroke-width: 1.5; }
+.sd-chart-points .sd-axis-line { stroke: var(--sd-color-muted); stroke-width: 2; }
+.sd-chart-points text.sd-axis-title, .sd-chart-points text.sd-points-label { fill: var(--sd-color-ink); }
+.sd-chart-points .sd-points-value { font-weight: 600; }
+.sd-chart-points text.sd-no-data { fill: var(--sd-color-muted); }
+.sd-chart-points .sd-whisker-line, .sd-chart-points .sd-whisker-cap { stroke: inherit; }
+.sd-chart-points .sd-halo-under { stroke-width: 9; }
+.sd-chart-points .sd-pair-connector { fill: none; stroke-width: 3; }
+.sd-chart-points .sd-points-row[data-visible="false"], .sd-chart-points .sd-points-label[data-visible="false"] { visibility: hidden !important; }
+/* strips: the followed item's dot is ringed in ink (over the background outline every dot has) and a thin ink line
+   joins it across strips; the summary tick, over the dots, is a stroke attribute (ink, or the dim colour out of focus);
+   an overflow box is a quiet frame with its count in the muted colour, at least the label size. */
+.sd-chart-points circle.sd-dot.sd-focus { stroke: var(--sd-color-ink); stroke-width: 3; }
+.sd-chart-points .sd-focus-join { fill: none; stroke: var(--sd-color-ink); stroke-width: 2.5; stroke-linecap: round; }
+.sd-chart-points .sd-summary { stroke-width: 4; stroke-linecap: round; }
+.sd-chart-points .sd-overflow-box { fill: var(--sd-color-background); stroke: var(--sd-color-rule); stroke-width: 2; }
+.sd-chart-points text.sd-overflow-count { fill: var(--sd-color-muted); }
+
+/* chart marks: shared by the charts and custom components (ctx.chart in core/chart.js). Theme tokens only. A mark's own
+   colour is the caller's (a fill or stroke attribute); these rules give what the theme decides: the background
+   outline of a filled dot, the background fill of a hollow one, the ink of a whisker, the halos (a dot has its outline already, so a halo skips it). They set no property
+   a caller's attribute sets: a filled dot has no `fill` rule and a hollow one no `stroke` rule. */
+.sd-dot:not(.sd-dot-hollow) { stroke: var(--sd-color-background); stroke-width: 3; }
+.sd-dot-hollow { fill: var(--sd-color-background); stroke-width: 4; }
+.sd-whisker-line, .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
+.sd-rule { stroke: var(--sd-color-muted); stroke-width: 2; stroke-dasharray: 8 8; }
+.sd-rule-label { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); font-variant-numeric: tabular-nums; }
+.sd-halo:not(.sd-dot) { stroke: var(--sd-color-background); stroke-width: 6; stroke-linejoin: round; paint-order: stroke; }
+.sd-halo-under { fill: none; stroke: var(--sd-color-background); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.sd-canvas-layer { position: absolute; pointer-events: none; }
+.sd-canvas-layer ~ svg { position: relative; }
 
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the

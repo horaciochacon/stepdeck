@@ -9,7 +9,7 @@ It is for two readers:
 
 Agents writing decks should follow the [step model reference](../../skill/references/step-model.md), the [cookbook](../../skill/references/cookbook.md) and the [checks reference](../../skill/references/checks.md) in the skill. Everything below comes from the engine code: `core/motion.js` (the named motions and their timing), `core/choreography.js` (which system plays an entrance), `core/controller.js` (when things move), `core/layout.js` (the element boxes), `core/kit.js`, `core/stepdeck.js` and the built-in components.
 
-The [gallery](../../site/gallery/) ends with five motion slides that show everything on this page: `motion-names`, `motion-choreography`, `motion-focus`, `motion-message` and `motion-ghost` (their files are in [`site/gallery/slides/`](../../site/gallery/slides/)).
+The [gallery](../../site/gallery/) has five motion slides that show everything on this page: `motion-names`, `motion-choreography`, `motion-focus`, `motion-message` and `motion-ghost` (their files are in [`site/gallery/slides/`](../../site/gallery/slides/)).
 
 ## The rule: played equals jumped
 
@@ -106,7 +106,8 @@ A component whose content has a natural build declares `"x-enter": "own"` at the
 | Component | Its build |
 |---|---|
 | `chart.line` | The lines draw along their length. |
-| `chart.bar` | The bars grow from zero, then the whiskers draw. |
+| `chart.bar` | The bars grow from zero, then the whiskers draw. A waterfall grows out of zero as a whole. |
+| `chart.points` | The dots grow out of the reference value (out of their `from`, for a pair; 0 or the start of the axis when the reference is not on the axis) and their whiskers draw; strips fade in from left to right. |
 | `big-number` | The figure fades in and counts up from 0. |
 | `list` | The visible items rise in, one after another; done ticks draw. |
 | `chat` | The visible messages rise in, one after another; with `typing`, the newest is then typed. |
@@ -215,8 +216,8 @@ How long each motion lasts:
 | `text`: crossfade of a changed text | two halves of `--sd-duration-fast` (out, then in) | Is the whole crossfade |
 | `text`: a badge's colour change | `--sd-duration-fast` | Replaces it |
 | `markdown` and `image`: a changed `md`, `src` or `caption` fades in | `--sd-duration` | Replaces it |
-| `chart.line` and `chart.bar`: draw, morph, grow | 2 × `--sd-duration` | Replaces it (not doubled) |
-| `chart.line`, `chart.bar` and `diagram`: `highlight` colour change | `--sd-duration-fast` | Replaces it |
+| `chart.line`, `chart.bar` and `chart.points`: draw, morph, grow | 2 × `--sd-duration` | Replaces it (not doubled) |
+| `chart.line`, `chart.bar`, `chart.points` and `diagram`: `highlight` colour change | `--sd-duration-fast` | Replaces it |
 | `big-number` count-up | 2.25 × `--sd-duration` (900ms) | Replaces it |
 | Items: list and chat rises, terminal line fades, diagram parts, timeline fill | `--sd-duration` | Replaces it |
 | Stagger between entering elements and between items | `--sd-stagger` | `transition.stagger` replaces it; 0 when the duration is 0 |
@@ -232,8 +233,9 @@ How long each motion lasts:
 | [markdown](../reference/components/markdown.md) | Its box plays `--sd-enter` | A changed `md` fades in |
 | [image](../reference/components/image.md) | Its box plays `--sd-enter` | A new `src` fades in once loaded; a new caption fades in |
 | [big-number](../reference/components/big-number.md) | Fades in and counts up from 0 | Counts from the previous value; a changed `label`, `ci`, `prefix`, `suffix` or `format` fades that part |
-| [chart.line](../reference/components/chart-line.md) | The lines draw | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` dims the others; annotations fade |
-| [chart.bar](../reference/components/chart-bar.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `highlight` dims the others |
+| [chart.line](../reference/components/chart-line.md) | The lines draw | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` dims the others; annotations fade; `points` and `forecast` fade in or out; a changed `until` sweeps the lines along x behind a cursor, with a counting `ticker`; `draws.shown` fades draws in and out on a canvas |
+| [chart.bar](../reference/components/chart-bar.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `sort` slides the bars to their new bands; `highlight` dims the others; in `waterfall` the bars and bases tween together, and `bars` to `waterfall` morphs; in `back-to-back` both sides move together |
+| [chart.points](../reference/components/chart-points.md) | Dots grow out of the reference value (see above), then whiskers draw; strips fade in from left to right | `y`, `from`, `interval` and `domain` tween (a `from` adds a connector that grows behind the sliding dot); rows added to `shown` grow in, removed ones shrink back; `sort` slides the rows; `highlight` and `focus` dim the others |
 | [terminal](../reference/components/terminal.md) | Types the command (with `typing`), then the lines fade in | When `shown` grows, new lines fade in, staggered; the command types only from `shown: 0` |
 | [list](../reference/components/list.md) | The visible items rise in, staggered | Newly shown items rise in, staggered; a newly done tick draws; `active` tweens text color |
 | [chat](../reference/components/chat.md) | The visible messages rise in, staggered; the newest types (with `typing`) | Newly shown messages rise in, staggered; with `typing`, the newest is then typed |
@@ -243,7 +245,7 @@ How long each motion lasts:
 Notes:
 
 - **Changing `items` or `marker` on a list**, and any change that makes list, chat, diagram or timeline rebuild their markup, renders directly with no motion.
-- **chart.bar skips motion when the bars are not comparable**: when `orient` changes, or when the set or order of categories changes. The new state is drawn directly.
+- **chart.bar and chart.points skip motion when the marks are not comparable**: when `orient` changes (bar), when the set of categories changes (`data` or `x` points at different rows), when `id` is set or removed (points), or when `mode` changes to or from `back-to-back`, or `group` or `groups` changes (bar). The new state is drawn directly. A new order of the same categories, from `sort`, slides.
 - **Text that appears and changes on the same step** is shown with its new text; only a change while it stays visible crossfades.
 
 ## Slide devices
@@ -252,9 +254,9 @@ Four devices built on the motion system, each a few keys in a slide.
 
 ### Focus-dim
 
-`highlight` on `chart.line`, `chart.bar` and `diagram` emphasises some marks and dims the rest the same way in all three:
+`highlight` on `chart.line`, `chart.bar`, `chart.points` and `diagram` emphasises some marks and dims the rest the same way in all four:
 
-- shapes out of focus (lines, bands, bars, node and group outlines, edges with their arrowheads) turn the theme's `--sd-color-dim`, a neutral grey, at full opacity (a diagram's arrowhead follows its line through `fill: context-stroke`, which Chromium supports; elsewhere it stays ink);
+- shapes out of focus (lines, bands, bars, dots and whiskers, node and group outlines, edges with their arrowheads) turn the theme's `--sd-color-dim`, a neutral grey, at full opacity (a diagram's arrowhead follows its line through `fill: context-stroke`, which Chromium supports; elsewhere it stays ink);
 - their text (series labels, value labels, node labels) turns `--sd-color-muted`, so it keeps its contrast;
 - the marks in focus keep their colour and are drawn above the dimmed ones.
 
@@ -326,7 +328,7 @@ When `animate` is false, the shell never asks for motion, so every step renders 
 2. **Arrived from the previous step**: `goTo(k)` from *k*−1, with animation.
 3. **Arrived from the next step**: `goTo(k)` from *k*+1, with no animation (a backward move).
 
-It compares each element's presence, visibility, text and box (rounded to 1 px). Any difference is a `played-mismatch` problem, reported once per element with the number of other differing arrivals. A slide with *n* steps gives 2(*n*−1) arrivals.
+It compares each element's presence, visibility, text, box (rounded to 1 px) and canvas state. Any difference is a `played-mismatch` problem, reported once per element with the number of other differing arrivals. A slide with *n* steps gives 2(*n*−1) arrivals.
 
 Run it from the repo, with Playwright available:
 

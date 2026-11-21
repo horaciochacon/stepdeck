@@ -135,6 +135,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-color-rule` | `#d4d4d8` | `#e4e4e7` | Hairlines: borders, separators. Also the fallback for `--sd-color-dim`. | `core/stepdeck.css`, `core/kit.js` (`focusPaint`, as the dim fallback) |
 | `--sd-color-grid` *(optional)* | `#d4d4d8` | `#f0f0f2` | Chart grid lines, lighter than a rule. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (`.sd-grid-line`) |
 | `--sd-color-dim` *(optional)* | `#b4b4bb` | `#c4c4cc` | What marks out of focus turn to when `highlight` emphasises another: a neutral grey lighter than `--sd-color-muted` and darker than `--sd-color-grid`. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (diagram), `core/kit.js`, `chart.line`, `chart.bar` |
+| `--sd-color-forecast` *(optional)* | *(not set)* | *(not set)* | The shaded region of a `chart.line` forecast. Falls back to 5% of `--sd-color-ink` over `--sd-color-background`. | `core/stepdeck.css`, `chart.line` |
 | `--sd-color-letterbox` | `#111114` | `=` | The page around the canvas when the window is not 16:9. | `core/stepdeck.css`, reveal shell |
 
 `accent` and `alert` are the same values as the palette colors their roles point at, so `{{color:accent}}` in a `markdown` element names the color the audience sees ("blue", "azul"). `modern`'s muted and alert were tuned from the mockup values so that text in them reaches 4.5:1 on the surface and the chat bubble; its README records each ratio.
@@ -155,7 +156,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-font-size-cover-figure` *(optional)* | `88px` | `96px` | The cover title while the `figure` region holds an element. Falls back to the cover size. | `core/stepdeck.css` (cover rule) |
 | `--sd-font-size-statement` | `64px` | `=` | Text in the `main` region of a `statement` slide. | `core/stepdeck.css` (`.sd-statement`) |
 | `--sd-font-size-title` | `64px` | `=` | Slide titles (the `title` region). | `core/stepdeck.css`, reveal shell |
-| `--sd-font-size-heading` | `48px` | `=` | Subtitles. | `core/stepdeck.css` (`.sd-subtitle`) |
+| `--sd-font-size-heading` | `48px` | `=` | Subtitles; the `chart.line` ticker. | `core/stepdeck.css` (`.sd-subtitle`, `.sd-ticker`) |
 | `--sd-font-size-body` | `40px` | `=` | Body text, the default text role. | `core/stepdeck.css` |
 | `--sd-font-size-note` | `32px` | `=` | Notes (`role: "note"`), meta lines, big-number labels, diagram and timeline labels, captions. | `core/stepdeck.css` |
 | `--sd-font-size-label` | `28px` | `=` | Axis ticks, legends, terminal text, inline code. | `core/stepdeck.css`, `chart.line`, `chart.bar`, `diagram` |

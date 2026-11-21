@@ -1,6 +1,6 @@
 # Writing a custom component
 
-This page walks you through writing a deck component: a component that lives in your deck's `components/` folder and that slides use like a built-in. It is for people who write decks by hand and for contributors who need something the 11 built-in components do not show.
+This page walks you through writing a deck component: a component that lives in your deck's `components/` folder and that slides use like a built-in. It is for people who write decks by hand and for contributors who need something the 12 built-in components do not show.
 
 You will scaffold a component with `new-component`, describe its props in `schema.json`, write `mount` and `update` so that a played step ends exactly where a jumped step does, declare it in `deck.js`, and check it with the CLI. The worked example is a counter that counts up to a new value when a step plays.
 
@@ -320,6 +320,174 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 | Know whether this is a screenshot render | `ctx.capture` |
 | Draw with d3 | `ctx.d3` |
 | Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. |
+| Keep a scale the same on every step | `ctx.stepProps[k]` is what `update` gets as `props` at step `k` (`null` when that step fails, and `null` altogether for a `ctx.mount` child). Size an axis from all of them. |
+| Draw a chart from ready-made pieces | `ctx.chart`: table loading, scale extents, the plot frame, keyed joins, dots, whiskers, rules, halos, a canvas layer, morph and entrance helpers, colour helpers. See [Build a chart from the engine's pieces](#build-a-chart-from-the-engines-pieces). |
+
+## Build a chart from the engine's pieces
+
+A chart is more than a drawing. Its axis has to stay put as steps change, its marks have to come and go cleanly, and a played step has to end where a jump does. The engine's own charts are made of pieces that a deck component gets as `ctx.chart`, so you do not rewrite them. This section builds a small dot plot, `my.dots`, in the order a chart is made: `frame`, then `extentOf` over `ctx.stepProps`, then `keyed`, the marks, `morph` and `settle`. Every piece is listed in the [component contract](../reference/component-contract.md#ctxchart).
+
+Scaffold it as before (`new-component my.dots`), then replace `schema.json`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "my.dots",
+  "description": "One dot per category at its value, with the value beside it. The value axis is the same on every step, and a played step slides each dot to its new place.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file, relative to the deck root.",
+      "examples": ["data/speed.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "description": "Column holding the category of each row.",
+      "examples": ["task"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "description": "Column holding each row's value. A change slides the dots; the axis covers the column of every step.",
+      "examples": ["before_days", "agent_days"],
+      "x-transition": "tween"
+    },
+    "format": {
+      "type": "string",
+      "description": "A d3-format specifier for the value labels.",
+      "examples": [",.0f", ".1%"],
+      "x-transition": "snap"
+    }
+  }
+}
+```
+
+And `components/my.dots/index.js`:
+
+```js
+// my.dots: one dot per category at its value, with the value beside it. Built only on `ctx.chart`.
+// The value axis is the same on every step, and a played step slides each dot to its new place.
+const SVG = "http://www.w3.org/2000/svg";
+
+export default {
+  mount(el, props, ctx) {
+    const { chart: C, d3 } = ctx;
+    const svg = d3.select(el).append(() => el.ownerDocument.createElementNS(SVG, "svg")).attr("display", "block");
+    const plot = svg.append("g");
+    const names = plot.append("g");
+    const dots = plot.append("g");
+    const values = plot.append("g");
+    const ink = ctx.tokens["--sd-color-ink"].trim();
+    const color = ctx.palette("categorical")?.colors?.[0] ?? ink;
+    let last = new Map(); // key -> the x each dot ended at: where a played step slides from
+
+    /** The rows, the frame and the scales for these props. */
+    async function layout(props) {
+      const rows = await C.loadTable(props, ctx, "my.dots", [["x", props.x], ["y", props.y]]);
+      const f = C.frame(el, ctx, ({ font, charW }) => ({ left: charW * 20, right: font * 3, top: font, bottom: font }));
+      // The domain covers the y column of every step, so the axis does not move when a step switches `y`.
+      const columns = (ctx.stepProps ?? [props]).map((p) => p?.y);
+      const x = d3.scaleLinear().domain(C.extentOf(rows, columns, { zero: true })).nice().range([0, f.pw]);
+      // Every row keeps its band, so a value that goes missing on one step moves no other row...
+      const y = d3.scaleBand().domain(rows.map((r) => String(r[props.x]))).range([0, f.ph]).padding(0.3);
+      // ...and a row without a number has no dot: a missing value is never drawn as zero.
+      const marks = rows.filter((r) => Number.isFinite(r[props.y])).map((r) => ({ key: String(r[props.x]), value: r[props.y] }));
+      return { f, x, y, marks, fmt: C.tickFormat(ctx, props.format, x.ticks(5)) };
+    }
+
+    /** The keyed joins: a new mark is created, one that left gets .sd-exiting (nothing is removed yet). */
+    function join({ marks }) {
+      const key = (d) => d.key;
+      C.keyed(names.selectAll("text"), marks, key, (enter) => enter.append("text"));
+      C.keyed(dots.selectAll("circle"), marks, key, (enter) => enter.append("circle"));
+      C.keyed(values.selectAll("text"), marks, key, (enter) => enter.append("text"));
+    }
+
+    /** Writes every attribute; `t` runs from 0 to 1 while a played step slides the dots. */
+    function place({ f, x, y, fmt }, t) {
+      svg.attr("width", f.w).attr("height", f.h);
+      plot.attr("transform", `translate(${f.margin.left},${f.margin.top})`);
+      const cx = (d) => d3.interpolateNumber(last.get(d.key) ?? x(d.value), x(d.value))(t);
+      const cy = (d) => y(d.key) + y.bandwidth() / 2;
+      names.selectAll("text:not(.sd-exiting)").attr("x", -f.font * 0.5).attr("y", cy).attr("dy", "0.35em")
+        .attr("text-anchor", "end").attr("fill", ink).attr("font-size", f.font).text((d) => d.key);
+      C.dot(dots.selectAll("circle:not(.sd-exiting)").attr("cx", cx).attr("cy", cy), { r: f.font * 0.4, color });
+      const labels = values.selectAll("text:not(.sd-exiting)").attr("x", (d) => cx(d) + f.font * 0.7).attr("y", cy).attr("dy", "0.35em")
+        .attr("fill", ink).attr("font-size", f.font).text((d) => fmt(d.value));
+      C.halo(labels); // a background outline, so the label reads over anything behind it
+    }
+
+    return {
+      async update(props, info = {}) {
+        const m = await layout(props);
+        join(m); // the joins first: they mark the leavers
+        // Only a change slides: on the step where the element appears, its box moves.
+        if (info.animate && last.size && !info.entered && !info.signal?.aborted) {
+          await C.morph(info, ctx, (t) => place(m, t), { factor: 1 });
+        }
+        C.settle(svg.node()); // removes the leavers and whatever the motion left
+        place(m, 1); // the end state, every attribute, however the step ended
+        last = new Map(m.marks.map((d) => [d.key, m.x(d.value)]));
+      },
+      destroy() {
+        svg.remove();
+      },
+    };
+  },
+};
+```
+
+The pieces, in the order `layout` and `update` take them:
+
+| Step | Piece | Why |
+|---|---|---|
+| Load | `C.loadTable` | Loads `props.data` and checks that every column the props name exists: a typo is an element error that names the column, not a blank chart. |
+| Frame | `C.frame` | The element's size and the plot inside it, from margins you give in `font` and character widths (`charW`), so the layout never waits for font loading. |
+| Scale | `C.extentOf` over `ctx.stepProps` | The extent of the `y` column of **every step**, not only the current one, so a step that switches `y` moves the dots and never the axis. `p?.y` skips a `null` step (one that failed), and `ctx.stepProps ?? [props]` covers a component mounted by `ctx.mount`, which has none. The built-in charts keep their axes still the same way: see [Charts keep one scale across steps](step-model.md#charts-keep-one-scale-across-steps). |
+| Joins | `C.keyed` | A mark that is new is created; one that is gone gets the class `sd-exiting` and stays until `settle`, so a motion could still fade it. The keys are the category names, so a dot is the same dot from step to step. |
+| Marks | `C.dot`, `C.halo` | A dot with the theme's background outline, and a halo behind each value so it reads over anything. Colours come from `ctx.palette()` and the theme's tokens, never literals. |
+| Motion | `C.morph` | Plays `place(m, t)` for `t` from 0 to 1 over `--sd-duration` (`factor: 1`; the default is twice that), or the step's `transition`, with the theme's easing and the step's `signal`. Only a change slides: when the element has just appeared (`info.entered`), its box moves instead. |
+| Settle | `C.settle` | Removes the marks that left and whatever style or opacity the motion wrote. Then `place(m, 1)` writes every attribute from the props, so the end state is the same however the step was reached. |
+
+The order inside `update` matters: the joins first, because they mark the leavers; then `settle`, which removes them; then every attribute. Pass `settle` the SVG root, never the element's box. A row with no number keeps its band but gets no dot, not a dot at zero.
+
+The example slide drives `y` with `set`, like the others. It puts the source line in `footer`, so the dot plot is alone in `main` and fills it: a deck component has no fill rule of its own.
+
+```js
+export default {
+  id: "my-dots-example",
+  layout: "figure-notes",
+  title: "From weeks to days",
+  elements: [
+    { id: "dots", region: "main", type: "my.dots",
+      props: { data: "data/speed.csv", x: "task", y: "before_days", format: ",.0f" } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic task durations." } },
+  ],
+  steps: [
+    { id: "before" },
+    { id: "agent", set: { dots: { y: "agent_days" } } },
+  ],
+};
+```
+
+Its `data/speed.csv`:
+
+```csv
+task,before_days,agent_days
+Clean the data,25,3
+Write the report,18,3
+Check the figures,12,2
+```
+
+`validate` and `check --played` pass on this deck, and the axis stays put between the two steps.
+
+`ctx.chart` has more for other charts: an interval whisker, a forecast band, labels kept apart, a canvas layer for many thin lines, a fixed draw order, and a colour that stays readable as text. Each group has its own example in the contract. A chart that builds its own entrance reads `C.entrance(info, ctx)` and draws its lines with `C.undraw` and `ctx.animate.drawPath`.
+
+The gallery's slope chart, [`gallery.slope`](../../site/gallery/components/gallery.slope/index.js), goes further with the same pieces in about 100 lines and no `import`: labels ranked with `C.rank` and kept apart with `C.spread` that slide to their new rank on a played step, `highlight` with `C.focusPaint` and `C.tweenColor`, and lines that draw in as its own entrance. It passes `check --played` like a built-in; its slide is `custom-slope` in the [gallery](../../site/gallery/), and the files are listed under [A complete example in the repository](#a-complete-example-in-the-repository).
 
 ## Verify it
 
@@ -398,6 +566,16 @@ Run them with `STEPDECK_PLAYWRIGHT=<playwright folder> npm run test:browser`. Se
 | [`examples/spike/slides/story.js`](../../examples/spike/slides/story.js) | A slide that drives `stage` with `advance`. |
 | [`examples/spike/deck.js`](../../examples/spike/deck.js) | `components: ["demo.story"]`. |
 | [`test/browser/custom.test.mjs`](../../test/browser/custom.test.mjs) | Browser tests for it. |
+
+The gallery has a chart built the same way, from `ctx.chart` alone, `gallery.slope`:
+
+| File | What it shows |
+|---|---|
+| [`site/gallery/components/gallery.slope/index.js`](../../site/gallery/components/gallery.slope/index.js) | A slope chart with no `import`: one scale over every step (`C.extentOf` over `ctx.stepProps`), `C.keyed` joins, then `C.settle`, then every attribute; one `C.morph` for a played change, ranked labels (`C.rank`, `C.spread`) that slide to their new place, focus-dim with `C.focusPaint` and `C.tweenColor`, and an owned entrance (`C.entrance`, `C.undraw`, `ctx.animate.drawPath`). |
+| [`site/gallery/components/gallery.slope/schema.json`](../../site/gallery/components/gallery.slope/schema.json) | A closed schema with `"x-enter": "own"` and `description`, `examples` and `x-transition` on every prop. |
+| [`site/gallery/components/gallery.slope/example.js`](../../site/gallery/components/gallery.slope/example.js) | The gallery slide: the right end moves from 2010 to 2020 and 2030, then one region is highlighted. |
+| [`site/gallery/deck.js`](../../site/gallery/deck.js) | `components: ["gallery.slope"]`. |
+| [`test/browser/custom-slope.test.mjs`](../../test/browser/custom-slope.test.mjs) | Played equals jumped, a scale that never moves, labels that slide to their new rank, and the entrance drawn from a deck with a copied engine. |
 
 The cookbook recipe [A custom component driven by `stage`](../../skill/references/cookbook.md#a-custom-component-driven-by-stage) shows the starter's example slide.
 

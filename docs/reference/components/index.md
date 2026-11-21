@@ -1,6 +1,6 @@
 # Components
 
-This page lists the 11 built-in components and the rules they all share. Use it to pick a component, see which props you must set and which props animate, and learn how to read the per-component pages. It is for people who write slides by hand and for agents that build decks.
+This page lists the 12 built-in components and the rules they all share. Use it to pick a component, see which props you must set and which props animate, and learn how to read the per-component pages. It is for people who write slides by hand and for agents that build decks.
 
 Agents look components up in the catalog, as described in [skill/references/components.md](../../../skill/references/components.md). The catalog and these pages are built from the same files.
 
@@ -11,8 +11,9 @@ The order is the order of `components/index.json`. **Required** lists the props 
 | Component | What it shows | Required props | Animated props | Entrance | Page |
 | --- | --- | --- | --- | --- | --- |
 | `text` | One paragraph of plain text: body copy, a source line, a note, a label, the message line under a title or a badge. | `text` | `text`, `tone` | box | [text](text.md) |
-| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval` | own: the lines draw | [chart.line](chart-line.md) |
+| `chart.line` | Lines from a CSV, one per series, over a numeric x. It has direct series labels, a one-step highlight, vertical annotations and an optional interval band. | `data`, `x`, `y`, `axes` | `y`, `series_shown`, `highlight`, `annotate`, `interval`, `points`, `forecast`, `until` | own: the lines draw | [chart.line](chart-line.md) |
 | `chart.bar` | Bars from a CSV, one per category, horizontal or vertical. Each bar has a value label and an optional interval whisker. | `data`, `x`, `y` | `y`, `interval`, `shown`, `highlight`, `domain` | own: the bars grow | [chart.bar](chart-bar.md) |
+| `chart.points` | Estimates from a CSV, one row per category: a dot with an optional interval whisker and a value label, against an optional reference line; or, with `id`, beeswarm strips of many points with a summary tick and one item followed across them. An empty value reads "no data". | `data`, `x`, `y` | `y`, `from`, `interval`, `axes`, `domain`, `shown`, `highlight`, `reference`, `summary`, `focus` | own: the dots grow out of the reference; strips fade in from left to right | [chart.points](chart-points.md) |
 | `terminal` | A recorded agent session in a terminal window: a typed command, an activity log, a task list and a file list. | `script`, `shown` | `shown`, `typing` | own: types, then the lines fade in | [terminal](terminal.md) |
 | `markdown` | A block of Markdown: paragraphs, headings, lists, emphasis, code and links. | `md` | `md` | box | [markdown](markdown.md) |
 | `big-number` | One large figure with an optional label and 95% interval. It counts up when its value changes. | `value`, `format` | `value`, `label`, `ci` | own: counts up | [big-number](big-number.md) |
@@ -73,7 +74,7 @@ When a component cannot render, for example because a column is missing from the
 
 ## Figures need a source line
 
-`chart.line`, `chart.bar` and `big-number` are figures. A slide that has a figure must also have an element whose props include `role: "source"`, which is usually a `text` element in the `footer` region. Without one, `validate` reports `figure-source` on the first figure:
+`chart.line`, `chart.bar`, `chart.points` and `big-number` are figures. A slide that has a figure must also have an element whose props include `role: "source"`, which is usually a `text` element in the `footer` region. Without one, `validate` reports `figure-source` on the first figure:
 
 ```text
 chart/chart · figure-source · chart (chart.line), latest (big-number) without a source vs an element with role: "source" · add { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }

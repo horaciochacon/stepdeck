@@ -1,8 +1,8 @@
 # chart.line
 
-`chart.line` draws one or more lines from a CSV file over a numeric x. Each line is labelled directly at its end, and the chart is built for step-by-step reveals: series draw in, one series can be highlighted for a step, vertical annotations fade in, and changing `y` morphs every line point by point. This page lists every prop, its default and transition, how the scales and colors are chosen, when the chart animates, how big it renders, the `anchor()` API, the markup, and the mistakes that are easy to make. It is for deck authors and for authors of custom components that mount a `chart.line` and need `anchor()`.
+`chart.line` draws one or more lines from a CSV file over a numeric x. Each line is labelled directly at its end, and the chart is built for step-by-step reveals: series draw in, one series can be highlighted for a step, vertical annotations fade in, point markers and a forecast segment fade in, `until` sweeps the lines across the x axis with a counting ticker, `draws` paints a fan of uncertainty draws under the lines, and changing `y` morphs every line point by point. This page lists every prop, its default and transition, how the scales and colors are chosen, when the chart animates, how big it renders, the `anchor()` API, the markup, and the mistakes that are easy to make. It is for deck authors and for authors of custom components that mount a `chart.line` and need `anchor()`.
 
-Sources: [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`components/chart.line/parts.js`](../../../engine/components/chart.line/parts.js), [`components/chart.line/fan.js`](../../../engine/components/chart.line/fan.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -67,17 +67,102 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 | `format` | `{ x?, y? }` | no | precision from the tick step | snap | d3-format specs for the tick labels, localized by the deck language. Without one, ticks use fixed precision derived from the tick step (`d3.precisionFixed`), so a step of 0.5 gives one decimal. |
 | `types` | `{ <column>: "string" \| "number" \| "date" }` | no | guessed | snap | CSV column types passed to the data loader. An undeclared column is a number only when every non-empty value looks like one. |
 | `interval` | `{ lower, upper }` | no | none | tween | A shaded band between two columns around each series, such as an uncertainty interval. Both keys are required. The band morphs with the lines. |
+| `points` | boolean | no | `false` | fade | A dot on every data point of every shown series. Dots after `forecast.from` are hollow. |
+| `forecast` | `{ from, label? }` | no | none | fade | From the x value `from` on, every line is dotted with hollow points and a lighter band, over a shaded region with a labelled divider. `from` is required; `label` replaces the default word. See [Forecast and points](#forecast-and-points). |
+| `until` | number | no | none | tween | Shows lines, bands, points and the forecast only up to this x value, cut exactly there. The x axis does not change. Played forward, the lines sweep behind a cursor, extending or (when `until` is lowered) retracting. See [Sweep](#sweep). |
+| `ticker` | boolean | no | `false` | snap | With `until`, a large label of the x the sweep has reached, in the plot's upper left. Without `until` it does nothing and `validate` warns (`chart-prop-unused`). See [Sweep](#sweep). |
+| `draws` | `{ data, id, shown, seed? }` | no | none | tween | A fan of uncertainty draws: `data` is a CSV with the chart's `x`, `y` and `series` columns and the draw column `id`; the first `shown` draws of a fixed order (`seed`, default 1) are painted under the lines. `data`, `id` and `shown` (an integer, at least 0) are required. See [The draw fan](#the-draw-fan). |
 
-The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
+The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval`, `forecast` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
 
 Rows whose x or y cell is empty are left out of the line; the line joins the points on either side. The band is broken where `lower` or `upper` is empty. `annotate` entries whose `x` is not a finite number are dropped.
 
 ## Scales and ticks
 
 - **x domain**: the extent of the x column over every row. Rows with an x but an empty y still widen the x domain, so a trailing x with no y stretches the axis past the end of the line. If all x values are equal, the domain is widened to `[x, x + 1]`.
-- **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not. It always includes 0, and is rounded out with `nice(5)`. Because hidden series count, the y axis does not jump when a series appears; it changes only when `y`, `interval` or the data change.
+- **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not, plus every `y` value of every draws file that a step of the slide with the same `y` names in `draws`. It always includes 0, and is rounded out with `nice(5)`. Because hidden series and draws not yet shown count, the y axis does not jump when a series or the fan appears; it changes only when `y`, `interval` or the data change.
 - **Ticks**: 5 y ticks and 6 x ticks (d3 tick counts, so the exact number can differ by one or two). Y ticks carry horizontal grid lines.
-- **Margins** are computed from character counts, not measured text, so the layout never depends on font loading. The left margin fits the longest y tick label; the right margin fits the longest shown series name.
+- **Margins** are computed from character counts, not measured text, so the layout never depends on font loading. The left margin fits the longest y tick label; the right margin fits the longest shown series name, and is never less than half the widest x tick label (the last tick is centred on the plot's end).
+
+## Forecast and points
+
+`forecast: { from: 2025 }` marks everything from an x value on as a forecast, and `points: true` puts a dot on every data point. They are independent, and both leave no markup behind while they are unset.
+
+With `forecast`, every series is cut at `from`:
+
+- **The line.** The observed part keeps its solid `path.sd-line`; the forecast part is a separate dotted `path.sd-forecast-line[data-forecast="<name>"]` (round dots, the series' color, `--sd-color-dim` when another series is highlighted).
+- **The join.** When `from` falls between two data points, the cut adds a boundary point interpolated on the line (and on the band's bounds). Both parts include it, so the solid line ends exactly where the dotted one starts. A data point exactly at `from` is the join itself and is not drawn twice. Series are cut independently, so a series that ends before `from` has no dotted line.
+- **The band.** With `interval`, the forecast part of each band is `path.sd-band.sd-band-forecast`, lighter than the observed one (8% fill opacity against 15%).
+- **The region and divider.** `rect.sd-forecast-region` shades the plot from `from` to its end. A dashed divider (`line.sd-rule`) marks `from`, with its label inside the plot at the top: `forecast.label`, or else the deck language's word ("Forecast", "Proyección"). Near the plot's end the label moves to the left of the divider. The region's color is `--sd-color-forecast` when the theme sets it, else 5% of `--sd-color-ink` over `--sd-color-background` (see [Themes](../themes.md)).
+- **Outside the data.** With `from` before the first x, the whole line is forecast (`path.sd-line` stays but has no points) and the region covers the whole plot. With `from` at or after the last x, there is no forecast part and no region, and the chart is as without `forecast`.
+
+With `points`, `g.sd-points` holds one `circle.sd-dot[data-series]` per data point of each shown series, in the series' color (outlined in the background color). A dot after `from` is hollow (`.sd-dot-hollow`: a ring filled with the background) and 20% larger. The interpolated boundary point has no dot. Dots follow the lines when `y` changes, appear with a series, and dim with `highlight`.
+
+Both props fade: when one is set on a step that plays, its markup fades in over the morph's duration, and when it is cleared the markup fades out; while `forecast.from` moves, the cut, the divider and the region move with it. On an entrance the dots and the dotted line fade in while the solid lines draw. Jumps and backward moves write the end state at once.
+
+```js
+{ id: "projection", set: { chart: { points: true, forecast: { from: 2025, label: "Projection" } } } },
+```
+
+## Sweep
+
+`until` shows the chart only up to an x value, so one chart can be revealed along its x axis, one step after another. Every line, band, dot and forecast part is cut exactly at `until`: where it falls between two data points the last segment is interpolated, and a data point exactly on it is shown once. The x domain, the ticks and the margins are the same whatever `until` is, so the axis never moves.
+
+- **Outside the data.** With `until` before the first x nothing is drawn (the lines keep an empty `d`, with no dot and no label) and there is no error; at or after the last x the whole chart is drawn. A line or band with fewer than two points shows nothing, so `until` on the first x does not leave a stray dot.
+- **Series labels.** With `until`, a label sits just after its line's visible end, at its height and clear of the other labels, and rides along while the sweep plays; once a line reaches the plot's end its label stays in the right margin, as it always was. A series with no visible point has no label yet. Without `until` the labels are where they always were.
+- **With a forecast.** The cut applies to the forecast part too, and the shaded region runs from the divider to the cut, so it is revealed as the sweep passes `forecast.from`. The divider and its label are always there. "Data, then forecast" is `forecast: { from: 2023 }` on the element, `until: 2023` on one step and `until: 2050` on the next.
+- **Ticker.** `ticker: true` adds `text.sd-ticker` in the plot's upper left: the x value of the sweep, formatted with `format.x`, in `--sd-font-size-heading` with tabular numerals. It counts while the sweep plays and rests on `until`. A series label that would start under it moves below it.
+- **Cursor.** While a sweep plays, `line.sd-sweep-cursor` marks the cut. It exists only during the motion: a chart at rest has no cursor, however it got there.
+
+```js
+export default {
+  id: "story",
+  layout: "full-bleed",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/trend.csv", x: "year", y: "rate", series: "series", forecast: { from: 2023 },
+               until: 2023, ticker: true, format: { x: "d" }, axes: { x: "Year", y: "Rate" } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: …" } },
+  ],
+  steps: [
+    { id: "observed" },
+    { id: "forecast", set: { chart: { until: 2050 } } },
+  ],
+};
+```
+
+## The draw fan
+
+`draws` paints many uncertainty draws (posterior samples, bootstrap replicates, simulation runs) as thin lines under the summary lines. The draws file is long format like `data`, with one more column naming the draw:
+
+```text
+year,series,rate,draw
+2000,north,16.9,1
+2005,north,20.7,1
+```
+
+It must have the chart's `x`, its `y`, its `series` column when the chart has series, and the `id` column; `types` applies to it as to `data`. The same id in two series is one draw of each. A series with fewer draws than another paints the ones it has.
+
+- **Which draws.** The ids are put in a fixed order, `drawOrder(ids, seed)` from `core/chart.js`: a hash of the seed and each id, so it depends on neither the file's row order nor the number of draws. The first `shown` ids are painted. Raising `shown` keeps every draw already shown and adds more; lowering it removes the last ones added. `seed` (an integer, default 1) picks another order. `shown: 0` paints nothing, but the canvas is there.
+- **How they look.** Each draw is a line in its series' color, or the ink (`--sd-color-ink`) when the chart has no `series`. With `highlight`, the draws of the other series turn `--sd-color-dim` with their lines and are painted below the highlighted series' draws. An empty value breaks a draw's line there; it is never drawn at 0. `until` cuts the draws with the lines.
+- **Opacity rule.** With n draws shown, each is painted at `clamp(1.9 / √n, 0.06, 0.85)`: 0.85 for one draw, 0.42 for 20, 0.13 for 200, 0.06 from about 1000 on. Where draws pile up the fan darkens, so its density reads as probability.
+- **Width tiers.** A draw's width is a fixed multiple of the summary line's stroke width (5 px): 0.5 for n ≤ 20, 0.4 for n ≤ 200, 0.3 above.
+- **Above the fan.** The draws are on a canvas under the chart's SVG, so the axes, the lines, the labels and the forecast's divider paint above them. Each summary line, solid or dotted, sits on a narrow halo in the background color. Over a fan, a forecast region in a theme without `--sd-color-forecast` is a translucent 5% ink tint that the draws show through; a theme that sets that token to an opaque color hides the draws in the region.
+- **Limits.** At most 2000 draws in the file and 500 x values per series; more fails the element (see [Errors](#errors)). A few hundred draws are plenty on a slide, and keep the file small.
+- **Motion.** A played change of `shown` (or of anything else, while `draws` is set) is one morph that repaints the canvas every frame: new draws fade in from 0, kept draws go from the old opacity and width to the new ones, and removed draws fade out. The last frame is followed by the end state, painted from props, so the canvas after a played step is the same, pixel for pixel, as after a jump. `draws` set on a step fades the whole fan in, and cleared fades it out.
+
+```js
+steps: [
+  { id: "none" },
+  { id: "one", set: { chart: { draws: { shown: 1 } } } },
+  { id: "few", set: { chart: { draws: { shown: 20 } } } },
+  { id: "many", set: { chart: { draws: { shown: 200 } } } },
+],
+```
+
+With `draws: { data: "data/draws.csv", id: "draw", shown: 0 }` on the element, these steps add one draw, then 20, then 200. `set` merges into the object, so a step can give `shown` alone.
+
+**State attributes.** The canvas, `canvas.sd-canvas-layer`, carries what it shows: `data-draws` (`shown`), `data-until` (`until`, or empty), `data-seed` (the seed in use) and `data-signature`, a hash of every painted line's color, width, opacity and points (`paintLines` in `core/chart.js`). Two canvases with the same signature show the same picture, so a test or a dump can compare the fan without its pixels.
 
 ## Colors
 
@@ -99,6 +184,9 @@ The chart animates only when the engine asks for it: you moved forward exactly o
 | `series_shown` removes a series | Its line, label and band fade out. |
 | `highlight` set or cleared | Line, band and label colors tween in RGB over `--sd-duration-fast`. Opacity never changes. |
 | `annotate` | New annotations fade in; removed ones fade out. Ticks that enter or leave fade the same way. |
+| `until` changes | One morph: every frame cuts the points at the sweep's position, which moves from the old `until` to the new one (the end of the x axis counts as the value of a chart with none), with `line.sd-sweep-cursor` drawn there and the ticker counting. Lines, bands, dots and labels follow; at the end the cursor is removed and the end state written. A jump, a backward move, capture and reduced motion show the end state at once. A forward step that lowers `until` sweeps backward: the cursor retracts from the old position to the new one. |
+| `points` or `forecast` set or cleared | The dots (or the forecast group, with its dotted lines and region) fade in or out; a series that appears fades in its dots and dotted line with it. A moving `forecast.from` moves the cut, the divider and the region with the morph. |
+| `draws.shown` (or `draws` set or cleared) | The canvas is repainted each frame: new draws fade in, kept draws change opacity and width, removed draws fade out, and the halos fade in or out with the fan. With `until`, the draws are cut where the sweep is in every frame. See [The draw fan](#the-draw-fan). |
 
 Motion lasts twice `--sd-duration` (400 ms in both built-in themes, so 800 ms), with the theme's `--sd-easing`. A step's `transition.duration` replaces it as is (it is not doubled); on the entrance, the element's own `enter.duration` wins. The one exception is color: a `highlight` change tweens line, band and label colors in their own tween over `--sd-duration-fast` (200 ms), or over the step's `transition.duration`, beside the geometry morph. An aborted step snaps to its end state. Every update ends by writing the target state from props and clearing inline styles and opacities, so the markup after a played step equals the markup after jumping to it.
 
@@ -141,6 +229,13 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="chart.line"]`) the co
 | `g.sd-axis.sd-axis-x > g.tick.sd-tick-x` | An x tick: `text`. `line.sd-axis-line` is the x baseline. |
 | `path.sd-line[data-series="<name>"]` | One line per shown series. |
 | `path.sd-band[data-band="<name>"]` | One band per shown series, only with `interval`. |
+| `g.sd-points > circle.sd-dot[data-series]` | One dot per data point, only with `points`; `.sd-dot-hollow` after the forecast start. |
+| `text.sd-ticker` | Only with `ticker` and `until`: the sweep's x value. |
+| `line.sd-sweep-cursor` | Only while a sweep plays. |
+| `canvas.sd-canvas-layer` | Only with `draws`: the draws, as the element's first child, placed over the plot, with `data-draws`, `data-until`, `data-seed` and `data-signature`. |
+| `path.sd-halo-under` | Only with `draws`: a background-colored copy just before each `path.sd-line` and `path.sd-forecast-line`. |
+| `g.sd-forecast` | Only with `forecast`, under the axes: `rect.sd-forecast-region`, `g.sd-forecast-divider` (`line.sd-rule` and `text.sd-rule-label`) and `path.sd-forecast-line[data-forecast="<name>"]` per series with a forecast part. |
+| `path.sd-band.sd-band-forecast[data-band-forecast="<name>"]` | The forecast part of a band, with `forecast` and `interval`. |
 | `text.sd-series-label[data-label="<name>"]` | A direct label at the end of each line, only with `series`. |
 | `g.sd-annotation` | An annotation: `line.sd-annotation-rule` and `text.sd-annotation-label`. |
 | `text.sd-axis-title.sd-axis-title-x`, `.sd-axis-title-y` | The axis titles. |
@@ -156,12 +251,21 @@ These fail the element: the message is shown on the slide, recorded in `STEPDECK
 | ``chart.line needs a `data` path`` | `data` is missing or empty. |
 | `<data> is not a table (use a .csv file)` | `data` points to a JSON file. |
 | ``chart.line needs `<prop>` (a column name)`` | `x`, `y`, `series` (if given) or `interval.lower`/`upper` (when `interval` is set) is not a non-empty string. An empty `series: ""` fails here. |
-| `column '<c>' not found in <data> (columns: a, b, ...)` | `x`, `y`, `series`, `interval.lower` or `interval.upper` names a column the CSV lacks. |
+| `column '<c>' not found in <data> (columns: a, b, ...)` | `x`, `y`, `series`, `interval.lower` or `interval.upper` names a column the CSV lacks, or the draws file (`draws.data`) lacks `x`, `y`, `series` or `draws.id`. |
+| `` `draws.shown` is <n> but <data> has only <m> draws `` | `shown` is more than the number of draws in the draws file. |
+| `<data> has <m> draws (at most 2000)` | The draws file has more than 2000 draws. |
+| `<data> has <k> x values for series '<s>' (at most 500)` | A series of the draws file has more than 500 x values (`'all'` without `series`). |
 
 `validate` catches a missing column before you open the deck, with a did-you-mean fix:
 
 ```text
 chart/chart/base · missing-column · y = 'vaule' vs columns of data/series.csv: year, group, value · set y to 'value'
+```
+
+For the draws file, `validate` checks the chart's `x`, `y` and `series` and `draws.id` the same way; the problem names `draws.data`:
+
+```text
+fan/chart/start · missing-column · series = 'group' in draws.data vs columns of data/draws.csv: year, grp, rate, draw · add the column 'group' to data/draws.csv (the chart's series), or rename its column 'grp' to 'group'
 ```
 
 A CSV that does not parse is `data-invalid`; a missing file is `file-missing`. A slide with a `chart.line` must also have an element with `role: "source"`, or `validate` reports `figure-source`. See the [CLI reference](../cli.md).

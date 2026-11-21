@@ -1,5 +1,16 @@
-// Helpers the built-in charts (chart.line, chart.bar) share.
+// Helpers the built-in charts (chart.line, chart.bar, chart.points) share, and `chartKit`: the same building blocks, frozen,
+// which every component receives as `ctx.chart`. The pure layout maths is in ./chart-layout.js, the DOM marks,
+// frame, joins and canvas layer in ./chart-marks.js, the motion in ./chart-motion.js.
 import { d3 } from "./d3.js";
+import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm } from "./chart-layout.js";
+import { frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines } from "./chart-marks.js";
+import { morph, entrance, undraw } from "./chart-motion.js";
+import { focusPaint, tweenColor } from "./kit.js";
+import { textColor } from "./color.js";
+
+export { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm } from "./chart-layout.js";
+export { frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines } from "./chart-marks.js";
+export { morph, entrance, undraw } from "./chart-motion.js";
 
 /**
  * Loads the rows of `props.data` and checks every column the props name. `columns` is
@@ -29,3 +40,14 @@ export function tickFormat(ctx, spec, ticks) {
 
 /** An `opacity` attribute value for a datum: none at full opacity. */
 export const opacityAttr = (d) => (d.opacity === 1 ? null : d.opacity);
+
+/**
+ * The chart building blocks a component gets as `ctx.chart`: one frozen object, the same for every component
+ * and child. Its public names are the contract (docs/reference/component-contract.md); `opacityAttr` is not one.
+ */
+export const chartKit = Object.freeze({
+  loadTable, tickFormat,
+  extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm,
+  frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines, morph, entrance, undraw,
+  focusPaint, tweenColor, textColor,
+});

@@ -20,11 +20,14 @@
 //             folded with stateAt at every step k up to the first step whose set/replace/show/hide names an
 //             unknown element (a bad `only` skips its own step; a bad from/at/advance ref skips folding), and at each k every element's props must be an object,
 //             hold no remote URL (http(s):// or //host, R20) and no hex color, have bindings whose file,
-//             pointer and format exist, name CSV columns (x, y, series, interval.lower/upper) that exist,
+//             pointer and format exist, name CSV columns (x, y, id, from, series, interval.lower/upper, and group in
+//             back-to-back) that exist,
 //             point at files that exist in that exact case, and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
-//             theme's tokens.css). Each problem is reported once, at the first step where it appears.
+//             theme's tokens.css), and every element goes through chartProblems (core/chart-rules.js:
+//             chart-prop-unused, a warning; chart-orient, an error). Each problem is reported once, at the first step
+//             where it appears.
 //   ghost     an element may not set ghost together with collapse: true (ghost-collapse, error).
 //   exit      an exit object with a delay is a warning (exit-delay-ignored): exits start at t = 0.
 //   budget    an element that enters on a step (k >= 1) must settle well inside the 10 s watchdog: its stagger
@@ -52,6 +55,7 @@ import { createRegistry, suggest } from "#engine/core/registry.js";
 import { makeFormat } from "#engine/core/format.js";
 import { problem, componentProblem } from "./problems.js";
 import { diagramProblems, diagramSpacing } from "#engine/components/diagram/place.js";
+import { chartProblems } from "#engine/core/chart-rules.js";
 import { DEFAULT_ENTER, motionParts, resolveEntrance, slotDelays } from "#engine/core/choreography.js";
 import { MOTION_NAMES, timing } from "#engine/core/motion.js";
 import { TYPE_MAX_MS, typingMs } from "#engine/core/animate.js";
@@ -233,6 +237,7 @@ function buildMs(type, props, own, tokens, transition) {
   switch (type) {
     case "chart.line":
     case "chart.bar":
+    case "chart.points":
       return own ?? timing(tokens, { transition }, { factor: 2 }).duration;
     case "big-number":
       return own ?? timing(tokens, { transition }, { factor: 2.25 }).duration;
@@ -785,7 +790,11 @@ async function validateSlide(spec, env) {
     await Promise.all(fileChecks);
 
     if (typeof props.data === "string" && /\.csv$/i.test(props.data) && env.exact(env.deckRoot, props.data).ok) {
-      for (const p of await checkColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
+      for (const p of await checkColumns(env, props, type)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
+    }
+    const draws = isObject(props.draws) ? props.draws.data : undefined;
+    if (typeof draws === "string" && /\.csv$/i.test(draws) && env.exact(env.deckRoot, draws).ok) {
+      for (const p of await checkDrawsColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
     }
 
     const validate = validator.get(id);
@@ -800,6 +809,7 @@ async function validateSlide(spec, env) {
       if (type === "diagram") {
         for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
       }
+      for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
       return;
     }
     for (const e of schemaErrors(validate.errors, resolved)) {
@@ -822,24 +832,59 @@ function checkFile(env, rel, path) {
   return { rule: "file-missing", measured: `${path} = ${rel}`, limit: "a file in the deck", fix: `create ${rel} in the deck (generate data with a script under data/), or fix the path in ${path}` };
 }
 
-async function checkColumns(env, props) {
+/**
+ * The columns of a CSV `file` the props name: reads and parses it (with `types`), then one `missing-column` for each
+ * `[prop, column]` of `named` whose column is a plain name (not a binding) that the header lacks, its `measured` and
+ * `fix` from `describe(prop, column, close, header)` (`close` is the nearest column, or null) and its `limit` the
+ * header. A file that does not parse is one `data-invalid`, its `measured` starting with `label`.
+ */
+async function columnsOf(env, file, types, named, label, describe) {
   let text;
   try {
-    text = await readFile(join(env.deckRoot, props.data), "utf8");
-    await env.load(props.data, isObject(props.types) ? { types: props.types } : undefined); // parses, with the declared types
+    text = await readFile(join(env.deckRoot, file), "utf8");
+    await env.load(file, isObject(types) ? { types } : undefined); // parses, with the declared types
   } catch (e) {
-    return [{ rule: "data-invalid", measured: `${props.data}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${props.data} or the declared types` }];
+    return [{ rule: "data-invalid", measured: `${label}${file}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${file} or the declared types` }];
   }
   const header = csvHeader(text);
-  const named = [["x", props.x], ["y", props.y], ["series", props.series]];
-  if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   const out = [];
   for (const [prop, column] of named) {
     if (typeof column !== "string" || parseBinding(column) || header.includes(column)) continue;
-    const close = didYouMean(column, header);
-    out.push({ rule: "missing-column", measured: `${prop} = '${column}'`, limit: `columns of ${props.data}: ${header.join(", ")}`, fix: close ? `set ${prop} to '${close}'` : `set ${prop} to one of ${quote(header)}, or add the column to ${props.data}` });
+    const { measured, fix } = describe(prop, column, didYouMean(column, header), header);
+    out.push({ rule: "missing-column", measured, limit: `columns of ${file}: ${header.join(", ")}`, fix });
   }
   return out;
+}
+
+/**
+ * The chart's columns in its `data` CSV: `x`, `y`, `series`, the `interval` bounds, `id` and `from` on `chart.points`
+ * (another component's `id` or `from` may mean something else), and `group` where it is read (`mode: "back-to-back"`;
+ * a `group` left on plain bars does nothing).
+ */
+function checkColumns(env, props, type) {
+  const points = type === "chart.points" ? [["id", props.id], ["from", props.from]] : [];
+  const named = [["x", props.x], ["y", props.y], ...points, ["series", props.series]];
+  if (props.mode === "back-to-back") named.push(["group", props.group]);
+  if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
+  return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({
+    measured: `${prop} = '${column}'`,
+    fix: close ? `set ${prop} to '${close}'` : `set ${prop} to one of ${quote(header)}, or add the column to ${props.data}`,
+  }));
+}
+
+/**
+ * chart.line `draws`: the draws file (`draws.data`) needs the chart's `x`, `y` and `series` (when set) and the
+ * `draws.id` column. A column of the chart that the draws file lacks is added to that file; `draws.id` is set.
+ */
+function checkDrawsColumns(env, props) {
+  const file = props.draws.data;
+  const named = [["x", props.x], ["y", props.y], ["series", props.series], ["draws.id", props.draws.id]];
+  return columnsOf(env, file, props.types, named, "draws.data ", (prop, column, close, header) => ({
+    measured: `${prop} = '${column}' in draws.data`,
+    fix: prop === "draws.id"
+      ? close ? `set draws.id to '${close}'` : `set draws.id to one of ${quote(header)}, or add the column to ${file}`
+      : `add the column '${column}' to ${file} (the chart's ${prop})${close ? `, or rename its column '${close}' to '${column}'` : ""}`,
+  }));
 }
 
 async function checkBinding(env, b, whole, path) {

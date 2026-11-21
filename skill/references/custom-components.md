@@ -115,6 +115,21 @@ export default {
 | `ctx.motion` | The named motions with the theme's timing: `in(node, name, opts)`, `out(node, name, opts)` (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`), `timing(info, { factor, fast })` → `{ duration, ease, stagger, signal }`. They put back the inline styles they touched and resolve at the end state, also when aborted. |
 | `ctx.animate` | `fadeIn(el)`, `reveal(el)`, `drawPath(path)`, `tween(from, to, onValue)`, `stagger(items, fn)`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also when it is aborted. |
 | `ctx.capture` | True when rendering for screenshots, where nothing animates. |
+| `ctx.stepProps` | `ctx.stepProps[k]` is what `update` gets as `props` at step `k`: the element's props after the patches up to that step, bindings resolved. Frozen, computed before `mount`. An entry is `null` when that step fails (skip it); the array itself is `null` for a `ctx.mount` child (use `ctx.stepProps ?? [props]`). Use it to size an axis from every step. |
+| `ctx.chart` | The chart building blocks, frozen and the same for every component: `loadTable`, `tickFormat`, `extentOf`, `rank`, `splitAt`, `spread`, `fit`, `wrapLabel`, `drawOrder`, `swarm`, `frame`, `keyed`, `settle`, `dot`, `whisker`, `band`, `rule`, `halo`, `canvasLayer`, `paintLines`, `morph`, `entrance`, `undraw`, `focusPaint`, `tweenColor`, `textColor`. These 26 names are the public set; use them instead of importing from `core/`. See below. |
+
+### Charts from the engine's pieces
+
+For a bespoke chart, build on `ctx.chart` instead of drawing everything yourself. The full signatures are in `docs/reference/component-contract.md` (the `ctx.chart` section, one example per group). The order that matters:
+
+1. **Load and frame.** `await ctx.chart.loadTable(props, ctx, "my.chart", [["x", props.x], ["y", props.y]])` checks the columns and returns the rows. `ctx.chart.frame(el, ctx, margin)` gives `{ w, h, font, charW, margin, pw, ph }`; margins come from `font` and `charW`, so the layout never depends on font timing.
+2. **One scale for every step.** `ctx.chart.extentOf(rows, (ctx.stepProps ?? [props]).map((p) => p?.y), { zero: true })` covers the column of every step, so a step that switches `y` moves the marks and never the axis. Blank cells are missing, never zero.
+3. **Joins, then settle, then attributes.** `ctx.chart.keyed(selection, data, key, enter)` marks leavers with `.sd-exiting` and removes nothing; `ctx.chart.settle(svg.node())` then removes them and every `style` and `opacity` the motion left; then you write every attribute. Settle the SVG root, never the element box.
+4. **Marks.** `dot`, `whisker`, `rule` and `halo` write attributes and generic classes the theme styles. Colours come from `ctx.palette()` and tokens; text coloured from a palette goes through `textColor(color, ctx.tokens["--sd-color-background"])`. Dim through `focusPaint`, never opacity.
+5. **Motion.** `await ctx.chart.morph(info, ctx, (t) => place(t))` only when `info.animate && last && !info.entered && !info.signal?.aborted`; a component that owns its entrance reads `ctx.chart.entrance(info, ctx)`. Write the end state after, from props alone.
+6. **Layout is deterministic.** `rank`, `drawOrder` and `swarm` are pure functions of data and props: no `Math.random`. A missing value is a gap (a `null` point breaks a `paintLines` line), never a zero. `halo` on a dot does nothing (a dot already has its outline).
+
+The stepdeck gallery's slope chart, `gallery.slope` (`site/gallery/components/gallery.slope/`, the `custom-slope` slide), is a whole chart built in this order from `ctx.chart` alone, with no `import`: `loadTable`, `frame` and `tickFormat`, one scale over every step with `extentOf`, `keyed` joins then `settle`, `dot` and `halo`, labels ranked with `rank` and kept apart with `spread`, one `morph` for a played change, `focusPaint` and `tweenColor` for `highlight`, `textColor` for its labels, and an owned entrance with `entrance`, `undraw` and `ctx.animate.drawPath`. The guide `docs/guide/custom-components.md` ("Build a chart from the engine's pieces") describes it and walks a smaller chart through the order above.
 
 ### Styling
 

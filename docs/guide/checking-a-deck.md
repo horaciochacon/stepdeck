@@ -105,7 +105,7 @@ node cli/index.js check ../my-talk --slide chart --played
 check: 1 slide, 4 steps, 6 played arrivals compared, 0 problems
 ```
 
-`--played` adds a second pass. Every step is reached three ways: by jumping straight to it, by arriving animated from the step before, and by arriving from the step after. The three results are compared per element by visibility, text and box (rounded to 1 px). A difference is a `played-mismatch`, reported once per element, at the first differing arrival, with `(+N more differing arrivals)`. It almost always means a component's `update()` depends on earlier calls or leaves animation residue. The built-in components pass; look at your custom components.
+`--played` adds a second pass. Every step is reached three ways: by jumping straight to it, by arriving animated from the step before, and by arriving from the step after. The three results are compared per element by visibility, text, box (rounded to 1 px) and canvas state (the `data-*` attributes of its canvas layers, such as a draw fan's `draws`, `seed` and `signature`, so the fan is compared without reading pixels). A difference is a `played-mismatch`, reported once per element, at the first differing arrival, with `(+N more differing arrivals)`. It almost always means a component's `update()` depends on earlier calls or leaves animation residue. The built-in components pass; look at your custom components.
 
 A slide with `n` steps gives `2(n − 1)` arrivals, so the four-step `chart` slide gives 6.
 
@@ -133,6 +133,7 @@ For each step, `dump` lists every element with:
 
 - whether it is visible, as measured on the page;
 - its box `x,y w×h` in canvas pixels (a collapsed element is `0,0 0×0`);
+- the state of its canvas layer, when it has one, as `canvas draws=20 seed=1 signature=…` (the layer's `data-*` attributes);
 - the start of its text;
 - `changed`: the ids whose resolved props or visibility differ from the previous step (every id at step 0);
 - `error:` lines for any engine, console or page error seen at that step.

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { validate } from "../../cli/validate.js";
 import { copyEngine } from "../../cli/engine.js";
 import { formatProblem } from "../../cli/problems.js";
-import { cpSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -72,6 +72,106 @@ test("chart.bar: a missing interval column is reported at the step that names it
   assert.match(problems[0].measured, /interval\.upper = 'hi_'/);
   assert.match(problems[0].limit, /group, value, lo, hi/);
   assert.match(problems[0].fix, /'hi'/);
+});
+
+test("chart.points: a missing `from` column is reported at the step that names it, with the nearest column", async () => {
+  const problems = await validate(fixture("from-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+  assert.equal(problems[0].element, "pairs");
+  assert.equal(problems[0].step, "two");
+  assert.equal(problems[0].measured, "from = 'befor'");
+  assert.equal(problems[0].limit, "columns of data/rows.csv: group, before, after");
+  assert.equal(problems[0].fix, "set from to 'before'");
+});
+
+test("chart.points: a missing `id` column is reported at the step that names it, with the nearest column", async () => {
+  const problems = await validate(fixture("id-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+  assert.equal(problems[0].element, "strips");
+  assert.equal(problems[0].step, "two");
+  assert.equal(problems[0].measured, "id = 'items'");
+  assert.equal(problems[0].limit, "columns of data/rows.csv: group, item, value");
+  assert.equal(problems[0].fix, "set id to 'item'");
+});
+
+test("`id` and `from` are checked as columns only on chart.points", async () => {
+  // A deck component may take a CSV `data` and an `id` or `from` that means something else (here, a label): no
+  // missing-column for it, while chart.points over the same CSV still reports its `id`.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-id-")));
+  try {
+    cpSync(fixture("id-missing-column"), tmp, { recursive: true });
+    mkdirSync(join(tmp, "components", "fixture.tagged"), { recursive: true });
+    writeFileSync(join(tmp, "components", "fixture.tagged", "index.js"), "export default { mount() { return { update() {} }; } };\n");
+    writeFileSync(join(tmp, "components", "fixture.tagged", "schema.json"), JSON.stringify({
+      $schema: "https://json-schema.org/draft/2020-12/schema", title: "fixture.tagged", description: "Test fixture: a CSV and a label.",
+      type: "object", additionalProperties: false, required: ["data"],
+      properties: {
+        data: { type: "string", description: "A CSV file of the deck.", examples: ["data/rows.csv"] },
+        id: { type: "string", description: "A label, not a column.", examples: ["first"] },
+        from: { type: "string", description: "Where the label comes from, not a column.", examples: ["survey"] },
+      },
+    }));
+    writeFileSync(join(tmp, "deck.js"), `export default { title: "validate fixture", lang: "en", theme: "academic-light", components: ["fixture.tagged"], slides: ["s", "t"] };\n`);
+    const slide = (id, type, props) => `export default { id: "${id}", layout: "figure-notes", title: "Tagged", elements: [
+      { id: "el", region: "main", type: "${type}", props: ${JSON.stringify(props)} },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`;
+    writeFileSync(join(tmp, "slides", "s.js"), slide("s", "fixture.tagged", { data: "data/rows.csv", id: "items", from: "survey" }));
+    writeFileSync(join(tmp, "slides", "t.js"), slide("t", "chart.points", { data: "data/rows.csv", x: "group", y: "value", id: "items" }));
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+    assert.equal(problems[0].slide, "t", "chart.points only, not the deck component");
+    assert.equal(problems[0].measured, "id = 'items'");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("chart.bar back-to-back: a missing `group` column is reported at the step that names it, with the nearest column", async () => {
+  const problems = await validate(fixture("group-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+  assert.equal(problems[0].element, "bars");
+  assert.equal(problems[0].step, "two");
+  assert.equal(problems[0].measured, "group = 'groups'");
+  assert.equal(problems[0].limit, "columns of data/pyramid.csv: age, group, share");
+  assert.equal(problems[0].fix, "set group to 'group'");
+});
+
+test("chart.bar: `group` is checked only where the chart is back-to-back", async () => {
+  // A `group` left on plain bars does nothing there, so a CSV without that column is fine until a step is back-to-back.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-group-")));
+  try {
+    cpSync(fixture("group-missing-column"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "data", "totals.csv"), "age,share\n0-29,62\n30+,38\n");
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "figure-notes", title: "Group", elements: [
+      { id: "bars", region: "main", type: "chart.bar", props: { data: "data/totals.csv", x: "age", y: "share", group: "sex" } },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ], steps: [{ id: "plain" }, { id: "pyramid", set: { bars: { mode: "back-to-back" } } }] };\n`);
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+    assert.equal(problems[0].step, "pyramid", "not at the plain step, where `group` does nothing");
+    assert.equal(problems[0].measured, "group = 'sex'");
+    assert.equal(problems[0].limit, "columns of data/totals.csv: age, share");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("chart.line draws: the draws file needs the chart's x, y and series and the draw column", async () => {
+  const problems = await validate(fixture("draws-missing-column"));
+  assert.deepEqual(rules(problems), ["missing-column", "missing-column"], show(problems));
+  const [series, id] = ["series", "draws.id"].map((prop) => problems.find((p) => p.measured.startsWith(`${prop} = `)));
+  assert.ok(series && id, show(problems));
+  for (const p of [series, id]) {
+    assert.equal(p.element, "chart");
+    assert.match(p.measured, /in draws\.data$/, "the problem names draws.data");
+    assert.equal(p.limit, "columns of data/draws.csv: x, y, grp, draw");
+  }
+  assert.equal(series.measured, "series = 'group' in draws.data");
+  assert.match(series.fix, /add the column 'group' to data\/draws\.csv/);
+  assert.match(series.fix, /'grp'/, "the nearest column is named");
+  assert.equal(id.measured, "draws.id = 'drw' in draws.data");
+  assert.match(id.fix, /set draws\.id to 'draw'/);
 });
 
 test("remote URLs, including protocol-relative //host, are rejected in props", async () => {
@@ -278,6 +378,61 @@ test("diagram: sibling groups that share a cell are diagram-overlap", async () =
   assert.equal(problems[0].element, "flow");
   assert.match(problems[0].measured, /left/);
   assert.match(problems[0].measured, /wide/);
+});
+
+test("chart-prop-unused: ticker without until is a warning", async () => {
+  const problems = await validate(fixture("ticker-without-until"));
+  assert.deepEqual(rules(problems), ["chart-prop-unused"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "warning");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "chart");
+  assert.match(p.measured, /`ticker` does nothing without `until`/);
+  assert.match(p.fix, /until/);
+});
+
+test("chart-prop-unused: invert and total outside a waterfall are warnings", async () => {
+  const problems = await validate(fixture("waterfall-props-outside"));
+  assert.deepEqual(rules(problems), ["chart-prop-unused", "chart-prop-unused"], show(problems));
+  assert.ok(problems.every((p) => p.severity === "warning" && p.slide === "s" && p.element === "bars"), show(problems));
+  assert.deepEqual(problems.map((p) => p.measured).sort(), [
+    '`invert` does nothing without `mode: "waterfall"`',
+    '`total` does nothing without `mode: "waterfall"`',
+  ]);
+  assert.ok(problems.every((p) => /mode: "waterfall"/.test(p.fix)), show(problems));
+  assert.deepEqual(errors(problems), [], "warnings only: the deck still builds");
+});
+
+test("chart-orient: back-to-back bars set vertical are an error", async () => {
+  const problems = await validate(fixture("back-to-back-vertical"));
+  assert.deepEqual(rules(problems), ["chart-orient"], show(problems));
+  const p = problems[0];
+  assert.notEqual(p.severity, "warning", "an error: the chart cannot draw it");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "bars");
+  assert.equal(p.measured, "back-to-back bars are horizontal only");
+  assert.match(p.fix, /orient/);
+  assert.deepEqual(errors(problems), problems);
+});
+
+test("a misspelt mode gets a did-you-mean", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-mode-")));
+  try {
+    cpSync(fixture("waterfall-props-outside"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "figure-notes", title: "Mode", elements: [
+      { id: "bars", region: "main", type: "chart.bar", props: { data: "data/flow.csv", x: "item", y: "change", mode: "waterfal", total: true } },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`);
+    const problems = await validate(tmp);
+    const p = only(problems, "prop-invalid");
+    assert.equal(problems.length, 1, show(problems));
+    assert.equal(p.element, "bars");
+    assert.match(p.measured, /^mode = "waterfal"$/);
+    assert.match(p.limit, /"bars", "waterfall"/);
+    assert.match(p.fix, /^set mode to "waterfall"/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 // Kicker and accent phrase (default-theme spec §5.4, §10.4, §10.5).

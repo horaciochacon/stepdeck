@@ -14,13 +14,13 @@ stepdeck is an engine for step-by-step HTML presentations. Slides are plain data
 
 This page is the front door. It shows what you get, a quick start and one slide, then points deck authors, agent operators and contributors to the right page in [docs/](docs/index.md).
 
-**Status.** First public release (0.1.0), with a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The built-in kit has 11 components and 5 layouts. The default theme is `modern`, and `academic-light` is the plain alternative; see the [changelog](CHANGELOG.md). PDF export is not implemented.
+**Status.** First public release (0.1.0), with a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The built-in kit has 12 components and 5 layouts. The default theme is `modern`, and `academic-light` is the plain alternative; see the [changelog](CHANGELOG.md). PDF export is not implemented.
 
 ## What you get
 
 | Piece | What there is | Reference |
 |---|---|---|
-| Components | 11: `text`, `markdown`, `chart.line`, `chart.bar`, `big-number`, `terminal`, `list`, `diagram`, `chat`, `timeline`, `image`. Anything else is a custom component under the same contract. | [Components](docs/reference/components/index.md) |
+| Components | 12: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Anything else is a custom component under the same contract. | [Components](docs/reference/components/index.md) |
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Themes | 2: `modern` (the default: Geist, a deep blue accent, a large cover title) and `academic-light`, with color-vision-safe palettes and vendored fonts | [Themes](docs/reference/themes.md) |
 | Shells | 2: `reveal` for presenting (keyboard, presenter view), `bare` for the CLI checks | |

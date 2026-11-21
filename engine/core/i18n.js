@@ -1,8 +1,8 @@
 // UI strings for the shell. t(lang, key): unknown lang -> English, unknown key -> the key itself.
 
 export const messages = {
-  en: { section: "Section", step: "Step", of: "of", error: "Error", tasks: "Tasks", files: "Files", ci95: "95% CI" },
-  es: { section: "Sección", step: "Paso", of: "de", error: "Error", tasks: "Tareas", files: "Archivos", ci95: "IC 95%" },
+  en: { section: "Section", step: "Step", of: "of", error: "Error", tasks: "Tasks", files: "Files", ci95: "95% CI", forecast: "Forecast", noData: "no data", total: "Total" },
+  es: { section: "Sección", step: "Paso", of: "de", error: "Error", tasks: "Tareas", files: "Archivos", ci95: "IC 95%", forecast: "Proyección", noData: "sin datos", total: "Total" },
 };
 
 export function t(lang, key) {

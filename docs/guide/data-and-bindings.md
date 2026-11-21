@@ -82,7 +82,7 @@ The pattern:
 
 A chart names a CSV in its `data` prop and its columns in `x`, `y`, `series` and so on. The loader turns each cell into a string, a number or `null`:
 
-1. **A declared type wins.** `chart.line` and `chart.bar` take a `types` prop that maps a column to `"string"`, `"number"` or `"date"`. A declared number column accepts any decimal or exponent form, including a leading zero (`"080101"` becomes `80101`). A cell that does not parse is an error naming the column and the row.
+1. **A declared type wins.** `chart.line`, `chart.bar` and `chart.points` take a `types` prop that maps a column to `"string"`, `"number"` or `"date"`. A declared number column accepts any decimal or exponent form, including a leading zero (`"080101"` becomes `80101`). A cell that does not parse is an error naming the column and the row.
 2. **Undeclared columns are guessed.** A column becomes numbers only when every non-empty cell is a plain decimal: an optional minus, no leading zero, optional decimals, no exponent and no thousands separator. Otherwise the whole column stays strings. So a code such as `080101` stays the string `"080101"`.
 3. **Dates are only dates when declared.** A `date` column keeps each value as the original ISO 8601 string (`2024-01-02`, or with a time and offset). The loader checks that it is a real calendar day, so `2024-02-31` is an error. An undeclared column of dates stays strings.
 4. **Empty cells** become `null` in number and date columns and `""` in string columns.

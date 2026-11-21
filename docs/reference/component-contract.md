@@ -25,7 +25,7 @@ components/<name>/
 
 Because only the browser runs `index.js`, the behaviour of `mount` and `update` is checked by `dump`, `check` and `check --played`, never by `validate`.
 
-Built-ins live in the engine's `components/` and are listed in `components/index.json`: `text`, `chart.line`, `chart.bar`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Deck components live in the deck's `components/` and must be listed in `deck.js`:
+Built-ins live in the engine's `components/` and are listed in `components/index.json`: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Deck components live in the deck's `components/` and must be listed in `deck.js`:
 
 ```js
 // deck.js (examples/spike)
@@ -188,7 +188,7 @@ A component whose content has a natural build (lines that draw, items that rise 
 - with `enter` set to `"fade"`, `"rise"`, `"wipe"` or `"pop"`, the box moves and `update` gets `info.entrance.motion === "none"`: render at once;
 - with `enter: "none"`, nothing moves and `info.entrance.motion` is `"none"`.
 
-The engine holds the element until its stagger slot, then calls `setVisible` and `update` in one synchronous block. **Write the build's start state synchronously at the top of `update`, before any `await`**, so the finished state never paints before the build starts. The eight built-ins with `x-enter: own` (`chart.line`, `chart.bar`, `big-number`, `list`, `chat`, `diagram`, `terminal`, `timeline`) all follow this pattern.
+The engine holds the element until its stagger slot, then calls `setVisible` and `update` in one synchronous block. **Write the build's start state synchronously at the top of `update`, before any `await`**, so the finished state never paints before the build starts. The nine built-ins with `x-enter: own` (`chart.line`, `chart.bar`, `chart.points`, `big-number`, `list`, `chat`, `diagram`, `terminal`, `timeline`) all follow this pattern.
 
 ## Optional members
 
@@ -202,7 +202,7 @@ A throw from `pause` or `destroy` is recorded as that element's error; the other
 
 ## The rules
 
-Each rule exists so that a step reached by playing looks exactly like the same step reached by jumping. `check --played` tests it at every step: it compares each element's presence, visibility, text and box after a jump with those after an animated arrival from the step before and the step after, and reports `played-mismatch` when they differ.
+Each rule exists so that a step reached by playing looks exactly like the same step reached by jumping. `check --played` tests it at every step: it compares each element's presence, visibility, text, box and canvas state after a jump with those after an animated arrival from the step before and the step after, and reports `played-mismatch` when they differ.
 
 | Rule | What to do |
 |---|---|
@@ -237,7 +237,7 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.data(path, { types })` | `Promise<any>` | Loads a deck file: `.json`, `.geojson` or `.csv`. Paths are relative to the deck folder. Results are cached and shared between elements: treat them as read-only and copy before sorting. For CSV, declared `types` (`string`, `number`, `date`) win. Errors: `data file not found: <path>`, `invalid data file <path>: …`, `unsupported data file type: …`. |
 | `ctx.assetUrl(path)` | `string` | The full URL of a deck file (an image, say) for the browser to fetch. Same path rules as `ctx.data`; nothing is read, so a missing file shows up only when the browser loads it. Throws `data path must be relative to the deck root: <path>` for an absolute, remote or `..` path, and `data path may not contain '%': <path>`. Used by `image`. |
 | `ctx.format(spec)` | `(n) => string` | A d3-format function localized to the deck language (`en`, `es`; unknown falls back to `en`). Negative numbers use U+2212. |
-| `ctx.t(key)` | `string` | An engine string in the deck language. Keys: `section`, `step`, `of`, `error`, `tasks`, `files`, `ci95`. An unknown key returns the key. |
+| `ctx.t(key)` | `string` | An engine string in the deck language. Keys: `section`, `step`, `of`, `error`, `tasks`, `files`, `ci95`, `forecast`, `noData`, `total`. An unknown key returns the key. |
 | `ctx.capture` | `boolean` | True when rendering for screenshots (`?capture`). Nothing animates then; `info.animate` is already false. |
 | `ctx.animate` | object | `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. See below. |
 | `ctx.motion` | object | The named motions with the theme's defaults: `in`, `out`, `timing`, `names`. See below. |
@@ -245,6 +245,8 @@ A failed element is recorded once, as `<slide>/<element>: <message>`, in the con
 | `ctx.palette(kind = "categorical")` | `Palette \| null` | `{ name, kind, colors, names, roles }` for `categorical`, `sequential` or `diverging`. `deck.palette` when its kind matches, else the theme default; `null` when there is none. `names` are in the deck language; `roles.accent` is the accent color. |
 | `ctx.size` | `{ w, h }` | `el`'s `offsetWidth` and `offsetHeight` in canvas pixels (unaffected by the shell's scaling), measured once when `ctx` is built at mount. It is `{ w: 0, h: 0 }` when the element has no layout. Read `el.offsetWidth` and `el.offsetHeight` again in `update` if you need the current size. |
 | `ctx.mount(type, el, props)` | `Promise<ChildHandle>` | Mounts a built-in or deck component inside yours. See below. |
+| `ctx.stepProps` | `ReadonlyArray<Props \| null> \| null` | This element's resolved props at every step of its slide. A frozen array, computed once before `mount`; `null` for a child mounted with `ctx.mount`. See [`ctx.stepProps`](#ctxstepprops). |
+| `ctx.chart` | `ChartKit` | The chart building blocks (layout maths, marks, joins, motion, canvas layer): one frozen object, the same for every component and child. See [`ctx.chart`](#ctxchart). |
 
 ### `ctx.animate`
 
@@ -303,6 +305,210 @@ Semantics:
 - `handle.update` after `destroy` throws `ctx.mount('<type>'): update called on a destroyed child`. A child destroyed while its props were resolving throws `ctx.mount('<type>'): child destroyed while its props resolved`.
 - There is no nesting depth limit.
 
+### `ctx.stepProps`
+
+`ctx.stepProps[k]` is what `update` would receive as `props` at step `k` (an index, not a step id): the element's props after the slide's patches up to and including step `k`, with the bindings resolved the same way. The array has one entry per step (a slide without `steps` has one), is frozen, and is computed once, before your `mount` runs. A component that draws against a scale can use it to keep that scale the same on every step: the built-in charts size their axes this way (see [Charts keep one scale across steps](../guide/step-model.md#charts-keep-one-scale-across-steps)).
+
+An entry is `null` when step `k` does not fold (for example a patch names an element that does not exist) or when the element's bindings fail at that step. The step's own navigation still reports the error, so skip `null` entries rather than treating them as an error. A child mounted with `ctx.mount` gets `ctx.stepProps === null`: use only its current props then.
+
+```js
+// A fixed y domain: the extent of `values` over every step, not only the current one.
+const all = (ctx.stepProps ?? [props]).flatMap((p) => p?.values ?? []);
+const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
+```
+
+### `ctx.chart`
+
+`ctx.chart` is the set of building blocks the built-in charts are made of, for a component that draws its own chart. A component that reads only `ctx.chart` needs no `import`, so it keeps working wherever the engine's files live. The object is frozen and is the same one for every component and child. The marks take d3 selections and write attributes; their colours and sizes are yours, from theme tokens and `ctx.palette()`, and the theme styles what it decides (the background outline of a dot, the ink of a whisker, the halos) through generic classes. Where an option says "value or accessor", a function is called per node as `(d, i, nodes)`.
+
+**Public and internal.** The 26 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
+
+The names are in eleven groups. Each group has its signatures and one short example. The examples are fragments: they assume a selection per kind of mark (`circles`, `whiskers`, `rules`, `labels`, `shade`) and the rows, scales (`x`, `y`) and frame (`f`) of the groups before them. The Joins group shows a whole `update`, and `test/fixtures/decks/chart-kit/components/fixture.marks/index.js` is a working component that calls the Data, Frame, Joins, Motion, Marks and Canvas groups.
+
+#### Data
+
+| Name | Signature | What it does |
+|---|---|---|
+| `loadTable` | `loadTable(props, ctx, name, columns) → Promise<rows>` | Loads `props.data` and checks every column the props name (`columns` is `[prop, column, optional]`); throws the first problem. |
+| `tickFormat` | `tickFormat(ctx, spec, ticks) → (n) => string` | The d3-format `spec`, else a fixed precision from the tick step. |
+| `extentOf` | `extentOf(rows, columns, { zero }) → [min, max]` | The extent of the finite numbers in `columns`; blank cells are missing. |
+
+Load a table, then size a scale from the rows. `extentOf` takes the finite numbers of the columns, so a blank cell never pulls the scale to zero. Give it the column every step names (see [`ctx.stepProps`](#ctxstepprops)) and the axis stays put as steps change.
+
+```js
+const rows = await ctx.chart.loadTable(props, ctx, "my.chart", [["x", props.x], ["y", props.y], ["id", props.id, true]]);
+const columns = (ctx.stepProps ?? [props]).map((p) => p?.y); // the y column of every step; a null step is skipped
+const [lo, hi] = ctx.chart.extentOf(rows, columns, { zero: true }); // one domain for every step
+const fmt = ctx.chart.tickFormat(ctx, props.format?.y, ctx.d3.scaleLinear().domain([lo, hi]).ticks(5));
+```
+
+#### Frame
+
+| Name | Signature | What it does |
+|---|---|---|
+| `frame` | `frame(el, ctx, margin) → { w, h, font, charW, margin, pw, ph }` | The element's size and the plot inside it. `font` is `--sd-font-size-label` (28 without it), `charW` is 0.6 × `font`. `margin` is `{ left, right, top, bottom }` or a function of `{ font, charW, w, h }` returning it; each side is rounded. `pw` and `ph` are at least 1. |
+
+The element's size and the plot inside it. Margins come from character counts, not measured text, so the layout does not depend on font loading.
+
+```js
+const f = ctx.chart.frame(el, ctx, ({ font, charW }) => ({ left: charW * 4, right: font, top: font, bottom: font * 2 }));
+const x = ctx.d3.scaleLinear().domain([lo, hi]).range([0, f.pw]);
+```
+
+#### Joins
+
+| Name | Signature | What it does |
+|---|---|---|
+| `keyed` | `keyed(selection, data, key, enter) → selection` | A keyed join: an update clears `.sd-exiting`, an exit sets it, nothing is removed. |
+| `settle` | `settle(root)` | The start of an end-state write: removes `.sd-exiting` nodes (and their `halo` copies) and every `style` and `opacity` attribute under `root`, and marks what remains as already on screen. Run it after the `keyed` joins, which mark the leavers, and before the attributes: a `settle` before the joins leaves every leaver on screen. Pass the SVG root, never the element box: the canvas layer keeps its inline size and position. |
+
+A keyed join marks leavers instead of removing them, so a morph can fade them out; `settle` then removes them. Joins first, then `settle`, then every attribute (see the update order below).
+
+```js
+ctx.chart.keyed(g.selectAll("circle"), rows, (r) => r.key, (enter) => enter.append("circle"));
+ctx.chart.settle(svg.node()); // the SVG root, never the element box
+```
+
+Write an update as the `keyed` joins, then `settle(svg)`, then every attribute, so a played step ends exactly where a jump does and a mark that left is gone:
+
+```js
+async update(props, info = {}) {
+  const f = ctx.chart.frame(el, ctx, ({ font, charW }) => ({ left: charW * 4, right: font, top: font, bottom: font * 2 }));
+  join(props); // ctx.chart.keyed joins: leavers get .sd-exiting, nothing is removed yet
+  if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => draw(f, ctx.d3.interpolateNumber(last.k, props.k)(t)));
+  ctx.chart.settle(svg.node()); // removes the leavers and the animation's leftovers
+  draw(f, props.k); // the end state, every attribute
+}
+```
+
+The same order, step by step, in a component of its own: [Build a chart from the engine's pieces](../guide/custom-components.md#build-a-chart-from-the-engines-pieces).
+
+#### Motion
+
+| Name | Signature | What it does |
+|---|---|---|
+| `morph` | `morph(info, ctx, frame, { factor, duration }) → Promise` | Plays `frame(t)` for t from 0 to 1 over `duration`, else the step's transition, else `factor` (default 2) × `--sd-duration`, with the theme's easing and the step's `signal`. |
+| `entrance` | `entrance(info, ctx, { factor }) → { draw, duration, ease, signal }` | For a component that owns its entrance: `draw` is true for a draw entrance that is not aborted; `duration` is `info.entrance.duration`, else as `morph`'s. |
+| `undraw` | `undraw(path)` | Hides an SVG path along its length: the start state of `ctx.animate.drawPath`. |
+
+`morph` runs one tween over the theme's timing and the step's `signal`; you write the end state yourself afterwards. A component that owns its entrance asks `entrance` whether to draw.
+
+```js
+const e = ctx.chart.entrance(info, ctx); // { draw, duration, ease, signal }
+if (e.draw) ctx.chart.undraw(line.node()); // before the first await: the element is shown in this same task, undrawn
+const rows = await ctx.chart.loadTable(props, ctx, "my.chart", columns);
+// … the joins, settle and the end state, every attribute …
+if (e.draw) await ctx.animate.drawPath(line.node(), { duration: e.duration, signal: e.signal });
+else if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => place(t));
+```
+
+#### Order
+
+| Name | Signature | What it does |
+|---|---|---|
+| `rank` | `rank(items, sort) → keys` | Category keys in display order; missing values last. |
+
+Category keys in display order for a `sort` prop: `"none"`, `"value"`, `"-value"`, `{ by, order }` or a list. It throws a message that names an unknown column or category.
+
+```js
+const keys = ctx.chart.rank(rows.map((r) => ({ key: r.group, value: r.score, columns: { later: r.later } })), props.sort);
+```
+
+#### Marks
+
+| Name | Signature | What it does |
+|---|---|---|
+| `dot` | `dot(selection, { r, color, hollow })` | Class `sd-dot` (`sd-dot-hollow` when hollow) and `r`. Filled: `fill` is `color`, and the theme outlines it in the background colour. Hollow: `stroke` is `color`, and the theme fills it with the background colour. Options are values or accessors; positions are yours. |
+| `whisker` | `whisker(selection, { at, lo, hi, cap, orient })` | On each `g`, class `sd-whisker` and the lines `sd-whisker-line`, `sd-whisker-cap-lower` and `sd-whisker-cap-upper`, placed from `lo` to `hi` across `at` (`orient`: `"horizontal"`, the default, or `"vertical"`). The theme draws them in the ink colour. |
+| `rule` | `rule(selection, { x1, y1, x2, y2, label, anchor }) → selection` | On each `g`, a `line.sd-rule` and, while `label` is not empty, a `text.sd-rule-label` at the rule's `"start"` (default), `"middle"` or `"end"`. |
+| `halo` | `halo(selection, { under }) → selection` | Default: class `sd-halo`, a background-colour outline for text (a dot has its outline already, so a halo on a dot changes nothing). `under: true`: a `.sd-halo-under` copy of each line or path before it (its geometry and `transform`, a wider background stroke), returned. Call it again after the geometry changes or the node moves. A copy has the node's tag, so in a parent that holds copies select the marks by class (`path.sd-line`), never by tag alone. |
+
+Marks write attributes and generic classes; the theme styles the classes. Positions, sizes and colours are yours.
+
+```js
+ctx.chart.dot(circles, { r: f.font * 0.4, color: (d) => d.color });
+ctx.chart.whisker(whiskers, { at: (d) => y(d.key), lo: (d) => x(d.lo), hi: (d) => x(d.hi), cap: f.font * 0.5 });
+ctx.chart.rule(rules, { x1: 0, y1: 0, x2: f.pw, y2: 0, label: "Average", anchor: "end" });
+ctx.chart.halo(labels); // a background outline, so text reads over a line
+```
+
+The generic classes, styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events).
+
+#### Forecast
+
+| Name | Signature | What it does |
+|---|---|---|
+| `splitAt` | `splitAt(points, at, x) → { observed, forecast }` | Splits points sorted by x at `at`; the boundary point ends one part and starts the other. |
+| `band` | `band(points) → d` | The `d` of an interval band over `{ px, lo, hi }`, defined where both bounds are not null; `null` when none is. |
+
+`splitAt` cuts points at an x without losing the join: a cut between two points adds a boundary point that both parts share, and a cut on a point does not duplicate it. `band` draws an interval where both bounds exist.
+
+```js
+const { observed, forecast } = ctx.chart.splitAt(points, 2023, (p) => p.x);
+shade.attr("d", ctx.chart.band(points.map((p) => ({ px: x(p.x), lo: p.lo === null ? null : y(p.lo), hi: p.hi === null ? null : y(p.hi) }))));
+```
+
+#### Labels
+
+| Name | Signature | What it does |
+|---|---|---|
+| `spread` | `spread(ys, gap, [min, max]) → ys` | Pushes label positions at least `gap` apart. |
+| `fit` | `fit(end, start, width, [lo, hi], gap) → { x, anchor, inside }` | Places a label past a mark's end, inside it, or past its start. |
+| `wrapLabel` | `wrapLabel(text, maxChars, maxLines) → lines` | Wraps a label. |
+
+Direct labels: keep them apart, keep them on the plot, keep them short.
+
+```js
+const ys = ctx.chart.spread(ends.map((p) => y(p.y)), f.font * 1.15, [0, f.ph]); // no two closer than the gap
+const at = ctx.chart.fit(x(value), x(0), width, [0, f.pw], f.font * 0.4);       // { x, anchor, inside }
+const lines = ctx.chart.wrapLabel("A long category name", 12, 2);               // at most two lines
+```
+
+#### Deterministic layout
+
+| Name | Signature | What it does |
+|---|---|---|
+| `drawOrder` | `drawOrder(ids, seed) → ids` | A fixed pseudo-random order that depends only on the ids and the seed. |
+| `swarm` | `swarm(xs, { r, maxDy }) → offsets` | A vertical offset per x that keeps nearby points apart. |
+
+Pure functions of data and props, never of chance: the same input paints the same picture, however the rows are ordered.
+
+```js
+const shownIds = ctx.chart.drawOrder(ids, props.seed ?? 1).slice(0, props.shown); // raising `shown` keeps the draws already shown
+const dy = ctx.chart.swarm(values.map(x), { r: f.font * 0.3, maxDy: f.ph / 4 });  // a vertical offset per value
+```
+
+#### Canvas
+
+| Name | Signature | What it does |
+|---|---|---|
+| `canvasLayer` | `canvasLayer(el, { left, top, pw, ph }) → canvas` | One `canvas.sd-canvas-layer` per `el`, its first child, at `left`/`top` and `pw` × `ph` in CSS pixels, with a backing store of that size × min(3, `devicePixelRatio`) and a scaled context: you draw in plot pixels. The SVG you append after it paints above it. Idempotent. |
+| `paintLines` | `paintLines(canvas, lines, { width, alpha }) → signature` | Clears the canvas and strokes each `{ points, color, alpha?, width? }`. A point with a `null` or non-finite coordinate breaks the line there (a missing value is a gap, never a line to zero); a stretch of fewer than 2 points draws nothing. The signature (hex) is the same for the same picture, so a component can write it to a `data-*` attribute of the canvas. |
+
+Many thin lines are cheaper on a canvas than in the DOM. The layer sits under your SVG; you draw in plot pixels. A `null` or non-finite point breaks the line.
+
+```js
+const canvas = ctx.chart.canvasLayer(el, { left: f.margin.left, top: f.margin.top, pw: f.pw, ph: f.ph });
+const signature = ctx.chart.paintLines(canvas, draws.map((d) => ({ points: d.map((p) => [x(p.x), y(p.y)]), color, alpha: 0.2 })), { width: 2 });
+canvas.setAttribute("data-signature", signature); // `dump` and `check --played` compare it
+```
+
+#### Colour
+
+| Name | Signature | What it does |
+|---|---|---|
+| `focusPaint` | `focusPaint(ctx, color, dimmed) → color` | The theme's `--sd-color-dim` for a mark out of focus. |
+| `tweenColor` | `tweenColor(ctx, from, to, set, opts) → Promise` | An RGB colour tween. |
+| `textColor` | `textColor(color, background) → color` | A palette colour darkened (or lightened) until it has 4.5:1 contrast, for text. |
+
+Focus-dim goes through `focusPaint`, never through opacity. Text coloured from a palette goes through `textColor`, which reaches 4.5:1.
+
+```js
+const fill = ctx.chart.focusPaint(ctx, color, dimmed); // the theme's --sd-color-dim when dimmed
+await ctx.chart.tweenColor(ctx, from, to, (c) => path.attr("stroke", c), ctx.motion.timing(info));
+label.attr("fill", ctx.chart.textColor(color, ctx.tokens["--sd-color-background"]));
+```
+
 ## Helpers inside the engine
 
 The built-ins import small helpers from three engine modules. They are internal: they may change without notice, and a deck component should not import them, because the engine's path differs between the repository and a deck's `stepdeck/` copy. Use `ctx` instead, and copy a one-liner if you need it.
@@ -312,7 +518,7 @@ The built-ins import small helpers from three engine modules. They are internal:
 | `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
 | `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
 | `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
-| `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`. Used by `chart.line` and `chart.bar`. |
+| `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`, and `chartKit`, which is `ctx.chart` (built from `core/chart-layout.js`, `core/chart-marks.js` and `core/chart-motion.js`). Use `ctx.chart`, not an import. |
 
 ## `schema.json`
 
@@ -346,6 +552,6 @@ The starter's schema:
 - [Writing a custom component](../guide/custom-components.md): the tutorial.
 - [Animation and motion](../guide/animation-and-motion.md): when steps animate.
 - [Deck and slide spec](deck-and-slide.md): elements, steps, `advance` and `transition`.
-- [Built-in components](components/index.md): what the 11 built-ins render.
+- [Built-in components](components/index.md): what the 12 built-ins render.
 - [skill/references/custom-components.md](../../skill/references/custom-components.md): the agent version.
 - `schema/stepdeck.d.ts`: `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext`, `ChildHandle`.

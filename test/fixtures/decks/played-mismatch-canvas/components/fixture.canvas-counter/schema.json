@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.canvas-counter",
+  "description": "Test fixture: a canvas layer whose data-n counts the updates (not idempotent, on purpose).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["step"],
+  "properties": {
+    "step": {
+      "type": "integer",
+      "description": "A number that changes every step, so update runs on every navigation.",
+      "examples": [0, 1],
+      "x-transition": "snap"
+    }
+  }
+}

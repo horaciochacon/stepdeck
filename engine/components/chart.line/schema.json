@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.line",
-  "description": "Line chart of one or more series over a numeric x, with direct series labels, a transient highlight, vertical annotations and an optional interval band. Changing `y` morphs the lines with a keyed join.",
+  "description": "Line chart of one or more series over a numeric x, with direct series labels, a transient highlight, vertical annotations, an optional interval band, point markers, a forecast segment, a time sweep with a ticker and a fan of uncertainty draws. Changing `y` morphs the lines with a keyed join.",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -98,6 +98,50 @@
       },
       "description": "Shaded band between two columns around each series (e.g. an uncertainty interval). Morphs with the lines.",
       "examples": [{ "lower": "responders_lo", "upper": "responders_hi" }],
+      "x-transition": "tween"
+    },
+    "points": {
+      "type": "boolean",
+      "description": "Draw a dot at every data point of every shown series. Dots after `forecast.from` are hollow. Fades in and out.",
+      "examples": [true],
+      "x-transition": "fade"
+    },
+    "forecast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from"],
+      "properties": {
+        "from": { "type": "number", "description": "x value where the forecast starts. The line from here on is dotted, its points hollow, its band lighter, and the plot from here to its end is shaded and labelled. Before the first x the whole line is forecast; after the last x there is no forecast part.", "examples": [2025] },
+        "label": { "type": "string", "description": "Text of the label at the divider. Default: the deck language's word for 'Forecast'.", "examples": ["Projection"] }
+      },
+      "description": "Marks the part of every line from an x value on as a forecast: a dotted line with hollow points, a lighter band, a shaded region and a labelled divider. The observed line ends exactly where the dotted one starts. Fades in and out.",
+      "examples": [{ "from": 2025 }, { "from": 2025, "label": "Projection" }],
+      "x-transition": "fade"
+    },
+    "until": {
+      "type": "number",
+      "description": "Shows lines, bands, points and the forecast only up to this x value, cut exactly there (the last segment is interpolated). The x axis never changes. Played forward, the lines sweep continuously from the old value to the new one (extending, or retracting when `until` is lowered) behind a vertical cursor; backward or jumped to, it snaps. Before the first x nothing is drawn; after the last x the whole chart is. Series labels sit after each line's visible end.",
+      "examples": [2023, 2050],
+      "x-transition": "tween"
+    },
+    "ticker": {
+      "type": "boolean",
+      "description": "With `until`, a large label of the current x in the plot's upper left (formatted with `format.x`), counting through a sweep and resting on `until`. Does nothing without `until` (`validate` warns).",
+      "examples": [true],
+      "x-transition": "snap"
+    },
+    "draws": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data", "id", "shown"],
+      "properties": {
+        "data": { "type": "string", "description": "Path to a CSV file of draws, relative to the deck root: one row per draw, series and x value, with the chart's `x`, its `y`, its `series` column when the chart has series, and the `id` column. At most 2000 draws and 500 x values per series.", "examples": ["data/draws.csv"] },
+        "id": { "type": "string", "description": "Column naming the draw of each row. The same id in two series is one draw of each.", "examples": ["draw"] },
+        "shown": { "type": "integer", "minimum": 0, "description": "How many draws to paint: the first ones of a fixed order of the ids, so raising it adds draws and keeps the ones shown. 0 paints none. More than the file has is an error.", "examples": [20, 200] },
+        "seed": { "type": "integer", "description": "Picks another fixed order of the draws. Default 1.", "examples": [1, 7] }
+      },
+      "description": "Uncertainty draws painted as thin lines under the summary lines, in each series' color, on a canvas. Their opacity and width fall as more are shown. A played change of `shown` fades draws in and out.",
+      "examples": [{ "data": "data/draws.csv", "id": "draw", "shown": 20 }],
       "x-transition": "tween"
     }
   }

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gallery.slope",
+  "description": "A slope chart: one line per category from its value in one column to its value in another, with a dot and a direct label at each end. Built only from what the engine hands every component (ctx.chart, ctx.motion, ctx.palette and the rest), with no import. The value scale is the same on every step; a played change of `left` or `right` slides the dots and moves the labels to their new rank, `highlight` dims the other categories, and the lines draw in as the chart's own entrance.",
+  "x-enter": "own",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "category", "left", "right"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a CSV file, relative to the deck root, with one row per category.",
+      "examples": ["data/slope.csv"],
+      "x-transition": "snap"
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Column holding each row's category: its label at both ends, and its key from step to step.",
+      "examples": ["region"],
+      "x-transition": "snap"
+    },
+    "left": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Column of the values at the left end. Its heading is the column name without a letter prefix before a number (`y2010` reads 2010). A change slides the left dots; the scale covers `left` and `right` of every step.",
+      "examples": ["y2010"],
+      "x-transition": "tween"
+    },
+    "right": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Column of the values at the right end, headed like `left`. A change slides the right dots, tilts the lines, counts the values and moves the right labels to their new rank.",
+      "examples": ["y2020", "y2030"],
+      "x-transition": "tween"
+    },
+    "highlight": {
+      "type": "string",
+      "description": "A category to keep in colour: the others turn to the theme's dim colour (their labels to the muted text colour), and it is drawn on top. The colours tween.",
+      "examples": ["Coastal"],
+      "x-transition": "fade"
+    },
+    "format": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A d3-format specifier for the values in the labels. Without it, a fixed precision from the scale.",
+      "examples": [".0%", ",.1f"],
+      "x-transition": "snap"
+    }
+  }
+}

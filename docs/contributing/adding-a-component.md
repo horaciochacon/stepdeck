@@ -42,7 +42,7 @@ Put the logic that does not need the DOM in a separate pure module, the way `lis
 Add the name to `components/index.json`. That file is the only list of built-ins. Nothing scans the folders, but `test/unit/components-index.test.mjs` checks that the list matches exactly the folders of `components/` that hold an `index.js`. The order of the file is the order that `docs/reference/components/index.md` uses.
 
 ```json
-["text", "chart.line", "chart.bar", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"]
+["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"]
 ```
 
 Check the name against these rules:
@@ -170,17 +170,15 @@ Errors: throw an `Error` whose message names the bad value and what is allowed, 
 
 A region is a column flexbox, and an element takes only the height of its content. A component that draws to the size of its box, such as an SVG that measures itself, needs a rule that stretches it. There are two mechanisms:
 
-- **By type, in any layout.** `core/stepdeck.css` stretches five types wherever they are (`diagram`, `image`, `terminal`, `chart.line` and `chart.bar`):
+- **By type, in any layout.** `core/stepdeck.css` stretches six types wherever they are (`chart.line`, `chart.bar`, `chart.points`, `diagram`, `image` and `terminal`), with one rule; `terminal` and `image` add their own `display` in their sections:
 
   ```css
-  .sd-region > .sd-el[data-type="diagram"] { flex: 1 1 0; min-height: 0; }
-  .sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  .sd-region > .sd-el[data-type="image"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  .sd-region > .sd-el[data-type="chart.line"]:not(.sd-collapsed):not(.sd-failed),
-  .sd-region > .sd-el[data-type="chart.bar"]:not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+  .sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="chart.points"], [data-type="diagram"],
+    [data-type="image"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+  .sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { display: flex; flex-direction: column; }
   ```
 
-  If your rule sets `display`, add `:not(.sd-collapsed):not(.sd-failed)` as `terminal` and `image` do (the charts add it too). A type rule is at least as specific as `.sd-el.sd-collapsed` (`display: none`) and comes later in the file. Without the `:not`, its `display` would win and a collapsed element would show again.
+  Add a new type to the `:is()` list. If your rule sets `display`, add `:not(.sd-collapsed):not(.sd-failed)` as `terminal` and `image` do (the shared rule has it too). A type rule is at least as specific as `.sd-el.sd-collapsed` (`display: none`) and comes later in the file. Without the `:not`, its `display` would win and a collapsed element would show again.
 - **By layout, only as the only child.** `figure-notes` (main), `halves` (both halves) and `title` (figure) stretch a region's only element of any type (`> .sd-el:only-child { flex: 1 1 0; min-height: 0; }`). `statement` and `full-bleed` have no such rule.
 
 Add a type rule if the component should fill its region whatever the layout. Without one, it is sized by its content or depends on the layout's only-child rule. Say which in the README.

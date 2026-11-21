@@ -69,7 +69,7 @@ Each family deduplicates differently:
 
 | Family | How often a problem is reported |
 | --- | --- |
-| `validate` per-step element rules (`props-not-object` to `diagram-overlap` in the [per-step table](#validate-per-step-rules)) | Once per element and offending value, at the first step where it appears. There is no "more steps" count. A different bad value at a later step (another path, another string, another binding) gets its own line. |
+| `validate` per-step element rules (`props-not-object` to `chart-orient` in the [per-step table](#validate-per-step-rules)) | Once per element and offending value, at the first step where it appears. There is no "more steps" count. A different bad value at a later step (another path, another string, another binding) gets its own line. |
 | `validate` `unknown-element` | Once per patch operation that names the unknown id, at that step. It is not deduplicated across steps. |
 | `validate` `noop-step` | Once per step that changes nothing. |
 | `check` layout rules (`text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small`, `contrast`) | Once per slide, element and rule (and per pair of elements for `text-overlap`). The line shows the first step's measurement. When the problem persists, `measured` ends with `(+N more steps)`. |
@@ -88,12 +88,12 @@ Some problems stop later checks, so fix problems in the order they are printed. 
 | `slide-missing`, `slide-load`, `slide-id` | Every other rule for that slide. |
 | A malformed element (no string `id` or `type`) or a `steps` entry that is not an object, reported as `spec-invalid` | Every rule after the slide schema for that slide. |
 | `unknown-layout` | `unknown-region` for that slide. |
-| `step-ref` | The folded per-step rules (`noop-step`, and `props-not-object` through `diagram-overlap`) for that slide. `unknown-element` is still reported at every step. |
+| `step-ref` | The folded per-step rules (`noop-step`, and `props-not-object` through `chart-orient`) for that slide. `unknown-element` is still reported at every step. |
 | `unknown-element` in `set`, `replace`, `show` or `hide` | The folded per-step rules from that step on. In `only`, just that step is skipped. `unknown-element` is still reported at later steps. |
 | `fold-error` | The folded per-step rules from that step on. `unknown-element` is still reported at later steps. |
 | `unknown-component` | `unknown-prop` and `prop-invalid` for that element. |
-| `binding-file`, `binding-pointer`, `binding-format`, or `path-case` on a binding | `unknown-prop`, `prop-invalid`, `diagram-id` and `diagram-overlap` for that element at that step. |
-| `unknown-prop`, `prop-invalid` on a `diagram` | `diagram-id`, `diagram-overlap` (they run only on props that pass the schema). |
+| `binding-file`, `binding-pointer`, `binding-format`, or `path-case` on a binding | `unknown-prop`, `prop-invalid`, `diagram-id`, `diagram-overlap`, `chart-prop-unused` and `chart-orient` for that element at that step. |
+| `unknown-prop`, `prop-invalid` on a `diagram`, a `chart.line` or a `chart.bar` | `diagram-id`, `diagram-overlap`, `chart-prop-unused`, `chart-orient` (they run only on props that pass the schema). |
 | `render-error` naming an element | The `check` layout rules for that element at that step. |
 
 ## validate
@@ -167,15 +167,19 @@ The palette rules run only on the palettes the deck draws with. For each kind (c
 | `path-case` | error | A file path in a prop, or a binding path, exists only in another case. | `on disk: <path>`. | Use the exact case. |
 | `file-missing` | error | A string prop that is a relative path ending in `.json`, `.geojson`, `.csv`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, `.avif`, `.mp4`, `.webm`, `.mp3`, `.wav` or `.ogg` names no file. The whole string must be such a path, with no spaces and no `..`. | A file in the deck. | Create the file, or fix the path. |
 | `data-invalid` | error | `props.data` is an existing `.csv` that does not parse with the declared `types`. | A CSV the loader parses. | Fix the data or the `types`. |
-| `missing-column` | error | For an element whose `data` is an existing `.csv`: `x`, `y`, `series`, `interval.lower` or `interval.upper` names a column the header lacks. Values that are bindings are skipped. Checked for any component, at every step, because `y` may change. | `columns of <file>: <header>`. | Use a listed column (did-you-mean given). |
+| `missing-column` | error | For an element whose `data` is an existing `.csv`: `x`, `y`, `series`, `interval.lower` or `interval.upper`, `id` or `from` on `chart.points`, or `group` with `mode: "back-to-back"`, names a column the header lacks. Values that are bindings are skipped. Checked for any component (`id` and `from` only on `chart.points`, where they name columns), at every step, because `y` may change. | `columns of <file>: <header>`. | Use a listed column (did-you-mean given). |
 | `unknown-prop` | error | With bindings resolved, a prop the component schema does not allow. | `props of <type>: <props>`. | Rename it as the did-you-mean says; `catalog <type>` lists the props. |
 | `prop-invalid` | error | With bindings resolved, any other component schema error: a missing required prop, a wrong type, a value out of range or off pattern. | The schema constraint. | Follow the fix text. A binding with a format yields a string. |
 | `title-accent` | warning | The slide's title (the shortcut, or a `text` element with id `title` and `accent: true`) has an odd number of unescaped `*`, counted on the string as written at each step where the title text changes. The unmatched `*` renders literally. | `* in pairs around the accent phrase: *phrase*`. | Close the phrase with a second `*`, or write `\*` for a literal asterisk. |
 | `accent-empty` | warning | The same title has an empty accent phrase `**`, usually a markdown bold habit. It renders as two literal asterisks. Two phrases that touch, as in `*a**b*`, are not empty. | `one * on each side of the accent phrase: *phrase* (titles are not markdown)`. | Write a single `*phrase*`, or `\*\*` for two literal asterisks. |
 | `diagram-id` | error | For a `diagram` whose props pass its schema: an edge end, a group member, or an entry of `shown` or `highlight` names an unknown id; an id is used twice across nodes, groups and edges; or a group contains itself. | Ids that exist and are unique; groups nest without cycles. | Fix the id, give a repeated edge an explicit `id`, or break the cycle. |
 | `diagram-overlap` | error | For a `diagram` whose props pass its schema: sibling groups share cells; a node sits in a group's cells without being a member; or the theme's `--sd-diagram-gap` is less than twice `--sd-diagram-pad`. | Separate cells for sibling groups; only members in a group's cells; gap at least 2 x pad. | Move members, nest one group in the other, add the node to the group, or change the theme tokens. |
+| `chart-prop-unused` | warning | For a `chart.line` whose props pass its schema: `ticker` is `true` and `until` is not set, so there is no sweep for the ticker to count. For a `chart.bar` whose props pass its schema: `invert` is `true`, or `total` is `true` or a label, and `mode` is not `"waterfall"`, so there are no increases to recolour and no running total to close. One line per prop. | `` `ticker` together with `until` ``; `` `invert` together with `mode: "waterfall"` `` (and the same for `total`). | Set `until`, or remove `ticker`. Set `mode: "waterfall"`, or remove `invert` / `total` (`total: null` on the step that switches back to plain bars). |
+| `chart-orient` | error | For a `chart.bar` whose props pass its schema: `mode` is `"back-to-back"` and `orient` is `"vertical"`. Its two sides run left and right of a centre rule, so the chart fails at render time with the same message, `back-to-back bars are horizontal only`. | `` `orient: "horizontal"` with `mode: "back-to-back"` ``. | Remove `orient: "vertical"`, or choose another `mode`. |
 
 `diagram-id` and `diagram-overlap` come from `diagramProblems` in `components/diagram/place.js`. The gap and pad come from the theme's `tokens.css` (`--sd-diagram-gap` and `--sd-diagram-pad`, else 3 x and 1 x `--sd-space`). An override in a slide's `style` is not seen. At run time a `diagram-id` problem also fails the element; a `diagram-overlap` problem does not, and the diagram renders with touching boxes. See the [components reference](components/index.md).
+
+`chart-prop-unused` and `chart-orient` come from `chartProblems` in `core/chart-rules.js`, a pure function with no imports that `validate` calls for every element type and that returns `[]` for the types it does not know. `chart-prop-unused` reports a prop that has no effect without another one; it is a warning, so the deck still builds. `chart-orient` reports props the chart cannot draw; it is an error.
 
 ### validate: lint
 
@@ -183,7 +187,7 @@ The palette rules run only on the palettes the deck draws with. For each kind (c
 | --- | --- | --- | --- | --- |
 | `figure-source` | error | A slide holds a figure and no element has `role: "source"` in its initial props. A figure is a type matching `chart.*` or `map.*`, the type `map`, or `big-number`. No `map` component exists yet; the name is reserved. Reported on the first figure element. | `an element with role: "source"`. | Add a source line. The fix suggests `region: "footer"` when the layout has a footer, else `"main"`. |
 
-The warnings are `noop-step`, `title-accent`, `accent-empty` (per-step rules above) and `kicker-no-region` (slide rules above); everything else in `validate` is an error.
+The warnings are `noop-step`, `title-accent`, `accent-empty`, `chart-prop-unused` (per-step rules above) and `kicker-no-region` (slide rules above); everything else in `validate` is an error.
 
 ## check
 
@@ -231,11 +235,11 @@ With `--played`, every step k is reached three ways:
 - **from the previous step**: `goTo(k)` from k−1, animated;
 - **from the next step**: `goTo(k)` from k+1.
 
-Each arrival is compared with the jump, per element, by presence, visibility, text, and box rounded to 1 px. A slide with n steps gives 2(n−1) arrivals.
+Each arrival is compared with the jump, per element, by presence, visibility, text, box rounded to 1 px, and canvas state (the `data-*` attributes of the element's canvas layers). A slide with n steps gives 2(n−1) arrivals.
 
 | Rule | Measures | Limit | Typical fix |
 | --- | --- | --- | --- |
-| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text` or `box`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
+| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text`, `box` or `canvas`; for `canvas` the value is the first attribute that differs, its value and that layer's attributes, as `signature 1a2b3c4d (draws=200 until= seed=1 signature=1a2b3c4d)`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
 
 A real line, from `test/fixtures/decks/played-mismatch`:
 
@@ -295,9 +299,12 @@ Each rule should have a fixture that yields exactly that problem. To add or chan
 | `test/fixtures/validate/kicker-no-region` | `kicker-no-region` |
 | `test/fixtures/validate/lede-on-cover` | `lede-on-cover` |
 | `test/fixtures/validate/exit-delay` | `exit-delay-ignored` |
+| `test/fixtures/validate/ticker-without-until` | `chart-prop-unused` |
+| `test/fixtures/validate/waterfall-props-outside` | `chart-prop-unused` (two: `invert` and `total` on plain bars) |
+| `test/fixtures/validate/back-to-back-vertical` | `chart-orient` |
 | `test/fixtures/validate/motion-budget` | `motion-budget` (three: a box motion, a list build and a count-up); `motion-budget-under` is the same slide a little earlier, and clean |
 | `test/fixtures/validate/image-alt-empty`, `image-alt-missing`, `invalid-at-step` | `prop-invalid` |
-| `test/fixtures/validate/missing-column`, `missing-column-bar` | `missing-column` |
+| `test/fixtures/validate/missing-column`, `missing-column-bar`, `group-missing-column` | `missing-column` |
 | `test/fixtures/validate/noop-step` | `noop-step` |
 | `test/fixtures/validate/numeric-step-id` | `step-id-numeric` |
 | `test/fixtures/validate/bad-motion` | `spec-invalid` (an unknown motion name in `enter`, with a did-you-mean) |

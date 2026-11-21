@@ -209,7 +209,7 @@ These look wrong but produce no error line, and `validate` passes.
 
 ### A chart has no height
 
-A `chart.line` or `chart.bar` fills the room its region leaves, next to other elements or alone. The one place it gets none is `statement` `main`: that region has no set height, so the chart collapses to zero height there. (`diagram`, `image` and `terminal` do the same.)
+A `chart.line`, `chart.bar` or `chart.points` fills the room its region leaves, next to other elements or alone. The one place it gets none is `statement` `main`: that region has no set height, so the chart collapses to zero height there. (`diagram`, `image` and `terminal` do the same.)
 
 Fix: move the chart to a region with a height, such as `main` of `figure-notes` or `full-bleed`, or either half of `halves`. If the chart is small in a region that should be larger, check what else is in the region: the chart takes only the height the other elements leave. No rule catches this, so look at a shot (`node cli/index.js shoot my-talk --slide chart`). The sizes are in the [Fill rules](reference/layouts.md#fill-rules) table; see also [Give figures room](guide/layouts-and-themes.md#give-figures-room).
 

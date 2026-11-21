@@ -283,7 +283,7 @@ A patch that names an element the slide does not have makes the fold throw `unkn
 
 ### `transition`
 
-`transition.duration` is the length, in milliseconds, of the motion that plays when moving forward into this step. It replaces the theme's durations at that step: the box motions of entering and leaving elements (`--sd-duration`), the components' changes and builds (`--sd-duration`, twice that for `chart.line` and `chart.bar`, 2.25 × for the `big-number` count-up; the step's value is used as it is, not scaled), a text crossfade (each half is `duration / 2`) and a highlight colour change (`--sd-duration-fast`). An element's own `enter` or `exit` `duration` still wins. `0` makes the whole step snap, stagger holds included. Typing keeps its own per-character speed and honours only `0`.
+`transition.duration` is the length, in milliseconds, of the motion that plays when moving forward into this step. It replaces the theme's durations at that step: the box motions of entering and leaving elements (`--sd-duration`), the components' changes and builds (`--sd-duration`, twice that for `chart.line`, `chart.bar` and `chart.points`, 2.25 × for the `big-number` count-up; the step's value is used as it is, not scaled), a text crossfade (each half is `duration / 2`) and a highlight colour change (`--sd-duration-fast`). An element's own `enter` or `exit` `duration` still wins. `0` makes the whole step snap, stagger holds included. Typing keeps its own per-character speed and honours only `0`.
 
 `transition.stagger` replaces the theme's `--sd-stagger`: the gap between the elements that enter on this step, and between the items of a build (list items, chat messages, diagram nodes, terminal lines).
 

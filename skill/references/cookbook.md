@@ -459,6 +459,184 @@ export default {
 };
 ```
 
+## Data stories
+
+Recipes for the chart props that tell a story over several steps. Each is a complete slide in a deck made with `new`; the data is synthetic.
+
+### Data, then forecast
+
+The forecast starts in 2023, a year with no data, so every line gets an interpolated point there and the solid line ends where the dotted one starts. `until` sweeps the lines along the x axis, and `ticker: true` counts the year. The first step stops at 2010; the second stops at 2023, where the lines are still all solid and no region is shaded; the third carries them into the dotted forecast, and the shaded region appears as the sweep passes. The x axis never moves. A jump or a backward move shows a step at once.
+
+`data/trend.csv`:
+
+```csv
+year,series,rate,lo,hi
+2000,north,18,16,20
+2005,north,22.5,20.2,24.8
+2010,north,27,24.4,29.6
+2015,north,27,24.1,29.9
+2020,north,31.5,28.3,34.7
+2025,north,36,32.5,39.5
+2030,north,36,32.2,39.8
+2035,north,40.5,36.4,44.6
+2040,north,45,40.6,49.4
+2045,north,45,40.3,49.7
+2050,north,49.5,44.5,54.5
+2000,south,12,10,14
+2005,south,18.6,16.3,20.9
+2010,south,25.2,22.6,27.8
+2015,south,27.3,24.4,30.2
+2020,south,33.9,30.7,37.1
+2025,south,40.5,37,44
+2030,south,42.6,38.8,46.4
+2035,south,49.2,45.1,53.3
+2040,south,55.8,51.4,60.2
+2045,south,57.9,53.2,62.6
+2050,south,64.5,59.5,69.5
+```
+
+```js
+export default {
+  id: "data-forecast",
+  layout: "full-bleed",
+  title: "Data, then forecast",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/trend.csv", x: "year", y: "rate", series: "series", interval: { lower: "lo", upper: "hi" },
+               points: true, forecast: { from: 2023 }, until: 2010, ticker: true,
+               format: { x: "d" }, axes: { x: "Year", y: "Rate" } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "start" },
+    { id: "observed", set: { chart: { until: 2023 } } },
+    { id: "forecast", set: { chart: { until: 2050 } } },
+  ],
+};
+```
+
+### More draws
+
+`draws` paints a fan of uncertainty draws under the lines, from a second CSV: the chart's `x`, `y` and `series` columns and a column that names the draw. `shown` is how many. Raise it step by step, and the draws already on screen stay while more join them; lower it on a later step to go back. The y axis already covers every draw, so it does not move when the fan appears. The lines stay on top, so the story is still the trend. Keep the file small (at most 2000 draws and 500 x values per series; a few hundred draws are plenty).
+
+`data/draws.csv` has one row per draw, series and year: the columns `year`, `series`, `rate` (the same names as `data/trend.csv`) and `draw` (the draw's id). It draws on the `data/trend.csv` of the previous recipe. This script, `data/make-draws.mjs`, writes the file: 300 draws around each series, 11 years and 2 series, so 6,600 rows (about 130 KB). It is deterministic (a seeded generator, no `Math.random`), so a rerun changes nothing. Run it with `node data/make-draws.mjs`.
+
+```js
+// Writes data/draws.csv: 300 draws around each series of data/trend.csv, one row per draw, series and year.
+// The same file every run: a small seeded generator, no Math.random, no dependencies.
+import { readFileSync, writeFileSync } from "node:fs";
+
+const here = new URL("./", import.meta.url);
+const trend = readFileSync(new URL("trend.csv", here), "utf8").trim().split("\n").slice(1).map((line) => line.split(","));
+
+let state = 12345;
+const random = () => {
+  state = (state + 0x6d2b79f5) | 0;
+  let t = Math.imul(state ^ (state >>> 15), 1 | state);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const rows = ["year,series,rate,draw"];
+for (let draw = 1; draw <= 300; draw++) {
+  const lean = new Map(); // each draw leans one way or the other in each series, more and more with the year
+  for (const [year, series, rate] of trend) {
+    if (!lean.has(series)) lean.set(series, random() + random() - 1);
+    const spread = 0.3 * ((year - 2000) / 50);
+    const value = Number(rate) * (1 + spread * lean.get(series)) + (random() - 0.5) * 0.6;
+    rows.push(`${year},${series},${value.toFixed(1)},${draw}`);
+  }
+}
+writeFileSync(new URL("draws.csv", here), `${rows.join("\n")}\n`);
+```
+
+```js
+export default {
+  id: "more-draws",
+  layout: "full-bleed",
+  title: "Uncertainty draws",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/trend.csv", x: "year", y: "rate", series: "series",
+               draws: { data: "data/draws.csv", id: "draw", shown: 0 },
+               format: { x: "d" }, axes: { x: "Year", y: "Rate" } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "none" },
+    { id: "one", set: { chart: { draws: { shown: 1 } } } },
+    { id: "few", set: { chart: { draws: { shown: 20 } } } },
+    { id: "many", set: { chart: { draws: { shown: 200 } } } },
+  ],
+};
+```
+
+### Re-sort to make the point
+
+A changed `sort` slides every bar, with its label and whisker, to its new band. Hidden categories keep their place, so the ranking never reflows, and an empty value comes last. Open in the data order, rank the bars, then put two chosen categories first. `chart.points` takes the same `sort`.
+
+`data/values.csv`:
+
+```csv
+group,score,low,high
+North,12.4,9.8,15.1
+South,8.6,6.9,10.4
+East,15.2,12.1,18.4
+West,6.1,4.2,8.3
+Centre,17.5,14.3,20.9
+```
+
+```js
+export default {
+  id: "re-sort",
+  layout: "full-bleed",
+  title: "Highest first",
+  elements: [
+    { id: "bars", region: "main", type: "chart.bar",
+      props: { data: "data/values.csv", x: "group", y: "score", interval: { lower: "low", upper: "high" },
+               format: { y: ",.1f" } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "data" },
+    { id: "desc", set: { bars: { sort: "-value" } } },
+    { id: "list", set: { bars: { sort: ["West", "Centre"] } } },
+  ],
+};
+```
+
+### Before and after
+
+`from` makes every row a before and after pair: a hollow dot at the `from` column, a quiet connector, and the filled dot at `y`. Show `y: "before"` first; on the next step set `y: "now"` and `from: "before"`, and the dots slide while the connectors grow. A row with an empty `from` (West) shows its end dot alone, never a dot at zero. Set `from: null` on a later step to fold the pairs back into plain dots.
+
+`data/pairs.csv`:
+
+```csv
+region,before,now
+North,14.2,10.1
+South,11.8,9.6
+East,16.5,12.0
+West,,8.3
+Centre,9.4,13.2
+```
+
+```js
+export default {
+  id: "before-after",
+  layout: "figure-notes",
+  title: "Before and now",
+  elements: [
+    { id: "points", region: "main", type: "chart.points",
+      props: { data: "data/pairs.csv", x: "region", y: "before", format: { y: ",.1f" } } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "before" },
+    { id: "now", set: { points: { y: "now", from: "before" } } },
+  ],
+};
+```
+
 ## Motion
 
 Every element that appears on a forward step enters in turn: its box plays the theme's entrance (`rise` in `modern`), or a component whose catalog entry says `enter: own` builds itself. These recipes use the data of a deck made with `new` (`data/series.csv`, `data/summary.json`). They pass `validate`, `check` and `check --played` there. The stepdeck gallery's motion slides (`site/gallery/slides/motion-*.js` in the repository) show the same devices at full size.
