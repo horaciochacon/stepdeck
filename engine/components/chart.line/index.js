@@ -321,6 +321,9 @@ export default {
       const [u0, u1] = [clampedUntil(from), clampedUntil(to)];
       const cutting = from.until !== null || to.until !== null;
       const sweeping = cutting && u0 !== u1;
+      // The ticker counts from the old `until` to the new one as given (the cut stays inside the x domain), so it rests on `until`.
+      const [t0, t1] = [from.until ?? from.xDomain[1], to.until ?? to.xDomain[1]];
+      const counting = cutting && t0 !== t1;
       const cursor = sweeping ? plot.insert("line", "g.sd-lines").attr("class", "sd-sweep-cursor") : null;
       // Colors change on their own, faster tween (a focus change takes --sd-duration-fast); the frame reads them.
       const live = new Map(to.series.map((s) => [s.name, { paint: prevSeries.get(s.name)?.paint ?? s.paint, label: prevSeries.get(s.name)?.labelColor ?? s.labelColor }]));
@@ -343,6 +346,8 @@ export default {
       });
       // The marks of a group that enters or leaves fade with the group, not once more by themselves.
       svg.selectAll(".sd-points, .sd-forecast").filter(function () { return this.__sdEnter; }).selectAll(".sd-dot, .sd-forecast-line").each(function () { this.__sdEnter = false; });
+      // A dot the sweep reveals arrives at full opacity as the cursor passes it: only `points` being switched on fades the dots.
+      if (cutting && from.showPoints && to.showPoints) plot.selectAll("circle.sd-dot").filter((d) => d && !entering.has(d.series)).each(function () { this.__sdEnter = false; });
       // Entering series draw at their final shape while everything else morphs.
       const toAt = to.forecast?.at ?? null;
       const lines = gLines.selectAll("path.sd-line:not(.sd-exiting)").data(to.series, (d) => d.name);
@@ -392,7 +397,7 @@ export default {
           .attr("opacity", (d) => (entering.has(d.name) ? t : 1))
           .style("display", (d) => (spots && !spots.get(d.name) ? "none" : null));
         svg.selectAll("path.sd-line.sd-exiting, .sd-band.sd-exiting, .sd-series-label.sd-exiting").attr("opacity", 1 - t);
-        if (to.ticker) placeTicker(plot, to, sweeping ? to.fmtX(u) : to.ticker.text);
+        if (to.ticker) placeTicker(plot, to, counting ? to.fmtX(lerp(t0, t1, t)) : to.ticker.text);
         cursor?.attr("x1", x(u)).attr("x2", x(u)).attr("y1", 0).attr("y2", y.range()[0]);
       };
       try {

@@ -353,6 +353,34 @@ test("ticker counts and rests on until", async () => {
   });
 });
 
+test("ticker counts to until even when it lies outside the x domain", async () => {
+  await withPage({ root, url: pages.url("sweep", "step=late&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "sweep", "after", "chart", sweepProbe);
+    const texts = r.frames.map((f) => f.ticker).filter((t) => t !== null);
+    const numbers = texts.map(Number);
+    for (let i = 1; i < numbers.length; i++) assert.ok(numbers[i] >= numbers[i - 1], "the ticker never counts back");
+    assert.ok(numbers.every((n) => n >= 2042 && n <= 2060), `between the two values: ${[...new Set(texts)].join(" ")}`);
+    assert.ok(numbers.some((n) => n > 2050), "it counts past the end of the x axis, to `until`");
+    const swept = r.frames.filter((f) => f.cursor !== null);
+    assert.ok(2060 - Number(swept.at(-1).ticker) <= 3, `no jump at the end: the last frame of the sweep shows ${swept.at(-1).ticker}`);
+    assert.equal(r.end.ticker, "2060");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("dots the sweep reveals arrive at full opacity", async () => {
+  await withPage({ root, url: pages.url("sweep", "step=on&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "sweep", "late", "chart", (el) => {
+      const dots = [...el.querySelectorAll("circle.sd-dot")].filter((c) => getComputedStyle(c).display !== "none");
+      return { count: dots.length, opacities: dots.map((c) => getComputedStyle(c).opacity) };
+    });
+    const first = r.frames[0].count;
+    assert.ok(r.frames.some((f) => f.count > first && f.count < r.end.count), "dots were seen appearing one by one");
+    for (const f of r.frames) assert.ok(f.opacities.every((o) => o === "1"), `every shown dot is opaque (${[...new Set(f.opacities)].join(", ")})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("series labels follow the visible end of each line", async () => {
   for (const step of ["first", "between", "on", "late"]) {
     await withPage({ root, url: pages.url("sweep", `step=${step}`) }, async (page, ctx) => {
