@@ -134,7 +134,7 @@ Behaviour:
   has more than one '<group>' row`, `` '<name>' in `highlight` is both a category and a group ``, a `highlight` that
   is neither, `groups` naming one group twice, a value or drawn bound below zero, and `back-to-back bars are horizontal
   only`.
-  `validate` also checks the columns `x`, `y`, `group` and `interval` name, at every step, gives a misspelt `mode` a
+  `validate` also checks the columns `x`, `y`, `interval` and (back-to-back) `group` name, at every step, gives a misspelt `mode` a
   did-you-mean, warns (`chart-prop-unused`) when `invert` or `total` is set without `mode: "waterfall"`, and fails
   (`chart-orient`) a back-to-back chart with `orient: "vertical"`.
 - **Accessibility.** Each bar carries a `<title>` with its category, value and interval, formatted like the labels

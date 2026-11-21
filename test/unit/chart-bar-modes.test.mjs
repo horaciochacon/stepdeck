@@ -200,6 +200,18 @@ test("backToBackOrder: sort ranks by the sum of the two sides", () => {
     { message: "category 'Men' in `sort` not found (categories: 0-14, 15-29, 30+)" });
 });
 
+test("backToBackOrder: text in a number column never ranks as a value", () => {
+  // 15-29 reads "n/a" in `share` and `later` on both sides: neither bar is drawn, so the band has no sum and ranks last
+  // both ways, as a plain bar with no value does (30+ has no Men value, so it has no sum either: data order between them).
+  const gaps = PYRAMID.map((r) => (r.age === "15-29" ? { ...r, share: "n/a", later: "n/a" } : r));
+  assert.deepEqual(backToBackOrder(gaps, { ...pyramid, sort: "-value" }), ["0-14", "15-29", "30+"]);
+  assert.deepEqual(backToBackOrder(gaps, { ...pyramid, sort: "value" }), ["0-14", "15-29", "30+"]);
+  // `later` sums to 14.2 and 64 elsewhere: a number column stays numeric under `{ by }`, its text missing.
+  assert.deepEqual(backToBackOrder(gaps, { ...pyramid, sort: { by: "later", order: "desc" } }), ["30+", "0-14", "15-29"]);
+  assert.deepEqual(backToBackOrder(gaps, { ...pyramid, sort: { by: "later" } }), ["0-14", "30+", "15-29"]);
+  assert.deepEqual(backToBackOrder(gaps, { ...pyramid, sort: { by: "age", order: "desc" } }), ["30+", "15-29", "0-14"], "a text column still sorts as text");
+});
+
 test("backToBackSpan: [0, max] of every value and drawn interval over every back-to-back step of the slide", () => {
   // The 30+ Men bounds (27..29) have no value to bracket, so they draw nothing and do not count.
   assert.deepEqual(backToBackSpan(PYRAMID, pyramid, null), [0, 30], "no stepProps: the current props only");

@@ -86,7 +86,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `binding-format` | A bad d3-format specifier, a format applied to a non-number, or an object or array embedded in text. | Use a valid specifier (`,.0f`, `.1%`, `d`), or bind the raw value. |
 | `file-missing` | A string prop that names a deck file (`.json`, `.csv`, image or media) points at nothing. | Create the file or fix the path. |
 | `data-invalid` | A CSV does not parse with the declared `types`. | Fix the data or the `types`. |
-| `missing-column` | `x`, `y`, `id`, `from`, `series`, `group` or `interval.lower`/`interval.upper` names a column the CSV lacks. Checked per step, because `y` may change. | Use a column the fix lists. |
+| `missing-column` | `x`, `y`, `id`, `from`, `series`, `interval.lower`/`interval.upper`, or `group` on a back-to-back `chart.bar`, names a column the CSV lacks. Checked per step, because `y` may change. | Use a column the fix lists. |
 | `title-accent` | Warning. The title has an odd number of unescaped `*`, so one `*` renders as written. | Close the accent phrase (`*phrase*`), or write `\*` for a literal asterisk. |
 | `accent-empty` | Warning. The title has an empty accent phrase `**` (markdown bold habit); it renders as two asterisks. | Write one `*phrase*`, or `\*\*`. |
 | `diagram-id` | A `diagram` (props that pass its schema) has an edge `from`/`to`, a group `contains`, or a `shown` or `highlight` entry that names an unknown id; an id used twice across nodes, groups and edges (two edges between the same pair need explicit ids); or a group that contains itself. | Correct the id, or give the edge an explicit `id`. |

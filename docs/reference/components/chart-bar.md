@@ -360,7 +360,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 
 The file errors from the data loader also apply, such as `data file not found: <path>`. See [Data and bindings](../../guide/data-and-bindings.md).
 
-`validate` catches only some of these before you open the deck. It checks that `x`, `y`, `group` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix):
+`validate` catches only some of these before you open the deck. It checks that `x`, `y`, the `interval` columns and, at a back-to-back step, `group` exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix):
 
 ```text
 squash/bars · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'

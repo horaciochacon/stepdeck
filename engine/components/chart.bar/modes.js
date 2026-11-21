@@ -25,9 +25,9 @@
 //   category with no row, or more than one, for a group; `groups` naming one group twice; a `highlight` that is both a
 //   category and a group, or neither; a value or a drawn bound below zero.
 // backToBackOrder(rows, props) -> keys in display order
-//   `rank` over the categories, each valued at the sum of its two sides' `y` (none when either is missing, which ranks
-//   last); `{ by }` reduces that column the same way (a number column is summed, a text column counts when both rows
-//   agree, as the category's own text does). The errors are rank's.
+//   `rank` over the categories, each valued at the sum of its two sides' `y` (none when either is not a number, which
+//   ranks last); `{ by }` reduces that column the same way: a column with a number in any row is summed (text in it is
+//   missing), and a text column counts where both rows agree, as the category's own text does. The errors are rank's.
 // backToBackSpan(rows, props, stepProps) -> [0, max]
 //   extentOf with zero over every `y` and drawn interval bound of every back-to-back step of the slide over the same
 //   `data` (the current props when they are one, then `stepProps`, null entries skipped). Not niced or mirrored: the
@@ -185,12 +185,13 @@ export function backToBack(rows, props) {
   };
 }
 
-/** A column reduced over a category's two rows: numbers summed, text that both rows agree on, else none. */
-function reduce(a, b) {
+/** The sum of two cells, or null unless both are numbers. */
+const sum = (a, b) => {
   const [x, y] = [valueOf({ v: a }, "v"), valueOf({ v: b }, "v")];
-  if (x !== null && y !== null) return x + y;
-  return typeof a === "string" && a !== "" && a === b && x === null ? a : null;
-}
+  return x !== null && y !== null ? x + y : null;
+};
+/** A text column's value for a category: the text both rows agree on, else none. */
+const agreed = (a, b) => (typeof a === "string" && a !== "" && a === b ? a : null);
 
 /**
  * @param {Array<Record<string, unknown>>} rows
@@ -200,10 +201,12 @@ function reduce(a, b) {
 export function backToBackOrder(rows, props) {
   const { categories } = pairRows(rows, props);
   const names = rows.length ? Object.keys(rows[0]) : [];
+  // A number column (a number in any row) is summed, so text in it ("n/a") ranks as missing, never as a value.
+  const numeric = new Set(names.filter((c) => rows.some((r) => valueOf(r, c) !== null)));
   const items = categories.map(({ key, rows: [a, b] }) => ({
     key,
-    value: reduce(a[props.y], b[props.y]),
-    columns: Object.fromEntries(names.map((c) => [c, reduce(a[c], b[c])])),
+    value: sum(a[props.y], b[props.y]),
+    columns: Object.fromEntries(names.map((c) => [c, numeric.has(c) ? sum(a[c], b[c]) : agreed(a[c], b[c])])),
   }));
   return rank(items, props.sort);
 }

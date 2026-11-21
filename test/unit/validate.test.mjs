@@ -104,6 +104,26 @@ test("chart.bar back-to-back: a missing `group` column is reported at the step t
   assert.equal(problems[0].fix, "set group to 'group'");
 });
 
+test("chart.bar: `group` is checked only where the chart is back-to-back", async () => {
+  // A `group` left on plain bars does nothing there, so a CSV without that column is fine until a step is back-to-back.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-group-")));
+  try {
+    cpSync(fixture("group-missing-column"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "data", "totals.csv"), "age,share\n0-29,62\n30+,38\n");
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "figure-notes", title: "Group", elements: [
+      { id: "bars", region: "main", type: "chart.bar", props: { data: "data/totals.csv", x: "age", y: "share", group: "sex" } },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ], steps: [{ id: "plain" }, { id: "pyramid", set: { bars: { mode: "back-to-back" } } }] };\n`);
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["missing-column"], show(problems));
+    assert.equal(problems[0].step, "pyramid", "not at the plain step, where `group` does nothing");
+    assert.equal(problems[0].measured, "group = 'sex'");
+    assert.equal(problems[0].limit, "columns of data/totals.csv: age, share");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test("chart.line draws: the draws file needs the chart's x, y and series and the draw column", async () => {
   const problems = await validate(fixture("draws-missing-column"));
   assert.deepEqual(rules(problems), ["missing-column", "missing-column"], show(problems));
