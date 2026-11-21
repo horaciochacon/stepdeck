@@ -326,7 +326,7 @@ When `animate` is false, the shell never asks for motion, so every step renders 
 2. **Arrived from the previous step**: `goTo(k)` from *k*−1, with animation.
 3. **Arrived from the next step**: `goTo(k)` from *k*+1, with no animation (a backward move).
 
-It compares each element's presence, visibility, text and box (rounded to 1 px). Any difference is a `played-mismatch` problem, reported once per element with the number of other differing arrivals. A slide with *n* steps gives 2(*n*−1) arrivals.
+It compares each element's presence, visibility, text, box (rounded to 1 px) and canvas state. Any difference is a `played-mismatch` problem, reported once per element with the number of other differing arrivals. A slide with *n* steps gives 2(*n*−1) arrivals.
 
 Run it from the repo, with Playwright available:
 

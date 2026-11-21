@@ -234,11 +234,11 @@ With `--played`, every step k is reached three ways:
 - **from the previous step**: `goTo(k)` from k−1, animated;
 - **from the next step**: `goTo(k)` from k+1.
 
-Each arrival is compared with the jump, per element, by presence, visibility, text, and box rounded to 1 px. A slide with n steps gives 2(n−1) arrivals.
+Each arrival is compared with the jump, per element, by presence, visibility, text, box rounded to 1 px, and canvas state (the `data-*` attributes of the element's canvas layers). A slide with n steps gives 2(n−1) arrivals.
 
 | Rule | Measures | Limit | Typical fix |
 | --- | --- | --- | --- |
-| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text` or `box`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
+| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text`, `box` or `canvas`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
 
 A real line, from `test/fixtures/decks/played-mismatch`:
 

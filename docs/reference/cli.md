@@ -455,11 +455,12 @@ Each step is a fresh page load of the bare shell at that step in capture mode, m
 | `elements[].ghost` | Present only while the element's ghost placeholder is on screen (the element is hidden and has `ghost`): the label, or `true` for a ghost without one. Measured on the page. |
 | `elements[].text` | The element's text nodes, each with whitespace collapsed, joined by one space. A ghost's label is not part of it. |
 | `elements[].box` | `{ x, y, w, h }` relative to the canvas, in canvas pixels, rounded to 1 px. A collapsed element is `{ 0, 0, 0, 0 }`. |
+| `elements[].canvas` | Present only when the element has a canvas layer: one object per `canvas.sd-canvas-layer`, in DOM order, holding its `data-*` attributes without the `data-` prefix. A `chart.line` draw fan has `draws`, `until` (empty without `until`), `seed` and `signature` (a hash of what the fan painted), so a dump shows the canvas state without pixels. Measured on the page. |
 | `elements[].props` | The resolved props (bindings applied) from `STEPDECK.state()`. They appear only in the JSON. |
 | `changed` | Ids whose resolved props or visibility differ from the previous step. At step 0, every id. With `--step`, the previous step is also loaded to compute it (and not printed). |
 | `errors` | Runtime errors (`STEPDECK.errors`) plus console errors (`console: …`) and uncaught page errors (`pageerror: …`) seen while showing the step. Failed network requests are not included: a 404 does not appear here and does not fail `dump`. Use `check` for those. |
 
-**Text output**, one block per step. Each element line shows visibility, id, type, box, `ghost "label"` (or `ghost`) while a ghost placeholder is shown, and its text, cut to 48 characters (47 plus `…`) when longer:
+**Text output**, one block per step. Each element line shows visibility, id, type, box, `ghost "label"` (or `ghost`) while a ghost placeholder is shown, its text, cut to 48 characters (47 plus `…`) when longer, and, for an element with a canvas layer, `canvas draws=20 seed=1 signature=…` (the layer's attributes; an empty one is left out):
 
 ```
 chart · step 1 (compare)
@@ -489,7 +490,7 @@ node cli/index.js check [deckDir] [--slide id] [--step ref] [--size n] [--theme 
 - `step0-shows-all` for a slide whose step 0 already shows what its last step shows. This is skipped with `--step`;
 - page errors: `render-error`, `console-error` and `network-error`, once per slide, step and message. Unlike `dump`, `check` reports failed requests.
 
-**Played pass (`--played`).** For each step k, `check` compares three arrivals: a jump (fresh load with `?motion=full`), an animated arrival from step k−1, and an arrival back from step k+1. It compares each element's presence, visibility, text and box (rounded to 1 px), and reports `played-mismatch` once per slide and element. A slide with n steps has 2(n−1) arrivals. With `--step`, only the arrivals at that step are compared: from the step before and from the step after, so just one at the first or last step. If the page reports that animation is off, the run stops with exit 2: `animation is off on the page (flags …); check --played cannot test the animated path`.
+**Played pass (`--played`).** For each step k, `check` compares three arrivals: a jump (fresh load with `?motion=full`), an animated arrival from step k−1, and an arrival back from step k+1. It compares each element's presence, visibility, text, box (rounded to 1 px) and canvas state (the `data-*` attributes of its canvas layers, as `dump` lists them), and reports `played-mismatch` once per slide and element. A slide with n steps has 2(n−1) arrivals. With `--step`, only the arrivals at that step are compared: from the step before and from the step after, so just one at the first or last step. If the page reports that animation is off, the run stops with exit 2: `animation is off on the page (flags …); check --played cannot test the animated path`.
 
 Problems are listed in this order: page errors, layout rules, `step0-shows-all`, then `played-mismatch`. The thresholds and fixes are in [Rules](rules.md).
 

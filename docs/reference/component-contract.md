@@ -202,7 +202,7 @@ A throw from `pause` or `destroy` is recorded as that element's error; the other
 
 ## The rules
 
-Each rule exists so that a step reached by playing looks exactly like the same step reached by jumping. `check --played` tests it at every step: it compares each element's presence, visibility, text and box after a jump with those after an animated arrival from the step before and the step after, and reports `played-mismatch` when they differ.
+Each rule exists so that a step reached by playing looks exactly like the same step reached by jumping. `check --played` tests it at every step: it compares each element's presence, visibility, text, box and canvas state after a jump with those after an animated arrival from the step before and the step after, and reports `played-mismatch` when they differ.
 
 | Rule | What to do |
 |---|---|

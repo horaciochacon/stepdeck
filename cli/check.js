@@ -55,7 +55,9 @@
 //     jumped    a fresh page load at k: mount, one update, no history (the same measurement as `dump`)
 //     fromPrev  arriving at k from k−1 with animation (STEPDECK.goTo, motion on, forward by one)
 //     fromNext  arriving at k from k+1
-//   Compared per element: visibility, text content, and the box rounded to 1 px (canvas pixels).
+//   Compared per element: visibility, text content, the box rounded to 1 px (canvas pixels) and the state
+//   of its canvas layers (`canvas` in the dump: their data-* attributes, so the draw fan's draws, seed
+//   and signature are compared without reading pixels).
 //   Paths, cheapest true version of each: page loads at k with `?motion=full` (no capture, so
 //   animation runs) record jumped(k); goTo(k+1) records fromPrev(k+1); goTo(k) back records
 //   fromNext(k). That is one page load per step. The run fails loudly if the page reports that
@@ -126,6 +128,7 @@ const short = (v, n = 60) => {
   const s = JSON.stringify(v) ?? "undefined";
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
 };
+const canvasText = (c) => (c ? short(c) : "none");
 const boxText = (b) => (b ? `${b.x},${b.y} ${b.w}×${b.h}` : "none");
 
 /** Keeps the first finding per key (make() builds it, with more: 0) and counts the repeats in `more`. */
@@ -146,6 +149,7 @@ function difference(jumped, arrived) {
   const a = arrived.box;
   const j = jumped.box;
   if (a.x !== j.x || a.y !== j.y || a.w !== j.w || a.h !== j.h) return { field: "box", measured: boxText(a), limit: boxText(j) };
+  if (!jsonEqual(jumped.canvas, arrived.canvas)) return { field: "canvas", measured: canvasText(arrived.canvas), limit: canvasText(jumped.canvas) };
   return null;
 }
 

@@ -216,7 +216,7 @@ test("interrupt mid-motion equals jump", async () => {
 });
 ```
 
-These helpers test one element closely. `check --played` (rule `played-mismatch`) compares presence, visibility, text and boxes for every element of a deck; use it, through `check(deck, { played: true })`, to keep a fixture deck clean as a whole.
+These helpers test one element closely. `check --played` (rule `played-mismatch`) compares presence, visibility, text, boxes and canvas state for every element of a deck; use it, through `check(deck, { played: true })`, to keep a fixture deck clean as a whole.
 
 ## The no-Ajv hook
 
