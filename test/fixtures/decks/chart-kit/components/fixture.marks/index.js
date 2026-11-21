@@ -1,5 +1,5 @@
 // fixture.marks: one of each shared chart mark, drawn only through `ctx.chart` (no imports). A pure
-// function of props: `update` ends by writing the end state (settle, then every attribute), and a played
+// function of props: `update` ends by writing the end state (the keyed joins, then settle, then every attribute), and a played
 // step first morphs from the previous `k` to the new one.
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -15,6 +15,7 @@ export default {
     const gWhisker = plot.append("g");
     const gDots = plot.append("g");
     const gText = plot.append("g");
+    const gExtra = plot.append("g");
     const colors = ctx.palette?.("categorical")?.colors ?? [];
     const ink = tokens["--sd-color-ink"].trim();
     const load = () => C.loadTable(props, ctx, "fixture.marks", [["x", props.x], ["y", props.y]]);
@@ -29,8 +30,21 @@ export default {
       return { f, rows, p, k: Number(p.k ?? 0), points: rows.map((r) => [Number(r[p.x]), Number(r[p.y])]), x, y };
     };
 
+    const one = (key) => [{ key }];
+    /** The keyed joins: marks that appear are created, marks that leave get `.sd-exiting` (nothing is removed yet). */
+    function join(m) {
+      const by = (d) => d.key;
+      C.keyed(gVline.selectAll("path.fixture-vline"), one("v"), by, (enter) => enter.append("path").attr("class", "fixture-vline"));
+      C.keyed(gRule.selectAll("g.fixture-rule"), one("r"), by, (enter) => enter.append("g").attr("class", "fixture-rule"));
+      C.keyed(gWhisker.selectAll("g.fixture-whisker"), one("w"), by, (enter) => enter.append("g").attr("class", "fixture-whisker"));
+      C.keyed(gDots.selectAll("circle"), [{ key: "filled", hollow: false }, { key: "hollow", hollow: true }], by, (enter) => enter.append("circle"));
+      C.keyed(gText.selectAll("text"), one("t"), by, (enter) => enter.append("text"));
+      // A mark that exists on one step only (k = 1), with a halo under it: it enters and leaves as steps move.
+      C.keyed(gExtra.selectAll("path.fixture-extra"), m.k === 1 ? one("x") : [], by, (enter) => enter.append("path").attr("class", "fixture-extra"));
+    }
+
     /** Writes every mark for the layout `m` with `k` moves done (`k` is fractional while a morph plays). */
-    function paint(m, k) {
+    function place(m, k) {
       const { f } = m;
       const u = k / 2;
       svg.attr("width", f.w).attr("height", f.h).attr("viewBox", `0 0 ${f.w} ${f.h}`);
@@ -38,22 +52,24 @@ export default {
       area.attr("width", f.pw).attr("height", f.ph);
 
       // A vertical line with a halo under it: the canvas lines cross it, and it paints above them.
-      const vline = C.keyed(gVline.selectAll("path.fixture-vline"), [{ key: "v" }], (d) => d.key, (enter) => enter.append("path").attr("class", "fixture-vline"))
+      const vline = gVline.selectAll("path.fixture-vline:not(.sd-exiting)")
         .attr("d", `M${f.pw * 0.5},0V${f.ph}`).attr("fill", "none").attr("stroke", colors[2] ?? ink).attr("stroke-width", 5);
       C.halo(vline, { under: true });
 
-      C.rule(C.keyed(gRule.selectAll("g.fixture-rule"), [{ key: "r" }], (d) => d.key, (enter) => enter.append("g").attr("class", "fixture-rule")),
-        { x1: 0, y1: f.ph * 0.6, x2: f.pw, y2: f.ph * 0.6, label: "Reference", anchor: "end" });
+      const extra = gExtra.selectAll("path.fixture-extra:not(.sd-exiting)")
+        .attr("d", `M${f.pw * 0.7},${f.ph * 0.35}L${f.pw * 0.85},${f.ph * 0.5}`).attr("fill", "none").attr("stroke", colors[3] ?? ink).attr("stroke-width", 5);
+      C.halo(extra, { under: true });
 
-      C.whisker(C.keyed(gWhisker.selectAll("g.fixture-whisker"), [{ key: "w" }], (d) => d.key, (enter) => enter.append("g").attr("class", "fixture-whisker")),
-        { at: f.ph * 0.9, lo: f.pw * 0.15, hi: f.pw * (0.45 + 0.3 * u), cap: f.font * 0.5 });
+      C.rule(gRule.selectAll("g.fixture-rule"), { x1: 0, y1: f.ph * 0.6, x2: f.pw, y2: f.ph * 0.6, label: "Reference", anchor: "end" });
 
-      const dots = C.keyed(gDots.selectAll("circle"), [{ key: "filled", hollow: false }, { key: "hollow", hollow: true }], (d) => d.key, (enter) => enter.append("circle"))
+      C.whisker(gWhisker.selectAll("g.fixture-whisker"), { at: f.ph * 0.9, lo: f.pw * 0.15, hi: f.pw * (0.45 + 0.3 * u), cap: f.font * 0.5 });
+
+      const dots = gDots.selectAll("circle")
         .attr("cx", (d) => (d.hollow ? f.pw * 0.1 : f.pw * (0.1 + 0.3 * u)))
         .attr("cy", (d) => (d.hollow ? f.ph * (0.15 + 0.15 * u) : f.ph * 0.15));
       C.dot(dots, { r: f.font * 0.4, color: (d) => colors[d.hollow ? 1 : 0] ?? ink, hollow: (d) => d.hollow });
 
-      const label = C.keyed(gText.selectAll("text"), [{ key: "t" }], (d) => d.key, (enter) => enter.append("text"))
+      const label = gText.selectAll("text")
         .attr("x", f.pw * (0.3 + 0.2 * u)).attr("y", f.ph * 0.3).attr("fill", ink).attr("font-size", f.font).text("Halo");
       C.halo(label);
 
@@ -72,12 +88,13 @@ export default {
     return {
       async update(props, info = {}) {
         const m = layout(await load(), props);
+        join(m); // joins first: they mark the leavers; settle then removes them
         if (info.animate && last && !info.entered && !info.signal?.aborted) {
           const from = last.k;
-          await C.morph(info, ctx, (t) => paint(m, from + (m.k - from) * t), { factor: 1 });
+          await C.morph(info, ctx, (t) => place(m, from + (m.k - from) * t), { factor: 1 });
         }
         C.settle(svg.node());
-        paint(m, m.k);
+        place(m, m.k);
         last = m;
       },
       destroy() {

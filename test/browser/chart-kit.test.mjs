@@ -210,3 +210,79 @@ test("whisker markup equals chart.bar's, and a vertical one is the same marks ac
     assert.deepEqual(ctx.errors, []);
   });
 });
+
+test("a mark that leaves is removed with its halo copy, however the step is reached", async () => {
+  const count = (page) =>
+    page.evaluate(() => ({
+      extra: document.querySelectorAll('[data-el="marks"] .fixture-extra').length,
+      under: document.querySelectorAll('[data-el="marks"] .sd-halo-under').length,
+      exiting: document.querySelectorAll('[data-el="marks"] .sd-exiting').length,
+    }));
+  // Without motion: a jump within the slide and a backward move.
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    assert.deepEqual(await count(page), { extra: 0, under: 1, exiting: 0 }, "step a: the extra mark is not there");
+    await goTo(page, "marks", "b");
+    assert.deepEqual(await count(page), { extra: 1, under: 2, exiting: 0 }, "step b: it is, with a halo under it");
+    await goTo(page, "marks", "a");
+    assert.deepEqual(await count(page), { extra: 0, under: 1, exiting: 0 }, "back to a: the leaver and its halo copy are gone");
+    await goTo(page, "marks", "b");
+    await goTo(page, "marks", "c");
+    assert.deepEqual(await count(page), { extra: 0, under: 1, exiting: 0 }, "a jump b -> c removes it too");
+    assert.deepEqual(ctx.errors, []);
+  });
+  // Played forward: the leaver stays through the morph and is gone at its end.
+  await withPage({ root, url: pages.url("marks", "step=b&motion=full") }, async (page, ctx) => {
+    await goTo(page, "marks", "c");
+    assert.deepEqual(await count(page), { extra: 0, under: 1, exiting: 0 }, "played b -> c");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a halo on a dot changes nothing: the dot keeps its outline and its colour", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    const look = (selector) => page.evaluate((selector) => {
+      const s = getComputedStyle(document.querySelector(selector));
+      return { stroke: s.stroke, fill: s.fill, width: s.strokeWidth, order: s.paintOrder };
+    }, selector);
+    for (const selector of ['[data-el="marks"] .sd-dot-hollow', '[data-el="marks"] .sd-dot:not(.sd-dot-hollow)']) {
+      const before = await look(selector);
+      await page.evaluate(async (selector) => {
+        const { chartKit } = await import("/engine/core/chart.js");
+        const { d3 } = await import("/engine/core/d3.js");
+        chartKit.halo(d3.select(selector));
+      }, selector);
+      assert.deepEqual(await look(selector), before, `${selector}: unchanged by a halo`);
+      assert.equal(await page.evaluate((selector) => document.querySelector(selector).classList.contains("sd-halo"), selector), true);
+    }
+    const hollow = await look('[data-el="marks"] .sd-dot-hollow');
+    assert.notEqual(hollow.stroke, await tokenRgb(page, "--sd-color-background"), "a hollow dot's stroke is its colour, not the background");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintLines breaks a line at a missing value and never draws it to zero", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    const out = await page.evaluate(async () => {
+      const { chartKit } = await import("/engine/core/chart.js");
+      const canvas = document.createElement("canvas");
+      canvas.width = 100;
+      canvas.height = 100;
+      const alphaAt = (x, y) => canvas.getContext("2d").getImageData(x, y, 1, 1).data[3];
+      const gapped = chartKit.paintLines(canvas, [{ points: [[10, 50], [30, 50], [null, 20], [50, null], [70, 50], [90, 50]], color: "#000", width: 6 }]);
+      const probes = { left: alphaAt(20, 50), between: alphaAt(50, 50), right: alphaAt(80, 50), towardZero: alphaAt(40, 25), atZero: alphaAt(1, 1), axis: alphaAt(50, 1) };
+      const whole = chartKit.paintLines(canvas, [{ points: [[10, 50], [30, 50], [70, 50], [90, 50]], color: "#000", width: 6 }]);
+      const again = chartKit.paintLines(canvas, [{ points: [[10, 50], [30, 50], [null, 20], [50, null], [70, 50], [90, 50]], color: "#000", width: 6 }]);
+      const empty = chartKit.paintLines(canvas, []);
+      const loose = chartKit.paintLines(canvas, [{ points: [[10, 50], [NaN, 50], [30, 50], [Infinity, 0], [70, 70]], color: "#000" }]);
+      return { gapped, whole, again, empty, loose, probes, afterLoose: alphaAt(20, 50) };
+    });
+    assert.ok(out.probes.left > 200 && out.probes.right > 200, "both stretches are drawn");
+    assert.equal(out.probes.between, 0, "nothing across the gap");
+    assert.deepEqual([out.probes.towardZero, out.probes.atZero, out.probes.axis], [0, 0, 0], "nothing toward zero");
+    assert.notEqual(out.gapped, out.whole, "a gap is part of the signature");
+    assert.equal(out.gapped, out.again, "the signature is a function of the input");
+    assert.equal(out.loose, out.empty, "stretches of one point draw nothing, so the signature is the empty one");
+    assert.equal(out.afterLoose, 0, "and the canvas is clear");
+    assert.deepEqual(ctx.errors, []);
+  });
+});

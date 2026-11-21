@@ -335,14 +335,14 @@ const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 | `swarm` | `swarm(xs, { r, maxDy }) → offsets` | A vertical offset per x that keeps nearby points apart. |
 | `frame` | `frame(el, ctx, margin) → { w, h, font, charW, margin, pw, ph }` | The element's size and the plot inside it. `font` is `--sd-font-size-label` (28 without it), `charW` is 0.6 × `font`. `margin` is `{ left, right, top, bottom }` or a function of `{ font, charW, w, h }` returning it; each side is rounded. `pw` and `ph` are at least 1. |
 | `keyed` | `keyed(selection, data, key, enter) → selection` | A keyed join: an update clears `.sd-exiting`, an exit sets it, nothing is removed. |
-| `settle` | `settle(root)` | The start of an end-state write: removes `.sd-exiting` nodes and every `style` and `opacity` attribute under `root`, and marks what remains as already on screen. Pass the SVG root, never the element box: the canvas layer keeps its inline size and position. |
+| `settle` | `settle(root)` | The start of an end-state write: removes `.sd-exiting` nodes (and their `halo` copies) and every `style` and `opacity` attribute under `root`, and marks what remains as already on screen. Run it after the `keyed` joins, which mark the leavers, and before the attributes: a `settle` before the joins leaves every leaver on screen. Pass the SVG root, never the element box: the canvas layer keeps its inline size and position. |
 | `dot` | `dot(selection, { r, color, hollow })` | Class `sd-dot` (`sd-dot-hollow` when hollow) and `r`. Filled: `fill` is `color`, and the theme outlines it in the background colour. Hollow: `stroke` is `color`, and the theme fills it with the background colour. Options are values or accessors; positions are yours. |
 | `whisker` | `whisker(selection, { at, lo, hi, cap, orient })` | On each `g`, class `sd-whisker` and the lines `sd-whisker-line`, `sd-whisker-cap-lower` and `sd-whisker-cap-upper`, placed from `lo` to `hi` across `at` (`orient`: `"horizontal"`, the default, or `"vertical"`). The theme draws them in the ink colour. |
 | `band` | `band(points) → d` | The `d` of an interval band over `{ px, lo, hi }`, defined where both bounds are not null; `null` when none is. |
-| `rule` | `rule(selection, { x1, y1, x2, y2, label, anchor })` | On each `g`, a `line.sd-rule` and, while `label` is not empty, a `text.sd-rule-label` at the rule's `"start"` (default), `"middle"` or `"end"`. |
-| `halo` | `halo(selection, { under }) → selection` | Default: class `sd-halo`, a background-colour outline for text and dots. `under: true`: a `.sd-halo-under` copy of each line or path before it (a wider background stroke), returned. Call it again after the geometry changes or the node moves. |
+| `rule` | `rule(selection, { x1, y1, x2, y2, label, anchor }) → selection` | On each `g`, a `line.sd-rule` and, while `label` is not empty, a `text.sd-rule-label` at the rule's `"start"` (default), `"middle"` or `"end"`. |
+| `halo` | `halo(selection, { under }) → selection` | Default: class `sd-halo`, a background-colour outline for text (a dot has its outline already, so a halo on a dot changes nothing). `under: true`: a `.sd-halo-under` copy of each line or path before it (a wider background stroke), returned. Call it again after the geometry changes or the node moves. |
 | `canvasLayer` | `canvasLayer(el, { left, top, pw, ph }) → canvas` | One `canvas.sd-canvas-layer` per `el`, its first child, at `left`/`top` and `pw` × `ph` in CSS pixels, with a backing store of that size × min(3, `devicePixelRatio`) and a scaled context: you draw in plot pixels. The SVG you append after it paints above it. Idempotent. |
-| `paintLines` | `paintLines(canvas, lines, { width, alpha }) → signature` | Clears the canvas and strokes each `{ points, color, alpha?, width? }`; a line with fewer than 2 points is skipped. The signature (hex) is the same for the same picture, so a component can write it to a `data-*` attribute of the canvas. |
+| `paintLines` | `paintLines(canvas, lines, { width, alpha }) → signature` | Clears the canvas and strokes each `{ points, color, alpha?, width? }`. A point with a `null` or non-finite coordinate breaks the line there (a missing value is a gap, never a line to zero); a stretch of fewer than 2 points draws nothing. The signature (hex) is the same for the same picture, so a component can write it to a `data-*` attribute of the canvas. |
 | `morph` | `morph(info, ctx, frame, { factor, duration }) → Promise` | Plays `frame(t)` for t from 0 to 1 over `duration`, else the step's transition, else `factor` (default 2) × `--sd-duration`, with the theme's easing and the step's `signal`. |
 | `entrance` | `entrance(info, ctx, { factor }) → { draw, duration, ease, signal }` | For a component that owns its entrance: `draw` is true for a draw entrance that is not aborted; `duration` is `info.entrance.duration`, else as `morph`'s. |
 | `undraw` | `undraw(path)` | Hides an SVG path along its length: the start state of `ctx.animate.drawPath`. |
@@ -350,13 +350,14 @@ const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 | `tweenColor` | `tweenColor(ctx, from, to, set, opts) → Promise` | An RGB colour tween. |
 | `textColor` | `textColor(color, background) → color` | A palette colour darkened (or lightened) until it has 4.5:1 contrast, for text. |
 
-The generic mark classes are styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events). Write an update as `settle(svg)`, then every attribute, so a played step ends exactly where a jump does:
+The generic mark classes are styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events). Write an update as the `keyed` joins, then `settle(svg)`, then every attribute, so a played step ends exactly where a jump does and a mark that left is gone:
 
 ```js
 async update(props, info = {}) {
   const f = ctx.chart.frame(el, ctx, ({ font, charW }) => ({ left: charW * 4, right: font, top: font, bottom: font * 2 }));
+  join(props); // ctx.chart.keyed joins: leavers get .sd-exiting, nothing is removed yet
   if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => draw(f, ctx.d3.interpolateNumber(last.k, props.k)(t)));
-  ctx.chart.settle(svg.node());
+  ctx.chart.settle(svg.node()); // removes the leavers and the animation's leftovers
   draw(f, props.k); // the end state, every attribute
 }
 ```

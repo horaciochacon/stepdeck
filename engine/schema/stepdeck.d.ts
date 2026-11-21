@@ -370,8 +370,8 @@ export interface ChartFrame {
 }
 
 export interface CanvasLine {
-  /** Plot pixels. A line with fewer than 2 points is skipped. */
-  points: Array<[number, number]>;
+  /** Plot pixels. A point with a non-finite (or null) coordinate breaks the line; a stretch of fewer than 2 points draws nothing. */
+  points: Array<[number | null, number | null]>;
   color: string;
   alpha?: number;
   width?: number;
@@ -407,18 +407,18 @@ export interface ChartKit {
   frame(el: HTMLElement, ctx: ComponentContext, margin: ChartMargin | ((m: { font: number; charW: number; w: number; h: number }) => ChartMargin)): ChartFrame;
   /** A keyed join: an update clears `.sd-exiting`, an exit sets it, nothing is removed. */
   keyed(selection: any, data: any[], key: (d: any, i: number, nodes: any) => string | number, enter: (enter: any) => any): any;
-  /** The start of an end-state write: removes `.sd-exiting` nodes and `style`/`opacity` attributes under `root`. Pass the SVG root, never the element box. */
+  /** The start of an end-state write: removes `.sd-exiting` nodes and `style`/`opacity` attributes under `root`. Run the `keyed` joins first, then this, then write the attributes. Pass the SVG root, never the element box. */
   settle(root: Element | any): void;
   dot(selection: any, options: { r: PerNode<number>; color: PerNode<string>; hollow?: PerNode<boolean> }): any;
   whisker(selection: any, options: { at: PerNode<number>; lo: PerNode<number>; hi: PerNode<number>; cap: PerNode<number>; orient?: "horizontal" | "vertical" }): any;
   /** The `d` of an interval band over `{ px, lo, hi }`; `null` when no point is defined. */
-  band(points: Array<{ px: number; lo: number | null; hi: number | null }>): string;
-  rule(selection: any, options: { x1: PerNode<number>; y1: PerNode<number>; x2: PerNode<number>; y2: PerNode<number>; label?: PerNode<string>; anchor?: PerNode<"start" | "middle" | "end"> }): void;
-  /** Adds class `sd-halo` (returns the selection), or with `under: true` ensures a `.sd-halo-under` copy before each node (returns the copies). */
+  band(points: Array<{ px: number; lo: number | null; hi: number | null }>): string | null;
+  rule(selection: any, options: { x1: PerNode<number>; y1: PerNode<number>; x2: PerNode<number>; y2: PerNode<number>; label?: PerNode<string>; anchor?: PerNode<"start" | "middle" | "end"> }): any;
+  /** Adds class `sd-halo` for text (a dot has its outline already: no change), returns the selection; or with `under: true` ensures a `.sd-halo-under` copy before each node (returns the copies). */
   halo(selection: any, options?: { under?: boolean }): any;
   /** One `canvas.sd-canvas-layer` per element, placed on the plot; its context is scaled so you draw in plot pixels. */
   canvasLayer(el: HTMLElement, plot: { left: number; top: number; pw: number; ph: number }): HTMLCanvasElement;
-  /** Clears the canvas and strokes the lines; returns a signature (hex) of what was painted. */
+  /** Clears the canvas and strokes the lines (a non-finite coordinate breaks a line); returns a signature (hex) of what was painted. */
   paintLines(canvas: HTMLCanvasElement, lines: CanvasLine[], defaults?: { width?: number; alpha?: number }): string;
   /** `ctx.animate.tween(0, 1, frame)` over the step's duration (else `factor` x --sd-duration), the theme's easing and the step's signal. */
   morph(info: Partial<UpdateInfo>, ctx: ComponentContext, frame: (t: number) => void, options?: { factor?: number; duration?: number }): Promise<void>;

@@ -47,11 +47,12 @@ export function keyed(selection, data, key, enter) {
 }
 
 /**
- * The start of an end-state write: removes the `.sd-exiting` nodes under `root`, drops every `style` and
- * `opacity` attribute under it (what animation leaves behind), and marks every node that remains as seen
- * (`node.__sdSeen = true`: a later morph treats it as already on screen, not entering). `root` is a node or
- * a d3 selection of one. Apply it to the SVG root, never to the element box: the canvas layer keeps its
- * inline size and position.
+ * The start of an end-state write: removes the `.sd-exiting` nodes under `root` (and the `halo` copies of
+ * them), drops every `style` and `opacity` attribute under it (what animation leaves behind), and marks every
+ * node that remains as seen (`node.__sdSeen = true`: a later morph treats it as already on screen, not
+ * entering). `root` is a node or a d3 selection of one. Apply it to the SVG root, never to the element box: the
+ * canvas layer keeps its inline size and position. Order of an update: the `keyed` joins first (they mark the
+ * leavers), then `settle`, then every attribute; a `settle` before the joins leaves the leavers on screen.
  * @param {Element | import("d3").Selection<any, any, any, any>} root
  */
 export function settle(root) {
@@ -124,7 +125,7 @@ const bandD = d3.area().defined((p) => p.lo !== null && p.hi !== null).x((p) => 
  * The `d` of an interval band over `{ px, lo, hi }` points (pixels), defined where `lo` and `hi` are both
  * not null. What d3 returns: `null` when no point is defined, which `attr("d", null)` drops.
  * @param {Array<{ px: number, lo: number | null, hi: number | null }>} points
- * @returns {string}
+ * @returns {string | null}
  */
 export const band = (points) => bandD(points);
 
@@ -132,7 +133,7 @@ export const band = (points) => bandD(points);
  * Reference rules: on each `g`, a `line.sd-rule` from (x1, y1) to (x2, y2), and a `text.sd-rule-label` only
  * while `label` is not empty (a rule that loses its label loses the text). The label sits at the start,
  * middle or end of the rule (`anchor`, also its `text-anchor`), just above it and clear of its end.
- * Every option may be a value or an accessor.
+ * Every option may be a value or an accessor. Returns the selection.
  * @param {import("d3").Selection<any, any, any, any>} selection
  * @param {{ x1: number | Function, y1: number | Function, x2: number | Function, y2: number | Function, label?: string | Function, anchor?: "start" | "middle" | "end" | Function }} options
  */
@@ -154,13 +155,15 @@ export function rule(selection, { x1, y1, x2, y2, label = "", anchor = "start" }
       .attr("dx", side === "end" ? "-0.35em" : side === "middle" ? null : "0.35em").attr("dy", "-0.35em")
       .attr("text-anchor", side === "end" || side === "middle" ? side : "start").text(text);
   });
+  return selection;
 }
 
 const HALO_GEOMETRY = ["d", "x1", "y1", "x2", "y2", "cx", "cy", "r", "points"];
 
 /**
  * Keeps marks readable over what is behind them. By default it adds class `sd-halo` (a background-colour
- * stroke painted under the fill) and returns the selection: for text and dots. With `under: true` it
+ * stroke painted under the fill) and returns the selection: for text. A dot already has its background
+ * outline, so a halo on a dot changes nothing (the CSS skips `.sd-dot`). With `under: true` it
  * ensures, just before each node, a sibling `.sd-halo-under` copy of its geometry (`d`, `x1` to `y2`, `cx`,
  * `cy`, `r`, `points`), styled as a wider background-colour stroke, and returns those copies. Call it
  * again after the node's geometry changes or after the node moved in the DOM (`raise`, `order`): the copy
@@ -231,14 +234,32 @@ function fnv1a(text) {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+/** The runs of consecutive points whose coordinates are both finite numbers: a point that is not breaks the line. */
+function runsOf(points) {
+  const runs = [];
+  let run = [];
+  for (const point of Array.isArray(points) ? points : []) {
+    const [x, y] = Array.isArray(point) ? point : [];
+    if (Number.isFinite(x) && Number.isFinite(y)) run.push([x, y]);
+    else {
+      if (run.length) runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length) runs.push(run);
+  return runs.filter((r) => r.length >= 2);
+}
+
 /**
  * Clears the canvas, then strokes each `{ points: [[x, y], ...], color, alpha?, width? }` with round joins
  * and caps, in plot pixels (see `canvasLayer`). `width` and `alpha` are the defaults for a line without its
- * own; a line with fewer than 2 points is skipped. Returns a signature of what was painted, the FNV-1a hex of
- * every painted line's color, width, alpha and points, rounded to 0.1 px and 0.001 alpha: two paintings with
- * the same signature are the same picture, so it can stand in for the pixels in a dump.
+ * own. A point whose x or y is not a finite number (a missing value) breaks the line there, so a gap is a gap
+ * and never a line to zero; a stretch of fewer than 2 points draws nothing, so a line without such a stretch
+ * is skipped. Returns a signature of what was painted, the FNV-1a hex of every painted line's color, width,
+ * alpha and stretches, rounded to 0.1 px and 0.001 alpha: two paintings with the same signature are the same
+ * picture, so it can stand in for the pixels in a dump.
  * @param {HTMLCanvasElement} canvas
- * @param {Array<{ points: Array<[number, number]>, color: string, alpha?: number, width?: number }>} lines
+ * @param {Array<{ points: Array<[number | null, number | null]>, color: string, alpha?: number, width?: number }>} lines
  * @param {{ width?: number, alpha?: number }} [defaults]
  * @returns {string}
  */
@@ -255,13 +276,14 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
   const tenth = (v) => Math.round(v * 10) / 10;
   let signature = "";
   for (const line of lines) {
-    if (!Array.isArray(line.points) || line.points.length < 2) continue;
+    const runs = runsOf(line.points);
+    if (!runs.length) continue;
     const w = tenth(line.width ?? width);
     const a = Math.round((line.alpha ?? alpha) * 1000) / 1000;
-    signature += `${line.color}|${w}|${a}|${line.points.map(([x, y]) => `${tenth(x)},${tenth(y)}`).join(";")}\n`;
+    signature += `${line.color}|${w}|${a}|${runs.map((run) => run.map(([x, y]) => `${tenth(x)},${tenth(y)}`).join(";")).join("/")}\n`;
     if (!g) continue;
     g.beginPath();
-    line.points.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    for (const run of runs) run.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     g.strokeStyle = line.color;
     g.lineWidth = line.width ?? width;
     g.globalAlpha = line.alpha ?? alpha;
