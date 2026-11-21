@@ -25,21 +25,13 @@
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat } from "../../core/chart.js";
+import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw } from "../../core/chart.js";
 import { textColor } from "../../core/color.js";
-import { SVG_NS, num, lerp, measureWidth, measureHeight, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
+import { SVG_NS, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const NO_SERIES = "all"; // series key when props.series is absent
 
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
-
-/** Hides an SVG path along its length (the start of ctx.animate.drawPath); a path with no length is left as is. */
-function undraw(path) {
-  const length = typeof path.getTotalLength === "function" ? Number(path.getTotalLength()) || 0 : 0;
-  if (!(length > 0)) return;
-  path.style.strokeDasharray = `${length} ${length}`;
-  path.style.strokeDashoffset = String(length);
-}
 
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
@@ -50,9 +42,6 @@ const loadRows = (props, ctx) =>
 
 /** The target state, in canvas pixels, computed from props alone. */
 function buildModel(props, rows, ctx, el) {
-  const font = num(ctx.tokens?.["--sd-font-size-label"], 28);
-  const w = measureWidth(el, ctx);
-  const h = measureHeight(el, ctx);
   const valueOf = (row, col) => (row[col] == null || row[col] === "" ? null : Number(row[col]));
   const seriesOf = (row) => (props.series ? String(row[props.series]) : NO_SERIES);
 
@@ -80,17 +69,14 @@ function buildModel(props, rows, ctx, el) {
   const xTicks = xTickValues.map((v) => ({ value: v, label: fx(v) }));
 
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
-  const charW = font * 0.6;
   const seriesList = order.filter((s) => shown.has(s));
   const labelChars = props.series ? Math.max(0, ...seriesList.map((s) => s.length)) : 0;
-  const margin = {
-    top: Math.round(font * 2),
-    left: Math.round(Math.max(4, ...yTicks.map((t) => t.label.length)) * charW + font * 0.6),
-    right: Math.round(labelChars ? labelChars * charW + font : font),
-    bottom: Math.round(font * 3.4),
-  };
-  const pw = Math.max(1, w - margin.left - margin.right);
-  const ph = Math.max(1, h - margin.top - margin.bottom);
+  const { w, h, font, margin, pw, ph } = frame(el, ctx, ({ font, charW }) => ({
+    top: font * 2,
+    left: Math.max(4, ...yTicks.map((t) => t.label.length)) * charW + font * 0.6,
+    right: labelChars ? labelChars * charW + font : font,
+    bottom: font * 3.4,
+  }));
   const x = d3.scaleLinear().domain(xDomain).range([0, pw]);
   const y = yScale0.copy().range([ph, 0]);
 
@@ -122,13 +108,14 @@ function buildModel(props, rows, ctx, el) {
     };
   });
 
-  // Direct labels at each line's end, nudged apart so they never overlap.
-  const gap = font * 1.15;
-  const labels = d3.sort(series.filter((s) => s.points.length), (s) => s.points.at(-1).py).map((s) => ({ name: s.name, ly: s.points.at(-1).py }));
-  for (let i = 1; i < labels.length; i++) labels[i].ly = Math.max(labels[i].ly, labels[i - 1].ly + gap);
-  const overflow = labels.length ? labels.at(-1).ly - ph : 0;
-  if (overflow > 0) for (const l of labels) l.ly -= overflow;
-  for (const s of series) s.ly = labels.find((l) => l.name === s.name)?.ly ?? 0;
+  // Direct labels at each line's end, nudged apart so they never overlap and never pass the plot's bottom.
+  // An end that is NaN (a non-numeric y cell) takes no part: its label keeps y NaN, and while one is present
+  // the other labels are not lifted off the plot's bottom.
+  const labelled = series.filter((s) => s.points.length);
+  const placed = labelled.filter((s) => !Number.isNaN(s.points.at(-1).py));
+  const lys = spread(placed.map((s) => s.points.at(-1).py), font * 1.15, [-Infinity, placed.length < labelled.length ? Infinity : ph]);
+  const labelY = new Map(placed.map((s, i) => [s.name, lys[i]]));
+  for (const s of series) s.ly = labelY.get(s.name) ?? (s.points.length ? NaN : 0);
 
   const annotations = (Array.isArray(props.annotate) ? props.annotate : [])
     .filter((a) => a && Number.isFinite(Number(a.x)))
@@ -145,7 +132,6 @@ function buildModel(props, rows, ctx, el) {
 }
 
 const lineD = d3.line().x((p) => p.px).y((p) => p.py);
-const bandD = d3.area().defined((p) => p.lo !== null && p.hi !== null).x((p) => p.px).y0((p) => p.lo).y1((p) => p.hi);
 
 export default {
   async mount(el, props, ctx) {
@@ -172,9 +158,6 @@ export default {
       y: d3.scaleLinear().domain(lerpArr(from.yDomain, to.yDomain, t)).range(lerpArr(from.yRange, to.yRange, t)),
     });
 
-    // A keyed join whose update and exit only toggle `.sd-exiting` (leavers stay until renderStatic).
-    const keyed = (sel, data, key, enter) =>
-      sel.data(data, key).join(enter, (update) => update.classed("sd-exiting", false), (exit) => exit.classed("sd-exiting", true));
     const byName = (d) => d.name;
 
     /** Keyed joins: brings the DOM's set of marks to the model's, marking leavers `.sd-exiting`. */
@@ -209,12 +192,7 @@ export default {
     /** Writes the model exactly: the end state of every update, animated or not. */
     function renderStatic(m) {
       join(m);
-      svg.selectAll(".sd-exiting").remove();
-      svg.selectAll("[style]").attr("style", null); // leftovers of drawPath and fades
-      svg.selectAll("[opacity]").attr("opacity", null);
-      svg.selectAll("*").each(function () {
-        this.__sdSeen = true; // what a later morph treats as already on screen (not entering)
-      });
+      settle(svg); // leavers go, the leftovers of drawPath and fades too; what remains is seen (not entering) by a later change
       svg.attr("width", m.w).attr("height", m.h).attr("viewBox", `0 0 ${m.w} ${m.h}`);
       plot.attr("transform", `translate(${m.margin.left},${m.margin.top})`);
       const x = d3.scaleLinear().domain(m.xDomain).range(m.xRange);
@@ -223,7 +201,7 @@ export default {
       gLines.selectAll("path.sd-line").data(m.series, (d) => d.name)
         .attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
       gBands.selectAll("path.sd-band").data(m.hasInterval ? m.series : [], (d) => d.name)
-        .attr("d", (d) => bandD(d.points)).attr("fill", (d) => d.paint);
+        .attr("d", (d) => band(d.points)).attr("fill", (d) => d.paint);
       stackFocus(m);
       gLabels.selectAll("text.sd-series-label").data(m.hasSeriesLabels ? m.series : [], (d) => d.name)
         .attr("x", m.pw + m.font * 0.4).attr("y", (d) => d.ly).attr("dy", "0.35em")
@@ -258,8 +236,8 @@ export default {
         .attr("dx", (d) => (x(d.x) > (x0 + x1) * 0.8 ? -m.font * 0.7 : 0));
     }
 
-    /** Morph from `from` to `to`: keyed by series+x, scales and ticks interpolate, leavers fade. */
-    async function morph(from, to, info) {
+    /** Plays `from` -> `to`: keyed by series+x, scales and ticks interpolate, leavers fade. */
+    async function change(from, to, info) {
       const duration = motionMs(info, ctx, 2);
       const signal = info.signal;
       const { ease } = motion(info, ctx); // the theme's --sd-easing, for every geometry tween and draw
@@ -298,7 +276,7 @@ export default {
       lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
       const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
 
-      const frame = (t) => {
+      const paintAt = (t) => {
         const { x, y } = scalesAt(from, to, t);
         // The plot origin moves with the y tick label width; interpolate it so nothing jumps at t=0.
         const margin = { left: lerp(from.margin.left, to.margin.left, t), top: lerp(from.margin.top, to.margin.top, t) };
@@ -309,7 +287,7 @@ export default {
           .attr("d", (d) => lineD(d.points.map((p) => tween(p, t))))
           .attr("stroke", (d) => live.get(d.name).paint);
         gBands.selectAll("path.sd-band:not(.sd-exiting)").data(to.hasInterval ? to.series : [], (d) => d.name)
-          .attr("d", (d) => bandD(d.points.map((p) => ({ ...p, ...tween(p, t) }))))
+          .attr("d", (d) => band(d.points.map((p) => ({ ...p, ...tween(p, t) }))))
           .attr("fill", (d) => live.get(d.name).paint).attr("opacity", (d) => (entering.has(d.name) ? t : 1));
         gLabels.selectAll("text.sd-series-label:not(.sd-exiting)").data(to.hasSeriesLabels ? to.series : [], (d) => d.name)
           .attr("x", x.range()[1] + to.font * 0.4).attr("y", (d) => lerp(prevSeries.get(d.name)?.ly ?? d.ly, d.ly, t))
@@ -317,12 +295,12 @@ export default {
           .attr("opacity", (d) => (entering.has(d.name) ? t : 1));
         svg.selectAll("path.sd-line.sd-exiting, .sd-band.sd-exiting, .sd-series-label.sd-exiting").attr("opacity", 1 - t);
       };
-      await Promise.all([ctx.animate.tween(0, 1, frame, { duration, signal, ease }), ...draws, ...recolor]);
+      await Promise.all([morph(info, ctx, paintAt, { duration }), ...draws, ...recolor]);
     }
 
     return {
       async update(props, info = {}) {
-        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        const { draw, duration, ease, signal } = entrance(info, ctx);
         // The start state of the entrance, before the first await: the lines of the last render are undrawn.
         if (draw) gLines.selectAll("path.sd-line").each(function () { undraw(this); });
         const rows = await loadRows(props, ctx);
@@ -330,12 +308,10 @@ export default {
         if (draw && !info.signal?.aborted) {
           // The entrance: every line draws in from its final shape.
           renderStatic(model);
-          const duration = info.entrance.duration ?? motionMs(info, ctx, 2);
-          const { ease } = motion(info, ctx);
-          await Promise.all(gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal: info.signal, ease })));
+          await Promise.all(gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })));
         } else if (info.animate && last && !info.entered && !info.signal?.aborted) {
           // A change while the chart stays shown. An element that just appeared without a draw snaps.
-          await morph(last, model, info);
+          await change(last, model, info);
         }
         renderStatic(model);
         last = model;

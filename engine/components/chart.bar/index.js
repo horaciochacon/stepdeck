@@ -29,9 +29,8 @@
 // renders the end state at once.
 // Colors come from ctx.palette("categorical") (the first color) and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr } from "../../core/chart.js";
-import { wrapLabel } from "../../core/chart-layout.js";
-import { SVG_NS, num, lerp, clamp01, measureWidth, measureHeight, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
+import { loadTable, tickFormat, opacityAttr, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
+import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
 const THICK = 0.65; // bar thickness as a share of its band
@@ -67,9 +66,6 @@ const categoriesOf = (rows, props) => rows.filter((r) => r[props.x] != null && r
 
 /** The target state, from props and rows alone. Pixel positions are derived from it by `geometry`. */
 function buildModel(props, rows, ctx, el) {
-  const font = num(ctx.tokens?.["--sd-font-size-label"], 28);
-  const w = measureWidth(el, ctx);
-  const h = measureHeight(el, ctx);
   const orient = props.orient === "vertical" ? "vertical" : "horizontal";
   const horizontal = orient === "horizontal";
   const lower = props.interval?.lower;
@@ -116,8 +112,6 @@ function buildModel(props, rows, ctx, el) {
   });
 
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
-  const charW = font * 0.6;
-  const lineH = font * 1.15;
   // Room for a value label at a bar's end. It must not depend on the current `y`, or the plot would resize (and the
   // fixed axis slide) when `y` switches: use the widest label over every numeric column but the category, and the domain ends.
   const columns = rows.length ? Object.keys(rows[0]).filter((c) => c !== props.x) : [];
@@ -126,37 +120,40 @@ function buildModel(props, rows, ctx, el) {
     ...columns.flatMap((c) => rows.map((r) => valueOf(r, c)).filter((v) => v !== null).map((v) => fv(v).length)),
     ...bars.map((b) => b.text.length),
   );
-  const labelW = widest * charW + font * 0.6;
   const hasX = props.axes?.x != null && String(props.axes.x) !== "";
   const hasY = props.axes?.y != null && String(props.axes.y) !== "";
   const n = Math.max(1, bars.length);
-  const margin = { left: 0, top: 0, right: 0, bottom: 0 };
-  let pw;
-  let ph;
-  if (horizontal) {
-    // Category labels left of the plot, value ticks under it, value labels past the bar ends.
-    margin.top = Math.round(hasX ? font * 1.9 : font * 0.6);
-    margin.bottom = Math.round(hasY ? font * 3.6 : font * 1.9);
-    ph = Math.max(1, h - margin.top - margin.bottom);
-    const maxChars = Math.max(4, Math.floor((w * 0.34 - font * 0.6) / charW));
-    const maxLines = Math.max(1, Math.floor((ph / n) / lineH));
-    for (const b of bars) b.lines = wrapLabel(b.label, maxChars, maxLines);
-    const chars = Math.max(1, ...bars.flatMap((b) => b.lines.map((l) => l.length)));
-    margin.left = Math.round(chars * charW + font * 0.6 + (domain[0] < 0 ? labelW : 0));
-    margin.right = Math.round(domain[1] > 0 ? labelW : font * 0.6);
-    pw = Math.max(1, w - margin.left - margin.right);
-  } else {
+  // The category labels wrap to the room the plot leaves them, and the margin across the bands follows from
+  // the wrapped lines, so each orientation sizes one pair of sides, then the plot, then wraps (setting
+  // `b.lines`), then sizes the other pair.
+  const { w, h, font, margin, pw, ph } = frame(el, ctx, ({ font, charW, w, h }) => {
+    const lineH = font * 1.15;
+    const labelW = widest * charW + font * 0.6;
+    if (horizontal) {
+      // Category labels left of the plot, value ticks under it, value labels past the bar ends.
+      const top = Math.round(hasX ? font * 1.9 : font * 0.6);
+      const bottom = Math.round(hasY ? font * 3.6 : font * 1.9);
+      const ph = Math.max(1, h - top - bottom);
+      const maxChars = Math.max(4, Math.floor((w * 0.34 - font * 0.6) / charW));
+      const maxLines = Math.max(1, Math.floor((ph / n) / lineH));
+      for (const b of bars) b.lines = wrapLabel(b.label, maxChars, maxLines);
+      const chars = Math.max(1, ...bars.flatMap((b) => b.lines.map((l) => l.length)));
+      return { top, bottom, left: chars * charW + font * 0.6 + (domain[0] < 0 ? labelW : 0), right: domain[1] > 0 ? labelW : font * 0.6 };
+    }
     // Value ticks left of the plot, category labels under it, value labels above the bar ends.
-    margin.left = Math.round(Math.max(1, ...ticks.map((t) => t.label.length)) * charW + font * 0.6);
-    margin.right = Math.round(font * 0.6);
-    pw = Math.max(1, w - margin.left - margin.right);
+    const left = Math.round(Math.max(1, ...ticks.map((t) => t.label.length)) * charW + font * 0.6);
+    const right = Math.round(font * 0.6);
+    const pw = Math.max(1, w - left - right);
     const maxChars = Math.max(3, Math.floor((pw / n) * 0.95 / charW));
     for (const b of bars) b.lines = wrapLabel(b.label, maxChars, 3);
     const lines = Math.max(1, ...bars.map((b) => b.lines.length));
-    margin.top = Math.round(hasY ? font * 2.7 : font * 1.9);
-    margin.bottom = Math.round(font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (domain[0] < 0 ? font * 1.4 : 0));
-    ph = Math.max(1, h - margin.top - margin.bottom);
-  }
+    return {
+      left, right,
+      top: hasY ? font * 2.7 : font * 1.9,
+      bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (domain[0] < 0 ? font * 1.4 : 0),
+    };
+  });
+  const lineH = font * 1.15;
   return {
     w, h, font, lineH, orient, margin, pw, ph, domain, ticks, bars, hasInterval,
     axes: { x: hasX ? String(props.axes.x) : "", y: hasY ? String(props.axes.y) : "" },
@@ -275,28 +272,11 @@ export default {
 
           // The whisker grows out of the bar's end: s.whisker 0 = a point at the end, 1 = lower..upper.
           const hasWhisker = d.lo !== null && d.hi !== null && s.lo !== null && s.hi !== null;
-          sel.selectAll("g.sd-whisker").data(hasWhisker ? [d] : []).join((enter) => {
-            const wg = enter.append("g").attr("class", "sd-whisker");
-            wg.append("line").attr("class", "sd-whisker-line");
-            wg.append("line").attr("class", "sd-whisker-cap sd-whisker-cap-lower");
-            wg.append("line").attr("class", "sd-whisker-cap sd-whisker-cap-upper");
-            return wg;
-          }).attr("opacity", s.whisker > 0 ? null : 0).each(function () {
-            const lo = scale(lerp(v, s.lo, s.whisker));
-            const hi = scale(lerp(v, s.hi, s.whisker));
-            const cap = thick * 0.45;
-            const wsel = d3.select(this);
-            const put = (cls, x1, y1, x2, y2) => wsel.select(cls).attr("x1", x1).attr("y1", y1).attr("x2", x2).attr("y2", y2);
-            if (horizontal) {
-              put(".sd-whisker-line", lo, center, hi, center);
-              put(".sd-whisker-cap-lower", lo, center - cap / 2, lo, center + cap / 2);
-              put(".sd-whisker-cap-upper", hi, center - cap / 2, hi, center + cap / 2);
-            } else {
-              put(".sd-whisker-line", center, lo, center, hi);
-              put(".sd-whisker-cap-lower", center - cap / 2, lo, center + cap / 2, lo);
-              put(".sd-whisker-cap-upper", center - cap / 2, hi, center + cap / 2, hi);
-            }
-          });
+          const wg = sel.selectAll("g.sd-whisker").data(hasWhisker ? [d] : []).join((enter) => enter.append("g").attr("class", "sd-whisker"))
+            .attr("opacity", s.whisker > 0 ? null : 0);
+          if (hasWhisker) {
+            whisker(wg, { at: center, lo: scale(lerp(v, s.lo, s.whisker)), hi: scale(lerp(v, s.hi, s.whisker)), cap: thick * 0.45, orient: m.orient });
+          }
 
           // The value label sits past the bar's end, or past the whisker's when there is one.
           const positive = v >= 0;
@@ -329,8 +309,11 @@ export default {
     const comparable = (a, b) => a && b && a.orient === b.orient && a.bars.map((x) => x.key).join("\n") === b.bars.map((x) => x.key).join("\n");
     const signature = (m) => JSON.stringify([m.domain, m.pw, m.ph, m.margin, m.bars.map((b) => [b.value, b.lo, b.hi, b.shown, b.dim]), m.ticks.map((t) => t.label)]);
 
-    /** Plays `from` -> `to` (from may be null: everything shown grows in, as when the element appears). */
-    async function morph(from, to, info, enterAll, duration = motionMs(info, ctx, 2)) {
+    /**
+     * Plays `from` -> `to` (from may be null: everything shown grows in, as when the element appears) over
+     * `duration`, else the step's transition, else 2 x --sd-duration.
+     */
+    async function change(from, to, info, enterAll, duration) {
       const prev = new Map((from?.bars ?? []).map((b) => [b.key, b]));
       const ref = from ?? to;
       // What does not depend on t: the union of the tick sets.
@@ -346,7 +329,7 @@ export default {
         return p ? ["fill", "labelFill"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
       });
       let first = true;
-      const frame = (t) => {
+      const paintAt = (t) => {
         const view = {
           domain: [lerp(ref.domain[0], to.domain[0], t), lerp(ref.domain[1], to.domain[1], t)],
           pw: lerp(ref.pw, to.pw, t),
@@ -388,22 +371,22 @@ export default {
         first = false;
       };
       // The geometry eases with the theme's --sd-easing, like every other motion.
-      await Promise.all([ctx.animate.tween(0, 1, frame, { duration, signal: info.signal, ease: motion(info, ctx).ease }), ...recolor]);
+      await Promise.all([morph(info, ctx, paintAt, { duration }), ...recolor]);
     }
 
     return {
       async update(props, info = {}) {
-        const draw = info.entrance?.motion === "draw" && !info.signal?.aborted;
+        const { draw, duration } = entrance(info, ctx);
         // The start state of the entrance, before the first await: the bars of the last render at zero length.
         if (draw && last) paint(last, emptyView(last));
         const rows = await loadRows(props, ctx);
         const model = buildModel(props, rows, ctx, el);
         const from = comparable(last, model) ? last : null;
         if (draw && !info.signal?.aborted) {
-          await morph(from, model, info, true, info.entrance.duration);
+          await change(from, model, info, true, duration);
         } else if (info.animate && !info.entered && !info.signal?.aborted && from && signature(from) !== signature(model)) {
           // A change while the chart stays shown. An element that just appeared without a draw snaps.
-          await morph(from, model, info, false);
+          await change(from, model, info, false);
         }
         renderStatic(model);
         last = model;
