@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { waterfall, waterfallDomain, waterfallSpan } from "#engine/components/chart.bar/modes.js";
+import { waterfall, waterfallDomain, waterfallSpan, waterfallSteps } from "#engine/components/chart.bar/modes.js";
 
 const ROWS = [
   { item: "Opening", change: 40, later: 40, low: 38, high: 42 },
@@ -98,6 +98,19 @@ test("waterfallSpan: a total and whiskers widen it; a step that fails is skipped
   assert.deepEqual(waterfallSpan(gap, ok, [ok, { ...base }]), [0, 49], "a later step with an empty value is skipped (its own update errors)");
   assert.deepEqual(waterfallSpan(gap, ok, [ok, { ...base, sort: { by: "pace" } }]), [0, 49], "so is a step whose sort fails");
   assert.throws(() => waterfallSpan(gap, { ...base }, null), { message: "waterfall needs a value for every category: 'Taxes' is empty" });
+});
+
+test("waterfallSteps: the slide's waterfalls; a current step in plain bars is left out and never throws", () => {
+  const gap = [...ROWS, { item: "Taxes", change: "", later: -4 }];
+  const bars = { ...base, mode: "bars" };
+  const later = { ...base, y: "later", total: true };
+  const steps = waterfallSteps(gap, bars, [bars, later, { ...base }]);
+  assert.equal(steps.length, 1, "the plain step is left out, the empty-value step skipped");
+  assert.deepEqual(steps[0].total, { start: 0, end: 35 });
+  assert.deepEqual(steps[0].whiskers, [], "no interval, no whiskers");
+  assert.deepEqual(waterfallSpan(gap, bars, [bars, later]), [0, 49], "the span of a plain step is its slide's waterfalls");
+  assert.deepEqual(waterfallSpan(gap, bars, [bars]), [0, 1], "none: [0, 1]");
+  assert.throws(() => waterfallSteps(gap, { ...base }, null), { message: "waterfall needs a value for every category: 'Taxes' is empty" });
 });
 
 test("modes.js has no DOM and imports only the pure layout module", async () => {

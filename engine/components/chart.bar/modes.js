@@ -6,14 +6,16 @@
 //   slot (start = end), so the bars and the total always add up what is on screen. Every category needs a finite value,
 //   shown or not: an empty one throws `waterfall needs a value for every category: '<key>' is empty`.
 // waterfallDomain(steps) -> [min, max]
-//   extentOf (core/chart-layout.js) over every start and end of every step's waterfall, the total included, with zero.
-//   `steps` are waterfall results; null entries are skipped. Not niced: the caller nices.
+//   extentOf (core/chart-layout.js) over every start and end of every step's waterfall, the total and any `whiskers`
+//   included, with zero. `steps` are waterfall results; null entries are skipped. Not niced: the caller nices.
+// waterfallSteps(rows, props, stepProps) -> [{ bars, total, whiskers }]
+//   The waterfalls of the slide: the current props when they are a waterfall, then every other step (`stepProps`,
+//   null entries skipped) that is a waterfall over the same `data`, each with its own `y`, `sort`, `shown` and
+//   `total`. `whiskers` are the spans of its shown bars' whiskers when it has `interval` (a contribution's interval
+//   sits on its start: start + lower .. start + upper). The current props throw (their error is the element's);
+//   another step that fails is skipped (its own update reports it).
 // waterfallSpan(rows, props, stepProps) -> [min, max]
-//   waterfallDomain over the current props and every other step of the slide (`stepProps`, null entries skipped) that
-//   is a waterfall over the same `data`, each with its own `y`, `sort`, `shown` and `total`, plus the whiskers of its
-//   shown bars when it has `interval` (a contribution's interval sits on its start: start + lower .. start + upper).
-//   The current props throw (their error is the element's); another step that fails is skipped (its own update
-//   reports it).
+//   waterfallDomain(waterfallSteps(rows, props, stepProps)).
 import { extentOf, rank } from "../../core/chart-layout.js";
 
 /** A finite number, from a number or a numeric string; null for an empty cell or anything else. */
@@ -51,7 +53,7 @@ export function waterfallDomain(steps) {
   const marks = [];
   for (const step of steps ?? []) {
     if (!step) continue;
-    marks.push(...step.bars);
+    marks.push(...step.bars, ...(step.whiskers ?? []));
     if (step.total) marks.push(step.total);
   }
   return extentOf(marks, ["start", "end"], { zero: true });
@@ -73,17 +75,17 @@ function flowOf(rows, props) {
       if (b.shown && lo !== null && hi !== null) whiskers.push({ start: b.start + lo, end: b.start + hi });
     });
   }
-  return { ...flow, bars: [...flow.bars, ...whiskers] };
+  return { ...flow, whiskers };
 }
 
 /**
  * @param {Array<Record<string, unknown>>} rows
- * @param {Record<string, any>} props the current props, in `mode: "waterfall"`
+ * @param {Record<string, any>} props the current props
  * @param {ReadonlyArray<Record<string, any> | null> | null} stepProps
- * @returns {[number, number]}
+ * @returns {Array<{ bars: Array<{ key: string, start: number, end: number, shown: boolean }>, total: { start: 0, end: number } | null, whiskers: Array<{ start: number, end: number }> }>}
  */
-export function waterfallSpan(rows, props, stepProps) {
-  const steps = [flowOf(rows, props)];
+export function waterfallSteps(rows, props, stepProps) {
+  const steps = props.mode === "waterfall" ? [flowOf(rows, props)] : [];
   for (const p of stepProps ?? []) {
     if (!p || p.mode !== "waterfall" || p.data !== props.data) continue;
     try {
@@ -92,5 +94,8 @@ export function waterfallSpan(rows, props, stepProps) {
       // That step's own update reports the problem.
     }
   }
-  return waterfallDomain(steps);
+  return steps;
 }
+
+/** @returns {[number, number]} */
+export const waterfallSpan = (rows, props, stepProps) => waterfallDomain(waterfallSteps(rows, props, stepProps));

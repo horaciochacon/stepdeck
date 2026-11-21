@@ -180,16 +180,21 @@ test("unknown sort column shows on the slide", async () => {
 // --- Waterfall -------------------------------------------------------------------------------------------------------
 
 const WATERFALL_STEPS = {
-  waterfall: ["start", "appear", "total", "later"],
+  waterfall: ["start", "appear", "total", "later", "ranked", "back"],
   "waterfall-sort": ["data", "desc", "asc", "list"],
   "waterfall-invert": ["plain", "invert", "focus", "back"],
   "waterfall-vertical": ["start", "appear", "less"],
   "waterfall-enter": ["start", "go", "later"],
+  "waterfall-floor": ["only"],
+  "waterfall-below": ["only"],
   "mode-switch": ["bars", "waterfall", "again"],
+  "mode-switch-vertical": ["bars", "waterfall", "again"],
+  "mode-switch-swing": ["bars", "waterfall", "again"],
 };
 const WATERFALL_INTERRUPTS = [
   ["waterfall", "start", "appear", "total"],
   ["waterfall", "total", "later", "appear"],
+  ["waterfall", "later", "ranked", "back"],
   ["waterfall-sort", "data", "desc", "asc"],
   ["waterfall-invert", "plain", "invert", "focus"],
   ["waterfall-vertical", "start", "appear", "start"],
@@ -230,6 +235,32 @@ const flow = (el) => {
   return { mode: svg.dataset.mode ?? null, zero: num(axis, horizontal ? "x1" : "y1"), bars, links, bands };
 };
 const readFlow = (page) => page.evaluate(`(${flow})(document.querySelector('[data-el="bars"]'))`);
+
+/** The shown bars whose value label overlaps their own rect (bounding boxes, in plot coordinates): none, in a waterfall. */
+const labelsInside = (page) => page.evaluate(() => [...document.querySelectorAll('[data-el="bars"] g.sd-bar-group[data-visible="true"]')]
+  .filter((g) => {
+    const r = g.querySelector("rect.sd-bar").getBBox();
+    const t = g.querySelector("text.sd-bar-label").getBBox();
+    const across = Math.min(r.x + r.width, t.x + t.width) - Math.max(r.x, t.x);
+    const down = Math.min(r.y + r.height, t.y + t.height) - Math.max(r.y, t.y);
+    return across > 0.5 && down > 0.5;
+  })
+  .map((g) => `${g.dataset.key} "${g.querySelector("text.sd-bar-label").textContent}"`));
+
+/** Where the plot sits and how big it is, and where the band labels are: what a mode change must not move. */
+const frameOf = (page) => page.evaluate(() => {
+  const el = document.querySelector('[data-el="bars"]');
+  const horizontal = el.querySelector("svg").dataset.orient === "horizontal";
+  // The domain ends are ticks (the axis is rounded to them), so the farthest tick is the plot's length along the axis.
+  const ticks = [...el.querySelectorAll("g.sd-axis-value g.tick")].map((t) => t.getAttribute("transform").match(/-?[\d.]+/g).map(Number));
+  const grid = el.querySelector("g.sd-axis-value line.sd-grid-line");
+  return {
+    plot: el.querySelector("g.sd-plot").getAttribute("transform"),
+    along: Math.max(...ticks.map(([x, y]) => (horizontal ? x : y))),
+    across: Number(grid.getAttribute(horizontal ? "y2" : "x2")),
+    bands: [...el.querySelectorAll("text.sd-band-label")].map((t) => [t.dataset.key, t.getAttribute("y"), t.querySelector("tspan").getAttribute("x")]),
+  };
+});
 const near = (a, b, message) => assert.ok(Math.abs(a - b) < 0.01, `${message} (${a} vs ${b})`);
 const between = (v, a, b) => v > Math.min(a, b) + 1 && v < Math.max(a, b) - 1;
 const within = (v, a, b) => v >= Math.min(a, b) - 0.01 && v <= Math.max(a, b) + 0.01;
@@ -280,6 +311,11 @@ const WATERFALL_CHECKS = {
       assert.deepEqual(["Growth", "Costs", "Other"].map((k) => s.bars[k].text), ["+12", "\u221215", "+3"], "contributions are signed");
     },
     later: (s) => assert.equal(s.bars.__total.text, "38"),
+    ranked: (s, { order, shown }) => {
+      assert.deepEqual(order, ["Opening", "Growth", "Prices", "Other", "Taxes", "Costs"], "highest first, Prices in its place");
+      assert.ok(!shown.includes("Prices"));
+    },
+    back: (s, { order }) => assert.deepEqual(order, CATEGORIES),
   },
   "waterfall-sort": {
     data: (s, { order }) => assert.deepEqual(order, CATEGORIES),
@@ -301,16 +337,17 @@ for (const [slide, steps] of Object.entries(WATERFALL_STEPS)) {
         await ctx.open(pages.url(slide, `step=${step}`));
         if (slide === "waterfall-enter" && step === "start") continue; // the chart enters at `go`
         const state = await readFlow(page);
-        if (slide === "mode-switch" && step !== "waterfall") {
+        if (slide.startsWith("mode-switch") && step !== "waterfall") {
           assert.equal(state.mode, null, `${step}: plain bars carry no data-mode`);
           assert.deepEqual(state.links, [], `${step}: no connectors`);
           assert.equal(await page.evaluate(() => document.querySelectorAll('[data-el="bars"] g.sd-connectors').length), 0);
-          for (const key of CATEGORIES) near(state.bars[key].start, state.zero, `${step}: ${key} starts at zero`);
+          for (const key of Object.keys(state.bars).filter((k) => k !== "__total")) near(state.bars[key].start, state.zero, `${step}: ${key} starts at zero`);
           continue;
         }
         assert.equal(state.mode, "waterfall");
         const seen = expectAddsUp(state, `${slide}/${step}`);
         WATERFALL_CHECKS[slide]?.[step]?.(state, seen);
+        assert.deepEqual(await labelsInside(page), [], `${slide}/${step}: every value label sits outside its bar`);
       }
       await errorsClean(page, ctx);
     });
@@ -441,6 +478,51 @@ test("waterfall: colours from the diverging palette, swapped by invert", async (
   });
 });
 
+// A slide with a waterfall step lays every step out for it, so a mode change moves the bars and never the frame.
+for (const slide of ["mode-switch", "mode-switch-vertical", "mode-switch-swing"]) {
+  test(`a mode switch keeps the frame (${slide})`, async () => {
+    await withPage({ root, url: pages.url(slide, "step=bars") }, async (page, ctx) => {
+      const frames = {};
+      for (const step of WATERFALL_STEPS[slide]) {
+        await ctx.open(pages.url(slide, `step=${step}`));
+        frames[step] = await frameOf(page);
+      }
+      assert.deepEqual(frames.waterfall, frames.bars, "bars -> waterfall: same plot place and size, same band labels");
+      assert.deepEqual(frames.again, frames.bars, "and back");
+      await errorsClean(page, ctx);
+    });
+  });
+}
+
+test("waterfall: a re-sort while a category leaves, then while it comes back: the bars slide and still add up", async () => {
+  // While bars change places their bases move from one order's running totals to the other's, so the stack is joined
+  // only at rest. At every frame, though, the shown bars add up to the total, and a bar that stays keeps its length.
+  const addsUpToTotal = (f, label) => {
+    const lengths = Object.entries(f.bars).filter(([k, b]) => k !== "__total" && b.visible === "true").map(([, b]) => b.end - b.start);
+    const sum = lengths.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sum - (f.bars.__total.end - f.bars.__total.start)) < 0.05, `${label}: the shown bars add up to the total (${sum})`);
+  };
+  await withPage({ root, url: pages.url("waterfall", "step=later&motion=full") }, async (page, ctx) => {
+    for (const [from, to, mover] of [["later", "ranked", "Prices"], ["ranked", "back", "Prices"]]) {
+      if (from !== "later") await ctx.open(pages.url("waterfall", `step=${from}&motion=full`));
+      const first = await readFlow(page);
+      const r = await sampleFrames(page, "waterfall", to, "bars", flow);
+      r.frames.forEach((f, i) => addsUpToTotal(f, `${to} frame ${i}`));
+      for (const key of ["Opening", "Growth", "Costs", "Taxes", "Other"]) {
+        assert.ok(r.frames.every((f) => Math.abs(f.bars[key].len - first.bars[key].len) < 0.01), `${to}: ${key} keeps its length`);
+      }
+      const [a, b] = [first.bars.Costs.center, r.end.bars.Costs.center];
+      assert.ok(Math.abs(b - a) > 1, `${to}: Costs changes band`);
+      assert.ok(r.frames.some((f) => between(f.bars.Costs.center, a, b)), `${to}: Costs is seen part-way to its new band`);
+      const [l0, l1] = [first.bars[mover].len, r.end.bars[mover].len];
+      assert.ok(r.frames.some((f) => f.bars[mover].visible === "true" && between(f.bars[mover].len, l0, l1)), `${to}: ${mover} is seen part-way`);
+      expectAddsUp(r.end, `${to} at rest`);
+      assert.equal(await elementHtml(page, "bars"), await htmlAfterJump(ctx, page, pages, "waterfall", to, "bars"));
+    }
+    await errorsClean(page, ctx);
+  });
+});
+
 test("mode switch bars ↔ waterfall morphs and equals the jump", async () => {
   await withPage({ root, url: pages.url("mode-switch", "step=bars&motion=full") }, async (page, ctx) => {
     const first = await readFlow(page);
@@ -490,6 +572,15 @@ for (const [slide, from, via, to] of WATERFALL_INTERRUPTS) {
     });
   });
 }
+
+test("a category named like the total bar is an element error", async () => {
+  await withPage({ root, url: broken.url("waterfall-reserved", "") }, async (page, ctx) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual(errors, ["waterfall-reserved/bars: category '__total' in data/reserved.csv is the name the total bar uses: rename it"]);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible");
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
 
 test("waterfall error shows on the slide", async () => {
   await withPage({ root, url: broken.url("waterfall-empty", "") }, async (page, ctx) => {

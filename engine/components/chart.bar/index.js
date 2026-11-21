@@ -23,10 +23,11 @@
 //     on the running total of its slot) and hidden with CSS visibility, so nothing reflows.
 // Waterfall: each bar runs from `start` to `end` (the running totals over the shown bars, ./modes.js); dotted
 // connectors (`m.links`) join each shown bar's end to the next shown bar, and the last to the total bar (`m.total`,
-// key "__total", in the last band). A slide that is a waterfall at any step keeps the total's band, the signed label
-// room and the band axis set back for it at every step, so a mode or `total` change never reflows the frame. Value
-// labels are signed; their side (past the end, inside against it, or past the start) is chosen once from the model at
-// rest with `fit` and kept through a motion. Colours: increases the diverging palette's `high` role, decreases its
+// key "__total", in the last band; a category of that name is an element error). A slide that is a waterfall at any
+// step keeps the total's band, the signed label room on both sides of the plot (the band axis set back by it) and
+// margins for every step's axis at every step, so a mode or `total` change never reflows the frame. Value labels are
+// signed; their side (past the end, inside against it, or past the start) is chosen once from the model at rest with
+// `fit` and kept through a motion; with the label room, every label within the axis lands past its end. Colours: increases the diverging palette's `high` role, decreases its
 // `low` role (`invert` swaps them), the total in ink.
 // Motion: a category that appears grows from zero and then its whisker is drawn (GROW is the share of the
 // motion given to the bar); a category that leaves does it in reverse; a changed value tweens the bar, its
@@ -48,7 +49,7 @@
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, opacityAttr, rank, fit, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
-import { waterfall, waterfallSpan, valueOf, categoriesOf, hasTotal } from "./modes.js";
+import { waterfall, waterfallSteps, waterfallDomain, valueOf, categoriesOf, hasTotal } from "./modes.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
 const THICK = 0.65; // bar thickness as a share of its band
@@ -81,6 +82,20 @@ async function loadRows(props, ctx) {
 
 const validDomain = (d) => Array.isArray(d) && d.length === 2 && d.every((v) => Number.isFinite(v)) && d[0] < d[1];
 
+/** Plain bars' value extent for props `p`: [min(0, every y and interval value), max(...)] over every row. */
+function barsExtent(rows, p) {
+  const lower = p.interval?.lower;
+  const upper = p.interval?.upper;
+  const both = Boolean(lower && upper);
+  const all = rows.flatMap((r) => [valueOf(r, p.y), both ? valueOf(r, lower) : null, both ? valueOf(r, upper) : null]).filter((v) => v !== null);
+  return [Math.min(0, d3.min(all) ?? 0), Math.max(0, d3.max(all) ?? 0)];
+}
+
+/** An extent rounded outward to tick values (an empty one first widened to one unit). */
+function niceDomain([lo, hi]) {
+  return d3.scaleLinear().domain([lo, lo < hi ? hi : lo + 1]).nice(5).domain();
+}
+
 /** The format spec with a `+` for positive values (unless it already names a sign), for a waterfall's contributions. */
 function signedSpec(spec) {
   const parsed = d3.formatSpecifier(spec);
@@ -108,22 +123,22 @@ function buildModel(props, rows, ctx, el) {
   const lower = props.interval?.lower;
   const upper = props.interval?.upper;
   const hasInterval = Boolean(lower && upper);
-  // A slide that is a waterfall at some step lays out as one at every step (the total's band, signed label room).
+  // A slide that is a waterfall at some step lays out as one at every step (the total's band, signed label room, the
+  // margins of every step's axis), so a mode change moves the bars and never the frame.
   const steps = [props, ...(ctx.stepProps ?? [])].filter(Boolean);
   const totalAt = (p) => p.mode === "waterfall" && hasTotal(p.total);
   const flowSlide = steps.some((p) => p.mode === "waterfall");
   const totalProps = totalAt(props) ? props : steps.find(totalAt);
+  // The slide's waterfalls over this data (this step's first when it is one: its empty value throws here).
+  const flows = flowSlide ? waterfallSteps(rows, props, ctx.stepProps ?? null) : [];
 
-  // The domain covers every row (not only the shown ones) so the axis never moves as categories appear.
-  const all = rows.flatMap((r) => [valueOf(r, props.y), hasInterval ? valueOf(r, lower) : null, hasInterval ? valueOf(r, upper) : null]).filter((v) => v !== null);
-  let domain;
-  if (props.domain !== undefined) {
-    domain = [props.domain[0], props.domain[1]]; // validated by loadRows; used as given, never rounded
-  } else {
-    domain = flow ? waterfallSpan(rows, props, ctx.stepProps ?? null) : [Math.min(0, d3.min(all) ?? 0), Math.max(0, d3.max(all) ?? 0)];
-    if (!(domain[0] < domain[1])) domain[1] = domain[0] + 1;
-    domain = d3.scaleLinear().domain(domain).nice(5).domain();
-  }
+  // The domain covers every row (not only the shown ones) so the axis never moves as categories appear; a waterfall's
+  // covers every running total of every waterfall step of the slide. `domain` is used as given (validated by loadRows
+  // for this step), never rounded.
+  const domainAt = (p) => (p.domain !== undefined ? [p.domain[0], p.domain[1]] : niceDomain(p.mode === "waterfall" ? waterfallDomain(flows) : barsExtent(rows, p)));
+  const domain = domainAt(props);
+  // The axes the frame is sized for: this step's, or on a waterfall slide every step's over this data.
+  const frameDomains = flowSlide ? steps.filter((p) => p.data === props.data && (p.domain === undefined || validDomain(p.domain))).map(domainAt) : [domain];
   const tickValues = d3.scaleLinear().domain(domain).ticks(5);
   const fy = tickFormat(ctx, props.format?.y, tickValues);
   const fv = props.format?.y ? ctx.format(props.format.y) : ctx.format(",~r"); // value labels: as precise as the data
@@ -131,6 +146,10 @@ function buildModel(props, rows, ctx, el) {
   const fl = flow ? fs : fv;
   const fx = props.format?.x ? ctx.format(props.format.x) : null;
   const ticks = tickValues.map((value) => ({ value, label: fy(value) }));
+  const tickLabels = (d) => {
+    const values = d3.scaleLinear().domain(d).ticks(5);
+    return values.map(tickFormat(ctx, props.format?.y, values));
+  };
 
   const categories = categoriesOf(rows, props.x);
   const shown = new Set(Array.isArray(props.shown) ? props.shown.map(String) : categories.map((r) => String(r[props.x])));
@@ -166,6 +185,7 @@ function buildModel(props, rows, ctx, el) {
   });
   // The order: every category is ranked, shown or not, so a hidden one keeps its slot. The errors are rank's.
   const byKey = new Map(made.map(({ bar }) => [bar.key, bar]));
+  if (totalProps && byKey.has(TOTAL)) throw new Error(`category '${TOTAL}' in ${props.data} is the name the total bar uses: rename it`);
   const bars = rank(made.map(({ bar, columns }) => ({ key: bar.key, value: bar.value, columns })), props.sort).map((key) => byKey.get(key));
   bars.forEach((b, i) => {
     b.slot = i;
@@ -197,20 +217,24 @@ function buildModel(props, rows, ctx, el) {
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
   // Room for a value label at a bar's end. It must not depend on the current `y`, or the plot would resize (and the
   // fixed axis slide) when `y` switches: use the widest label over every numeric column but the category, and the domain ends.
+  // On a waterfall slide every step's axis ends count, signed, and the total of every step that shows one.
   const fw = flowSlide ? fs : fv;
   const columns = rows.length ? Object.keys(rows[0]).filter((c) => c !== props.x) : [];
   const widest = Math.max(
-    fw(domain[0]).length, fw(domain[1]).length,
+    ...frameDomains.flatMap((d) => [fw(d[0]).length, fw(d[1]).length]),
     ...columns.flatMap((c) => rows.map((r) => valueOf(r, c)).filter((v) => v !== null).map((v) => fw(v).length)),
-    ...bands.map((b) => b.text.length),
+    ...bars.map((b) => b.text.length),
+    ...flows.filter((f) => f.total).map((f) => fv(f.total.end).length),
   );
+  const below = frameDomains.some((d) => d[0] < 0);
   const hasX = props.axes?.x != null && String(props.axes.x) !== "";
   const hasY = props.axes?.y != null && String(props.axes.y) !== "";
   const n = Math.max(1, bands.length);
   // The category labels wrap to the room the plot leaves them, and the margin across the bands follows from
   // the wrapped lines, so each orientation sizes one pair of sides, then the plot, then wraps (setting
-  // `b.lines`), then sizes the other pair. A horizontal waterfall keeps a value label's room on both sides of the
-  // plot (a decrease's label points left), with the band axis set back by it (`labelRoom`).
+  // `b.lines`), then sizes the other pair. A waterfall keeps a value label's room on both sides of the plot (a
+  // decrease's label points left, or down), with the band axis set back by the room on its side (`labelRoom`), so no
+  // label has to go inside its bar.
   let lineH = 0;
   let labelRoom = 0;
   const { w, h, font, charW, margin, pw, ph } = frame(el, ctx, ({ font, charW, w, h }) => {
@@ -229,7 +253,9 @@ function buildModel(props, rows, ctx, el) {
       return { top, bottom, left: chars * charW + font * 0.6 + (domain[0] < 0 || flowSlide ? labelW : 0), right: domain[1] > 0 || flowSlide ? labelW : font * 0.6 };
     }
     // Value ticks left of the plot, category labels under it, value labels above the bar ends.
-    const left = Math.round(Math.max(1, ...ticks.map((t) => t.label.length)) * charW + font * 0.6);
+    labelRoom = flowSlide ? font * 1.5 : 0;
+    const tickChars = flowSlide ? frameDomains.flatMap((d) => tickLabels(d).map((l) => l.length)) : ticks.map((t) => t.label.length);
+    const left = Math.round(Math.max(1, ...tickChars) * charW + font * 0.6);
     const right = Math.round(font * 0.6);
     const plotW = Math.max(1, w - left - right);
     const maxChars = Math.max(3, Math.floor((plotW / n) * 0.95 / charW));
@@ -238,18 +264,18 @@ function buildModel(props, rows, ctx, el) {
     return {
       left, right,
       top: hasY ? font * 2.7 : font * 1.9,
-      bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (domain[0] < 0 ? font * 1.4 : 0),
+      bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (flowSlide ? labelRoom : below ? font * 1.4 : 0),
     };
   });
   if (flow) {
-    // The value labels' room along the value axis: the plot and the label room beside it (horizontal), or the plot and
-    // the room above it under the axis title (vertical; the band labels sit right under the plot).
+    // The value labels' room along the value axis: the plot and the label room on either side of it (horizontal), or
+    // the room above it under the axis title and the room kept below it (vertical).
     const scale = d3.scaleLinear().domain(domain).range(horizontal ? [0, pw] : [ph, 0]);
-    const range = horizontal ? [-labelRoom, pw + margin.right] : [-(margin.top - (hasY ? font * 1.2 : 0)), ph];
+    const range = horizontal ? [-labelRoom, pw + margin.right] : [-(margin.top - (hasY ? font * 1.2 : 0)), ph + labelRoom];
     for (const b of bands) b.side = sideOf(b, scale, range, (horizontal ? 1 : -1) * (b.up ? 1 : -1), font * 0.4, horizontal ? b.text.length * charW : font);
   }
   return {
-    w, h, font, lineH, orient, mode, margin, pw, ph, domain, ticks, bars, total, links, labelRoom, hasInterval,
+    w, h, font, lineH, orient, mode, flowSlide, margin, pw, ph, domain, ticks, bars, total, links, labelRoom, hasInterval,
     axes: { x: hasX ? String(props.axes.x) : "", y: hasY ? String(props.axes.y) : "" },
   };
 }
@@ -343,7 +369,7 @@ export default {
       gBand.selectAll("text.sd-band-label").data(marks, (d) => d.key).join((enter) => enter.append("text").attr("class", "sd-band-label"))
         .attr("data-key", (d) => d.key)
         .attr("data-visible", (d) => String(view.bars.get(d.key).visible))
-        .attr("y", (d) => (horizontal ? centerOf(view.bars.get(d.key).slot) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5))
+        .attr("y", (d) => (horizontal ? centerOf(view.bars.get(d.key).slot) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5 + m.labelRoom))
         .attr("text-anchor", horizontal ? "end" : "middle")
         .order()
         .each(function (d) {
@@ -410,19 +436,21 @@ export default {
           }
 
           const gap = f * 0.4;
+          // A label running up from its anchor has no `dy`; on a waterfall slide it gets "0em" instead, so the attribute
+          // is never dropped and re-added between steps (that would change its place in the markup).
+          const atBaseline = m.flowSlide ? "0em" : null;
           const label = text(sel.select("text"), d.text);
           if (m.mode === "waterfall") {
             // On the side the model chose at rest, following the bar's ends (and whisker) as they move.
-            const up = d.up;
-            const dir = (horizontal ? 1 : -1) * (up ? 1 : -1); // the bar's direction in pixels
-            const tip = hasWhisker ? scale(up ? Math.max(v, lerp(v, s.hi, s.whisker)) : Math.min(v, lerp(v, s.lo, s.whisker))) : end;
+            const dir = (horizontal ? 1 : -1) * (d.up ? 1 : -1); // the bar's direction in pixels
+            const tip = hasWhisker ? scale(d.up ? Math.max(v, lerp(v, s.hi, s.whisker)) : Math.min(v, lerp(v, s.lo, s.whisker))) : end;
             const side = s.side ?? "end";
             const at = side === "end" ? tip + dir * gap : side === "inside" ? end - dir * gap : base - dir * gap;
             const forward = side === "end" ? dir > 0 : dir < 0; // the text runs towards higher pixel values from `at`
             label
               .attr("x", horizontal ? at : center)
               .attr("y", horizontal ? center : at)
-              .attr("dy", horizontal ? "0.35em" : forward ? "0.71em" : null)
+              .attr("dy", horizontal ? "0.35em" : forward ? "0.71em" : atBaseline)
               .attr("text-anchor", horizontal ? (forward ? "start" : "end") : "middle");
           } else {
             // The value label sits past the bar's end, or past the whisker's when there is one.
@@ -431,7 +459,7 @@ export default {
             label
               .attr("x", horizontal ? tip + (positive ? gap : -gap) : center)
               .attr("y", horizontal ? center : tip + (positive ? -gap : gap))
-              .attr("dy", horizontal ? "0.35em" : positive ? null : "0.71em")
+              .attr("dy", horizontal ? "0.35em" : positive ? atBaseline : "0.71em")
               .attr("text-anchor", horizontal ? (positive ? "start" : "end") : "middle");
           }
           label.attr("fill", s.labelFill).attr("opacity", s.labelOpacity === 1 ? null : s.labelOpacity);
@@ -441,7 +469,7 @@ export default {
 
       text(bandTitle, m.axes.x).attr("text-anchor", horizontal ? "start" : "middle")
         .attr("x", horizontal ? 0 : view.margin.left + view.pw / 2)
-        .attr("y", horizontal ? f : view.margin.top + view.ph + f * 0.5 + (Math.max(1, ...marks.map((b) => b.lines.length)) * m.lineH) + f * 1.2);
+        .attr("y", horizontal ? f : view.margin.top + view.ph + f * 0.5 + m.labelRoom + (Math.max(1, ...marks.map((b) => b.lines.length)) * m.lineH) + f * 1.2);
       text(valueTitle, m.axes.y).attr("text-anchor", horizontal ? "middle" : "start")
         .attr("x", horizontal ? view.margin.left + view.pw / 2 : 0)
         .attr("y", horizontal ? view.margin.top + view.ph + f * 3.1 : f);

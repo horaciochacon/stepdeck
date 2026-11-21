@@ -55,16 +55,17 @@ Behaviour:
   - Value labels are signed (`+12`, `−15`) through the same format (`format.y` with a `+` sign, unless it names its
     own sign); the total's label is not. Each label sits past its bar's end, or inside the bar against its end, or past
     its start, whichever fits first (`fit` in `core/chart.js`); the side is chosen at rest and kept through a motion.
-    A horizontal waterfall keeps a label's room on both sides of the plot, so its labels sit outside. A label inside
-    a bar stays in ink.
+    A waterfall keeps a label's room on both sides of the plot (left and right of it, or above and below it, with the
+    band labels set back by that room), so within its axis every label fits past its bar's end, outside the bar.
   - The value axis covers every running total, the total and the whiskers of **every waterfall step of the slide**
     (each with its own `y`, `sort`, `shown` and `total`, from `ctx.stepProps`, over the same `data`), with zero, rounded
     outward to tick values; `domain` overrides it. So nothing a step shows or re-orders moves the axis.
   - `interval` draws each contribution's whisker on its running total: from start + lower to start + upper.
   - Every category needs a value, shown or not: an empty one fails the element with
     `waterfall needs a value for every category: '<key>' is empty` (it would otherwise be drawn as no change).
-  - A slide that is a waterfall at any step lays out like one at every step (the label room, the total's band), so a
-    `mode` change moves the bars and never the frame.
+  - A slide that is a waterfall at any step lays out like one at every step (the label room, the total's band, margins
+    wide enough for every step's axis), so a `mode` change moves the bars and never the frame.
+  - The total bar's key is `__total`: with a total, a category of that name is an element error naming it.
 - **Entrance.** The chart builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
   an animated step, every shown bar grows from zero and then draws its whisker, over 2 × `--sd-duration` or the
   element's `enter.duration`, while its box stays still. It waits for its stagger slot like any entering element,
@@ -99,7 +100,8 @@ Behaviour:
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
   lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
   `shown`, `highlight` or a `sort` list that the data does not have, a `sort` column the data lacks, a `sort` of no
-  valid form, a `domain` that is not `[min, max]` with min < max, and an empty value in a waterfall.
+  valid form, a `domain` that is not `[min, max]` with min < max, an empty value in a waterfall, and a category named
+  `__total` in a chart with a total.
   `validate` also checks the columns `x`, `y` and `interval` name, at every step, gives a misspelt `mode` a
   did-you-mean, and warns (`chart-prop-unused`) when `invert` or `total` is set without `mode: "waterfall"`.
 - **Accessibility.** Each bar carries a `<title>` with its category, value and interval, formatted like the labels
