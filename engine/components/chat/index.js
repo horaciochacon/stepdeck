@@ -1,4 +1,4 @@
-// Built-in `chat`: an exchange as bubbles, or quote and prompt cards (slide kit 1, §5.2).
+// Built-in `chat`: an exchange as bubbles, or quote and prompt cards.
 //
 // Everything on screen is a pure function of the props (deriveChat in ./derive.js):
 //   - hidden messages (index >= `shown`) keep their space; CSS hides them with visibility, never with reflow;

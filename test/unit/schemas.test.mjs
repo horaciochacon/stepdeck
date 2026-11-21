@@ -1,4 +1,4 @@
-// Every built-in schema compiles with the shared Ajv setup (R16): component props schemas are JSON
+// Every built-in schema compiles with the shared Ajv setup: component props schemas are JSON
 // Schemas (2020-12, with x- annotation keywords); layout schema.json files are descriptors and must
 // match schema/layout.schema.json. The deck and slide schemas compile and accept the spike deck.
 import { test } from "node:test";

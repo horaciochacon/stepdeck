@@ -1,4 +1,4 @@
-// `chat` in Chrome (slide kit 1, task 5). Run with:
+// `chat` in Chrome (slide kit 1). Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chat.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";

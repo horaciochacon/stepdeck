@@ -47,7 +47,7 @@
 //   console-error  console.error calls and uncaught page errors. Chrome's own "Failed to load
 //                  resource" console lines are left to network-error.
 //   network-error  a request that failed or answered HTTP 400 or more. A 404 for a theme's
-//                  themes/<name>/theme.css is not one: that file is optional (default-theme spec §5.1).
+//                  themes/<name>/theme.css is not one: that file is optional.
 //
 // runPlayed(deckDir, { slide?, size? })   -> Promise<{ problems, slides: { [id]: { jumped, fromPrev, fromNext } } }>
 // checkPlayed(deckDir, { slide?, size? }) -> Promise<Problem[]>
@@ -575,7 +575,7 @@ export function layoutFindings(layout) {
   return out;
 }
 
-/** Same content (R10): visible set, text and resolved props of every element. */
+/** Same content: visible set, text and resolved props of every element. */
 function sameContent(a, b) {
   if (a.elements.length !== b.elements.length) return false;
   const other = new Map(b.elements.map((e) => [e.id, e]));

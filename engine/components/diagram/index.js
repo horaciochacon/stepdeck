@@ -1,5 +1,4 @@
-// Built-in `diagram`: nodes, arrows and nested groups on an explicit grid, appearing by step (slide kit 1,
-// §5.2 and §10.2-§10.3).
+// Built-in `diagram`: nodes, arrows and nested groups on an explicit grid, appearing by step.
 //
 // Geometry is a pure function of the props, the element's size and the measured label sizes (placeDiagram
 // in ./place.js). The grid cell is only a node's placement slot: the drawn shape is sized to its label

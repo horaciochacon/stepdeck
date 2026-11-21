@@ -1,6 +1,6 @@
 // `stepdeck check` layout rules and `stepdeck shoot` (spec §10): measured in the bare shell, in
 // capture mode, after fonts and settled(). Every fixture under test/fixtures/check/<rule>/ is a
-// minimal deck that must produce exactly its rule (R6); the spike deck must check clean.
+// minimal deck that must produce exactly its rule; the spike deck must check clean.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser
 import { test } from "node:test";
 import assert from "node:assert/strict";

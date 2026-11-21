@@ -1,4 +1,4 @@
-// The `modern` theme (default-theme spec §5.3): tokens, vendored Geist fonts, palettes, contrast.
+// The `modern` theme: tokens, vendored Geist fonts, palettes, contrast.
 // Also covers the optional tokens that academic-light now declares with today's values.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -212,7 +212,7 @@ test("modern is the default theme: DEFAULT_THEME, the talk template and the kit;
   const deck = async (p) => (await import(new URL(`../../${p}/deck.js`, import.meta.url).href)).default;
   assert.equal((await deck("templates/talk")).theme, "modern");
   assert.equal((await deck("examples/kit")).theme, "modern");
-  assert.equal((await deck("examples/spike")).theme, "academic-light", "both themes stay exercised (plan Task 5 [call])");
+  assert.equal((await deck("examples/spike")).theme, "academic-light", "both themes stay exercised");
 });
 
 test("modern theme.css styles the hooks: kicker, title, accent, cover, meta rule on the region only, big number", () => {

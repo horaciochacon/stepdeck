@@ -42,7 +42,7 @@ test("bad progress, duplicate ids and bad `at` throw, naming the problem", () =>
   assert.throws(() => stopStates([{ label: "A", at: 0.6 }, { label: "B", at: 0.3 }], 0), /increas/);
 });
 
-test("schema: `orient` accepts only \"horizontal\" (spec §5.2), so a timeline may name it", async () => {
+test("schema: `orient` accepts only \"horizontal\", so a timeline may name it", async () => {
   const { readFileSync } = await import("node:fs");
   const { createAjv } = await import("../../cli/ajv.js");
   const schema = JSON.parse(readFileSync(new URL("../../engine/components/timeline/schema.json", import.meta.url), "utf8"));

@@ -1,4 +1,4 @@
-// Kit layouts statement, halves and title-with-figure, in Chrome (slide kit 1, spec §5.1, §10.6).
+// Kit layouts statement, halves and title-with-figure, in Chrome.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -180,7 +180,7 @@ test("halves --align: start by default, center centres the content of both halve
 });
 
 // The spike deck's cover region and element boxes under academic-light. They moved on purpose with the cover
-// geometry (default-theme spec §10.3, Task 4): the title region spans the top rows with the title at the bottom
+// geometry: the title region spans the top rows with the title at the bottom
 // of the band, and the meta block sits on the bottom margin above the footer line. Before, the cover was
 // centred a little above the middle (title y 355, subtitle 488, meta 607). With no element in `figure` the layout
 // is still the plain one-column cover, whatever the figure region does.
@@ -242,7 +242,7 @@ test("title with figure makes two columns", async () => {
   });
 });
 
-// Cover with a figure and a ~40 character title (default-theme spec §10.3, Review Focus 5): the title stays within
+// Cover with a figure and a ~40 character title: the title stays within
 // 3 lines at 1920 under both themes, and the kicker and the meta block still sit on the margins.
 test("cover with figure keeps the title to 3 lines or fewer, kicker on the top margin, meta on the bottom", async () => {
   for (const theme of ["academic-light", "modern"]) {

@@ -19,7 +19,7 @@
 // boot imports <deck>/deck.js and <deck>/slides/<id>.js, reads
 // <engine>/layouts/<layout>/{layout.css,schema.json} and <engine>/themes/<theme>/{tokens.css,palettes.json}, plus the
 // theme's optional theme.css (a missing one is no error).
-// Cascade layers (default-theme spec §5.1): core/stepdeck.css is sd-core, layout CSS sd-layout, theme.css
+// Cascade layers: core/stepdeck.css is sd-core, layout CSS sd-layout, theme.css
 // sd-theme, sd-deck (declared and empty, reserved for per-deck overrides) and a slide's `style` sd-slide, each
 // sheet prefixed with the order (LAYER_ORDER). The theme's
 // tokens.css (custom properties and @font-face only) is not layered.

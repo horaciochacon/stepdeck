@@ -551,7 +551,7 @@ test("component whose tween callback throws is contained; later goTo and settled
   assert.equal(log[0].updates.length, 1, "b updated once and kept working");
 });
 
-// ---------- Task 4: canvas-pixel size and the onError hook ----------
+// ---------- canvas-pixel size and the onError hook ----------
 test("ctx.size uses unscaled offsetWidth/offsetHeight (canvas pixels) when the element has them", async () => {
   const log = [];
   const slide = { id: "z", elements: [{ id: "a", type: "rec", props: {} }] };
@@ -591,7 +591,7 @@ test("ctxBase.onError is called once per failed element with its id and error", 
   assert.equal(c.errors.length, 1);
 });
 
-// ---------- ctx.mount (Task 7) ----------
+// ---------- ctx.mount ----------
 
 /** A parent that mounts one child of type `kid` into a plain-object element and exposes the handle. */
 function parentMounting(kidProps, out, { onUpdate } = {}) {

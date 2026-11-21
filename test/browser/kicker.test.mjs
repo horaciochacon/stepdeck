@@ -1,4 +1,4 @@
-// The section kicker element and the accent phrase in titles (default-theme spec §5.2, §5.4, §10.4, §10.5), in Chrome.
+// The section kicker element and the accent phrase in titles, in Chrome.
 //
 // One temporary engine copy (like a `stepdeck new` deck), with two test-only layouts that know nothing about any
 // theme: `fourth` (test/fixtures/fourth-layout: a title band over main) and `main-only` (test/fixtures/no-title-layout:

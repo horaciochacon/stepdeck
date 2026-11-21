@@ -30,7 +30,7 @@ const TASK_MARKERS = { pending: "[ ]", active: "[~]", done: "[x]" };
 async function loadScript(props, ctx) {
   if (typeof props.script !== "string" || props.script === "") throw new Error("terminal needs a `script` path");
   const script = await ctx.data(props.script);
-  return checkScript(script, props.script); // shared cached value: read-only (R14)
+  return checkScript(script, props.script); // shared cached value: read-only
 }
 
 export default {

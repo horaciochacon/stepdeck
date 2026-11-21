@@ -1,4 +1,4 @@
-// The first commands must work before `npm install` (I5): only the commands that need Ajv load it,
+// The first commands must work before `npm install`: only the commands that need Ajv load it,
 // and they fail with exit 2 and the fix instead of a module-not-found crash.
 import { test } from "node:test";
 import assert from "node:assert/strict";

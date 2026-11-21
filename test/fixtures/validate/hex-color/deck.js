@@ -1,4 +1,4 @@
-// Fixture (R6): a hex color typed into a prop.
+// Fixture: a hex color typed into a prop.
 export default {
   title: "validate fixture",
   lang: "en",

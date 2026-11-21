@@ -1,4 +1,4 @@
-// Fixture: a deck for the `timeline` component (slide kit 1, task 6). All values are synthetic.
+// Fixture: a deck for the `timeline` component (slide kit 1). All values are synthetic.
 export default {
   title: "Timeline fixture",
   lang: "en",

@@ -1,4 +1,4 @@
-// The `modern` theme in Chrome (default-theme spec §5.3, §7, §10): its theme.css, `modern` as the default theme,
+// The `modern` theme in Chrome: its theme.css, `modern` as the default theme,
 // and both shipped themes over every layout example and every built-in component.
 //
 // Temporary decks (each with a copied engine, like a `stepdeck new` deck):

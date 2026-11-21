@@ -1,4 +1,4 @@
-// Fixture (R6): a diagram whose `shown` names an id that matches no node, group or edge.
+// Fixture: a diagram whose `shown` names an id that matches no node, group or edge.
 export default {
   title: "validate fixture",
   lang: "en",

@@ -23,7 +23,7 @@
 //                sd-kicker. A layout without a "title" region drops it quietly: renderSlideFrame lays out
 //                placedSlide(slide, regions), and the runtime gives the controller that same slide.
 //   lede         the slide's `lede` (or an element with the id `lede`) gets the class sd-lede on its box.
-//   hooks        published styling hooks (core/constants.js HOOKS, default-theme spec §10.1): the layout's
+//   hooks        published styling hooks (core/constants.js HOOKS): the layout's
 //                { region: hook } map. The region and every element wrapper in it get the class sd-<hook>.
 //                The reserved title element (id "title": the slide's `title` sugar or an explicit element)
 //                gets sd-title, and the "title" region is a size container named sd-title, so a theme or a

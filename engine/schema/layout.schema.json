@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "layouts/<name>/schema.json",
-  "description": "A layout descriptor: its named regions, documented grid variables, styling hooks and kind (spec §7; default-theme spec §10.1). Not a props schema.",
+  "description": "A layout descriptor: its named regions, documented grid variables, styling hooks and kind (spec §7). Not a props schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "description", "regions", "variables"],

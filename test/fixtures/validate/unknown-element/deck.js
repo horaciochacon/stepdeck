@@ -1,4 +1,4 @@
-// Fixture (R6): a patch at step b names an element id that does not exist (nte).
+// Fixture: a patch at step b names an element id that does not exist (nte).
 export default {
   title: "validate fixture",
   lang: "en",

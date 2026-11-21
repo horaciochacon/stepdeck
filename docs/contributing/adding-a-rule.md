@@ -247,7 +247,7 @@ Every rule gets a fixture deck that produces exactly that one problem. How the s
 
    ```js
    // deck.js
-   // Fixture (R6): slide.style with an @import, which the runtime would drop silently (I2).
+   // Fixture: slide.style with an @import, which the runtime would drop silently.
    export default {
      title: "validate fixture",
      lang: "en",
@@ -292,7 +292,7 @@ Every rule gets a fixture deck that produces exactly that one problem. How the s
 
    ```js
    // deck.js
-   // Fixture (R6): a deck that must fail `stepdeck check` with exactly one rule, font-too-small.
+   // Fixture: a deck that must fail `stepdeck check` with exactly one rule, font-too-small.
    export default {
      title: "check fixture: font-too-small",
      lang: "en",

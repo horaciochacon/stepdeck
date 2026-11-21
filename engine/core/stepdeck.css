@@ -1,6 +1,6 @@
 /* stepdeck structural CSS. Only structure here: colors, fonts and sizes come from theme tokens.
 
-   Cascade layers (default-theme spec §5.1), lowest priority first: sd-core (this file: sd-core.components,
+   Cascade layers, lowest priority first: sd-core (this file: sd-core.components,
    then sd-core.hooks), sd-layout (layout.css), sd-theme (the theme's theme.css), sd-deck (declared and empty,
    reserved for per-deck overrides), sd-slide (a slide's own `style`). Every sheet the engine writes starts with the same order statement. Reveal's sheets
    (vendor/reveal/reveal.css, core/shells/reveal.css) stay unlayered; they style the shell, not the canvas. */
@@ -360,7 +360,7 @@ html.capture *, html.capture *::before, html.capture *::after {
 
 } /* @layer sd-core.components */
 
-/* Hook defaults (default-theme spec §5.2, §10.2): token-driven, so a theme with only tokens.css, and a layout
+/* Hook defaults: token-driven, so a theme with only tokens.css, and a layout
    that knows nothing about themes, still get a styled title, kicker, accent, subtitle, meta and statement.
    A theme's theme.css (layer sd-theme) overrides these whatever their specificity. Core puts a hook class
    on a region and on every element wrapper in it, so these rules set inherited properties only (font,

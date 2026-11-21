@@ -10,7 +10,7 @@ export const THEME_NAME = /^[a-z0-9][a-z0-9-]*$/;
 export const DEFAULT_LAYOUT = "full-bleed";
 
 /**
- * Published styling hooks (default-theme spec §5.2, §10.1). Core emits `sd-<hook>` classes: `title` on the
+ * Published styling hooks (docs/reference/themes.md, "Styling hooks"). Core emits `sd-<hook>` classes: `title` on the
  * reserved title element, the others on the regions a layout schema maps to them (`hooks`) and on their
  * element wrappers. Themes (theme.css) style these classes; layouts never do. `kicker`, `lede` and `accent` are
  * published here and emitted by core inside the title region (`lede` on the box of the reserved `lede` element).

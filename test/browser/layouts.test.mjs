@@ -72,7 +72,7 @@ test("title layout: title, subtitle, meta and footer stacked, left-aligned on th
 const THEMES = ["academic-light", "modern"];
 const marginOf = (page) => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue("--sd-canvas-margin")));
 
-// Cover geometry (default-theme spec §10.3): the kicker on the top margin, title and subtitle in the upper
+// Cover geometry: the kicker on the top margin, title and subtitle in the upper
 // middle, the meta block on the bottom margin with the footer line below it.
 test("cover kicker on the top margin", async () => {
   for (const theme of THEMES) {

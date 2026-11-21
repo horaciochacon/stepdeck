@@ -1,4 +1,4 @@
-// Built-in `list`: numbered, lettered, bulleted or checklist items revealed one by one (slide kit 1, §5.2).
+// Built-in `list`: numbered, lettered, bulleted or checklist items revealed one by one.
 //
 // Everything on screen is a pure function of the props (deriveList in ./derive.js):
 //   - hidden items (index >= `shown`) keep their space; CSS hides them with visibility, never with reflow;

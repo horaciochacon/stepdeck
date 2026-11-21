@@ -1,4 +1,4 @@
-// Fixture (R6): a deck that must fail `stepdeck check` with exactly one rule, console-error.
+// Fixture: a deck that must fail `stepdeck check` with exactly one rule, console-error.
 export default {
   title: "check fixture: console-error",
   lang: "en",

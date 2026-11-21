@@ -1,4 +1,4 @@
-// A component whose update never settles (I1): the controller's watchdog fails the element after
+// A component whose update never settles: the controller's watchdog fails the element after
 // 10 s and records the error; the reveal shell's neighbour prefetch never blocks navigation; `check`
 // reports the element instead of aborting; a page that does not settle names its URL.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser

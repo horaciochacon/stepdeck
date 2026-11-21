@@ -1,4 +1,4 @@
-/* modern: a neutral modern theme (default-theme spec §5.3). Geist and Geist Mono, a deep blue accent, a rose alert,
+/* modern: a neutral modern theme. Geist and Geist Mono, a deep blue accent, a rose alert,
    near-black titles with tight tracking, and a large cover title. No shapes or ornament: colour and type only.
    Every token is prefixed --sd- (plus the spec name --min-audience-font). Components and layouts read
    only these, never raw colors or sizes. Documented in README.md. It declares every token academic-light

@@ -1,5 +1,5 @@
 // stepdeck validate (spec §10): Node only, no browser. One minimal fixture deck per rule under
-// test/fixtures/validate/<case>/ (R6); the spike deck must validate clean.
+// test/fixtures/validate/<case>/; the spike deck must validate clean.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -435,7 +435,7 @@ test("a misspelt mode gets a did-you-mean", async () => {
   }
 });
 
-// Kicker and accent phrase (default-theme spec §5.4, §10.4, §10.5).
+// Kicker and accent phrase.
 test("title-accent: an unmatched * in a title is a warning", async () => {
   const problems = await validate(fixture("title-accent"));
   assert.deepEqual(rules(problems), ["title-accent"], show(problems));

@@ -1,4 +1,4 @@
-// The contract between layouts, themes and core (default-theme spec §5.2, §10.1):
+// The contract between layouts, themes and core:
 //   - layout CSS is placement only: no colour, font, font family, weight, style, letter-spacing,
 //     text-transform, line-height, text-align or -webkit-text-fill-color, no --sd-* custom property,
 //     no !important, and font-size only as var(--sd-…);

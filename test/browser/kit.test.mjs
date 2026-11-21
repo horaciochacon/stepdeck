@@ -1,4 +1,4 @@
-// The kit example deck (slide kit 1, spec §6): every new layout and component, building step by step.
+// The kit example deck: every new layout and component, building step by step.
 // It must stay clean under validate, check and check --played.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser
 import { test } from "node:test";
@@ -14,7 +14,7 @@ const kit = fileURLToPath(new URL("../../examples/kit/", import.meta.url));
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const pages = deckPages("examples/kit/");
 
-// Steps per slide, in deck order (spec §6 and the Task 8 brief).
+// Steps per slide, in deck order.
 const STEPS = {
   cover: 1, question: 1, concept: 3, sandbox: 4, criteria: 4,
   tasks: 5, speed: 2, estimate: 2, exchange: 3, track: 3,

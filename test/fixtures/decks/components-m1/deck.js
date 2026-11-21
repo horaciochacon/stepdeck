@@ -1,4 +1,4 @@
-// Fixture (R6): a Spanish deck that exercises `markdown` and `big-number` (task 10 tests).
+// Fixture: a Spanish deck that exercises `markdown` and `big-number`.
 // All values are synthetic.
 export default {
   title: "Components M1 fixture",

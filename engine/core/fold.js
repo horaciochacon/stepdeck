@@ -45,7 +45,7 @@ export function parseStepRef(value) {
   return /^\d+$/.test(value) ? Number(value) : value;
 }
 
-/** Whether an element is a title whose `*phrase*` is an accent (default-theme spec §10.5): a text element with the
+/** Whether an element is a title whose `*phrase*` is an accent: a text element with the
  * reserved id `title`. It defaults to `accent: true`; props that set `accent` (e.g. false) keep their value. */
 const accentTitle = (id, type) => id === "title" && type === "text";
 const withAccent = (props) => (isObject(props) && props.accent === undefined ? { ...props, accent: true } : props);

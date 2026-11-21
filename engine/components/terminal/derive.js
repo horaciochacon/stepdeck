@@ -1,5 +1,5 @@
 // terminal: pure derivation from the script and `shown` (no DOM). The script is a shared cached
-// value (R14): nothing here mutates it; every result is a new structure.
+// value: nothing here mutates it; every result is a new structure.
 
 export const EVENT_TYPES = ["read", "run", "result", "note", "error", "code", "file", "task"];
 export const TASK_STATUSES = ["pending", "active", "done"];

@@ -1,4 +1,4 @@
-// Accent phrase in titles (default-theme spec §5.4, §10.5): `*phrase*` marks the phrase the theme colours
+// Accent phrase in titles: `*phrase*` marks the phrase the theme colours
 // (<em class="sd-accent">). Pure string functions, no DOM: used by the text component, the shells, dump and validate.
 //
 //   parseAccent(s)   -> Array<{ text, accent }>   consecutive parts never share the same `accent`; no empty parts

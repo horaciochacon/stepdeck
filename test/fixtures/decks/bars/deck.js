@@ -1,4 +1,4 @@
-// Fixture: a Spanish deck for the `chart.bar` component (slide kit 1, task 4). All values are synthetic.
+// Fixture: a Spanish deck for the `chart.bar` component (slide kit 1). All values are synthetic.
 export default {
   title: "Bars fixture",
   lang: "es",

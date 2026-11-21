@@ -1,4 +1,4 @@
-// Built-in `timeline`: a track between stops that fills (slide kit 1, §5.2). It also works as the progress
+// Built-in `timeline`: a track between stops that fills. It also works as the progress
 // connector between two steps of a story ("agent's report -> our study").
 //
 // Everything on screen is a pure function of the props (stopStates in ./stops.js), drawn as one svg sized

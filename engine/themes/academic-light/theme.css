@@ -1,4 +1,4 @@
-/* academic-light theme.css: today's plain look for the published hooks (default-theme spec §10.2).
+/* academic-light theme.css: today's plain look for the published hooks.
    Loaded after tokens.css, in the sd-theme cascade layer: these rules beat core's hook defaults and the
    layouts, and lose to a slide's own `style`. Hooks and component part classes only: never [data-layout],
    never a region, never !important. Sizes, colours and fonts still come from tokens.css. */

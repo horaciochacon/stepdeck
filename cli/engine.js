@@ -77,7 +77,7 @@ export { THEME_NAME };
 
 /**
  * A failed-request line for a missing optional theme.css ("404 <path>/themes/<name>/theme.css"): the runtime treats
- * it as absent (default-theme spec §5.1), so check and dump do not report it.
+ * it as absent (theme.css is optional), so check and dump do not report it.
  */
 export const OPTIONAL_THEME_CSS = /^404 (?:\S*\/)?themes\/[^/\s]+\/theme\.css$/;
 

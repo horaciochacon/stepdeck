@@ -2,7 +2,7 @@
 // load this file in plain Node.
 //
 // edgeId(edge) -> string
-//   An edge's id: `edge.id`, else "<from>-><to>" (slide kit spec §10.2).
+//   An edge's id: `edge.id`, else "<from>-><to>".
 //
 // placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null })
 //   -> { cells: Map<id, {x,y,w,h}>, nodes: Map<id, {x,y,w,h}>,

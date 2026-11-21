@@ -1,4 +1,4 @@
-// props with a remote URL and a protocol-relative URL (R20).
+// props with a remote URL and a protocol-relative URL.
 export default {
   id: "s", title: "Remote URL",
   elements: [

@@ -1,4 +1,4 @@
-// a step id made of digits, ambiguous with a step number (R20).
+// a step id made of digits, ambiguous with a step number.
 export default {
   id: "s", title: "Numeric step id",
   elements: [

@@ -1,4 +1,4 @@
-// Built-in `image`: a local image with alt text, a fit mode and an optional caption (slide kit 1, §5.2).
+// Built-in `image`: a local image with alt text, a fit mode and an optional caption.
 //
 // The element is a <figure> with an <img> that fills the box (object-fit from `fit`) and a <figcaption> under
 // it when there is a caption. `src` is a deck-relative path; ctx.assetUrl resolves it against the deck root

@@ -1,4 +1,4 @@
-// Fixture (R6): a chart prop misspelled (serie_shown); validate suggests series_shown.
+// Fixture: a chart prop misspelled (serie_shown); validate suggests series_shown.
 export default {
   title: "validate fixture",
   lang: "en",

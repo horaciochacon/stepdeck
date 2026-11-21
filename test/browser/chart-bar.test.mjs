@@ -1,4 +1,4 @@
-// `chart.bar` in Chrome (slide kit 1, task 4). Run with:
+// `chart.bar` in Chrome (slide kit 1). Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-bar.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";

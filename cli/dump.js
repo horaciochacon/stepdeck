@@ -191,7 +191,7 @@ export function measureInPage([canvasWidth, selector = ".sd-stage .sd-canvas"]) 
 }
 
 /**
- * An accent title's text (a text element with accent: true, default-theme spec §5.4) is its plain string,
+ * An accent title's text (a text element with accent: true) is its plain string,
  * stripAccent(props.text), not the text nodes joined by spaces: the phrase is its own node, so the walk would read
  * "at *50 mg*, then" as "at 50 mg , then". Elements that show nothing (or an error) keep what was measured.
  */

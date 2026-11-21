@@ -1,4 +1,4 @@
-// Cascade layers, theme.css and the published styling hooks (default-theme spec §5.1, §5.2, §10.1-2), in Chrome.
+// Cascade layers, theme.css and the published styling hooks, in Chrome.
 //
 // Two temporary engine copies (like a `stepdeck new` deck, never under the shipped layouts/):
 //   plain    the engine plus a fourth layout (test/fixtures/fourth-layout) that knows nothing about any theme;
@@ -314,7 +314,7 @@ test("academic-light unchanged where there is no kicker or accent: element boxes
     "kit/concept": { title: [96, 96, 1728, 74], idea: [96, 194, 1728, 730], src: [96, 948, 1728, 36] },
     "kit/speed": { title: [96, 96, 1728, 74], bars: [96, 218, 1096, 754], before: [1264, 525, 560, 52], after: [1264, 613, 560, 52], src: [96, 996, 1728, 36] },
     "kit/criteria": { title: [96, 96, 1728, 74], list: [210, 389, 1500, 350] },
-    // The cover's boxes moved on purpose (Task 4, spec §10.3: title band on top, meta on the bottom margin);
+    // The cover's boxes moved on purpose (title band on top, meta on the bottom margin);
     // its type is still HEAD's. HEAD had title y 355, subtitle 488, meta 607.
     "spike/cover": { title: [96, 368, 1400, 101], subtitle: [96, 501, 1400, 55], meta: [96, 930, 1400, 42], src: [96, 996, 1728, 36] },
   };

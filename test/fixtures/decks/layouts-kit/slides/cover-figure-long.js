@@ -1,4 +1,4 @@
-// A cover with a section, a ~40 character title and a figure beside it (Review Focus 5: at most 3 lines).
+// A cover with a section, a ~40 character title and a figure beside it (at most 3 lines).
 export default {
   id: "cover-figure-long",
   layout: "title",

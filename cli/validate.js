@@ -12,7 +12,7 @@
 //             with a built-in; every component schema.json (deck and engine) compiles and every engine
 //             layout schema.json matches schema/layout.schema.json, used or not.
 //   slide     the file exists in that exact case and imports; its id matches; slide.schema.json with
-//             did-you-mean on unknown keys; unique element and step ids; no digits-only step ids (R20);
+//             did-you-mean on unknown keys; unique element and step ids; no digits-only step ids;
 //             slide.style holds no remote URL (http(s):// or //host; spec §3) and no @import (the
 //             runtime parses it with CSSStyleSheet.replaceSync, which drops @import);
 //             layout and regions exist; from / at / advance.start name real steps; advance fits.
@@ -352,7 +352,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
     }
   }
 
-  // Components: built-ins from components/index.json; deck components from deck.js (R17).
+  // Components: built-ins from components/index.json; deck components from deck.js.
   let builtins = [];
   try {
     builtins = readBuiltins(engine);
@@ -548,7 +548,7 @@ async function validateSlide(spec, env) {
   for (const d of defs) {
     if (seen.has(d.id)) add({ slide, element: d.id, rule: "duplicate-id", measured: `element id '${d.id}' used twice`, limit: "unique per slide", fix: `rename one of the '${d.id}' elements (and the patches that target it)` });
     seen.add(d.id);
-    // Reserved ids (default-theme spec §10.4): core makes the element `kicker` from the slide's section. (`title` is
+    // Reserved ids: core makes the element `kicker` from the slide's section. (`title` is
     // reserved too, but an author may define it: it replaces the title sugar.)
     if (RESERVED_IDS.includes(d.id)) add({ slide, element: d.id, rule: "reserved-id", measured: `element id '${d.id}'`, limit: `reserved: ${quote(RESERVED_IDS)} (core's element for the slide's section)`, fix: `rename the element '${d.id}' (and the patches that target it); to show a kicker, set the slide's section` });
   }
@@ -754,7 +754,7 @@ async function validateSlide(spec, env) {
       report(`${id}|props-not-object`, { slide, element: id, step, rule: "props-not-object", measured: `props = ${JSON.stringify(props)}`, limit: "an object", fix: `use set: { ${id}: { <prop>: null } } to delete one prop, not set: { ${id}: null }; or replace: { ${id}: { … } }` });
       return;
     }
-    // The accent phrase of a title (default-theme spec §5.4): `*phrase*`, counted on the string as written.
+    // The accent phrase of a title: `*phrase*`, counted on the string as written.
     if (id === "title" && type === "text" && props.accent === true && typeof props.text === "string") {
       const { stars, empty } = accentMarks(props.text);
       const text = JSON.stringify(props.text);

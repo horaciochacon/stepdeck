@@ -87,7 +87,7 @@ A fixture is as small as it can be. `test/fixtures/validate/hex-color/` is a who
 
 ```js
 // deck.js
-// Fixture (R6): a hex color typed into a prop.
+// Fixture: a hex color typed into a prop.
 export default {
   title: "validate fixture",
   lang: "en",

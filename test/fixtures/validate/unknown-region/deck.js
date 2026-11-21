@@ -1,4 +1,4 @@
-// Fixture (R6): an element names a region its layout lacks (notez).
+// Fixture: an element names a region its layout lacks (notez).
 export default {
   title: "validate fixture",
   lang: "en",

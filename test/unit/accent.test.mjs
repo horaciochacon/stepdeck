@@ -1,4 +1,4 @@
-// Accent phrase in titles (default-theme spec §5.4, §10.5) and the section kicker element (§10.4):
+// Accent phrase in titles and the section kicker element:
 // core/accent.js, the fold's title and kicker defaults, and bindings that cannot create an accent.
 import { test } from "node:test";
 import assert from "node:assert/strict";
