@@ -239,7 +239,7 @@ Each arrival is compared with the jump, per element, by presence, visibility, te
 
 | Rule | Measures | Limit | Typical fix |
 | --- | --- | --- | --- |
-| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text`, `box` or `canvas`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
+| `played-mismatch` | The first arrival, in step order, that differs from the jump, as `<field> <value> arriving from '<step>' [(animated)] (+N more differing arrivals)`. The field is `presence`, `visibility`, `text`, `box` or `canvas`; for `canvas` the value is the first attribute that differs, its value and that layer's attributes, as `signature 1a2b3c4d (draws=200 until= seed=1 signature=1a2b3c4d)`. | `<value> when jumped to`. | Make `update()` idempotent: render the whole state from props, never from `prev` or earlier calls, and leave no animation residue when it ends or is aborted. |
 
 A real line, from `test/fixtures/decks/played-mismatch`:
 

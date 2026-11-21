@@ -48,9 +48,8 @@ test("check --played catches a canvas that differs", async () => {
   const [p] = problems;
   assert.equal(p.rule, "played-mismatch");
   assert.equal(p.element, "counter");
-  assert.match(p.measured, /^canvas /);
-  assert.match(p.measured, /"n":"[2-9]"/, "the arrival's attributes: more updates ran than for the jump");
-  assert.match(p.limit, /"n":"1"/, "the jump's attributes");
+  assert.match(p.measured, /^canvas n [2-9] \(n=[2-9]\) arriving from /, "the attribute that differs, the arrival's value and its layer: more updates ran than for the jump");
+  assert.equal(p.limit, "n 1 (n=1) when jumped to", "the jump's");
 });
 
 test("check --played is clean on line-story", async () => {

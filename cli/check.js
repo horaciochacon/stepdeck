@@ -124,12 +124,38 @@ function errorCollector() {
 const FIX =
   "make update() idempotent: render the whole state from props (never from prev or earlier calls) and leave no animation residue when it ends or is aborted";
 
-const short = (v, n = 60) => {
-  const s = JSON.stringify(v) ?? "undefined";
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
-};
-const canvasText = (c) => (c ? short(c) : "none");
+const cap = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const short = (v, n = 60) => cap(JSON.stringify(v) ?? "undefined", n);
 const boxText = (b) => (b ? `${b.x},${b.y} ${b.w}×${b.h}` : "none");
+
+/** Canvas layers as `dump` writes them: each layer's attributes `name=value`, layers apart by " | ". */
+const layersText = (layers) => cap(layers.map((l) => Object.entries(l).map(([k, v]) => `${k}=${v}`).join(" ")).join(" | "), 200);
+
+/**
+ * Two canvas states (each a list of layers' data-* attributes, or undefined for none) as { measured, limit }: the
+ * first layer and attribute that differ, each side's value of it, and that side's whole layer, so two signatures
+ * that differ are shown whole. `layer k` names the layer when there are several; "absent" is an attribute one side
+ * lacks; "none" is no canvas, "missing" a layer one side lacks.
+ * @param {Array<Record<string, string>> | undefined} jumped
+ * @param {Array<Record<string, string>> | undefined} arrived
+ * @returns {{ measured: string, limit: string }}
+ */
+export function canvasDifference(jumped, arrived) {
+  if (!jumped?.length || !arrived?.length) {
+    return { measured: arrived?.length ? layersText(arrived) : "none", limit: jumped?.length ? layersText(jumped) : "none" };
+  }
+  const n = Math.max(jumped.length, arrived.length);
+  const value = (v) => (v === undefined ? "absent" : v === "" ? '""' : cap(v, 120));
+  for (let i = 0; i < n; i++) {
+    const at = n > 1 ? `layer ${i + 1} ` : "";
+    const [j, a] = [jumped[i], arrived[i]];
+    if (!j || !a) return { measured: `${at}${a ? layersText([a]) : "missing"}`, limit: `${at}${j ? layersText([j]) : "missing"}` };
+    for (const k of new Set([...Object.keys(a), ...Object.keys(j)])) {
+      if (a[k] !== j[k]) return { measured: `${at}${k} ${value(a[k])} (${layersText([a])})`, limit: `${at}${k} ${value(j[k])} (${layersText([j])})` };
+    }
+  }
+  return { measured: layersText(arrived), limit: layersText(jumped) };
+}
 
 /** Keeps the first finding per key (make() builds it, with more: 0) and counts the repeats in `more`. */
 function tally(map, key, make) {
@@ -149,7 +175,7 @@ function difference(jumped, arrived) {
   const a = arrived.box;
   const j = jumped.box;
   if (a.x !== j.x || a.y !== j.y || a.w !== j.w || a.h !== j.h) return { field: "box", measured: boxText(a), limit: boxText(j) };
-  if (!jsonEqual(jumped.canvas, arrived.canvas)) return { field: "canvas", measured: canvasText(arrived.canvas), limit: canvasText(jumped.canvas) };
+  if (!jsonEqual(jumped.canvas, arrived.canvas)) return { field: "canvas", ...canvasDifference(jumped.canvas, arrived.canvas) };
   return null;
 }
 
