@@ -4,7 +4,20 @@
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const missing = (v) => v == null || v === "" || (typeof v === "number" && !Number.isFinite(v));
-const lerpN = (a, b, t) => a + (b - a) * t;
+
+/**
+ * The value `t` of the way from `a` to `b`: `a + (b - a) * t`, and exactly `b` when `t` is 1, so the last frame of a
+ * played change writes the value a jump writes. When either end is missing (`null` or undefined) there is nothing
+ * to blend: the result is `b`, so a mark that appears is drawn where it ends and one whose value goes missing has none.
+ * @param {number | null | undefined} a
+ * @param {number | null | undefined} b
+ * @param {number} t
+ * @returns {number | null | undefined}
+ */
+export function lerp(a, b, t) {
+  if (a == null || b == null || t === 1) return b;
+  return a + (b - a) * t;
+}
 
 /** Compares two strings by code point (not by UTF-16 unit): negative, 0 or positive. */
 function byCodePoint(a, b) {
@@ -172,7 +185,7 @@ export function splitAt(points, at, x = (p) => p.x) {
     const boundary = { ...b };
     for (const k of Object.keys(b)) {
       if (a[k] === null || b[k] === null) boundary[k] = null;
-      else if (isNum(a[k]) && isNum(b[k])) boundary[k] = lerpN(a[k], b[k], t);
+      else if (isNum(a[k]) && isNum(b[k])) boundary[k] = lerp(a[k], b[k], t);
     }
     boundary.boundary = true;
     observed.push(boundary);

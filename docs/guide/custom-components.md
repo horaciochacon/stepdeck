@@ -378,6 +378,7 @@ export default {
     const { chart: C, d3 } = ctx;
     const svg = d3.select(el).append(() => el.ownerDocument.createElementNS(SVG, "svg")).attr("display", "block");
     const plot = svg.append("g");
+    const axisG = plot.append("g"); // first, so the grid lines sit behind the dots
     const names = plot.append("g");
     const dots = plot.append("g");
     const values = plot.append("g");
@@ -388,7 +389,7 @@ export default {
     /** The rows, the frame and the scales for these props. */
     async function layout(props) {
       const rows = await C.loadTable(props, ctx, "my.dots", [["x", props.x], ["y", props.y]]);
-      const f = C.frame(el, ctx, ({ font, charW }) => ({ left: charW * 20, right: font * 3, top: font, bottom: font }));
+      const f = C.frame(el, ctx, ({ font, charW }) => ({ left: charW * 20, right: font * 3, top: font, bottom: font * 2 }));
       // The domain covers the y column of every step, so the axis does not move when a step switches `y`.
       const columns = (ctx.stepProps ?? [props]).map((p) => p?.y);
       const x = d3.scaleLinear().domain(C.extentOf(rows, columns, { zero: true })).nice().range([0, f.pw]);
@@ -396,7 +397,8 @@ export default {
       const y = d3.scaleBand().domain(rows.map((r) => String(r[props.x]))).range([0, f.ph]).padding(0.3);
       // ...and a row without a number has no dot: a missing value is never drawn as zero.
       const marks = rows.filter((r) => Number.isFinite(r[props.y])).map((r) => ({ key: String(r[props.x]), value: r[props.y] }));
-      return { f, x, y, marks, fmt: C.tickFormat(ctx, props.format, x.ticks(5)) };
+      const ticks = x.ticks(5);
+      return { f, x, y, marks, ticks, fmt: C.tickFormat(ctx, props.format, ticks) };
     }
 
     /** The keyed joins: a new mark is created, one that left gets .sd-exiting (nothing is removed yet). */
@@ -408,10 +410,14 @@ export default {
     }
 
     /** Writes every attribute; `t` runs from 0 to 1 while a played step slides the dots. */
-    function place({ f, x, y, fmt }, t) {
+    function place({ f, x, y, ticks, fmt }, t) {
       svg.attr("width", f.w).attr("height", f.h);
       plot.attr("transform", `translate(${f.margin.left},${f.margin.top})`);
-      const cx = (d) => d3.interpolateNumber(last.get(d.key) ?? x(d.value), x(d.value))(t);
+      // The value axis: grid lines up the plot, labels below it. Its scale is the same on every step, so its
+      // ticks never change and it needs no `fade`.
+      C.axis(axisG, { scale: x, orient: "x", length: f.ph, ticks, format: fmt });
+      // From the x the dot ended at to its new one; a dot with no last x starts where it ends.
+      const cx = (d) => C.lerp(last.get(d.key), x(d.value), t);
       const cy = (d) => y(d.key) + y.bandwidth() / 2;
       names.selectAll("text:not(.sd-exiting)").attr("x", -f.font * 0.5).attr("y", cy).attr("dy", "0.35em")
         .attr("text-anchor", "end").attr("fill", ink).attr("font-size", f.font).text((d) => d.key);
@@ -449,8 +455,8 @@ The pieces, in the order `layout` and `update` take them:
 | Frame | `C.frame` | The element's size and the plot inside it, from margins you give in `font` and character widths (`charW`), so the layout never waits for font loading. |
 | Scale | `C.extentOf` over `ctx.stepProps` | The extent of the `y` column of **every step**, not only the current one, so a step that switches `y` moves the dots and never the axis. `p?.y` skips a `null` step (one that failed), and `ctx.stepProps ?? [props]` covers a component mounted by `ctx.mount`, which has none. The built-in charts keep their axes still the same way: see [Charts keep one scale across steps](step-model.md#charts-keep-one-scale-across-steps). |
 | Joins | `C.keyed` | A mark that is new is created; one that is gone gets the class `sd-exiting` and stays until `settle`, so a motion could still fade it. The keys are the category names, so a dot is the same dot from step to step. |
-| Marks | `C.dot`, `C.halo` | A dot with the theme's background outline, and a halo behind each value so it reads over anything. Colours come from `ctx.palette()` and the theme's tokens, never literals. |
-| Motion | `C.morph` | Plays `place(m, t)` for `t` from 0 to 1 over `--sd-duration` (`factor: 1`; the default is twice that), or the step's `transition`, with the theme's easing and the step's `signal`. Only a change slides: when the element has just appeared (`info.entered`), its box moves instead. |
+| Marks | `C.axis`, `C.dot`, `C.halo` | The value axis, grid lines and tick labels in the theme's colours; a dot with the theme's background outline; and a halo behind each value so it reads over anything. Colours come from `ctx.palette()` and the theme's tokens, never literals. `C.axis` joins its own ticks, so it is called in `place`, not in `join`. |
+| Motion | `C.morph`, `C.lerp` | `morph` plays `place(m, t)` for `t` from 0 to 1 over `--sd-duration` (`factor: 1`; the default is twice that), or the step's `transition`, with the theme's easing and the step's `signal`. Only a change slides: when the element has just appeared (`info.entered`), its box moves instead. `lerp` moves each dot `t` of the way, and is exactly at the end at `t` = 1. |
 | Settle | `C.settle` | Removes the marks that left and whatever style or opacity the motion wrote. Then `place(m, 1)` writes every attribute from the props, so the end state is the same however the step was reached. |
 
 The order inside `update` matters: the joins first, because they mark the leavers; then `settle`, which removes them; then every attribute. Pass `settle` the SVG root, never the element's box. A row with no number keeps its band but gets no dot, not a dot at zero.

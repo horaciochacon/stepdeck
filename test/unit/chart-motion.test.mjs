@@ -81,11 +81,11 @@ test("undraw hides a path along its length and leaves one without length alone",
 test("chartKit: frozen, exactly the public names", () => {
   assert.ok(Object.isFrozen(chartKit));
   assert.deepEqual(Object.keys(chartKit).sort(), [
-    "band", "canvasLayer", "dot", "drawOrder", "entrance", "extentOf", "fit", "focusPaint", "frame", "halo", "keyed",
-    "loadTable", "morph", "paintLines", "rank", "rule", "settle", "splitAt", "spread", "swarm", "textColor",
-    "tickFormat", "tweenColor", "undraw", "whisker", "wrapLabel",
+    "axis", "band", "canvasLayer", "dot", "drawOrder", "entrance", "extentOf", "fit", "focusPaint", "frame", "halo",
+    "keyed", "lerp", "loadTable", "morph", "paintLines", "rank", "rule", "settle", "splitAt", "spread", "swarm",
+    "textColor", "tickFormat", "tweenColor", "undraw", "whisker", "wrapLabel",
   ]);
-  assert.equal(Object.keys(chartKit).length, 26);
+  assert.equal(Object.keys(chartKit).length, 28);
   for (const [name, value] of Object.entries(chartKit)) assert.equal(typeof value, "function", name);
 });
 

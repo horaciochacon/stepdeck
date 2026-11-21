@@ -402,6 +402,8 @@ export interface ChartKit {
   drawOrder(ids: Array<string | number>, seed?: number): string[];
   /** A vertical offset per x (a beeswarm) that keeps nearby points apart. */
   swarm(xs: number[], options: { r: number; maxDy: number }): number[];
+  /** `a + (b - a) * t`, exactly `b` when `t` is 1; `b` when `a` or `b` is null or undefined. */
+  lerp<B extends number | null | undefined>(a: number | null | undefined, b: B, t: number): B;
 
   /** The element's size, the label font and the margins: `margin` is an object or a function of `{ font, charW, w, h }`. */
   frame(el: HTMLElement, ctx: ComponentContext, margin: ChartMargin | ((m: { font: number; charW: number; w: number; h: number }) => ChartMargin)): ChartFrame;
@@ -414,6 +416,8 @@ export interface ChartKit {
   /** The `d` of an interval band over `{ px, lo, hi }`; `null` when no point is defined. */
   band(points: Array<{ px: number; lo: number | null; hi: number | null }>): string | null;
   rule(selection: any, options: { x1: PerNode<number>; y1: PerNode<number>; x2: PerNode<number>; y2: PerNode<number>; label?: PerNode<string>; anchor?: PerNode<"start" | "middle" | "end"> }): any;
+  /** A value axis: one `g.sd-axis-tick` per tick (keyed by value) with a `line.sd-axis-grid` and a `text.sd-axis-label`. It joins its own ticks: call it with `fade` on a played change's frames (new ticks fade in, leavers out) and without it for the end state (leavers removed). Returns every tick. */
+  axis(g: any, options: { scale: (v: number) => number; orient?: "y" | "x"; length?: number; ticks?: number[]; format?: (v: number) => string; fade?: number }): any;
   /** Adds class `sd-halo` for text (a dot has its outline already: no change), returns the selection; or with `under: true` ensures a `.sd-halo-under` copy of each node's geometry and `transform` before it (returns the copies). A copy has the node's tag: in a parent that holds copies, select marks by class. */
   halo(selection: any, options?: { under?: boolean }): any;
   /** One `canvas.sd-canvas-layer` per element, placed on the plot; its context is scaled so you draw in plot pixels. */

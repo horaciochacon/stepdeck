@@ -106,10 +106,10 @@ All notable changes to stepdeck are recorded here. The format follows
 - **Charts keep one scale across steps.** `chart.points`, a waterfall or back-to-back `chart.bar`, and the draw
   fan size their axis from every step of the slide, so a step that shows more never moves the axis. `domain`
   is still used as given.
-- **For component authors:** `ctx.stepProps` (the element's props at every step) and `ctx.chart`, 26 building
-  blocks of the built-in charts: table loading, extents, the plot frame, keyed joins, dots, whiskers, rules,
-  halos, a canvas layer, morph and entrance helpers, and colour helpers. The guide has a new section, "Build a
-  chart from the engine's pieces", and the contract an example per group. The gallery shows them at work in a
+- **For component authors:** `ctx.stepProps` (the element's props at every step) and `ctx.chart`, 28 building
+  blocks of the built-in charts: table loading, extents, the plot frame, keyed joins, dots, whiskers, rules, a
+  value axis, halos, a canvas layer, morph, entrance and `lerp` helpers, and colour helpers. The guide has a new
+  section, "Build a chart from the engine's pieces", and the contract an example per group. The gallery shows them at work in a
   group of its own, "Custom components": `gallery.slope`, a slope chart of about 100 lines with no `import`,
   whose labels slide to their new rank, whose `highlight` dims the rest and whose lines draw in as its entrance.
 - `validate` warns `chart-prop-unused` for `ticker` without `until` and for `invert` or `total` outside a

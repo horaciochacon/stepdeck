@@ -64,9 +64,8 @@ export default {
     /** Writes every attribute, `t` of the way from the last model to `m`; `tone` gives a category's colours now. */
     function place(m, t, tone = (d) => d) {
       const { f, y } = m;
-      const lerp = (a, b) => (t >= 1 || a == null || b == null ? b : a + (b - a) * t);
-      const value = (d, side) => lerp(last?.byKey.get(d.key)?.[side], d[side]);
-      const spot = (d, side) => lerp(last?.byKey.get(d.key)?.at[side], d.at[side]);
+      const value = (d, side) => C.lerp(last?.byKey.get(d.key)?.[side], d[side], t);
+      const spot = (d, side) => C.lerp(last?.byKey.get(d.key)?.at[side], d.at[side], t);
       const x = (side) => (side === "left" ? 0 : f.pw);
       svg.attr("width", f.w).attr("height", f.h);
       plot.attr("transform", `translate(${f.margin.left},${f.margin.top})`).attr("font-size", f.font);

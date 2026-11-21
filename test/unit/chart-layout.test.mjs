@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, cellValue, sortColumns } from "#engine/core/chart-layout.js";
+import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp, cellValue, sortColumns } from "#engine/core/chart-layout.js";
 import { chartKit } from "#engine/core/chart.js";
 import { parseCSV } from "#engine/core/data.js";
 import { d3 } from "#engine/core/d3.js";
@@ -24,6 +24,23 @@ test("cellValue: a blank-looking CSV cell is missing, never zero", () => {
   const rows = parseCSV('region,value\nA,3\nB, \nC,5\nD," "\n');
   assert.deepEqual(rows.map((r) => r.value), ["3", " ", "5", " "], "the column stays text, so the cells are strings");
   assert.deepEqual(rows.map((r) => cellValue(r, "value")), [3, null, 5, null]);
+});
+
+// lerp
+test("lerp blends a to b, and is exactly b at t = 1", () => {
+  assert.equal(lerp(0, 10, 0), 0);
+  assert.equal(lerp(0, 10, 0.25), 2.5);
+  assert.equal(lerp(10, 0, 0.5), 5);
+  assert.equal(0.7 + (0.1 - 0.7) * 1, 0.09999999999999998, "the plain formula misses b by a rounding error at t = 1");
+  assert.equal(lerp(0.7, 0.1, 1), 0.1, "so the last frame of a played change writes what a jump writes");
+});
+
+test("lerp with a missing end gives the end value: nothing to blend", () => {
+  assert.equal(lerp(null, 5, 0.5), 5, "a mark that appears starts where it ends");
+  assert.equal(lerp(undefined, 5, 0.5), 5);
+  assert.equal(lerp(5, null, 0.5), null, "a value that goes missing is missing at once");
+  assert.equal(lerp(5, undefined, 0.5), undefined);
+  assert.equal(chartKit.lerp, lerp, "the same function as ctx.chart.lerp");
 });
 
 test("cellValue and sortColumns are internal: chartKit keeps its names", () => {

@@ -27,12 +27,12 @@ import { d3 } from "../../core/d3.js";
 import { fit } from "../../core/chart.js";
 import { textColor } from "../../core/color.js";
 import { lerp, focusPaint, tweenColor } from "../../core/kit.js";
+import { lerp as lerpNull } from "../../core/chart-layout.js"; // a missing end gives the end value
 import { waterfall, hasTotal, backToBack, backToBackOrder, categoriesOf } from "./modes.js";
 
 export const TOTAL = "__total"; // the key of a waterfall's total bar
 const SIDES = ["left", "right"];
 
-const lerpNull = (a, b, t) => (a === null || b === null ? b : lerp(a, b, t));
 const tokenColor = (tokens, name) => tokens?.[name]?.trim() || null; // a value: var() does not work in a fill attribute
 
 // --- Waterfall: model ---------------------------------------------------------------------------------------------

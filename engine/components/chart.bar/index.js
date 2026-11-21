@@ -48,7 +48,7 @@
 // and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, opacityAttr, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
-import { cellValue } from "../../core/chart-layout.js";
+import { cellValue, lerp as lerpNull } from "../../core/chart-layout.js"; // lerpNull: a missing end gives the end value
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
 import { waterfallSteps, waterfallDomain, backToBack, backToBackSpan, barOrder, categoriesOf, hasTotal } from "./modes.js";
 import {
@@ -60,7 +60,6 @@ const GROW = 0.6; // share of a motion in which an entering bar grows; its whisk
 const THICK = 0.65; // bar thickness as a share of its band
 const THICK_MAX = 4; // ... and its cap, in label font sizes
 
-const lerpNull = (a, b, t) => (a === null || b === null ? b : lerp(a, b, t));
 const tokenColor = (tokens, name) => tokens?.[name]?.trim() || null; // a value: var() does not work in a fill attribute
 
 /** Loads the rows and checks the props against them. Throws naming the column or the category. */

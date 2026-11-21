@@ -321,9 +321,9 @@ const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 
 `ctx.chart` is the set of building blocks the built-in charts are made of, for a component that draws its own chart. A component that reads only `ctx.chart` needs no `import`, so it keeps working wherever the engine's files live. The object is frozen and is the same one for every component and child. The marks take d3 selections and write attributes; their colours and sizes are yours, from theme tokens and `ctx.palette()`, and the theme styles what it decides (the background outline of a dot, the ink of a whisker, the halos) through generic classes. Where an option says "value or accessor", a function is called per node as `(d, i, nodes)`.
 
-**Public and internal.** The 26 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
+**Public and internal.** The 28 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
 
-The names are in eleven groups. Each group has its signatures and one short example. The examples are fragments: they assume a selection per kind of mark (`circles`, `whiskers`, `rules`, `labels`, `shade`) and the rows, scales (`x`, `y`) and frame (`f`) of the groups before them. The Joins group shows a whole `update`, and `test/fixtures/decks/chart-kit/components/fixture.marks/index.js` is a working component that calls the Data, Frame, Joins, Motion, Marks and Canvas groups.
+The names are in eleven groups. Each group has its signatures and one short example. The examples are fragments: they assume a selection per kind of mark (`circles`, `whiskers`, `rules`, `labels`, `shade`, and the axis group `axisG`) and the rows, scales (`x`, `y`) and frame (`f`) of the groups before them. The Joins group shows a whole `update`, and `test/fixtures/decks/chart-kit/components/fixture.marks/index.js` is a working component that calls the Data, Frame, Joins, Motion, Marks and Canvas groups.
 
 #### Data
 
@@ -375,7 +375,7 @@ Write an update as the `keyed` joins, then `settle(svg)`, then every attribute, 
 async update(props, info = {}) {
   const f = ctx.chart.frame(el, ctx, ({ font, charW }) => ({ left: charW * 4, right: font, top: font, bottom: font * 2 }));
   join(props); // ctx.chart.keyed joins: leavers get .sd-exiting, nothing is removed yet
-  if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => draw(f, ctx.d3.interpolateNumber(last.k, props.k)(t)));
+  if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => draw(f, ctx.chart.lerp(last.k, props.k, t)));
   ctx.chart.settle(svg.node()); // removes the leavers and the animation's leftovers
   draw(f, props.k); // the end state, every attribute
 }
@@ -390,8 +390,9 @@ The same order, step by step, in a component of its own: [Build a chart from the
 | `morph` | `morph(info, ctx, frame, { factor, duration }) → Promise` | Plays `frame(t)` for t from 0 to 1 over `duration`, else the step's transition, else `factor` (default 2) × `--sd-duration`, with the theme's easing and the step's `signal`. |
 | `entrance` | `entrance(info, ctx, { factor }) → { draw, duration, ease, signal }` | For a component that owns its entrance: `draw` is true for a draw entrance that is not aborted; `duration` is `info.entrance.duration`, else as `morph`'s. |
 | `undraw` | `undraw(path)` | Hides an SVG path along its length: the start state of `ctx.animate.drawPath`. |
+| `lerp` | `lerp(a, b, t) → value` | `a + (b - a) × t`, and exactly `b` when `t` is 1. When `a` or `b` is `null` or undefined, the result is `b`. |
 
-`morph` runs one tween over the theme's timing and the step's `signal`; you write the end state yourself afterwards. A component that owns its entrance asks `entrance` whether to draw.
+`morph` runs one tween over the theme's timing and the step's `signal`; you write the end state yourself afterwards. A component that owns its entrance asks `entrance` whether to draw. Inside a frame, `lerp` blends each value from where it was to where it goes: a mark with no previous value (`null`) is drawn where it ends, and at `t` = 1 the value is exactly the end value, as a jump writes it.
 
 ```js
 const e = ctx.chart.entrance(info, ctx); // { draw, duration, ease, signal }
@@ -400,6 +401,8 @@ const rows = await ctx.chart.loadTable(props, ctx, "my.chart", columns);
 // … the joins, settle and the end state, every attribute …
 if (e.draw) await ctx.animate.drawPath(line.node(), { duration: e.duration, signal: e.signal });
 else if (info.animate && last && !info.entered) await ctx.chart.morph(info, ctx, (t) => place(t));
+// in place(t): each dot from its last x (a Map by key) to its new one; a new dot starts where it ends
+circles.attr("cx", (d) => ctx.chart.lerp(lastX.get(d.key), x(d.value), t));
 ```
 
 #### Order
@@ -421,6 +424,7 @@ const keys = ctx.chart.rank(rows.map((r) => ({ key: r.group, value: r.score, col
 | `dot` | `dot(selection, { r, color, hollow })` | Class `sd-dot` (`sd-dot-hollow` when hollow) and `r`. Filled: `fill` is `color`, and the theme outlines it in the background colour. Hollow: `stroke` is `color`, and the theme fills it with the background colour. Options are values or accessors; positions are yours. |
 | `whisker` | `whisker(selection, { at, lo, hi, cap, orient })` | On each `g`, class `sd-whisker` and the lines `sd-whisker-line`, `sd-whisker-cap-lower` and `sd-whisker-cap-upper`, placed from `lo` to `hi` across `at` (`orient`: `"horizontal"`, the default, or `"vertical"`). The theme draws them in the ink colour. |
 | `rule` | `rule(selection, { x1, y1, x2, y2, label, anchor }) → selection` | On each `g`, a `line.sd-rule` and, while `label` is not empty, a `text.sd-rule-label` at the rule's `"start"` (default), `"middle"` or `"end"`. |
+| `axis` | `axis(g, { scale, orient, length, ticks, format, fade }) → ticks` | A value axis for a continuous `scale`: one `g.sd-axis-tick` per tick, keyed by value, with a `line.sd-axis-grid` across the plot (`length` long) and a `text.sd-axis-label`. `orient` `"y"` (the default) puts the ticks down the plot and the labels left of it; `"x"` puts them along it and the labels below `length`. `ticks` defaults to `scale.ticks(5)`, `format` to `String`. It joins its own ticks, so call it where you write attributes: with `fade` (0 to 1) on the frames of a played change, where a new tick fades in and one that left fades out, and without it for the end state, which removes the ticks that left. |
 | `halo` | `halo(selection, { under }) → selection` | Default: class `sd-halo`, a background-colour outline for text (a dot has its outline already, so a halo on a dot changes nothing). `under: true`: a `.sd-halo-under` copy of each line or path before it (its geometry and `transform`, a wider background stroke), returned. Call it again after the geometry changes or the node moves. A copy has the node's tag, so in a parent that holds copies select the marks by class (`path.sd-line`), never by tag alone. |
 
 Marks write attributes and generic classes; the theme styles the classes. Positions, sizes and colours are yours.
@@ -430,9 +434,12 @@ ctx.chart.dot(circles, { r: f.font * 0.4, color: (d) => d.color });
 ctx.chart.whisker(whiskers, { at: (d) => y(d.key), lo: (d) => x(d.lo), hi: (d) => x(d.hi), cap: f.font * 0.5 });
 ctx.chart.rule(rules, { x1: 0, y1: 0, x2: f.pw, y2: 0, label: "Average", anchor: "end" });
 ctx.chart.halo(labels); // a background outline, so text reads over a line
+const ticks = y.ticks(5), format = ctx.chart.tickFormat(ctx, props.format, ticks);
+ctx.chart.axis(axisG, { scale: y, length: f.pw, ticks, format });              // the end state
+ctx.chart.axis(axisG, { scale: yAt(t), length: f.pw, ticks, format, fade: t }); // a frame of a played change, with that frame's scale
 ```
 
-The generic classes, styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events).
+The generic classes, styled by theme tokens only: `.sd-dot`, `.sd-dot-hollow`, `.sd-whisker-line`, `.sd-whisker-cap`, `.sd-rule`, `.sd-rule-label`, `.sd-axis-grid` (the grid colour), `.sd-axis-label` (the muted colour), `.sd-halo`, `.sd-halo-under` and `.sd-canvas-layer` (absolutely placed, no pointer events).
 
 #### Forecast
 

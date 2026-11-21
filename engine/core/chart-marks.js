@@ -158,6 +158,45 @@ export function rule(selection, { x1, y1, x2, y2, label = "", anchor = "start" }
   return selection;
 }
 
+/**
+ * A value axis for a continuous `scale`: under the `g` selection, one `g.sd-axis-tick` per tick value, keyed by
+ * value, each holding a `line.sd-axis-grid` across the plot and a `text.sd-axis-label`. It joins its ticks itself, so
+ * call it where the attributes are written, on every frame of a played change and for the end state. `orient` "y" (the default): a tick at y = scale(v), its grid line from x 0
+ * to `length`, its label left of x 0. "x": a tick at x = scale(v), its grid line from y 0 to `length`, its label
+ * below `length`. `ticks` defaults to `scale.ticks(5)`; `format` to `String` (pass `tickFormat(ctx, spec, ticks)`
+ * for labels in the deck's locale). Every tick is placed by `scale`, a leaving one too, so a played change that
+ * passes the scale of each frame moves them all. `fade` (0 to 1, for those frames): a new tick's opacity is
+ * `fade`, and a tick that left stays, with opacity `1 - fade`. Without `fade` (the end state) the ticks that left
+ * are removed, no tick has an opacity, and the rest count as on screen for the next played change. Every other
+ * attribute is written on every call, never dropped, so a played step ends with the markup of a jump.
+ * The theme draws the grid in `--sd-color-grid` and the labels in `--sd-color-muted`. Returns every tick.
+ * @param {import("d3").Selection<any, any, any, any>} g
+ * @param {{ scale: any, orient?: "y" | "x", length?: number, ticks?: number[], format?: (v: number) => string, fade?: number }} options
+ */
+export function axis(g, { scale, orient = "y", length = 0, ticks, format = String, fade }) {
+  keyed(g.selectAll(":scope > g.sd-axis-tick"), ticks ?? scale.ticks(5), (v) => String(v), (enter) => {
+    const tick = enter.append("g").attr("class", "sd-axis-tick");
+    tick.append("line").attr("class", "sd-axis-grid");
+    tick.append("text").attr("class", "sd-axis-label");
+    return tick;
+  });
+  if (fade === undefined) {
+    g.selectAll(":scope > g.sd-axis-tick.sd-exiting").remove();
+    g.selectAll(":scope > g.sd-axis-tick").each(function () { this.__sdSeen = true; }); // as `settle` marks what it keeps
+  }
+  const across = orient !== "x"; // a "y" axis: ticks down the plot, grid lines across it
+  const all = g.selectAll(":scope > g.sd-axis-tick")
+    .attr("transform", (v) => (across ? `translate(0,${scale(v)})` : `translate(${scale(v)},0)`))
+    .attr("opacity", fade === undefined ? null : function () {
+      return this.classList.contains("sd-exiting") ? 1 - fade : this.__sdSeen ? null : fade;
+    });
+  all.select("line.sd-axis-grid").attr("x1", 0).attr("y1", 0).attr("x2", across ? length : 0).attr("y2", across ? 0 : length);
+  all.select("text.sd-axis-label").attr("x", 0).attr("y", across ? 0 : length)
+    .attr("dx", across ? "-0.4em" : "0em").attr("dy", across ? "0.35em" : "1.2em")
+    .attr("text-anchor", across ? "end" : "middle").text((v) => format(v));
+  return all;
+}
+
 const HALO_GEOMETRY = ["d", "x1", "y1", "x2", "y2", "cx", "cy", "r", "points", "transform"];
 
 /**

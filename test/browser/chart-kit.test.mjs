@@ -307,3 +307,38 @@ test("paintLines breaks a line at a missing value and never draws it to zero", a
     assert.deepEqual(ctx.errors, []);
   });
 });
+
+test("axis: ticks keyed by value in the theme's look; a played change fades them in and out, then the leavers are gone", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a&motion=full") }, async (page, ctx) => {
+    const ticks = (axis) => page.evaluate((axis) => [...document.querySelectorAll(`[data-el="marks"] .fixture-axis-${axis} > g.sd-axis-tick`)].map((g) => ({
+      label: g.querySelector("text.sd-axis-label").textContent,
+      exiting: g.classList.contains("sd-exiting"),
+      opacity: g.getAttribute("opacity"),
+      anchor: g.querySelector("text").getAttribute("text-anchor"),
+    })), axis);
+    const look = await page.evaluate(() => ({
+      grid: getComputedStyle(document.querySelector('[data-el="marks"] .sd-axis-grid')).stroke,
+      label: getComputedStyle(document.querySelector('[data-el="marks"] .sd-axis-label')).fill,
+    }));
+    assert.equal(look.grid, await tokenRgb(page, "--sd-color-grid"), "grid lines are the grid colour");
+    assert.equal(look.label, await tokenRgb(page, "--sd-color-muted"), "tick labels are the muted colour");
+    const atA = await ticks("y");
+    assert.deepEqual(atA.map((t) => t.label), ["0", "2", "4", "6", "8", "10"]);
+    assert.ok(atA.every((t) => t.anchor === "end" && t.opacity === null && !t.exiting), "y labels end at the axis; at rest no tick has an opacity");
+    assert.deepEqual((await ticks("x")).map((t) => [t.label, t.anchor]), ["0", "1", "2", "3", "4", "5"].map((l) => [l, "middle"]));
+
+    await page.evaluate(() => { window.STEPDECK.goTo("marks", "b"); });
+    await page.waitForTimeout(120);
+    const mid = new Map((await ticks("y")).map((t) => [t.label, t]));
+    const between = (t) => t && t.opacity !== null && Number(t.opacity) > 0 && Number(t.opacity) < 1;
+    assert.ok(mid.get("2")?.exiting && between(mid.get("2")), "a tick that leaves stays, fading out");
+    assert.ok(!mid.get("15")?.exiting && between(mid.get("15")), "a new tick fades in");
+    assert.equal(mid.get("10")?.opacity, null, "a tick on both steps stays at full opacity");
+
+    await page.evaluate(() => window.STEPDECK.settled());
+    const atB = await ticks("y");
+    assert.deepEqual(atB.map((t) => t.label), ["0", "5", "10", "15", "20"], "the leavers are gone");
+    assert.ok(atB.every((t) => t.opacity === null && !t.exiting));
+    assert.deepEqual(ctx.errors, []);
+  });
+});

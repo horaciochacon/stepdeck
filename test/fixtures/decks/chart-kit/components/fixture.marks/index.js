@@ -1,6 +1,7 @@
 // fixture.marks: one of each shared chart mark, drawn only through `ctx.chart` (no imports). A pure
 // function of props: `update` ends by writing the end state (the keyed joins, then settle, then every attribute), and a played
-// step first morphs from the previous `k` to the new one.
+// step first morphs from the previous `k` to the new one. Two axes: an x axis on the data's x, and a y axis whose
+// domain grows with `k` (0 to 10, 20, 30), so ticks stay, enter and leave between steps.
 const SVG = "http://www.w3.org/2000/svg";
 
 export default {
@@ -10,6 +11,8 @@ export default {
     const svg = d3.select(el).append(() => doc.createElementNS(SVG, "svg")).attr("class", "fixture-marks").attr("display", "block");
     const plot = svg.append("g").attr("class", "fixture-plot");
     const area = plot.append("rect").attr("class", "fixture-plot-area").attr("fill", "none").attr("stroke", "none");
+    const gAxisY = plot.append("g").attr("class", "fixture-axis-y");
+    const gAxisX = plot.append("g").attr("class", "fixture-axis-x");
     const gVline = plot.append("g");
     const gRule = plot.append("g");
     const gWhisker = plot.append("g");
@@ -24,11 +27,16 @@ export default {
 
     /** The layout for props and rows: the frame, the scales, the plot size. */
     const layout = (rows, p) => {
-      const f = C.frame(el, ctx, ({ font, charW }) => ({ left: charW * 3, right: font, top: font * 1.5, bottom: font * 1.5 }));
+      const f = C.frame(el, ctx, ({ font, charW }) => ({ left: charW * 3, right: font, top: font * 3, bottom: font * 1.5 }));
       const x = d3.scaleLinear().domain(C.extentOf(rows, [p.x])).range([0, f.pw]);
       const y = d3.scaleLinear().domain(C.extentOf(rows, [p.y], { zero: true })).range([f.ph, 0]);
-      return { f, rows, p, k: Number(p.k ?? 0), points: rows.map((r) => [Number(r[p.x]), Number(r[p.y])]), x, y };
+      const k = Number(p.k ?? 0);
+      const yTicks = axisScale(f, k).ticks(5);
+      return { f, rows, p, k, points: rows.map((r) => [Number(r[p.x]), Number(r[p.y])]), x, y, yTicks,
+        yFmt: C.tickFormat(ctx, undefined, yTicks), xFmt: C.tickFormat(ctx, undefined, x.ticks(5)) };
     };
+    /** The y axis's scale after `k` moves: 0 to 10 × (1 + k). */
+    const axisScale = (f, k) => d3.scaleLinear().domain([0, 10 * (1 + k)]).range([f.ph, 0]);
 
     const one = (key) => [{ key }];
     /** The keyed joins: marks that appear are created, marks that leave get `.sd-exiting` (nothing is removed yet). */
@@ -43,13 +51,18 @@ export default {
       C.keyed(gExtra.selectAll("path.fixture-extra"), m.k === 1 ? one("x") : [], by, (enter) => enter.append("path").attr("class", "fixture-extra"));
     }
 
-    /** Writes every mark for the layout `m` with `k` moves done (`k` is fractional while a morph plays). */
-    function place(m, k) {
+    /** Writes every mark for the layout `m` with `k` moves done (`k` is fractional while a morph plays, and `fade`
+     * the morph's progress, for the ticks that enter and leave). */
+    function place(m, k, fade) {
       const { f } = m;
       const u = k / 2;
       svg.attr("width", f.w).attr("height", f.h).attr("viewBox", `0 0 ${f.w} ${f.h}`);
       plot.attr("transform", `translate(${f.margin.left},${f.margin.top})`);
       area.attr("width", f.pw).attr("height", f.ph);
+
+      // The axes: the y ticks are the end state's, placed by the scale of this frame.
+      C.axis(gAxisY, { scale: axisScale(f, k), length: f.pw, ticks: m.yTicks, format: m.yFmt, fade });
+      C.axis(gAxisX, { scale: m.x, orient: "x", length: f.ph, format: m.xFmt });
 
       // A vertical line with a halo under it: the canvas lines cross it, and it paints above them.
       const vline = gVline.selectAll("path.fixture-vline:not(.sd-exiting)")
@@ -91,7 +104,7 @@ export default {
         join(m); // joins first: they mark the leavers; settle then removes them
         if (info.animate && last && !info.entered && !info.signal?.aborted) {
           const from = last.k;
-          await C.morph(info, ctx, (t) => place(m, from + (m.k - from) * t), { factor: 1 });
+          await C.morph(info, ctx, (t) => place(m, C.lerp(from, m.k, t), t), { factor: 1 });
         }
         C.settle(svg.node());
         place(m, m.k);

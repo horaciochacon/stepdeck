@@ -2,14 +2,14 @@
 // which every component receives as `ctx.chart`. The pure layout maths is in ./chart-layout.js, the DOM marks,
 // frame, joins and canvas layer in ./chart-marks.js, the motion in ./chart-motion.js.
 import { d3 } from "./d3.js";
-import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm } from "./chart-layout.js";
-import { frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines } from "./chart-marks.js";
+import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp } from "./chart-layout.js";
+import { frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines } from "./chart-marks.js";
 import { morph, entrance, undraw } from "./chart-motion.js";
 import { focusPaint, tweenColor } from "./kit.js";
 import { textColor } from "./color.js";
 
-export { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm } from "./chart-layout.js";
-export { frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines } from "./chart-marks.js";
+export { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp } from "./chart-layout.js";
+export { frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines } from "./chart-marks.js";
 export { morph, entrance, undraw } from "./chart-motion.js";
 
 /**
@@ -47,7 +47,7 @@ export const opacityAttr = (d) => (d.opacity === 1 ? null : d.opacity);
  */
 export const chartKit = Object.freeze({
   loadTable, tickFormat,
-  extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm,
-  frame, keyed, settle, dot, whisker, band, rule, halo, canvasLayer, paintLines, morph, entrance, undraw,
+  extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp,
+  frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines, morph, entrance, undraw,
   focusPaint, tweenColor, textColor,
 });
