@@ -32,6 +32,8 @@ const STEPS = {
   highlight: ["all", "focus", "after", "wide"],
   missing: ["first", "later"],
   entrance: ["start", "go", "more"],
+  resort: ["data", "desc", "list", "later"],
+  "resort-shown": ["start", "both", "all", "flip", "less"],
 };
 
 // Per row, in the svg's own pixels (attributes) and on screen (boxes, for overflow).
@@ -108,23 +110,38 @@ test("chart.points renders estimates with whiskers on halos and labels that fit"
   });
 });
 
-test("jump equals played, backward, interrupted", async () => {
-  await withPage({ root, url: pages.url("estimates", "step=base") }, async (page, ctx) => {
-    for (const [slide, steps] of Object.entries(STEPS)) {
+// Each slide, and each interrupted move, is a test of its own: a failure names the slide, and none runs long.
+const INTERRUPTS = [
+  ["estimates", "base", "later", "titled"],
+  ["estimates", "later", "titled", "base"],
+  ["highlight", "all", "focus", "after"],
+  ["highlight", "after", "wide", "focus"],
+  ["shown", "none", "one", "all"],
+  ["shown", "three", "all", "none"],
+  ["reference", "none", "line", "moved"],
+  ["missing", "first", "later", "first"],
+  ["entrance", "start", "go", "more"],
+  ["resort", "data", "desc", "list"],
+  ["resort", "list", "later", "desc"],
+  ["resort-shown", "start", "both", "all"],
+  ["resort-shown", "both", "all", "flip"],
+  ["resort-shown", "flip", "less", "all"],
+];
+for (const [slide, steps] of Object.entries(STEPS)) {
+  test(`${slide}: played, jumped and backward end the same`, async () => {
+    await withPage({ root, url: pages.url(slide, `step=${steps[0]}`) }, async (page, ctx) => {
       await expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id: "points" });
       await expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id: "points" });
-    }
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "estimates", from: "base", via: "later", to: "titled", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "estimates", from: "later", via: "titled", to: "base", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "highlight", from: "all", via: "focus", to: "after", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "highlight", from: "after", via: "wide", to: "focus", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "shown", from: "none", via: "one", to: "all", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "shown", from: "three", via: "all", to: "none", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "reference", from: "none", via: "line", to: "moved", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "missing", from: "first", via: "later", to: "first", id: "points" });
-    await expectInterruptEqualsJump(ctx, page, { pages, slide: "entrance", from: "start", via: "go", to: "more", id: "points" });
+    });
   });
-});
+}
+for (const [slide, from, via, to] of INTERRUPTS) {
+  test(`${slide}: '${from}' -> '${via}' interrupted by '${to}' ends as a jump`, async () => {
+    await withPage({ root, url: pages.url(slide, `step=${from}`) }, async (page, ctx) => {
+      await expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id: "points" });
+    });
+  });
+}
 
 test("a played step really moves: y tweens, rows grow in, the reference and the titles fade", async () => {
   await withPage({ root, url: pages.url("estimates", "step=base") }, async (page, ctx) => {
@@ -265,6 +282,143 @@ test("domain error shows on the slide", async () => {
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
+
+test("unknown sort column shows on the slide", async () => {
+  await withPage({ root, url: broken.url("sort-error", "") }, async (page, ctx) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual(errors, ["sort-error/points: sort column 'ritmo' not found (columns: region, rate, low, high, rate2, low2, high2)"]);
+    const shown = await page.evaluate(() => document.querySelector('[data-el="points"] .sd-error')?.textContent);
+    assert.match(shown ?? "", /sort column 'ritmo' not found/);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible");
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+// The y a row (or its category label) is placed at, from its transform.
+const slotY = (page, key, what = "row") =>
+  page.evaluate(([key, what]) => {
+    const node = what === "row"
+      ? document.querySelector(`[data-el="points"] g.sd-points-row[data-key="${key}"]`)
+      : document.querySelector(`[data-el="points"] text.sd-points-label[data-key="${key}"]`);
+    return Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(node.getAttribute("transform"))[1]);
+  }, [key, what]);
+
+const rowOrder = (page) =>
+  page.evaluate(() => [...document.querySelectorAll('[data-el="points"] g.sd-points-row')].map((g) => g.dataset.key));
+
+test("resort: rows pass through intermediate positions", async () => {
+  await withPage({ root, url: pages.url("resort", "step=data&motion=full") }, async (page, ctx) => {
+    const before = {};
+    for (const key of ["Norte", "Este", "Centro"]) before[key] = [await slotY(page, key), await slotY(page, key, "label")];
+    assert.deepEqual(await rowOrder(page), ["Norte", "Sur", "Este", "Oeste", "Centro"], "data order first");
+    const r = await sampleFrames(page, "resort", "desc", "points", (el) => {
+      const y = (sel) => Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(el.querySelector(sel).getAttribute("transform"))[1]);
+      return Object.fromEntries(["Norte", "Este", "Centro"].map((k) => [k, {
+        row: y(`g.sd-points-row[data-key="${k}"]`),
+        label: y(`text.sd-points-label[data-key="${k}"]`),
+        dot: Number(el.querySelector(`g.sd-points-row[data-key="${k}"] circle.sd-dot`).getAttribute("cx")),
+      }]));
+    });
+    // Norte 0 -> 2, Este 2 -> 1, Centro 4 -> 0 (slots); the dots stay where they are on the axis.
+    for (const key of ["Norte", "Este", "Centro"]) {
+      const old = before[key][0];
+      const now = r.end[key].row;
+      assert.notEqual(old, now, `${key} changes rank`);
+      const [lo, hi] = [Math.min(old, now), Math.max(old, now)];
+      assert.ok(r.frames.some((f) => f[key].row > lo + 1 && f[key].row < hi - 1), `${key}: a frame strictly between ${old} and ${now}`);
+      assert.ok(r.frames.every((f) => f[key].row >= lo - 0.01 && f[key].row <= hi + 0.01), `${key}: never past either end`);
+      assert.ok(r.frames.some((f) => f[key].label > lo + 1 && f[key].label < hi - 1), `${key}: its label slides too`);
+      assert.ok(r.frames.every((f) => Math.abs(f[key].label - f[key].row) < 0.01), `${key}: the label stays level with its row`);
+      assert.equal(r.end[key].label, now, `${key}: the label ends at the row's place`);
+      assert.ok(r.frames.every((f) => f[key].dot === r.end[key].dot), `${key}: the dot only moves along the rows`);
+    }
+    const moving = r.frames.filter((f) => f.Centro.row !== r.frames[0].Centro.row && f.Centro.row !== r.end.Centro.row);
+    assert.ok(moving.length >= 3, `seen part-way in several frames (${moving.length})`);
+    assert.ok(moving.at(-1).ms - moving[0].ms < r.settledMs, "inside the morph");
+    assert.deepEqual(await rowOrder(page), ["Centro", "Este", "Norte", "Sur", "Oeste"], "the markup follows the new order");
+    await ctx.open(pages.url("resort", "step=desc"));
+    assert.deepEqual(await rowOrder(page), ["Centro", "Este", "Norte", "Sur", "Oeste"], "as does a jump");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("resort while a category appears", async () => {
+  await withPage({ root, url: pages.url("resort-shown", "step=start&motion=full") }, async (page, ctx) => {
+    const at = await rows(page);
+    assert.deepEqual(Object.entries(at).filter(([, r]) => r.visible).map(([k]) => k), ["Norte", "Sur"]);
+    const first = { Norte: await slotY(page, "Norte"), Sur: await slotY(page, "Sur") };
+    const r = await sampleFrames(page, "resort-shown", "both", "points", (el) => {
+      const y = (k) => Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(el.querySelector(`g.sd-points-row[data-key="${k}"]`).getAttribute("transform"))[1]);
+      const label = (k) => Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(el.querySelector(`text.sd-points-label[data-key="${k}"]`).getAttribute("transform"))[1]);
+      return {
+        Este: y("Este"), EsteLabel: label("Este"), EsteR: Number(el.querySelector('g.sd-points-row[data-key="Este"] circle.sd-dot').getAttribute("r")),
+        Norte: y("Norte"), Sur: y("Sur"),
+      };
+    });
+    // Este (15.2) ranks first: it grows in at its final place while Norte and Sur slide down to make room.
+    assert.ok(r.frames.some((f) => f.EsteR > 0 && f.EsteR < r.end.EsteR), "Este is seen growing");
+    assert.ok(r.frames.every((f) => f.Este === r.end.Este && f.EsteLabel === r.end.Este), "from its first frame, at its final place");
+    for (const key of ["Norte", "Sur"]) {
+      assert.ok(r.end[key] > first[key] + 1, `${key} slides down (${first[key]} -> ${r.end[key]})`);
+      assert.ok(r.frames.some((f) => f[key] > first[key] + 1 && f[key] < r.end[key] - 1), `${key} passes between`);
+    }
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "resort-shown", "both", "points"));
+
+    // Oeste has no estimate and is hidden: it ranks last, keeps its place and shows "sin datos" when it appears.
+    await ctx.open(pages.url("resort-shown", "step=both"));
+    assert.deepEqual(await rowOrder(page), ["Este", "Norte", "Sur", "Oeste"]);
+    const hidden = await rows(page);
+    assert.equal(hidden.Oeste.visible, false);
+    const oeste = hidden.Oeste.transform;
+    await ctx.open(pages.url("resort-shown", "step=all&motion=full"));
+    assert.equal((await rows(page)).Oeste.transform, oeste, "Oeste appears in the slot it already had");
+    assert.equal((await rows(page)).Oeste.noData.text, "sin datos");
+    await goTo(page, "resort-shown", "flip");
+    assert.deepEqual(await rowOrder(page), ["Sur", "Norte", "Este", "Oeste"], "lowest first; the empty row still last");
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "resort-shown", "flip", "points"));
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// The side a value label takes comes from the row it ends at (the row it starts from, for one that leaves), so it
+// never jumps from one side of its whisker to the other part-way through a motion.
+const ANCHOR_STEPS = [
+  ["entrance", "start", "go"],
+  ["estimates", "base", "later"],
+  ["highlight", "after", "wide"],
+  ["shown", "one", "three"],
+  ["resort", "list", "later"],
+  ["resort-shown", "flip", "less"],
+];
+for (const [slide, from, to] of ANCHOR_STEPS) {
+  test(`value labels keep their side through ${slide}: '${from}' -> '${to}'`, async () => {
+    await withPage({ root, url: pages.url(slide, `step=${from}&motion=full`) }, async (page, ctx) => {
+      const r = await sampleFrames(page, slide, to, "points", (el) => Object.fromEntries([...el.querySelectorAll("g.sd-points-row")].map((g) => {
+        const line = g.querySelector("line.sd-whisker-line");
+        const value = g.querySelector("text.sd-points-value");
+        const at = (node, a) => (node ? Number(node.getAttribute(a)) : null);
+        return [g.dataset.key, { anchor: value?.getAttribute("text-anchor") ?? null, cx: at(g.querySelector("circle.sd-dot"), "cx"), r: at(g.querySelector("circle.sd-dot"), "r"), x2: at(line, "x2") }];
+      })));
+      const same = (a, b) => a.cx === b.cx && a.r === b.r && a.x2 === b.x2;
+      let mid = 0;
+      for (const key of Object.keys(r.end).filter((k) => !["ms", "visible", "style"].includes(k))) {
+        const frames = r.frames.map((f) => f[key]);
+        const inside = frames.filter((f) => !same(f, frames[0]) && !same(f, r.end[key]));
+        mid += inside.length;
+        const anchors = new Set(inside.filter((f) => f.anchor !== null).map((f) => f.anchor));
+        const want = new Set(r.end[key].anchor === null ? [] : [r.end[key].anchor]);
+        // A leaver ends hidden; the side it kept is the one it had at the start.
+        const kept = to === "less" ? new Set(frames[0].anchor === null ? [] : [frames[0].anchor]) : want;
+        for (const a of anchors) assert.ok(kept.has(a), `${key}: '${a}' mid-motion, but the label sits '${[...kept]}' (${[...anchors]})`);
+      }
+      assert.ok(mid > 0, "the motion was seen part-way");
+      assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
 
 test("owned entrance grows from the reference", async () => {
   await withPage({ root, url: pages.url("entrance", "step=start&motion=full") }, async (page, ctx) => {

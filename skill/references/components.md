@@ -110,6 +110,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `interval` adds the whisker; `reference` (a number, or `{ value, label }`) draws a dashed line across every row, such as an average.
 - The value axis covers `y`, the interval columns and `reference` of every step of the slide, so switching `y` moves the dots and never the axis. Set `domain` only to fix the range yourself; an estimate outside it is an element error.
 - `shown` brings rows in one by one, each growing out of the reference line; hidden rows keep their place. `highlight` dims the other rows; use `only` so it lasts one step.
+- `sort` orders the rows: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden rows keep their place, empty values come last, and changing it on a step slides every row to its new place.
 - An empty `y` cell shows "no data" (`sin datos` in Spanish) beside the label, never a dot at zero.
 - It counts as a figure, so the slide needs a `role: "source"` line. It fills the room its region leaves, like `chart.bar`.
 

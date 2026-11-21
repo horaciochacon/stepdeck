@@ -61,6 +61,7 @@ A second estimate set on a later step (`test/fixtures/decks/points/slides/estima
 | `types` | `{ column: "string" \| "number" \| "date" }` | guessed | snap | CSV column types for the data loader. An undeclared column is a number only when every non-empty value looks like one. |
 | `domain` | `[min, max]` | from every step | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). |
 | `shown` | string[] | every category | draw | Categories to show, by name. A row that appears grows out of the origin, then draws its whisker. Hidden rows keep their place. |
+| `sort` | `"none"` \| `"value"` \| `"-value"` \| `{ by, order? }` \| string[] | `"none"` | tween | Order of the rows. See [Sorting](#sorting). |
 | `highlight` | string | none | fade | One category to emphasize. The other rows' dots and whiskers turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color. |
 | `reference` | number \| `{ value, label? }` | none | fade | A dashed line across every row at `value`, with `label` above the plot when it is set. |
 
@@ -73,6 +74,34 @@ Each category must appear in exactly one row. A second row with the same categor
 ### Missing values
 
 A row whose `y` cell is empty keeps its row and its category label, and shows the engine string "no data" (`sin datos` in a Spanish deck) in `--sd-color-muted`, with no dot, no whisker and no value label. A missing value is never drawn as zero, and it does not reach the axis as zero. A row with a value but an empty interval bound has a dot and no whisker.
+
+## Sorting
+
+`sort` decides the order of the rows down the plot. Every category is ranked, shown or not, so a row that `shown` hides keeps its place in the order and appears there.
+
+| `sort` | Order |
+| --- | --- |
+| `"none"`, or omitted | The data order. |
+| `"value"` | By `y`, lowest first. |
+| `"-value"` | By `y`, highest first. |
+| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A text column compares by code point. |
+| `["North", "South"]` | Those categories first, in that order, then the rest in data order. |
+
+Ties keep the data order. A row with no value (an empty cell, which reads "no data") comes last whichever way the order runs. Sorting changes the order and nothing else: the axis, the margins and every row's values are the same.
+
+```js
+{ id: "points", region: "main", type: "chart.points",
+  props: { data: "data/estimates.csv", x: "region", y: "rate" } },
+// ...
+steps: [
+  { id: "data" },
+  { id: "ranked", set: { points: { sort: "-value" } } },
+],
+```
+
+On a played step, a change of `sort` slides every row, with its category label, from its old place to its new one in one motion. A row that appears on the same step is already at its final place while it grows, and the others slide to make room. `sort` and `y` can change together: the dots move along the axis while the rows change places.
+
+The errors are the ranking's own. An unknown column fails the element with `sort column '<c>' not found (columns: a, b, …)`, an unknown category in a list with ``category '<k>' in `sort` not found (categories: …)``, and any other form with `` `sort` must be "none", "value", "-value", { by, order } or a list of categories``.
 
 ## The value axis
 
@@ -95,6 +124,7 @@ The origin of a growing row is the reference value when it is inside the axis, e
 | Change | What you see |
 | --- | --- |
 | `y` or `interval` changes | Every dot, whisker and value label moves to its new place. A whisker that appears draws out of its dot; one that goes retracts into it. |
+| `sort` changes | Every row and its category label slide from the old place to the new one, in one motion. |
 | A category enters `shown` | Over the first 60% of the motion the dot slides out of the origin as it grows; over the remaining 40% the whisker draws outward from the dot. The value label follows the dot and its opacity rises with it. |
 | A category leaves `shown` | The reverse: the whisker retracts, then the dot shrinks back into the origin. The row is then hidden. |
 | A value becomes empty, or an empty one gets a value | The dot shrinks (or grows) where it is, never through zero, while "no data" fades in (or out). |
@@ -104,7 +134,7 @@ The origin of a growing row is the reference value when it is inside the axis, e
 | An axis title set, changed or cleared | It fades in or out, or the new text fades in over the old one. The plot keeps its size: room for a title is kept at every step that has one. |
 | The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown row grows out of the origin and draws its whisker, while the box stays still and the axis, labels and reference show at once (over the element's own `enter.duration` when set). With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the rows are drawn at once; with `enter: "none"` nothing moves. |
 
-No motion plays, and the new state is drawn at once, when the set or order of categories changes (for example `data` or `x` points at different rows).
+No motion plays, and the new state is drawn at once, when the set of categories changes (for example `data` or `x` points at different rows).
 
 An aborted step (you press next again before the motion ends) snaps to its end state. Every update ends by writing the target state from the props and rows alone, and the component writes attributes only, never inline styles. So the markup after a played step equals the markup after jumping to it, which is what `check --played` compares.
 
@@ -112,13 +142,13 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 
 | Aspect | Rule |
 | --- | --- |
-| Rows | One band per category, in data order, down the plot. A hidden row keeps its band and is hidden with `visibility`, together with its category label. |
+| Rows | One band per category, in the [sorted](#sorting) order (data order without `sort`), down the plot. A hidden row keeps its band and is hidden with `visibility`, together with its category label. |
 | Dot | Radius 0.35 × the label font size (`--sd-font-size-label`, 28px, so about 10px), smaller in narrow bands. The first color of the categorical palette, or `--sd-color-accent` without one. The theme outlines it in the background color. |
 | Whisker | Ink, 3px, with end caps, on a 9px background halo so it reads over grid lines and the reference. Dimmed rows use `--sd-color-dim`. |
-| Value labels | Weight 600, ink (muted when dimmed), on a background halo. Past the upper end of the whisker (or of the dot, without one) when the label fits inside the chart; else past the lower end, left of the whisker; only when neither fits, inside the whisker against its upper end. |
+| Value labels | Weight 600, ink (muted when dimmed), on a background halo. Past the upper end of the whisker (or of the dot, without one) when the label fits inside the chart; else past the lower end, left of the whisker; only when neither fits, inside the whisker against its upper end. The side is chosen from the row where it ends (where it starts, for a row that leaves) and kept through a motion: the label follows its mark and never jumps to the other side part-way. |
 | Category labels | Left of the plot, in ink, right-aligned. Long names wrap: up to about a third of the chart width per line, and as many lines as fit the band. A label that does not fit ends with `…`. |
 | Reference | `--sd-color-muted`, dashed, from the top to the bottom of the plot. Its label sits above the plot, right of the line when it fits, else left of it. |
-| Margins | Computed from character counts, not measured text, and from every step of the slide (its titles, its reference label, the tick labels of its own axis), so nothing that appears later resizes the plot. The right margin is small (half the widest tick label); a value label near the right edge moves to the left of its whisker instead. |
+| Margins | Computed from character counts, not measured text, and from every step of the slide (its titles, its reference label, the tick labels of its own axis), so nothing that appears later resizes the plot. Each side keeps half of the widest tick label inside the chart; a value label near the right edge moves to the left of its whisker instead. |
 | Sizing | The chart takes the height the other elements in its region leave (`flex: 1 1 0`), like [`chart.bar`](chart-bar.md#sizing-give-the-chart-a-region-that-fills). In `statement` `main` it has no height. |
 | Accessibility | Each row has a `<title>` with the category, its value and the interval, formatted like the labels: `Norte: 12,4 (9,8 – 15,1)` in a Spanish deck, or `Oeste: sin datos`. |
 
@@ -186,9 +216,12 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category. |
 | ``category '<k>' in `shown` not found in <data> (categories: …)`` | `shown` names a category the data does not have. |
 | ``category '<k>' in `highlight` not found in <data> (categories: …)`` | `highlight` names a category the data does not have. |
+| `sort column '<c>' not found (columns: a, b, …)` | `sort: { by }` names a column the CSV does not have. |
+| ``category '<k>' in `sort` not found (categories: …)`` | A `sort` list names a category the data does not have. |
+| `` `sort` must be "none", "value", "-value", { by, order } or a list of categories`` | `sort` is none of those forms. |
 | ``estimate '<k>' (<value>) is outside `domain` [<a>, <b>]`` | A given `domain` stops short of an estimate (the first one, in data order). |
 
-`validate` checks that `x`, `y` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain`, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+`validate` checks that `x`, `y` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain`, `sort`, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 domain-error/points: estimate 'Norte' (12.4) is outside `domain` [0, 10]

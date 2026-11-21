@@ -15,6 +15,7 @@ rows can appear one by one out of the reference line, one row can be emphasized,
 | `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). |
 | `domain` | `[min, max]` | from every step | tween | Fixed value axis, used as given. An estimate outside it is an error. |
 | `shown` | string[] | all categories | draw | Categories to show, by name. A row that appears grows out of the reference line, then draws its whisker. |
+| `sort` | `"none"` \| `"value"` \| `"-value"` \| `{by, order?}` \| string[] | `"none"` | tween | Order of the rows: the data order, by `y` (lowest or highest first), by another column, or a list of categories first. See Sorting. |
 | `highlight` | string | none | fade | One category emphasized; the other rows turn the theme's dim color (`--sd-color-dim`). Use `only` so it lasts one step. |
 | `reference` | number \| `{value, label?}` | none | fade | A dashed line across every row, such as an average or a target, with an optional label above the plot. |
 
@@ -23,7 +24,13 @@ Behaviour:
   columns of **every step** of the slide (the props each step resolves to, read from the same data file), plus every
   step's `reference`, rounded outward to tick values. Zero is not forced. So switching `y` between steps moves the
   dots and never the axis.
-- **Rows keep their place.** Rows follow the data order whether or not they are shown; a hidden row is laid out
+- **Sorting.** `sort` orders the rows (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
+  `y`, lowest first, and `"-value"` highest first; `{ by, order }` orders by another column (ascending unless
+  `order` is `"desc"`); a list puts those categories first, in that order, and the rest after in data order. Ties
+  keep data order, rows without a value come last whichever way it runs, and text compares by code point. Every
+  category is ranked, shown or not, so a hidden row keeps its place in the order. The axis, margins and values do
+  not change with `sort`. An unknown column or category fails the element with `rank`'s message.
+- **Rows keep their place.** Rows follow the sorted order (the data order without `sort`) whether or not they are shown; a hidden row is laid out
   where it will be and hidden with `visibility` (dot, whisker, value label and category label). The room for an
   axis title, a labelled reference or the tick labels of a step's own `domain` is kept at every step of the slide,
   so the plot never resizes.
@@ -38,6 +45,8 @@ Behaviour:
   - a changed `y`, `interval` or `domain` tweens the dots, whiskers and value labels, and the axis (ticks that stay
     move, new ones fade in, dropped ones fade out);
   - a row that appears grows out of the origin, as in the entrance; a row that leaves does the reverse;
+  - a changed `sort` slides every row, with its category label, from its old place to its new one in the same motion;
+    a row that appears at the same step is already at its final place while it grows;
   - a value that becomes empty shrinks where it is while "no data" fades in, and the reverse;
   - `highlight` tweens the other rows' dots and whiskers to `--sd-color-dim` and their value labels to
     `--sd-color-muted` over `--sd-duration-fast`. Opacity is never used, so label contrast does not drop;
@@ -46,10 +55,12 @@ Behaviour:
 - **Idempotent.** Every `update` ends by writing the target state from props and rows alone; the component writes
   attributes only (never inline styles), so the markup after playing equals the markup after jumping.
 - **Labels.** A value label sits past the upper end of its whisker (or its dot) when it fits inside the chart, else
-  past the lower end; only when neither fits does it sit inside the whisker. Each has a background halo.
+  past the lower end; only when neither fits does it sit inside the whisker. Each has a background halo. The side
+  is chosen from the row at rest (where it ends; where it started, for a row that leaves) and kept through a
+  motion, so a label follows its mark and never jumps to the other side part-way.
   Without `format.y` value labels show the value as it is, and ticks use a fixed precision from the tick step.
   Category labels sit left of the plot and wrap. Everything is at least `--sd-min-audience-font` (it uses
-  `--sd-font-size-label`). Margins come from character counts, not measured text.
+  `--sd-font-size-label`). Margins come from character counts, not measured text; the left one keeps half of the widest tick label inside the chart.
 - **Layout.** The chart fills the room its region leaves (like `chart.line` and `chart.bar`), so a source line can
   share the region.
 - **Colors.** Dots use the first color of `ctx.palette("categorical")`; whiskers and value labels the ink color.

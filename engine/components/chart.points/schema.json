@@ -82,6 +82,24 @@
       "examples": [["North"], ["North", "South"]],
       "x-transition": "draw"
     },
+    "sort": {
+      "anyOf": [
+        { "enum": ["none", "value", "-value"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by"],
+          "properties": {
+            "by": { "type": "string", "description": "Column to order by.", "examples": ["rate_adjusted"] },
+            "order": { "enum": ["asc", "desc"], "description": "Ascending (the default) or descending.", "examples": ["desc"] }
+          }
+        },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Order of the rows. \"none\" (the default) keeps the data order; \"value\" orders by `y`, lowest first, and \"-value\" highest first; { by, order } orders by another column (ascending unless `order` is \"desc\"); a list of categories puts those first, in that order, and the rest after them in data order. Ties keep data order and rows without a value come last, whichever way it runs. Hidden rows keep their place in the order. When it changes on a played step, every row slides to its new place; a row that appears grows in at its place. An unknown column or category is an element error naming it.",
+      "examples": ["-value", { "by": "rate_adjusted", "order": "desc" }, ["North", "South"]],
+      "x-transition": "tween"
+    },
     "highlight": {
       "type": "string",
       "description": "Category to emphasize; the other rows' dots and whiskers turn the theme's dim color and their value labels the muted color (never faded, so labels keep their contrast). Usually set with `only` so it lasts one step. An unknown category is an element error naming it.",

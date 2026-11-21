@@ -19,6 +19,10 @@
 //   - a row that appears in `shown` grows out of the origin (the reference, else 0, else the domain's start): its
 //     dot slides out as it grows (GROW is that share of the motion), then its whisker draws outward; a row that
 //     leaves does the reverse. A value that turns missing shrinks where it is while "no data" fades in, and back;
+//   - `sort` orders the rows (rank, in ./model.js); when it changes, every row, with its category label, slides from
+//     its old slot to its new one in the same motion, and a row that appears is already at its final slot as it
+//     grows. A value label keeps the side of its mark it ends at (the side it started at, for a row that goes) and
+//     only its x follows the mark, so it never flips part-way;
 //   - `highlight` tweens the other rows' dots and whiskers to the theme's --sd-color-dim and their value labels to
 //     the muted colour, over --sd-duration-fast (never opacity);
 //   - `reference` and the axis titles fade: one that appears fades in, one that changes fades out as the new one
@@ -66,9 +70,43 @@ function sizes(m) {
 }
 
 /**
+ * Which side of its mark a row's value label takes, decided once from the row at rest (its whole whisker, its dot at
+ * full size, the model's own axis) and then kept through a motion, so it never flips part-way: `edge` is the end of
+ * the mark it sits against (`top` the upper end, `bottom` the lower) and `anchor` its `text-anchor`. Past the upper
+ * end when the label fits in the svg, else past the lower end, and only when neither fits inside the whisker. Null
+ * for a row without a value.
+ */
+const sides = new WeakMap();
+function sideOf(m, row) {
+  if (row.missing) return null;
+  let own = sides.get(m);
+  if (!own) sides.set(m, (own = new Map()));
+  if (!own.has(row.key)) {
+    const { r } = sizes(m);
+    const x = d3.scaleLinear().domain(m.domain).range([0, m.pw]);
+    const [d0, d1] = m.domain;
+    const clamped = (v) => x(Math.min(Math.max(v, Math.min(d0, d1)), Math.max(d0, d1)));
+    const at = x(row.value);
+    const top = Math.max(row.hi === null ? at : clamped(row.hi), at + r);
+    const bottom = Math.min(row.lo === null ? at : clamped(row.lo), at - r);
+    const width = row.text.length * m.charW;
+    const range = [0, m.pw + m.margin.right];
+    const gap = m.font * 0.4;
+    const right = fit(top, bottom, width, range, gap);
+    const left = right.inside ? fit(bottom, top, width, range, gap) : null;
+    const spot = left && !left.inside && left.anchor === "end" ? left : right;
+    const lower = spot === left || (!spot.inside && spot.anchor === "end"); // past the lower end, not against the upper
+    own.set(row.key, { edge: lower ? "bottom" : "top", anchor: spot.anchor });
+  }
+  return own.get(row.key);
+}
+
+/**
  * One row at time t of a change from `p` (the row before; null when there is none, or for an entrance) to `b`.
  * `v` is where the dot is (data units), `grow` its size (0..1), `whisker` how far its whisker is drawn out of it
- * (0..1), `label` the opacity of its value label and `noData` that of its "no data" mark.
+ * (0..1), `label` the opacity of its value label and `noData` that of its "no data" mark. A row slides from its old
+ * slot to its new one; one that was hidden has no old place, so it is at its new one from the start. `leaving` is
+ * true while a row that is drawn goes away (its label keeps the side it had).
  */
 function rowAt(p, b, t, enterAll, origin) {
   const was = enterAll ? null : p;
@@ -77,8 +115,9 @@ function rowAt(p, b, t, enterAll, origin) {
   const blank0 = Boolean(was && was.shown && was.missing);
   const blank1 = b.shown && b.missing;
   const s = {
-    slot: p ? lerp(p.slot, b.slot, t) : b.slot,
+    slot: was?.shown ? lerp(was.slot, b.slot, t) : b.slot,
     visible: Boolean(was?.shown) || b.shown,
+    leaving: drawn0 && !drawn1,
     v: b.value ?? p?.value ?? null, lo: b.lo ?? p?.lo ?? null, hi: b.hi ?? p?.hi ?? null,
     grow: 1, whisker: 1, label: 1,
     noData: blank0 === blank1 ? 1 : blank1 ? t : 1 - t,
@@ -114,10 +153,15 @@ function viewAt(from, to, t, enterAll, live = null) {
     domain: [lerp(ref.domain[0], to.domain[0], t), lerp(ref.domain[1], to.domain[1], t)],
     in: enterAll ? 1 : t,
     out: 1 - t,
-    rows: new Map(to.rows.map((b) => [b.key, {
-      ...rowAt(prev.get(b.key) ?? null, b, t, enterAll, origin),
-      ...(live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill }),
-    }])),
+    rows: new Map(to.rows.map((b) => {
+      const s = rowAt(prev.get(b.key) ?? null, b, t, enterAll, origin);
+      // A value label takes the side its row ends at (the side it started at, for a row that goes).
+      return [b.key, {
+        ...s,
+        side: s.leaving ? sideOf(from, prev.get(b.key)) : sideOf(to, b),
+        ...(live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill }),
+      }];
+    })),
   };
 }
 
@@ -233,19 +277,15 @@ export default {
             halo(wg.select(".sd-whisker-line"), { under: true });
           }
           dot(row.selectAll(":scope > circle.sd-dot").attr("cx", at).attr("cy", 0), { r: r * s.grow, color: s.fill });
-          // The value label: past the upper end of the mark (the whisker, else the dot) when it fits in the svg, else
-          // past its lower end, and only when neither fits inside the whisker (a label on a line reads struck through).
+          // The value label: against the end of the mark its side names (see sideOf), which follows the mark through a
+          // motion; only its x changes.
           const top = Math.max(hi ?? at, at + r * s.grow);
           const bottom = Math.min(lo ?? at, at - r * s.grow);
-          const range = [0, m.pw + m.margin.right];
           const gap = f * 0.4;
+          const side = s.side ?? { edge: "top", anchor: "start" };
           halo(row.selectAll(":scope > text.sd-points-value").each(function (own) {
-            const width = own.text.length * m.charW;
-            const right = fit(top, bottom, width, range, gap);
-            const left = right.inside ? fit(bottom, top, width, range, gap) : null;
-            const spot = left && !left.inside && left.anchor === "end" ? left : right;
-            d3.select(this).attr("x", spot.x).attr("y", 0).attr("dy", "0.35em").attr("text-anchor", spot.anchor)
-              .attr("fill", s.labelFill).attr("opacity", s.label === 1 ? null : s.label).text(own.text);
+            d3.select(this).attr("x", (side.edge === "top" ? top : bottom) + (side.anchor === "start" ? gap : -gap)).attr("y", 0).attr("dy", "0.35em")
+              .attr("text-anchor", side.anchor).attr("fill", s.labelFill).attr("opacity", s.label === 1 ? null : s.label).text(own.text);
           }));
         });
 
@@ -262,7 +302,8 @@ export default {
       place(m, staticView(m));
     }
 
-    const comparable = (a, b) => a && b && a.rows.map(byKey).join("\n") === b.rows.map(byKey).join("\n");
+    // The same set of categories (their order may differ: a re-sort moves them).
+    const comparable = (a, b) => a && b && a.rows.map(byKey).sort().join("\n") === b.rows.map(byKey).sort().join("\n");
     const signature = (m) => JSON.stringify([
       m.domain, m.margin, m.pw, m.ph, m.ticks.map((k) => k.label), m.reference?.key ?? null, m.axes,
       m.rows.map((r) => [r.slot, r.value, r.lo, r.hi, r.shown, r.dim, r.missing, r.text, r.lines]),

@@ -2,8 +2,9 @@
 //
 // pointsModel(rows, props, { stepProps, font, charW, w, h, format, t }) ->
 //   { w, h, font, charW, lineH, margin, pw, ph, domain, ticks, rows, reference, origin, axes, noData }
-//   rows       one per category, in display order:
+//   rows       one per category, in display order (`sort`; the data order without it):
 //              { key, label, lines, slot, value, lo, hi, shown, dim, text, title, missing }
+//              `slot` is the place in that order; a hidden category has its slot too
 //   reference  { key, value, label }, or null without one or when it is past a given `domain` (it is not drawn);
 //              `origin` is the value rows grow out from
 //   margin     { left, right, top, bottom } around the plot (pw x ph), rounded as `frame` rounds them
@@ -11,11 +12,12 @@
 //
 // The value domain is `domain` as given, else the extent of `y` and the interval columns of every step's props
 // (`stepProps`, null entries skipped; steps that read another file do not count) plus every step's `reference`,
-// rounded outward to ticks; zero is not forced. The margins come from character counts and from every step too
+// rounded outward to ticks; zero is not forced. `sort` orders the rows through `rank` (core/chart-layout.js) and
+// changes nothing else: not the domain, the margins nor any row's data. The margins come from character counts and from every step too
 // (its titles, its reference label, the tick labels of its own axis), so nothing that appears later resizes the plot. A missing value is never zero:
 // it gives `missing: true` and no value.
 import { d3 } from "../../core/d3.js";
-import { extentOf, wrapLabel } from "../../core/chart-layout.js";
+import { extentOf, rank, wrapLabel } from "../../core/chart-layout.js";
 
 const REF = Symbol("reference"); // the column of the pseudo-rows that carry reference values into extentOf
 
@@ -106,7 +108,7 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
   const lower = props.interval?.lower;
   const upper = props.interval?.upper;
   const shown = Array.isArray(props.shown) ? new Set(props.shown.map(String)) : null;
-  const out = categories.map((row, slot) => {
+  const made = categories.map((row, slot) => {
     const raw = row[props.x];
     const key = String(raw);
     const label = fCategory && typeof raw === "number" ? fCategory(raw) : key;
@@ -128,9 +130,15 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
     };
   });
 
+  // The order: every category is ranked, shown or not, so a hidden one keeps its slot. An estimate's `value` is its
+  // `y` and its `columns` its row; the errors are rank's.
+  const byKey = new Map(made.map((r) => [r.key, r]));
+  const order = rank(made.map((r, i) => ({ key: r.key, value: r.value, columns: categories[i] })), props.sort);
+  const out = order.map((key, slot) => Object.assign(byKey.get(key), { slot }));
+
   // Margins from character counts (never measured text), over every step, so the plot keeps its size:
   // category labels left of the plot (wrapped to the room the plot leaves them), ticks and the value axis title
-  // under it, the category axis title and a reference label above it, and half the widest tick label past its right end.
+  // under it, the category axis title and a reference label above it, and half the widest tick label past either end (left too, whatever the category labels leave).
   const titled = (axis) => steps.some((p) => isText(p.axes?.[axis]));
   const lineH = font * 1.15;
   const top = Math.round(titled("x") || steps.some((p) => referenceOf(p)?.label) ? font * 1.9 : font * 0.6);
@@ -141,9 +149,10 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
   for (const r of out) r.lines = wrapLabel(r.label, maxChars, maxLines);
   const chars = Math.max(1, ...out.flatMap((r) => r.lines.map((l) => l.length)));
   const tickChars = Math.max(1, ...steps.flatMap((p) => ticksOf(domainAt(p), p.format?.y, format).map((k) => k.label.length)));
+  const tickHalf = (tickChars * charW) / 2 + font * 0.2; // half the widest tick label, past either end of the axis
   const margin = {
-    left: Math.round(chars * charW + font * 0.6),
-    right: Math.round(Math.max(font * 0.6, (tickChars * charW) / 2 + font * 0.2)),
+    left: Math.round(Math.max(chars * charW + font * 0.6, tickHalf)),
+    right: Math.round(Math.max(font * 0.6, tickHalf)),
     top,
     bottom,
   };

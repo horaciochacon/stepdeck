@@ -4,5 +4,5 @@ export default {
   title: "Points errors fixture",
   lang: "es",
   theme: "academic-light",
-  slides: ["domain-error"],
+  slides: ["domain-error", "sort-error"],
 };

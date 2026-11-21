@@ -152,3 +152,70 @@ test("pointsModel: reference widens the domain", () => {
   assert.equal(past.reference, null, "a reference past a given domain is not drawn");
   assert.equal(pointsModel(ROWS, { ...BASE, domain: [-5, 20], reference: 30 }, env()).origin, -5);
 });
+
+test("pointsModel: rows in sort order, hidden keep their slot", () => {
+  // Data order is the default; "value" runs lowest first and "-value" highest first.
+  assert.deepEqual(pointsModel(ROWS, BASE, env()).rows.map((r) => r.key), ["North", "South", "East"]);
+  assert.deepEqual(pointsModel(ROWS, { ...BASE, sort: "none" }, env()).rows.map((r) => r.key), ["North", "South", "East"]);
+  const asc = pointsModel(ROWS, { ...BASE, sort: "value" }, env());
+  assert.deepEqual(asc.rows.map((r) => [r.key, r.slot]), [["South", 0], ["North", 1], ["East", 2]]);
+  const desc = pointsModel(ROWS, { ...BASE, sort: "-value" }, env());
+  assert.deepEqual(desc.rows.map((r) => [r.key, r.slot]), [["East", 0], ["North", 1], ["South", 2]]);
+
+  // A hidden category keeps the slot it has in the sorted order: all are ranked, then some are hidden.
+  const hidden = pointsModel(ROWS, { ...BASE, sort: "-value", shown: ["South"] }, env());
+  assert.deepEqual(hidden.rows.map((r) => [r.key, r.slot, r.shown]), [["East", 0, false], ["North", 1, false], ["South", 2, true]]);
+
+  // Missing values come last whichever way it runs, hidden or not, and a ranked-last row still has its slot.
+  const more = [...ROWS, { region: "West", rate: null, low: null, high: null }];
+  for (const sort of ["value", "-value"]) {
+    const m = pointsModel(more, { ...BASE, sort, shown: ["North", "South", "East"] }, env());
+    assert.equal(m.rows.at(-1).key, "West", sort);
+    assert.deepEqual([m.rows.at(-1).slot, m.rows.at(-1).missing, m.rows.at(-1).shown], [3, true, false]);
+  }
+
+  // Sorting changes the order only: the domain, ticks and plot are the same, and so is each row's data.
+  const plain = pointsModel(ROWS, BASE, env());
+  assert.deepEqual([desc.domain, desc.ticks, desc.margin, desc.pw, desc.ph], [plain.domain, plain.ticks, plain.margin, plain.pw, plain.ph]);
+  assert.deepEqual(desc.rows.find((r) => r.key === "North"), { ...plain.rows.find((r) => r.key === "North"), slot: 1 });
+});
+
+test("pointsModel: sort by a column and by a list", () => {
+  const by = (sort) => pointsModel(ROWS, { ...BASE, sort }, env()).rows.map((r) => r.key);
+  // `later` runs East 30.5, North 10.2, South 7.9.
+  assert.deepEqual(by({ by: "later" }), ["South", "North", "East"], "ascending by default");
+  assert.deepEqual(by({ by: "later", order: "desc" }), ["East", "North", "South"]);
+  // A list puts its categories first, in its order, and the rest after in data order.
+  assert.deepEqual(by(["East"]), ["East", "North", "South"]);
+  assert.deepEqual(by(["South", "East"]), ["South", "East", "North"]);
+
+  // Ties keep data order; a text column sorts by code point.
+  const tied = [{ region: "A", rate: 5, group: "b" }, { region: "B", rate: 5, group: "a" }, { region: "C", rate: 1, group: "b" }];
+  const keys = (sort) => pointsModel(tied, { data: "d.csv", x: "region", y: "rate", sort }, env()).rows.map((r) => r.key);
+  assert.deepEqual(keys("-value"), ["A", "B", "C"]);
+  assert.deepEqual(keys({ by: "group" }), ["B", "A", "C"]);
+
+  // Errors are rank's, as they are.
+  assert.throws(() => by({ by: "nope" }), { message: "sort column 'nope' not found (columns: region, rate, low, high, later, lo2, hi2)" });
+  assert.throws(() => by(["North", "Nowhere"]), { message: "category 'Nowhere' in `sort` not found (categories: North, South, East)" });
+  assert.throws(() => by("sideways"), { message: '`sort` must be "none", "value", "-value", { by, order } or a list of categories' });
+});
+
+test("pointsModel: the left margin keeps half of a wide tick label inside the svg", () => {
+  // One-letter categories leave little room on the left; the first tick label ("120.0") is centred on the plot's left end.
+  const rows = [{ g: "A", v: 10 }, { g: "B", v: 20 }];
+  const props = { data: "d.csv", x: "g", y: "v", format: { y: ",.1f" }, domain: [0, 120] };
+  const m = pointsModel(rows, props, env());
+  assert.equal(m.ticks[0].label, "0.0");
+  const widest = Math.max(...m.ticks.map((k) => k.label.length));
+  assert.ok(m.margin.left >= (widest * 16.8) / 2 + 28 * 0.2, `half the widest tick fits left of the plot (${m.margin.left})`);
+  assert.equal(m.margin.left + m.pw + m.margin.right, 1200);
+  // The widest tick of any step counts, so the plot keeps its size.
+  const steps = [{ ...props, domain: undefined }, props];
+  const first = pointsModel(rows, steps[0], env({ stepProps: steps }));
+  const second = pointsModel(rows, steps[1], env({ stepProps: steps }));
+  assert.deepEqual([first.margin, first.pw], [second.margin, second.pw]);
+  // Long category labels still decide it when they are wider.
+  const long = pointsModel([{ g: "Northern district", v: 10 }, { g: "B", v: 20 }], props, env());
+  assert.ok(long.margin.left > m.margin.left);
+});
