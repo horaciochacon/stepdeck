@@ -260,6 +260,27 @@ test("a halo on a dot changes nothing: the dot keeps its outline and its colour"
   });
 });
 
+test("halo under: the copy follows the node's transform, and has its tag", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    const out = await page.evaluate(async () => {
+      const { chartKit } = await import("/engine/core/chart.js");
+      const { d3 } = await import("/engine/core/d3.js");
+      const svg = d3.select(document.body).append("svg");
+      const path = svg.append("path").attr("class", "probe").attr("d", "M0,0L10,10").attr("transform", "translate(5,7)");
+      const copy = chartKit.halo(path, { under: true }).node();
+      const first = { tag: copy.localName, transform: copy.getAttribute("transform"), d: copy.getAttribute("d") };
+      path.attr("transform", null);
+      chartKit.halo(path, { under: true });
+      const second = copy.hasAttribute("transform");
+      svg.remove();
+      return { first, second };
+    });
+    assert.deepEqual(out.first, { tag: "path", transform: "translate(5,7)", d: "M0,0L10,10" });
+    assert.equal(out.second, false, "a transform the node loses, the copy loses");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("paintLines breaks a line at a missing value and never draws it to zero", async () => {
   await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
     const out = await page.evaluate(async () => {

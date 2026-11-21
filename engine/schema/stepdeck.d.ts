@@ -414,7 +414,7 @@ export interface ChartKit {
   /** The `d` of an interval band over `{ px, lo, hi }`; `null` when no point is defined. */
   band(points: Array<{ px: number; lo: number | null; hi: number | null }>): string | null;
   rule(selection: any, options: { x1: PerNode<number>; y1: PerNode<number>; x2: PerNode<number>; y2: PerNode<number>; label?: PerNode<string>; anchor?: PerNode<"start" | "middle" | "end"> }): any;
-  /** Adds class `sd-halo` for text (a dot has its outline already: no change), returns the selection; or with `under: true` ensures a `.sd-halo-under` copy before each node (returns the copies). */
+  /** Adds class `sd-halo` for text (a dot has its outline already: no change), returns the selection; or with `under: true` ensures a `.sd-halo-under` copy of each node's geometry and `transform` before it (returns the copies). A copy has the node's tag: in a parent that holds copies, select marks by class. */
   halo(selection: any, options?: { under?: boolean }): any;
   /** One `canvas.sd-canvas-layer` per element, placed on the plot; its context is scaled so you draw in plot pixels. */
   canvasLayer(el: HTMLElement, plot: { left: number; top: number; pw: number; ph: number }): HTMLCanvasElement;

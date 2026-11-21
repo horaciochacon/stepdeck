@@ -158,16 +158,17 @@ export function rule(selection, { x1, y1, x2, y2, label = "", anchor = "start" }
   return selection;
 }
 
-const HALO_GEOMETRY = ["d", "x1", "y1", "x2", "y2", "cx", "cy", "r", "points"];
+const HALO_GEOMETRY = ["d", "x1", "y1", "x2", "y2", "cx", "cy", "r", "points", "transform"];
 
 /**
  * Keeps marks readable over what is behind them. By default it adds class `sd-halo` (a background-colour
  * stroke painted under the fill) and returns the selection: for text. A dot already has its background
  * outline, so a halo on a dot changes nothing (the CSS skips `.sd-dot`). With `under: true` it
  * ensures, just before each node, a sibling `.sd-halo-under` copy of its geometry (`d`, `x1` to `y2`, `cx`,
- * `cy`, `r`, `points`), styled as a wider background-colour stroke, and returns those copies. Call it
+ * `cy`, `r`, `points`, `transform`), styled as a wider background-colour stroke, and returns those copies. Call it
  * again after the node's geometry changes or after the node moved in the DOM (`raise`, `order`): the copy
- * is the same one, updated and put back before the node.
+ * is the same one, updated and put back before the node. A copy has the node's tag (a `path` for a `path`), so in a
+ * parent that holds copies select the marks by their class (`path.sd-line`), never by tag alone.
  * @param {import("d3").Selection<any, any, any, any>} selection
  * @param {{ under?: boolean }} [options]
  * @returns {import("d3").Selection<any, any, any, any>}
