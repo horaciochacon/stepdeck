@@ -4,7 +4,7 @@
 export default {
   id: "story-strips",
   layout: "full-bleed",
-  title: "One item sits above the median in every region",
+  title: "Item p07 ranks near the top in every region",
   elements: [
     { id: "points", region: "main", type: "chart.points",
       props: { data: "data/story-strips.csv", x: "region", y: "score", id: "id", summary: "median",
