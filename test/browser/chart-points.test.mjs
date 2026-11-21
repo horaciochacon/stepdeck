@@ -1,8 +1,10 @@
 // `chart.points` in Chrome: estimates with intervals by category, a reference line, `shown`, `highlight`, the
-// "no data" mark, the domain error and the owned entrance. Run with:
+// "no data" mark, the domain error, the owned entrance, pairs, and beeswarm strips with a summary tick, an overflow
+// box and a followed item. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-points.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { check } from "../../cli/check.js";
@@ -34,8 +36,12 @@ const STEPS = {
   entrance: ["start", "go", "more"],
   resort: ["data", "desc", "list", "later"],
   "resort-shown": ["start", "both", "all", "flip", "less"],
-  pairs: ["before", "now"],
+  pairs: ["before", "now", "shift", "fold"],
   "pairs-entrance": ["start", "go"],
+  strips: ["start", "go", "mean", "later", "none"],
+  focus: ["strips", "focus", "resort", "next"],
+  overflow: ["cut", "wide", "auto"],
+  "strip-edges": ["edges", "sorted", "less", "all"],
 };
 
 // Per row, in the svg's own pixels (attributes) and on screen (boxes, for overflow).
@@ -130,6 +136,14 @@ const INTERRUPTS = [
   ["resort-shown", "flip", "less", "all"],
   ["pairs", "before", "now", "before"],
   ["pairs", "now", "before", "now"],
+  ["pairs", "now", "shift", "fold"],
+  ["pairs", "shift", "fold", "now"],
+  ["strips", "start", "go", "mean"],
+  ["strips", "mean", "later", "none"],
+  ["focus", "strips", "focus", "resort"],
+  ["focus", "focus", "resort", "next"],
+  ["overflow", "cut", "wide", "auto"],
+  ["strip-edges", "sorted", "less", "all"],
 ];
 for (const [slide, steps] of Object.entries(STEPS)) {
   test(`${slide}: played, jumped and backward end the same`, async () => {
@@ -600,6 +614,56 @@ test("pairs: the dot slides and the connector grows", async () => {
   });
 });
 
+test("pairs: a changed `from` slides the hollow dot", async () => {
+  await withPage({ root, url: pages.url("pairs", "step=now&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "pairs", "shift", "points", pairsProbe("Norte", "Centro"));
+    for (const key of ["Norte", "Centro"]) {
+      const a = r.frames[0][key].from;
+      const b = r.end[key].from;
+      const [lo, hi] = [Math.min(a, b), Math.max(a, b)];
+      assert.ok(Math.abs(a - b) > 20, `${key}: the earlier value moves (${a} -> ${b})`);
+      assert.ok(r.frames.some((f) => f[key].from > lo + 1 && f[key].from < hi - 1), `${key}: the hollow dot is seen between its two places`);
+      assert.ok(r.frames.every((f) => f[key].from >= lo - 0.01 && f[key].from <= hi + 0.01), `${key}: never past either`);
+      assert.ok(r.frames.every((f) => f[key].cx === r.end[key].cx), `${key}: the filled dot stays (y does not change)`);
+      assert.ok(r.frames.every((f) => Math.abs(f[key].length - Math.abs(f[key].cx - f[key].from)) < 0.5), `${key}: the connector spans the two dots at every frame`);
+    }
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "pairs", "shift", "points"));
+    await errorsClean(page, ctx);
+  });
+});
+
+test("pairs: removing `from` folds the pair into the dot", async () => {
+  await withPage({ root, url: pages.url("pairs", "step=shift&motion=full") }, async (page, ctx) => {
+    // Este was hidden at `shift` (with its own `from`) and comes back at `fold`, when `from` goes: it grows as a
+    // plain dot, and no hollow dot or connector of its old pair shows on the way.
+    const probe = { toString: () => `(el) => {
+      const pairOf = ${pairOf};
+      const g = el.querySelector('g.sd-points-row[data-key="Este"]');
+      const seen = (n) => n.getAttribute("opacity") !== "0";
+      return {
+        Norte: pairOf(el, "Norte"),
+        este: getComputedStyle(g).visibility === "visible",
+        esteHollow: [...g.querySelectorAll("circle.sd-dot-hollow")].some((c) => Number(c.getAttribute("r")) > 0.5 && seen(c)),
+        esteLink: [...g.querySelectorAll("path.sd-pair-connector")].some((p) => p.getTotalLength() > 0.5 && seen(p)),
+      };
+    }` };
+    const r = await sampleFrames(page, "pairs", "fold", "points", probe);
+    const start = r.frames[0].Norte;
+    assert.ok(start.hollow && start.link && start.fromR > 0 && start.length > 20, `a pair before the fold (${JSON.stringify(start)})`);
+    const folding = r.frames.filter((f) => f.Norte.hollow);
+    assert.ok(folding.some((f) => f.Norte.fromR > 0.5 && f.Norte.fromR < start.fromR - 0.5), "the hollow dot is seen shrinking");
+    assert.ok(folding.some((f) => f.Norte.length > 1 && f.Norte.length < start.length - 1), "the connector is seen retracting");
+    const lengths = folding.map((f) => f.Norte.length);
+    assert.ok(lengths.every((l, i) => i === 0 || l <= lengths[i - 1] + 0.01), "and only retracts");
+    assert.ok(r.frames.every((f) => f.Norte.cx === r.end.Norte.cx), "the filled dot stays where it is");
+    assert.deepEqual([r.end.Norte.hollow, r.end.Norte.link], [false, false], "no pair left at the end");
+    assert.ok(r.frames.some((f) => f.este), "Este is on screen during the fold");
+    assert.deepEqual(r.frames.filter((f) => f.este && (f.esteHollow || f.esteLink)).map((f) => f.ms), [], "Este never shows a hollow dot or a connector");
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "pairs", "fold", "points"));
+    await errorsClean(page, ctx);
+  });
+});
+
 test("pairs: the axis is the same at before and now", async () => {
   await withPage({ root, url: pages.url("pairs", "step=before") }, async (page, ctx) => {
     const base = await axis(page);
@@ -634,6 +698,246 @@ test("pairs: the entrance draws from the old value to the new one", async () => 
     assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the chart builds itself");
     assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "pairs-entrance", "go", "points"));
     await errorsClean(page, ctx);
+  });
+});
+
+// Strips: with `id` each row is one dot in its category's strip (`g.sd-strip`), placed by `swarm` within the band.
+const strips = (page) =>
+  page.evaluate(() =>
+    Object.fromEntries([...document.querySelectorAll('[data-el="points"] g.sd-points-row')].map((g) => {
+      const n = (node, a) => Number(node.getAttribute(a));
+      return [g.dataset.key, {
+        y: Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(g.getAttribute("transform"))[1]),
+        dots: [...g.querySelectorAll(":scope > g.sd-strip > circle.sd-dot")].map((c) => ({
+          id: c.dataset.id, cx: n(c, "cx"), cy: n(c, "cy"), r: n(c, "r"), focus: c.classList.contains("sd-focus"),
+          fill: getComputedStyle(c).fill, stroke: getComputedStyle(c).stroke, last: c === c.parentNode.lastElementChild,
+        })),
+        summary: [...g.querySelectorAll(":scope > g.sd-strip > line.sd-summary")].map((l) => ({ x1: n(l, "x1"), x2: n(l, "x2"), y1: n(l, "y1"), y2: n(l, "y2") })),
+        boxes: [...g.querySelectorAll(":scope > g.sd-overflow")].map((o) => o.dataset.side),
+        noData: g.querySelector(":scope > text.sd-no-data")?.textContent ?? null,
+      }];
+    })),
+  );
+
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+const bandOf = (at) => {
+  const ys = Object.values(at).map((s) => s.y).sort((a, b) => a - b);
+  return ys[1] - ys[0];
+};
+
+test("strips: no two dots overlap beyond tolerance", async () => {
+  await withPage({ root, url: pages.url("strips", "step=go") }, async (page, ctx) => {
+    for (const step of ["go", "mean", "later", "none"]) {
+      if (step !== "go") await ctx.open(pages.url("strips", `step=${step}`));
+      const at = await strips(page);
+      assert.deepEqual(Object.keys(at), ["Norte", "Sur", "Este", "Oeste"], step);
+      const band = bandOf(at);
+      for (const [key, s] of Object.entries(at)) {
+        assert.equal(s.dots.length, 40, `${step}/${key}: one dot per point`);
+        assert.equal(new Set(s.dots.map((d) => d.id)).size, 40, `${step}/${key}: each with its own id`);
+        for (const d of s.dots) {
+          assert.ok([d.cx, d.cy, d.r].every(Number.isFinite) && d.r > 0, `${step}/${key}/${d.id}: a placed dot`);
+          assert.ok(Math.abs(d.cy) + d.r <= band / 2 + 0.5, `${step}/${key}/${d.id}: inside its band (${d.cy}, band ${band})`);
+        }
+        for (let i = 0; i < s.dots.length; i++) {
+          for (let j = i + 1; j < s.dots.length; j++) {
+            const [a, b] = [s.dots[i], s.dots[j]];
+            const gap = Math.hypot(a.cx - b.cx, a.cy - b.cy) - (a.r + b.r);
+            assert.ok(gap >= -0.5, `${step}/${key}: ${a.id} and ${b.id} overlap by ${(-gap).toFixed(2)} px`);
+          }
+        }
+        // The summary tick: at the median of the strip's points (the scale is linear), then at their mean, then none.
+        const xs = s.dots.map((d) => d.cx);
+        const want = { go: median(xs), mean: xs.reduce((a, b) => a + b, 0) / xs.length, later: xs.reduce((a, b) => a + b, 0) / xs.length }[step];
+        if (step === "none") assert.deepEqual(s.summary, [], `${key}: no tick`);
+        else {
+          assert.equal(s.summary.length, 1, `${step}/${key}: one tick`);
+          assert.ok(Math.abs(s.summary[0].x1 - want) < 0.5 && s.summary[0].x1 === s.summary[0].x2, `${step}/${key}: the tick at ${want} (${JSON.stringify(s.summary[0])})`);
+          assert.ok(s.summary[0].y1 < 0 && s.summary[0].y2 > 0, "across the strip");
+        }
+      }
+    }
+    await errorsClean(page, ctx);
+  });
+});
+
+test("strips: the entrance fades the points in from left to right", async () => {
+  await withPage({ root, url: pages.url("strips", "step=start&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "strips", "go", "points", (el) => {
+      const dots = [...el.querySelectorAll('g.sd-points-row[data-key="Este"] g.sd-strip circle.sd-dot')]
+        .map((c) => [Number(c.getAttribute("cx")), Number(c.getAttribute("opacity") ?? 1)])
+        .sort((a, b) => a[0] - b[0]);
+      return { left: dots[0][1], right: dots.at(-1)[1] };
+    });
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0, "the chart is shown");
+    assert.deepEqual([shown[0].left, shown[0].right], [0, 0], "nothing drawn at the first frame shown");
+    assert.ok(shown.some((f) => f.left > f.right + 0.2), "the left end of a strip fades in before its right end");
+    assert.deepEqual(r.frames.filter((f) => f.style !== null).map((f) => f.style), [], "the box stays still: the chart builds itself");
+    const building = shown.filter((f) => f.right < 1);
+    const spanMs = building.at(-1).ms - shown[0].ms;
+    assert.ok(spanMs >= 300 && spanMs < 4000, `one build over most of 2 x --sd-duration (${spanMs.toFixed(0)} ms)`);
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "strips", "go", "points"));
+    await errorsClean(page, ctx);
+  });
+});
+
+// The focus line: `M x,y L x,y` segments between the followed item's dots, trimmed at their rings.
+const joinOf = (page) =>
+  page.evaluate(() => {
+    const paths = [...document.querySelectorAll('[data-el="points"] path.sd-focus-join')];
+    const p = paths[0];
+    if (!p) return { count: 0 };
+    const segments = [...(p.getAttribute("d") ?? "").matchAll(/M([-\d.e]+),([-\d.e]+)L([-\d.e]+),([-\d.e]+)/g)].map((m) => m.slice(1).map(Number));
+    return { count: paths.length, segments, stroke: getComputedStyle(p).stroke, fill: getComputedStyle(p).fill, halo: p.previousElementSibling?.classList.contains("sd-halo-under") ?? false };
+  });
+
+/** Asserts that the join's segments run between consecutive centres (row order), each on the line between them. */
+function assertJoins(join, centres, r, label) {
+  assert.equal(join.segments.length, centres.length - 1, `${label}: one segment between each pair of strips (${JSON.stringify(join.segments)})`);
+  join.segments.forEach(([x1, y1, x2, y2], i) => {
+    const [a, b] = [centres[i], centres[i + 1]];
+    assert.ok(Math.hypot(x1 - a[0], y1 - a[1]) <= r + 6 && Math.hypot(x2 - b[0], y2 - b[1]) <= r + 6, `${label}: segment ${i} runs from ${a} to ${b} (${[x1, y1, x2, y2]})`);
+    const cross = (b[0] - a[0]) * (y1 - a[1]) - (b[1] - a[1]) * (x1 - a[0]);
+    assert.ok(Math.abs(cross) / Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.5, `${label}: segment ${i} lies on the line between the dots`);
+  });
+}
+
+test("focus: ring, raise and join line; others dim", async () => {
+  await withPage({ root, url: pages.url("focus", "step=focus") }, async (page, ctx) => {
+    const ink = await tokenRgb(page, "--sd-color-ink");
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    // The followed item's dot centres, in row order (strips without it are skipped).
+    const centresOf = (at) => Object.values(at).sort((a, b) => a.y - b.y).flatMap((s) => {
+      const d = s.dots.find((q) => q.focus);
+      return d ? [[d.cx, s.y + d.cy]] : [];
+    });
+    const at = await strips(page);
+    for (const [key, s] of Object.entries(at)) {
+      const ringed = s.dots.filter((d) => d.focus);
+      assert.deepEqual(ringed.map((d) => d.id), ["p07"], `${key}: the followed item is ringed`);
+      assert.equal(ringed[0].stroke, ink, `${key}: an ink ring`);
+      assert.notEqual(ringed[0].fill, dim, `${key}: the followed dot keeps its colour`);
+      assert.ok(ringed[0].last, `${key}: raised to the end of its strip`);
+      assert.deepEqual(s.dots.filter((d) => !d.focus && d.fill !== dim).map((d) => d.id), [], `${key}: every other dot is the dim colour`);
+    }
+    const r = at.Norte.dots[0].r;
+    const join = await joinOf(page);
+    assert.equal(join.count, 1, "one join line");
+    assert.deepEqual([join.stroke, join.fill, join.halo], [ink, "none", true], "an ink line on a halo");
+    assertJoins(join, centresOf(at), r, "focus");
+    const opacities = await page.evaluate(() => [...document.querySelectorAll('[data-el="points"] svg *')].map((n) => getComputedStyle(n).opacity));
+    assert.ok(opacities.every((o) => o === "1"), "nothing is faded");
+
+    // Re-sorted by the median, highest first: the line follows the new row order.
+    await ctx.open(pages.url("focus", "step=resort"));
+    const sorted = await strips(page);
+    assert.deepEqual(Object.entries(sorted).sort((a, b) => a[1].y - b[1].y).map(([k]) => k), ["Este", "Norte", "Oeste", "Sur"]);
+    assertJoins(await joinOf(page), centresOf(sorted), r, "resort");
+
+    // Played: the other dots turn dim over --sd-duration-fast, never by opacity.
+    await ctx.open(pages.url("focus", "step=strips&motion=full"));
+    const played = await sampleFrames(page, "focus", "focus", "points", () => {
+      const dot = document.querySelector('[data-el="points"] g.sd-points-row[data-key="Norte"] circle.sd-dot[data-id="p01"]');
+      return { color: getComputedStyle(dot).fill, opacity: getComputedStyle(dot).opacity };
+    });
+    const move = colorMove(played.frames);
+    assert.equal(move.to, dim, "p01 ends at the dim colour");
+    assert.ok(move.moved >= 2, `the colour was seen part-way (${move.moved} frames)`);
+    assert.ok(move.arrived >= 150, `200 ms, not a snap (arrived at ${move.arrived.toFixed(0)} ms)`);
+    assert.ok(played.frames.every((f) => f.opacity === "1"), "opacity never changes");
+    await errorsClean(page, ctx);
+  });
+});
+
+test("strip edges: a single row, equal values, and a join that skips a strip without the item", async () => {
+  await withPage({ root, url: pages.url("strip-edges", "step=edges") }, async (page, ctx) => {
+    const at = await strips(page);
+    assert.deepEqual(Object.keys(at), ["Uno", "Varios", "Igual", "Vacío"]);
+    const band = bandOf(at);
+    assert.equal(at.Uno.dots.length, 1);
+    assert.equal(at.Uno.dots[0].cy, 0, "a single point sits on the row's centre line");
+    assert.ok(at.Uno.summary.length === 1 && Math.abs(at.Uno.summary[0].x1 - at.Uno.dots[0].cx) < 0.01, "its tick is at its value");
+    assert.equal(at.Igual.dots.length, 20);
+    for (const d of at.Igual.dots) assert.ok(Number.isFinite(d.cy) && Math.abs(d.cy) + d.r <= band / 2 + 0.5, `${d.id}: inside the band (${d.cy})`);
+    assert.ok(Math.abs(at.Igual.summary[0].x1 - at.Igual.dots[0].cx) < 0.01, "equal values: the tick on them");
+    assert.equal(at.Varios.dots.length, 3, "an empty cell is not drawn");
+    assert.deepEqual(at.Varios.dots.filter((d) => d.focus), [], "Varios has no a01");
+    assert.deepEqual([at.Vacío.dots.length, at.Vacío.summary.length, at.Vacío.noData], [0, 0, "sin datos"]);
+    const ends = ["Uno", "Igual"].map((k) => { const d = at[k].dots.find((q) => q.focus); return [d.cx, at[k].y + d.cy]; });
+    assertJoins(await joinOf(page), ends, at.Uno.dots[0].r, "edges");
+    await errorsClean(page, ctx);
+  });
+});
+
+test("overflow box shows the count", async () => {
+  const csv = readFileSync(new URL("../fixtures/decks/points/data/strips.csv", import.meta.url), "utf8").trim().split("\n").slice(1).map((l) => l.split(","));
+  const counts = ([lo, hi]) => Object.fromEntries(["Norte", "Sur", "Este", "Oeste"].map((k) => {
+    const vs = csv.filter((c) => c[0] === k).map((c) => Number(c[2]));
+    return [k, { low: vs.filter((v) => v < lo).length, high: vs.filter((v) => v > hi).length }];
+  }));
+  const boxes = (page) => page.evaluate(() => {
+    const el = document.querySelector('[data-el="points"]');
+    const box = (n) => n.getBoundingClientRect();
+    const axis = box(el.querySelector("line.sd-axis-line"));
+    const svg = box(el.querySelector("svg"));
+    return {
+      plot: [axis.left, axis.right],
+      svg: [svg.left, svg.right],
+      transform: el.querySelector("g.sd-plot").getAttribute("transform"),
+      rows: Object.fromEntries([...el.querySelectorAll("g.sd-points-row")].map((g) => [g.dataset.key, {
+        dots: g.querySelectorAll("g.sd-strip circle.sd-dot").length,
+        label: box(el.querySelector(`text.sd-points-label[data-key="${g.dataset.key}"]`)),
+        boxes: Object.fromEntries([...g.querySelectorAll(":scope > g.sd-overflow")].map((o) => {
+          const t = o.querySelector("text.sd-overflow-count");
+          return [o.dataset.side, { text: t.textContent, size: parseFloat(getComputedStyle(t).fontSize), fill: getComputedStyle(t).fill, rect: box(o.querySelector("rect.sd-overflow-box")) }];
+        })),
+      }])),
+    };
+  });
+  await withPage({ root, url: pages.url("overflow", "step=cut") }, async (page, ctx) => {
+    const muted = await tokenRgb(page, "--sd-color-muted");
+    let sides = new Set();
+    let plot = null;
+    for (const [step, domain] of [["cut", [12, 30]], ["wide", [10, 34]]]) {
+      if (step !== "cut") await ctx.open(pages.url("overflow", `step=${step}`));
+      const at = await boxes(page);
+      plot ??= at.transform;
+      const want = counts(domain);
+      for (const [key, row] of Object.entries(at.rows)) {
+        const { low, high } = want[key];
+        assert.equal(row.dots, 40 - low - high, `${step}/${key}: the points outside [${domain}] are not drawn`);
+        assert.deepEqual(Object.keys(row.boxes).sort(), [...(high ? ["high"] : []), ...(low ? ["low"] : [])], `${step}/${key}: a box at each end with points past it`);
+        for (const [side, b] of Object.entries(row.boxes)) {
+          sides.add(side);
+          assert.equal(b.text, side === "low" ? `‹ ${low}` : `${high} ›`, `${step}/${key}: the count`);
+          assert.ok(b.size >= 28, `${step}/${key}: audience text (${b.size}px)`);
+          assert.equal(b.fill, muted, "muted");
+          if (side === "low") assert.ok(b.rect.right <= at.plot[0] + 0.5 && b.rect.left >= row.label.right - 0.5, `${step}/${key}: between the label and the plot (${JSON.stringify([row.label.right, b.rect.left, b.rect.right, at.plot[0]])})`);
+          else assert.ok(b.rect.left >= at.plot[1] - 0.5 && b.rect.right <= at.svg[1] + 0.5, `${step}/${key}: past the plot's end, inside the chart`);
+        }
+      }
+    }
+    assert.deepEqual([...sides].sort(), ["high", "low"], "both ends are cut somewhere");
+    await ctx.open(pages.url("overflow", "step=auto"));
+    const auto = await boxes(page);
+    assert.deepEqual(Object.values(auto.rows).map((r) => [r.dots, Object.keys(r.boxes).length]), [[40, 0], [40, 0], [40, 0], [40, 0]], "without `domain` every point is drawn");
+    assert.equal(auto.transform, plot, "the plot keeps its place and size");
+    await errorsClean(page, ctx);
+  });
+});
+
+test("unknown focus id shows on the slide", async () => {
+  await withPage({ root, url: broken.url("focus-error", "") }, async (page, ctx) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual(errors, ["focus-error/points: `focus` id 'p99' not found in data/strips.csv"]);
+    const shown = await page.evaluate(() => document.querySelector('[data-el="points"] .sd-error')?.textContent);
+    assert.match(shown ?? "", /`focus` id 'p99' not found in data\/strips\.csv/);
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible");
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
 

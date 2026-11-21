@@ -1,8 +1,8 @@
 # chart.points
 
-`chart.points` draws estimates by category from a CSV file: one row per category, each a dot with an optional interval whisker and its value written beside it, against a value axis at the bottom and an optional reference line across every row. It is built for step-by-step stories: the axis stays put across steps, rows can appear one at a time out of the reference line, one row can be emphasized, a row can show a before and after pair, and an empty cell reads "no data" instead of a dot at zero. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
+`chart.points` draws estimates by category from a CSV file: one row per category, each a dot with an optional interval whisker and its value written beside it, against a value axis at the bottom and an optional reference line across every row. It is built for step-by-step stories: the axis stays put across steps, rows can appear one at a time out of the reference line, one row can be emphasized, a row can show a before and after pair, and an empty cell reads "no data" instead of a dot at zero. With `id`, a category holds many points instead: a beeswarm strip with a summary tick, in which one item can be followed from strip to strip. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chart.points/schema.json`](../../../engine/components/chart.points/schema.json), [`components/chart.points/index.js`](../../../engine/components/chart.points/index.js), [`components/chart.points/model.js`](../../../engine/components/chart.points/model.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chart.points/schema.json`](../../../engine/components/chart.points/schema.json), [`components/chart.points/index.js`](../../../engine/components/chart.points/index.js), [`components/chart.points/model.js`](../../../engine/components/chart.points/model.js), [`components/chart.points/strips.js`](../../../engine/components/chart.points/strips.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -64,13 +64,33 @@ Norte,14.2,10.1
 Oeste,,8.3
 ```
 
+Strips with one item followed across them (`test/fixtures/decks/points/slides/focus.js`, a Spanish deck). Each row of the CSV is one point; `id` names it, so the same id in two regions is the same item. The second step rings that item in every strip and joins it with a line; the third re-sorts the strips by their median:
+
+```js
+{ id: "points", region: "main", type: "chart.points",
+  props: { data: "data/strips.csv", x: "region", y: "score", id: "id", format: { y: ",.1f" } } },
+// ...
+steps: [
+  { id: "strips" },
+  { id: "focus", set: { points: { focus: "p07" } } },
+  { id: "resort", set: { points: { sort: "-value" } } },
+],
+```
+
+```text
+region,id,score,score2
+Norte,p01,16.4,15.4
+Norte,p02,21.4,18.6
+Sur,p01,12.5,16.2
+```
+
 ## Props
 
 `data`, `x` and `y` are required. The schema has `additionalProperties: false`, so any other prop is a `validate` error (`unknown-prop`).
 
 | Prop | Type | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- |
-| `data` | string | (required) | snap | Path to a CSV file, relative to the deck root. One row per category. |
+| `data` | string | (required) | snap | Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`). |
 | `x` | string | (required) | snap | Column holding the category of each row. Its text labels the row. Rows with an empty category are skipped. |
 | `y` | string | (required) | tween | Column holding the estimate of each row. A change moves every dot to its new value. An empty cell shows "no data" (see [Missing values](#missing-values)). |
 | `from` | string | none | tween | Column holding the earlier value of each row, for a pair. See [Pairs](#pairs-before-and-after). |
@@ -83,12 +103,15 @@ Oeste,,8.3
 | `sort` | `"none"` \| `"value"` \| `"-value"` \| `{ by, order? }` \| string[] | `"none"` | tween | Order of the rows. See [Sorting](#sorting). |
 | `highlight` | string | none | fade | One category to emphasize. The other rows' dots and whiskers turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color. |
 | `reference` | number \| `{ value, label? }` | none | fade | A dashed line across every row at `value`, with `label` above the plot when it is set. |
+| `id` | string | none | snap | Column naming each point. With it every row is one point and each category a beeswarm strip. See [Strips](#strips). |
+| `summary` | `"median"` \| `"mean"` \| `"none"` | `"median"` | fade | Strips: the summary tick across each strip, at the median or the mean of its values, or none. |
+| `focus` | string | none | fade | Strips: one `id` followed across the strips. Its dots are ringed and raised, a line joins them, and every other dot turns `--sd-color-dim`. |
 
 The transition column is the schema's `x-transition` annotation. It feeds the catalog; the motion itself is written in `index.js` and described in [Motion](#motion).
 
 ## Data: one row per category
 
-Each category must appear in exactly one row. A second row with the same category fails the element (see [Errors](#errors)). Rows whose category cell is empty are ignored.
+Each category must appear in exactly one row. A second row with the same category fails the element (see [Errors](#errors)). Rows whose category cell is empty are ignored. With `id` the data has one row per point instead, and a category has as many rows as it has points: see [Strips](#strips).
 
 ### Missing values
 
@@ -108,6 +131,25 @@ The axis covers `from` at every step, like `y` and the interval columns (see [Th
 
 On the played step that adds `from` and changes `y`, each filled dot slides from its old value to the new one and the connector grows behind it; the hollow dot is where the old value was from the first frame. A pair that appears, in `shown` or in the chart's entrance, grows out of its `from`: the hollow dot grows there, the filled dot slides out to `y` and the connector follows it. Removing `from` on a later step folds the pair into the dot. See [Motion](#motion).
 
+## Strips
+
+`id` names a column that identifies each point. With it, every row of the CSV is one point and the rows of a category make up its strip, in the category's band:
+
+- **Beeswarm.** The dots are packed with `swarm` (`core/chart.js`) over their x positions in pixels: each takes the first free slot of 0, +s, −s, +2s, … (s is one dot's diameter), so points with close values sit apart. The offsets stay within half the band less one radius; once the band is full, extra points share the slot whose last point is farthest away, so the strip never spills into the next one. The layout is computed at rest from the data and the plot size alone, never at random.
+- **Summary tick.** A vertical ink line (`line.sd-summary`) across the strip at the median of all its values, or at the mean with `summary: "mean"`. `summary: "none"` draws no tick. Out of focus (`highlight` on another category) the tick takes `--sd-color-dim`.
+- **Edges.** A strip with a single row has one dot on its centre line and its tick on that dot. Equal values stack across the band. A row with an empty value is not drawn, never at zero, and a strip with no value at all reads "no data". A row with an empty id is skipped.
+- **Ids.** An id appears at most once per category (a second one fails the element). The same id in several categories is the same item, which `focus` follows.
+- **Sorting.** `sort: "value"` and `"-value"` rank the strips by their summary statistic, the median when `summary` is `"none"`. `sort: { by }` reduces that column over each strip the same way (the median or the mean, numerically: a text column ranks as empty, so last).
+- **Overflow.** With a given `domain`, points outside it are not drawn. A box at that end of the row counts them: `‹ 3` between the category label and the plot, `3 ›` past the plot's right end, in `--sd-color-muted` at the label size, in a frame of `--sd-color-rule`. The margins keep room for the widest box of every step, so a step that sets `domain` does not resize the plot. The summary still counts every value; its tick is drawn only when it falls inside the domain. Without `domain` the axis covers every point, so nothing overflows.
+- **Focus.** `focus` names one id. Its dots get class `sd-focus` (an ink ring over the dot's colour) and are raised to the end of their strip. A thin ink line on a background halo (`path.sd-focus-join`) joins them from strip to strip in row order; a strip without the item, or with it outside the domain, is skipped, and the line stops at each ring. Every other dot turns `--sd-color-dim` (never faded, so nothing loses contrast). An id the data does not have fails the element.
+- **Not drawn in strips.** `from`, `interval` and the value labels. `from` and `interval` do not widen the axis either.
+- **Accessibility.** Each strip's `<title>` reads `Norte: 22,0 (n = 40)`: its summary and how many values it has (`Norte (n = 40)` with `summary: "none"`).
+
+```js
+{ id: "points", region: "main", type: "chart.points",
+  props: { data: "data/strips.csv", x: "region", y: "score", id: "id", domain: [12, 30] } },
+```
+
 ## Sorting
 
 `sort` decides the order of the rows down the plot. Every category is ranked, shown or not, so a row that `shown` hides keeps its place in the order and appears there.
@@ -120,7 +162,7 @@ On the played step that adds `from` and changes `y`, each filled dot slides from
 | `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A text column compares by code point. |
 | `["North", "South"]` | Those categories first, in that order, then the rest in data order. |
 
-Ties keep the data order. A row with no value (an empty cell, which reads "no data") comes last whichever way the order runs. Sorting changes the order and nothing else: the axis, the margins and every row's values are the same.
+Ties keep the data order. A row with no value (an empty cell, which reads "no data") comes last whichever way the order runs. Sorting changes the order and nothing else: the axis, the margins and every row's values are the same. Strips rank by their summary (see [Strips](#strips)).
 
 ```js
 { id: "points", region: "main", type: "chart.points",
@@ -138,11 +180,11 @@ The errors are the ranking's own. An unknown column fails the element with `sort
 
 ## The value axis
 
-With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans every number in `y`, `from` and both interval columns of **every step** of the slide, plus every step's `reference` value, rounded outward to tick values (d3 `nice` with about 5 ticks). Only what the chart can draw counts: a row with an empty category is not shown, and a row with no `y` at a step shows "no data", so its `from` and its interval bounds do not widen the axis at that step; a lone bound without the other is not drawn either. The steps counted are the props each step of the slide resolves to (`ctx.stepProps`); a step that reads another data file does not count. Zero is not forced: estimates between 60 and 80 get an axis around them.
+With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans every number in `y`, `from` and both interval columns of **every step** of the slide (in strips, every point's `y`), plus every step's `reference` value, rounded outward to tick values (d3 `nice` with about 5 ticks). Only what the chart can draw counts: a row with an empty category is not shown, and a row with no `y` at a step shows "no data", so its `from` and its interval bounds do not widen the axis at that step; a lone bound without the other is not drawn either. The steps counted are the props each step of the slide resolves to (`ctx.stepProps`); a step that reads another data file does not count. Zero is not forced: estimates between 60 and 80 get an axis around them.
 
 So the axis is the same at every step of the slide: switching `y` moves the dots and never the axis, and a reference that appears later already has its place. The axis moves only when the data file changes or when a step sets a different `domain`, and then it tweens; the plot keeps its size, because the room for every step's tick labels is kept from the start.
 
-An estimate outside a given `domain` fails the element. An interval bound past it is not an error: the whisker is cut at the axis end. A `reference` past it is not drawn.
+An estimate outside a given `domain` fails the element. An interval bound past it is not an error: the whisker is cut at the axis end. A `reference` past it is not drawn. In strips, a point past it is counted in an [overflow box](#strips) instead.
 
 The value axis has about 5 ticks with grid lines, and an axis line under the rows.
 
@@ -165,10 +207,14 @@ The origin of a growing row is the reference value when it is inside the axis, e
 | `highlight` set, changed or cleared | Dot fill, whisker stroke and value label color interpolate in RGB over `--sd-duration-fast`. |
 | `domain` changes | The axis range tweens. Ticks that stay move with it; new ticks fade in and dropped ticks fade out. |
 | `reference` set, changed or cleared | The line and its label fade in or out. A new value or label fades in at its place while the old one fades out. |
+| Strips: `y` or `domain` changes | Every point slides from its place to its new one, along the axis and across the strip at once (the beeswarm of each end is computed at rest; it is never re-run part-way). A point that comes into the axis or gets a value fades in where it ends; one that leaves fades out where it was. Overflow boxes fade in and out; a count changes at once. |
+| Strips: a strip enters or leaves `shown` | It fades in from left to right, each mark in turn by its place on the axis, within the motion; one that leaves fades out. |
+| Strips: `summary` changes | The old tick fades out and the new one fades in. With the same statistic (a `y` change), the tick slides. |
+| Strips: `focus` set, changed or cleared | The ring and the raise move at once; the other dots' fill interpolates to `--sd-color-dim` (or back) over `--sd-duration-fast`, one tween per pair of colours; the join line fades in or out. |
 | An axis title set, changed or cleared | It fades in or out, or the new text fades in over the old one. The plot keeps its size: room for a title is kept at every step that has one. |
-| The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown row grows out of the origin (its `from`, for a pair) and draws its whisker, while the box stays still and the axis, labels and reference show at once (over the element's own `enter.duration` when set). With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the rows are drawn at once; with `enter: "none"` nothing moves. |
+| The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown row grows out of the origin (its `from`, for a pair) and draws its whisker (a strip fades in from left to right and the focus line fades in at the end), while the box stays still and the axis, labels and reference show at once (over the element's own `enter.duration` when set). With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the rows are drawn at once; with `enter: "none"` nothing moves. |
 
-No motion plays, and the new state is drawn at once, when the set of categories changes (for example `data` or `x` points at different rows).
+No motion plays, and the new state is drawn at once, when the set of categories changes (for example `data` or `x` points at different rows), or when `id` is set or removed.
 
 An aborted step (you press next again before the motion ends) snaps to its end state. Every update ends by writing the target state from the props and rows alone, and the component writes attributes only, never inline styles. So the markup after a played step equals the markup after jumping to it, which is what `check --played` compares.
 
@@ -185,7 +231,11 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 | Reference | `--sd-color-muted`, dashed, from the top to the bottom of the plot. Its label sits above the plot, right of the line when it fits, else left of it. |
 | Margins | Computed from character counts, not measured text, and from every step of the slide (its titles, its reference label, the tick labels of its own axis), so nothing that appears later resizes the plot. Each side keeps half of the widest tick label inside the chart; a value label near the right edge moves to the left of its whisker instead. |
 | Sizing | The chart takes the height the other elements in its region leave (`flex: 1 1 0`), like [`chart.bar`](chart-bar.md#sizing-give-the-chart-a-region-that-fills). In `statement` `main` it has no height. |
-| Accessibility | Each row has a `<title>` with the category, its value and the interval, formatted like the labels: `Norte: 12,4 (9,8 – 15,1)` in a Spanish deck, or `Oeste: sin datos`. |
+| Strip | The category's band holds its points as a beeswarm, each dot the size of an estimate's dot. The dots keep the background outline, so neighbours read apart. |
+| Summary tick | Ink, 4px, across the strip a little inside the band, over the dots. |
+| Overflow box | A `--sd-color-background` box with a 2px `--sd-color-rule` frame, its count in `--sd-color-muted` at the label size. The low box sits between the category label and the plot, the high box past the plot's right end, both half a font size clear of the axis ends. |
+| Focus | The followed dot keeps its colour and gets a 3px ink ring. The join is a 2.5px ink line on a background halo, cut back at each ring. |
+| Accessibility | Each row has a `<title>` with the category, its value and the interval, formatted like the labels: `Norte: 12,4 (9,8 – 15,1)` in a Spanish deck, or `Oeste: sin datos`. A strip's reads `Norte: 22,0 (n = 40)`. |
 
 ## Labels and formats
 
@@ -220,7 +270,15 @@ svg.sd-chart-points
         circle.sd-dot.sd-dot-hollow         (a row with a `from` value)
         circle.sd-dot
         text.sd-points-value.sd-halo        (a row with a value)
-        text.sd-no-data.sd-halo             (a row without one)
+        g.sd-strip                          (strips, instead of the marks above)
+          circle.sd-dot[data-id]            (one per point inside the axis, in data order)
+          line.sd-summary                   (with a summary)
+          circle.sd-dot.sd-focus[data-id]   (the followed item, last)
+        g.sd-overflow[data-side]            (strips with points past a given domain)
+          rect.sd-overflow-box, text.sd-overflow-count
+        text.sd-no-data.sd-halo             (a row without a value)
+    g.sd-focus-joins
+      path.sd-halo-under, path.sd-focus-join  (strips with `focus` in two shown strips or more)
   text.sd-axis-title.sd-axis-title-band
   text.sd-axis-title.sd-axis-title-value
 ```
@@ -237,6 +295,11 @@ svg.sd-chart-points
 | `text.sd-no-data` | "no data", for a row whose `y` cell is empty. |
 | `g.sd-reference` | The reference line and its label, present while `reference` is set. |
 | `text.sd-points-label[data-key]` | The category label. |
+| `g.sd-strip > circle.sd-dot[data-id]` | One point of a strip. `data-id` is its id; its `fill` attribute is the palette color, or the dimmed color. |
+| `circle.sd-dot.sd-focus` | A dot of the followed item: an ink ring, the last child of its strip. |
+| `line.sd-summary` | The summary tick. Its `stroke` attribute is the ink color, or the dimmed one. |
+| `g.sd-overflow[data-side="low\|high"]` | The count of points past that end of a given domain: `text.sd-overflow-count` reads `‹ 3` (low) or `3 ›` (high). |
+| `path.sd-focus-join` | The line through the followed item's dots, in row order. |
 
 Restyle one slide with slide `style` and these classes. Colors are written as attributes, so to override a dot color use a CSS `fill` rule, which takes precedence over the attribute.
 
@@ -251,7 +314,9 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``chart.points needs `<prop>` (a column name)`` | `x` or `y` is missing or not a non-empty string, or an `interval` key is empty or not a string. |
 | `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y`, `from` or `interval` is not in the CSV header. |
 | ``\`domain\` must be [min, max] with min < max`` | `domain` is not two finite numbers in increasing order. |
-| ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category. |
+| ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category, without `id`. |
+| `id '<id>' appears more than once in category '<k>' of <data>` | Strips: two rows of one category share an id. |
+| ``\`focus\` id '<id>' not found in <data>`` | `focus` names an id that no row of the data has (without `id`, every `focus` is unknown). An id found only outside a given `domain` is known: it simply has no dot. |
 | ``category '<k>' in `shown` not found in <data> (categories: …)`` | `shown` names a category the data does not have. |
 | ``category '<k>' in `highlight` not found in <data> (categories: …)`` | `highlight` names a category the data does not have. |
 | `sort column '<c>' not found (columns: a, b, …)` | `sort: { by }` names a column the CSV does not have. |
@@ -260,7 +325,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``estimate '<k>' (<value>) is outside `domain` [<a>, <b>]`` | A given `domain` stops short of an estimate (the first one, in data order). |
 | ``\`from\` of '<k>' (<value>) is outside `domain` [<a>, <b>]`` | A given `domain` stops short of the `from` value of a row that has an estimate. |
 
-`validate` checks that `x`, `y`, `from` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain`, `sort`, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+`validate` checks that `x`, `y`, `id`, `from` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain`, `sort`, duplicate categories or ids, or names in `shown`, `highlight` and `focus`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 domain-error/points: estimate 'Norte' (12.4) is outside `domain` [0, 10]

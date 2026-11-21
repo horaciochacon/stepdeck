@@ -1,7 +1,8 @@
 // Built-in `chart.points`: one estimate per category from a CSV, as a dot with an optional interval whisker and a
 // direct value label, one row per category down the left, a value axis at the bottom and an optional reference
 // line across every row. With `from` each row is a before and after pair: a hollow dot at `from`, a quiet connector
-// and the filled dot at `y`; a row whose `from` is empty has its end dot alone.
+// and the filled dot at `y`; a row whose `from` is empty has its end dot alone. With `id` each row of the data is one
+// point and a category is a beeswarm strip, with a summary tick, overflow boxes and a followed item (./strips.js).
 //
 // Everything on screen is a pure function of (model, view):
 //   - the model (./model.js) comes from props, rows and every step's props alone: the domain, ticks, margins and
@@ -32,20 +33,23 @@
 //   - `reference` and the axis titles fade: one that appears fades in, one that changes fades out as the new one
 //     fades in.
 // Entrance: the chart owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" every shown row
-// grows out of the origin (its `from`, for a pair) as above, over info.entrance.duration (else 2 x --sd-duration), while the box stays still
+// grows out of the origin (its `from`, for a pair) as above, and every strip fades in in x order (./strips.js), over
+// info.entrance.duration (else 2 x --sd-duration), while the box stays still
 // and the axes, labels and reference show at once. The start state is written before the first await, in the same
 // task as the engine shows the element. Any other entrance renders the end state at once.
 import { d3 } from "../../core/d3.js";
 import { loadTable, frame, keyed, settle, dot, whisker, rule, halo, fit, morph, entrance } from "../../core/chart.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
-import { pointsModel } from "./model.js";
+import { pointsModel, sizesOf } from "./model.js";
+import { stripAt, joinStrip, placeStrip, joinFocus, placeFocus, sweep } from "./strips.js";
 
 const GROW = 0.6; // share of a row's growth in which its dot slides out and grows; its whisker draws in the rest
 const FILLED = ":scope > circle.sd-dot:not(.sd-dot-hollow)"; // the dot at `y`; the hollow one at `from` is `.sd-dot-hollow`
 const LINK = ":scope > path.sd-pair-connector";
 const HOLLOW = ":scope > circle.sd-dot-hollow";
-// Back to front: the whisker, the connector, the hollow dot, the filled dot, then the labels.
-const ROW_PARTS = [":scope > title", ":scope > g.sd-whisker", LINK, HOLLOW, FILLED, ":scope > text.sd-points-value", ":scope > text.sd-no-data"];
+// Back to front: the whisker, the connector, the hollow dot, the filled dot, then the labels; a strip's points and
+// its overflow boxes before its "no data" mark.
+const ROW_PARTS = [":scope > title", ":scope > g.sd-whisker", LINK, HOLLOW, FILLED, ":scope > text.sd-points-value", ":scope > g.sd-strip", ":scope > g.sd-overflow", ":scope > text.sd-no-data"];
 
 const token = (ctx, name) => ctx.tokens?.[name]?.trim() || null; // a value: var() does not work in an attribute
 const mix = (a, b, t) => (a === null ? b : b === null ? a : lerp(a, b, t));
@@ -55,10 +59,10 @@ const byKey = (d) => d.key;
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
   loadTable(props, ctx, "chart.points", [
-    ["x", props.x], ["y", props.y], ["from", props.from, true], ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
+    ["x", props.x], ["y", props.y], ["id", props.id, true], ["from", props.from, true], ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
   ]);
 
-/** The model of ./model.js for this element's box, with each row's colours. Throws the model's errors. */
+/** The model of ./model.js for this element's box, with each row's colours (and each strip point's). Throws the model's errors. */
 function buildModel(props, rows, ctx, el) {
   const { w, h, font, charW } = frame(el, ctx, { left: 0, right: 0, top: 0, bottom: 0 });
   const m = pointsModel(rows, props, { stepProps: ctx.stepProps ?? null, font, charW, w, h, format: ctx.format, t: ctx.t ?? ((key) => key) });
@@ -67,15 +71,13 @@ function buildModel(props, rows, ctx, el) {
   const muted = token(ctx, "--sd-color-muted");
   for (const r of m.rows) {
     Object.assign(r, { fill: focusPaint(ctx, color, r.dim), stroke: focusPaint(ctx, ink, r.dim), labelFill: r.dim && muted ? muted : ink, link: focusPaint(ctx, muted ?? ink, r.dim) });
+    for (const q of r.points ?? []) q.fill = focusPaint(ctx, color, q.dim);
   }
   return m;
 }
 
-/** The radius of a dot and the length of a whisker's caps, from the label font and the row band. */
-function sizes(m) {
-  const band = m.ph / Math.max(1, m.rows.length);
-  return { band, r: Math.max(4, Math.min(m.font * 0.35, band * 0.3)), cap: Math.max(4, Math.min(m.font * 0.8, band * 0.5)) };
-}
+/** The row band, the radius of a dot and the length of a whisker's caps (./model.js, which packs the strips with them). */
+const sizes = sizesOf;
 
 /**
  * Which side of its mark a row's value label takes, decided once from the row at rest (its whole whisker and pair, its
@@ -149,7 +151,8 @@ function rowAt(p, b, t, enterAll, origin) {
     // A row that appears grows out of the origin (out of its `from`, for a pair); a value that was missing grows where it is (never from zero).
     const g = clamp01(t / GROW);
     s.v = g >= 1 ? b.value : lerp(blank0 ? b.value : b.from ?? origin, b.value, g);
-    Object.assign(s, { grow: g, fromGrow: g, reach: blank0 ? g : 1, whisker: clamp01((t - GROW) / (1 - GROW)), label: g });
+    // Its own pair only: a `from` it had while hidden is gone (its marks leave and are not drawn).
+    Object.assign(s, { from: b.from, grow: g, fromGrow: g, reach: blank0 ? g : 1, whisker: clamp01((t - GROW) / (1 - GROW)), label: g });
   } else if (drawn0) {
     const g = 1 - clamp01((t - (1 - GROW)) / GROW);
     s.v = g >= 1 ? p.value : lerp(blank1 ? p.value : p.from ?? origin, p.value, g);
@@ -160,24 +163,29 @@ function rowAt(p, b, t, enterAll, origin) {
 
 /**
  * The view of a change `from` -> `to` at time t (`from` null: nothing before). `in` and `out` are the opacities of
- * the ticks, reference and titles that enter and leave (an entrance shows them at once). `live` holds the colours
- * of a running colour tween.
+ * the ticks, reference and titles that enter and leave (an entrance shows them at once); `join` is the opacity of
+ * the focus join at an entrance (it fades in at the end of the build), else null. `live` holds the row colours of a
+ * running colour tween and `paint(from, to)` a strip point's.
  */
-function viewAt(from, to, t, enterAll, live = null) {
+function viewAt(from, to, t, enterAll, live = null, paint = (_a, b) => b) {
   const prev = new Map((from?.rows ?? []).map((r) => [r.key, r]));
   const ref = from ?? to;
   const origin = lerp(ref.origin, to.origin, t);
+  const sameKind = from?.summary === to.summary;
   return {
     domain: [lerp(ref.domain[0], to.domain[0], t), lerp(ref.domain[1], to.domain[1], t)],
     in: enterAll ? 1 : t,
     out: 1 - t,
+    join: enterAll ? sweep(t, 1) : null,
     rows: new Map(to.rows.map((b) => {
+      const colours = live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill, link: b.link };
+      if (to.strips) return [b.key, { ...stripAt(prev.get(b.key) ?? null, b, t, enterAll, to.domain, paint, sameKind), ...colours }];
       const s = rowAt(prev.get(b.key) ?? null, b, t, enterAll, origin);
       // A value label takes the side its row ends at (the side it started at, for a row that goes).
       return [b.key, {
         ...s,
         side: s.leaving ? sideOf(from, prev.get(b.key)) : sideOf(to, b),
-        ...(live?.get(b.key) ?? { fill: b.fill, stroke: b.stroke, labelFill: b.labelFill, link: b.link }),
+        ...colours,
       }];
     })),
   };
@@ -195,6 +203,7 @@ export default {
     const gRefs = plot.append("g").attr("class", "sd-references");
     const gLabels = plot.append("g").attr("class", "sd-points-labels");
     const gRows = plot.append("g").attr("class", "sd-points-rows");
+    const gJoins = plot.append("g").attr("class", "sd-focus-joins");
 
     let last = null; // the last fully applied model
     buildModel(props, await loadRows(props, ctx), ctx, el); // fail early: a column, a category or the domain
@@ -215,14 +224,17 @@ export default {
         return g;
       }).each(function (d) {
         const row = d3.select(this);
-        keyed(row.selectAll(":scope > g.sd-whisker"), hasWhisker(d) ? [d] : [], () => "whisker", (enter) => enter.append("g").attr("class", "sd-whisker"));
-        keyed(row.selectAll(LINK), d.from === null ? [] : [d], () => "link", (enter) => enter.append("path").attr("class", "sd-pair-connector"));
-        keyed(row.selectAll(HOLLOW), d.from === null ? [] : [d], () => "from", (enter) => enter.append("circle").attr("class", "sd-dot-hollow"));
-        keyed(row.selectAll(FILLED), d.missing ? [] : [d], () => "dot", (enter) => enter.append("circle").attr("class", "sd-dot"));
-        keyed(row.selectAll(":scope > text.sd-points-value"), d.missing ? [] : [d], () => "value", (enter) => enter.append("text").attr("class", "sd-points-value"));
+        const mark = !m.strips && !d.missing; // an estimate's own marks; a strip has its points instead
+        keyed(row.selectAll(":scope > g.sd-whisker"), !m.strips && hasWhisker(d) ? [d] : [], () => "whisker", (enter) => enter.append("g").attr("class", "sd-whisker"));
+        keyed(row.selectAll(LINK), mark && d.from !== null ? [d] : [], () => "link", (enter) => enter.append("path").attr("class", "sd-pair-connector"));
+        keyed(row.selectAll(HOLLOW), mark && d.from !== null ? [d] : [], () => "from", (enter) => enter.append("circle").attr("class", "sd-dot-hollow"));
+        keyed(row.selectAll(FILLED), mark ? [d] : [], () => "dot", (enter) => enter.append("circle").attr("class", "sd-dot"));
+        keyed(row.selectAll(":scope > text.sd-points-value"), mark ? [d] : [], () => "value", (enter) => enter.append("text").attr("class", "sd-points-value"));
         keyed(row.selectAll(":scope > text.sd-no-data"), d.missing ? [d] : [], () => "none", (enter) => enter.append("text").attr("class", "sd-no-data"));
+        joinStrip(row, m.strips ? d : {}, m);
         for (const part of ROW_PARTS) row.selectAll(part).raise();
       });
+      joinFocus(gJoins, m);
       const title = (cls, text) => keyed(svg.selectAll(`text.${cls}`), text ? [{ key: text }] : [], byKey, (enter) => enter.append("text").attr("class", `sd-axis-title ${cls}`));
       title("sd-axis-title-band", m.axes.x);
       title("sd-axis-title-value", m.axes.y);
@@ -262,7 +274,7 @@ export default {
         rule(d3.select(this), { x1: px, y1: down ? 0 : m.ph, x2: px, y2: down ? m.ph : 0, label: d.label, anchor: side });
       });
 
-      // Category labels, right-aligned left of the plot, wrapped; hidden with their row.
+      // Category labels, right-aligned left of the plot (and of the room kept for overflow boxes), wrapped; hidden with their row.
       gLabels.selectAll("text.sd-points-label")
         .attr("data-key", byKey)
         .attr("data-visible", (d) => String(view.rows.get(d.key).visible))
@@ -271,7 +283,7 @@ export default {
         .attr("text-anchor", "end")
         .each(function (d) {
           d3.select(this).selectAll("tspan").data(d.lines).join("tspan")
-            .attr("x", -f * 0.4).attr("dy", (_l, j) => (j > 0 ? m.lineH : "0.35em")).text((l) => l);
+            .attr("x", -f * 0.4 - m.room.low).attr("dy", (_l, j) => (j > 0 ? m.lineH : "0.35em")).text((l) => l);
         });
 
       // Rows: the whisker on a halo, the dot and the value label, or the "no data" mark. A leaving mark keeps its
@@ -287,6 +299,7 @@ export default {
           row.select(":scope > title").text(d.title);
           halo(row.selectAll(":scope > text.sd-no-data").attr("x", f * 0.3).attr("y", 0).attr("dy", "0.35em").attr("text-anchor", "start")
             .attr("opacity", s.noData === 1 ? null : s.noData).text(m.noData));
+          if (m.strips) return placeStrip(row, s, { x, r, band, m, stroke: s.stroke, out: view.out });
           if (s.v === null) return; // missing on both sides: only the mark
           const at = x(s.v);
           const lo = s.lo === null ? null : clamped(lerp(s.v, s.lo, s.whisker));
@@ -301,6 +314,9 @@ export default {
             const start = x(s.from);
             row.selectAll(LINK).attr("d", `M${s.reach >= 1 ? start : lerp(at, start, s.reach)},0L${at},0`).attr("stroke", s.link);
             dot(row.selectAll(HOLLOW).attr("cx", start).attr("cy", 0), { r: r * s.fromGrow, color: s.fill, hollow: true });
+          } else {
+            // No pair now: the marks of one this row had while hidden are leaving, and stay out of sight.
+            row.selectAll(`${LINK}, ${HOLLOW}`).attr("opacity", 0);
           }
           dot(row.selectAll(FILLED).attr("cx", at).attr("cy", 0), { r: r * s.grow, color: s.fill });
           // The value label: against the end of the mark its side names (see sideOf), which follows the mark through a
@@ -316,6 +332,9 @@ export default {
           }));
         });
 
+      // The focus join, over every row.
+      placeFocus(gJoins, m, view, { x, yOf, r });
+
       // Axis titles: the category axis above the labels, the value axis under the ticks.
       svg.selectAll("text.sd-axis-title-band").attr("opacity", fade).attr("x", 0).attr("y", f).attr("text-anchor", "start").text(byKey);
       svg.selectAll("text.sd-axis-title-value").attr("opacity", fade)
@@ -329,11 +348,12 @@ export default {
       place(m, staticView(m));
     }
 
-    // The same set of categories (their order may differ: a re-sort moves them).
-    const comparable = (a, b) => a && b && a.rows.map(byKey).sort().join("\n") === b.rows.map(byKey).sort().join("\n");
+    // The same set of categories (their order may differ: a re-sort moves them), both estimates or both strips.
+    const comparable = (a, b) => a && b && a.strips === b.strips && a.rows.map(byKey).sort().join("\n") === b.rows.map(byKey).sort().join("\n");
     const signature = (m) => JSON.stringify([
-      m.domain, m.margin, m.pw, m.ph, m.ticks.map((k) => k.label), m.reference?.key ?? null, m.axes,
+      m.domain, m.margin, m.room, m.pw, m.ph, m.ticks.map((k) => k.label), m.reference?.key ?? null, m.axes,
       m.rows.map((r) => [r.slot, r.value, r.from, r.lo, r.hi, r.shown, r.dim, r.missing, r.text, r.lines]),
+      m.strips ? [m.summary, m.focus, m.rows.map((r) => [r.summary, r.overflow, r.points.map((q) => [q.id, q.value, q.dy, q.dim, q.focus])])] : null,
     ]);
 
     /**
@@ -358,7 +378,20 @@ export default {
         const now = live.get(b.key);
         return p ? ["fill", "stroke", "labelFill", "link"].filter((k) => p[k] !== b[k]).map((k) => tweenColor(ctx, p[k], b[k], (c) => { now[k] = c; }, fast)) : [];
       });
-      await Promise.all([morph(info, ctx, (t) => place(to, viewAt(from, to, t, enterAll, live)), { duration }), ...recolor]);
+      // Strip points: one tween per pair of colours (base to dim and back), shared by every point that makes it.
+      const tones = new Map();
+      for (const b of to.strips ? to.rows : []) {
+        const was = new Map((prev.get(b.key)?.points ?? []).map((q) => [q.id, q.fill]));
+        for (const q of b.points) {
+          const a = was.get(q.id);
+          const pair = `${a}\n${q.fill}`;
+          if (a === undefined || a === q.fill || tones.has(pair)) continue;
+          tones.set(pair, a);
+          recolor.push(tweenColor(ctx, a, q.fill, (c) => { tones.set(pair, c); }, fast));
+        }
+      }
+      const paint = (a, b) => (a === b ? b : tones.get(`${a}\n${b}`) ?? b);
+      await Promise.all([morph(info, ctx, (t) => place(to, viewAt(from, to, t, enterAll, live, paint)), { duration }), ...recolor]);
     }
 
     return {

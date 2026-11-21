@@ -258,6 +258,14 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-points .sd-halo-under { stroke-width: 9; }
 .sd-chart-points .sd-pair-connector { fill: none; stroke-width: 3; }
 .sd-chart-points .sd-points-row[data-visible="false"], .sd-chart-points .sd-points-label[data-visible="false"] { visibility: hidden !important; }
+/* strips: the followed item's dot is ringed in ink (over the background outline every dot has) and a thin ink line on a
+   halo joins it across strips; the summary tick, over the dots, is a stroke attribute (ink, or the dim colour out of focus);
+   an overflow box is a quiet frame with its count in the muted colour, at least the label size. */
+.sd-chart-points circle.sd-dot.sd-focus { stroke: var(--sd-color-ink); stroke-width: 3; }
+.sd-chart-points .sd-focus-join { fill: none; stroke: var(--sd-color-ink); stroke-width: 2.5; stroke-linecap: round; }
+.sd-chart-points .sd-summary { stroke-width: 4; stroke-linecap: round; }
+.sd-chart-points .sd-overflow-box { fill: var(--sd-color-background); stroke: var(--sd-color-rule); stroke-width: 2; }
+.sd-chart-points text.sd-overflow-count { fill: var(--sd-color-muted); }
 
 /* chart marks: shared by the charts and custom components (ctx.chart in core/chart.js). Theme tokens only. A mark's own
    colour is the caller's (a fill or stroke attribute); these rules give what the theme decides: the background

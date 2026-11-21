@@ -1,6 +1,6 @@
-region,before,now
-Norte,14.2,10.1
-Sur,11.8,9.6
-Este,16.5,12.0
-Oeste,,8.3
-Centro,9.4,13.2
+region,before,now,early
+Norte,14.2,10.1,12.6
+Sur,11.8,9.6,10.8
+Este,16.5,12.0,15.0
+Oeste,,8.3,
+Centro,9.4,13.2,10.5

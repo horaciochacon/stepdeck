@@ -1,9 +1,10 @@
 // chart.points' pure model (components/chart.points/model.js): one row per category with its value, interval,
-// label and value text, the fixed value domain over every step, the "no data" rows and the errors it throws.
+// label and value text, the fixed value domain over every step, the "no data" rows and the errors it throws; pairs;
+// and strips (with `id`): points per category, their summary, beeswarm offsets, overflow counts and the followed item.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { d3 } from "#engine/core/d3.js";
-import { pointsModel } from "#engine/components/chart.points/model.js";
+import { pointsModel, sizesOf } from "#engine/components/chart.points/model.js";
 
 const format = (spec) => d3.format(spec);
 const t = (key) => ({ noData: "no data" })[key] ?? key;
@@ -292,4 +293,138 @@ test("pointsModel: the domain counts displayed categories and the bounds of rows
   assert.deepEqual(reach([...ROWS, { region: "West", rate: 10, low: null, high: 99 }]), plain);
   // A row that is shown or hidden counts alike (the axis does not move when `shown` changes).
   assert.deepEqual(reach(ROWS, { ...BASE, shown: ["North"] }), plain);
+});
+
+// Strips: with `id`, a category has many rows, one point each, packed as a beeswarm with a summary tick.
+const STRIPS = [
+  { g: "A", id: "x1", v: 1, w: 10 }, { g: "A", id: "x2", v: 2, w: 30 }, { g: "A", id: "x3", v: 9, w: 20 },
+  { g: "B", id: "x1", v: 4, w: 5 }, { g: "B", id: "x2", v: 8, w: 7 },
+  { g: "C", id: "x1", v: 3, w: 1 }, { g: "C", id: "x3", v: "", w: 2 }, { g: "C", id: "x4", v: 4, w: 3 },
+];
+const SBASE = { data: "s.csv", x: "g", y: "v", id: "id" };
+const keysOf = (m) => m.rows.map((r) => r.key);
+
+test("pointsModel: strips group by category, summary median and mean", () => {
+  const m = pointsModel(STRIPS, SBASE, env());
+  assert.equal(m.strips, true);
+  assert.equal(m.summary, "median", "the median by default");
+  assert.equal(m.focus, null);
+  assert.deepEqual(keysOf(m), ["A", "B", "C"], "one strip per category, in data order");
+  assert.deepEqual(m.rows.map((r) => r.points.map((q) => [q.id, q.value])), [
+    [["x1", 1], ["x2", 2], ["x3", 9]],
+    [["x1", 4], ["x2", 8]],
+    [["x1", 3], ["x4", 4]],
+  ], "a point per row with a value, in data order; an empty cell is never drawn");
+  assert.deepEqual(m.rows.map((r) => r.summary), [2, 6, 3.5]);
+  assert.ok(m.rows.every((r) => r.points.every((q) => Number.isFinite(q.dy) && !q.focus && !q.dim)));
+  assert.deepEqual(m.rows.map((r) => r.overflow), [{ low: 0, high: 0 }, { low: 0, high: 0 }, { low: 0, high: 0 }], "no overflow without `domain`");
+  assert.deepEqual(m.rows.map((r) => [r.from, r.lo, r.hi, r.missing]), [[null, null, null, false], [null, null, null, false], [null, null, null, false]]);
+  assert.equal(m.rows[0].title, "A: 2 (n = 3)");
+  assert.equal(m.rows[2].title, "C: 3.5 (n = 2)");
+
+  const mean = pointsModel(STRIPS, { ...SBASE, summary: "mean" }, env());
+  assert.deepEqual(mean.rows.map((r) => r.summary), [4, 6, 3.5]);
+  assert.equal(mean.rows[0].title, "A: 4 (n = 3)");
+  const none = pointsModel(STRIPS, { ...SBASE, summary: "none" }, env());
+  assert.deepEqual(none.rows.map((r) => r.summary), [null, null, null], "no tick");
+  assert.equal(none.rows[0].title, "A (n = 3)");
+
+  // `sort` ranks strips by their summary (the median when there is none); `{ by }` reduces that column the same way.
+  const order = (props) => keysOf(pointsModel(STRIPS, { ...SBASE, ...props }, env()));
+  assert.deepEqual(order({ sort: "value" }), ["A", "C", "B"], "medians 2, 6, 3.5");
+  assert.deepEqual(order({ sort: "-value" }), ["B", "C", "A"]);
+  assert.deepEqual(order({ sort: "value", summary: "mean" }), ["C", "A", "B"], "means 4, 6, 3.5");
+  assert.deepEqual(order({ sort: "value", summary: "none" }), ["A", "C", "B"], "still the median");
+  assert.deepEqual(order({ sort: { by: "w" } }), ["C", "B", "A"], "medians of w: 20, 6, 2");
+  assert.deepEqual(order({ sort: { by: "w", order: "desc" }, summary: "mean" }), ["A", "B", "C"], "means of w: 20, 6, 2");
+  assert.deepEqual(order({ sort: ["C"] }), ["C", "A", "B"]);
+  assert.throws(() => order({ sort: { by: "nope" } }), { message: "sort column 'nope' not found (columns: g, id, v, w)" });
+
+  // The domain covers every point of every step; `from` and `interval` are not drawn in strips, so they do not count.
+  assert.deepEqual(m.domain, d3.scaleLinear().domain([1, 9]).nice(5).domain());
+  const wide = STRIPS.map((r) => ({ ...r, far: 99, lo: -50, hi: 80 }));
+  assert.deepEqual(pointsModel(wide, { ...SBASE, from: "far", interval: { lower: "lo", upper: "hi" } }, env()).domain, m.domain);
+  // A row with an empty id is not a point.
+  assert.deepEqual(pointsModel([...STRIPS, { g: "A", id: "", v: 50, w: 1 }], SBASE, env()).rows[0].points.length, 3);
+  // shown and highlight name categories; highlight dims every point of the other strips.
+  const lit = pointsModel(STRIPS, { ...SBASE, shown: ["A", "C"], highlight: "C" }, env());
+  assert.deepEqual(lit.rows.map((r) => [r.shown, r.dim, r.points.every((q) => q.dim === r.dim)]), [[true, true, true], [false, true, true], [true, false, true]]);
+  // Without `id` a repeated category is still an error.
+  assert.throws(() => pointsModel(STRIPS, { data: "s.csv", x: "g", y: "v" }, env()), { message: "category 'A' appears more than once in s.csv (chart.points needs one row per category, or `id` for strips)" });
+});
+
+test("strip edge cases", () => {
+  const rows = [
+    { g: "One", id: "a01", v: 12 },
+    { g: "Some", id: "b01", v: 8.5 }, { g: "Some", id: "b02", v: 14 }, { g: "Some", id: "b03", v: "" }, { g: "Some", id: "b04", v: 19.5 },
+    ...Array.from({ length: 20 }, (_, i) => ({ g: "Equal", id: `a${String(i + 1).padStart(2, "0")}`, v: 15 })),
+    { g: "Empty", id: "c01", v: "" }, { g: "Empty", id: "c02", v: null },
+  ];
+  const m = pointsModel(rows, { data: "e.csv", x: "g", y: "v", id: "id", focus: "a01" }, env());
+  const [one, some, equal, empty] = m.rows;
+  const { band, r } = sizesOf(m);
+  const maxDy = band / 2 - r;
+  // A single row: its summary is its value, its point sits on the row's centre line.
+  assert.deepEqual([one.summary, one.points.length, one.points[0].dy, one.missing], [12, 1, 0, false]);
+  // All values equal: the swarm stays inside the band and has no NaN.
+  assert.equal(equal.summary, 15);
+  assert.equal(equal.points.length, 20);
+  for (const q of equal.points) assert.ok(Number.isFinite(q.dy) && Math.abs(q.dy) <= maxDy + 1e-9, `${q.id}: ${q.dy} within ${maxDy}`);
+  assert.ok(new Set(equal.points.map((q) => q.dy)).size > 1, "spread over several slots");
+  // A strip without the followed item has no focused point; the item's dots in the others are focused, not dimmed.
+  assert.deepEqual(m.rows.map((s) => s.points.filter((q) => q.focus).map((q) => q.id)), [["a01"], [], ["a01"], []]);
+  assert.ok(m.rows.every((s) => s.points.every((q) => q.dim === !q.focus)), "every other point is dimmed");
+  assert.equal(m.focus, "a01");
+  // A strip with no value reads "no data": no points, no summary, never a dot at zero.
+  assert.deepEqual([empty.missing, empty.points.length, empty.summary, empty.value], [true, 0, null, null]);
+  assert.equal(empty.title, "Empty: no data");
+  assert.equal(some.points.length, 3, "an empty cell is not a point");
+  // Ranked last whichever way it runs.
+  assert.equal(keysOf(pointsModel(rows, { data: "e.csv", x: "g", y: "v", id: "id", sort: "-value" }, env())).at(-1), "Empty");
+  // Every value equal across the whole chart still gives a usable axis (extentOf's [v, v + 1]).
+  const flat = pointsModel(rows.filter((x) => x.g === "Equal"), { data: "e.csv", x: "g", y: "v", id: "id" }, env());
+  assert.ok(flat.domain.every(Number.isFinite) && flat.domain[0] <= 15 && flat.domain[1] > 15, `${flat.domain}`);
+  assert.ok(flat.rows[0].points.every((q) => Number.isFinite(q.dy)));
+  // An id twice in one strip is an error: its dots are keyed by id.
+  assert.throws(
+    () => pointsModel([...rows, { g: "Some", id: "b02", v: 3 }], { data: "e.csv", x: "g", y: "v", id: "id" }, env()),
+    { message: "id 'b02' appears more than once in category 'Some' of e.csv" },
+  );
+});
+
+test("overflow counts per side", () => {
+  // [2.5, 6]: A has 1 and 2 below and 9 above; B has 8 above; C is inside.
+  const props = { ...SBASE, domain: [2.5, 6] };
+  const m = pointsModel(STRIPS, props, env());
+  assert.deepEqual(m.domain, [2.5, 6], "used as given");
+  assert.deepEqual(m.rows.map((r) => r.overflow), [{ low: 2, high: 1 }, { low: 0, high: 1 }, { low: 0, high: 0 }]);
+  assert.deepEqual(m.rows.map((r) => r.points.map((q) => q.id)), [[], ["x1"], ["x1", "x4"]], "points outside are not drawn");
+  // The summary is the strip's own (every value), drawn only inside the domain.
+  assert.deepEqual(m.rows.map((r) => r.summary), [null, 6, 3.5], "A's median (2) is outside: no tick");
+  assert.equal(m.rows[0].title, "A: 2 (n = 3)");
+  // Room for the boxes is kept at every step, so the plot keeps its size; a step without overflow has none of its own.
+  const steps = [SBASE, props];
+  const [plain, cut] = steps.map((p) => pointsModel(STRIPS, p, env({ stepProps: steps })));
+  assert.deepEqual([plain.margin, plain.pw, plain.ph], [cut.margin, cut.pw, cut.ph]);
+  assert.deepEqual(plain.rows.map((r) => r.overflow), [{ low: 0, high: 0 }, { low: 0, high: 0 }, { low: 0, high: 0 }]);
+  const alone = pointsModel(STRIPS, SBASE, env());
+  assert.ok(cut.room.low > 0 && cut.room.high > 0, JSON.stringify(cut.room));
+  assert.deepEqual(alone.room, { low: 0, high: 0 });
+  assert.ok(cut.margin.left >= alone.margin.left + cut.room.low - 1, "the low box sits between the labels and the plot");
+  assert.ok(cut.margin.right >= cut.room.high, "the high box fits in the right margin");
+  // Estimates keep their rule: a value outside a given domain is an error.
+  assert.throws(() => pointsModel(ROWS, { ...BASE, domain: [0, 14] }, env()), { message: "estimate 'East' (15.2) is outside `domain` [0, 14]" });
+});
+
+test("focus unknown id errors", () => {
+  assert.throws(() => pointsModel(STRIPS, { ...SBASE, focus: "zz" }, env()), { message: "`focus` id 'zz' not found in s.csv" });
+  // Without `id` there are no points to follow.
+  assert.throws(() => pointsModel(ROWS, { ...BASE, focus: "North" }, env()), { message: "`focus` id 'North' not found in data/estimates.csv" });
+  // An id found only outside a given domain is known: it simply has no dot.
+  const m = pointsModel(STRIPS, { ...SBASE, domain: [2.5, 6], focus: "x3" }, env());
+  assert.deepEqual(m.rows.map((r) => r.points.filter((q) => q.focus).length), [0, 0, 0]);
+  // The followed item's dots are focused in every strip that has it; the rest dim.
+  const x1 = pointsModel(STRIPS, { ...SBASE, focus: "x1" }, env());
+  assert.deepEqual(x1.rows.map((r) => r.points.filter((q) => q.focus).map((q) => q.id)), [["x1"], ["x1"], ["x1"]]);
+  assert.ok(x1.rows.every((r) => r.points.every((q) => q.dim === (q.id !== "x1"))));
 });

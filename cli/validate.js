@@ -20,7 +20,7 @@
 //             folded with stateAt at every step k up to the first step whose set/replace/show/hide names an
 //             unknown element (a bad `only` skips its own step; a bad from/at/advance ref skips folding), and at each k every element's props must be an object,
 //             hold no remote URL (http(s):// or //host, R20) and no hex color, have bindings whose file,
-//             pointer and format exist, name CSV columns (x, y, series, interval.lower/upper) that exist,
+//             pointer and format exist, name CSV columns (x, y, id, from, series, interval.lower/upper) that exist,
 //             point at files that exist in that exact case, and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
@@ -854,9 +854,9 @@ async function columnsOf(env, file, types, named, label, describe) {
   return out;
 }
 
-/** The chart's columns in its `data` CSV: `x`, `y`, `from`, `series` and the `interval` bounds. */
+/** The chart's columns in its `data` CSV: `x`, `y`, `id`, `from`, `series` and the `interval` bounds. */
 function checkColumns(env, props) {
-  const named = [["x", props.x], ["y", props.y], ["from", props.from], ["series", props.series]];
+  const named = [["x", props.x], ["y", props.y], ["id", props.id], ["from", props.from], ["series", props.series]];
   if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({
     measured: `${prop} = '${column}'`,

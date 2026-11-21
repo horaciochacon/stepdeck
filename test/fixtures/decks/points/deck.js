@@ -4,5 +4,5 @@ export default {
   title: "Points fixture",
   lang: "es",
   theme: "academic-light",
-  slides: ["estimates", "reference", "shown", "highlight", "missing", "entrance", "resort", "resort-shown", "pairs", "pairs-entrance"],
+  slides: ["estimates", "reference", "shown", "highlight", "missing", "entrance", "resort", "resort-shown", "pairs", "pairs-entrance", "strips", "focus", "overflow", "strip-edges"],
 };
