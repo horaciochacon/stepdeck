@@ -829,51 +829,53 @@ function checkFile(env, rel, path) {
   return { rule: "file-missing", measured: `${path} = ${rel}`, limit: "a file in the deck", fix: `create ${rel} in the deck (generate data with a script under data/), or fix the path in ${path}` };
 }
 
-async function checkColumns(env, props) {
+/**
+ * The columns of a CSV `file` the props name: reads and parses it (with `types`), then one `missing-column` for each
+ * `[prop, column]` of `named` whose column is a plain name (not a binding) that the header lacks, its `measured` and
+ * `fix` from `describe(prop, column, close, header)` (`close` is the nearest column, or null) and its `limit` the
+ * header. A file that does not parse is one `data-invalid`, its `measured` starting with `label`.
+ */
+async function columnsOf(env, file, types, named, label, describe) {
   let text;
   try {
-    text = await readFile(join(env.deckRoot, props.data), "utf8");
-    await env.load(props.data, isObject(props.types) ? { types: props.types } : undefined); // parses, with the declared types
+    text = await readFile(join(env.deckRoot, file), "utf8");
+    await env.load(file, isObject(types) ? { types } : undefined); // parses, with the declared types
   } catch (e) {
-    return [{ rule: "data-invalid", measured: `${props.data}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${props.data} or the declared types` }];
+    return [{ rule: "data-invalid", measured: `${label}${file}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${file} or the declared types` }];
   }
   const header = csvHeader(text);
-  const named = [["x", props.x], ["y", props.y], ["series", props.series]];
-  if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
   const out = [];
   for (const [prop, column] of named) {
     if (typeof column !== "string" || parseBinding(column) || header.includes(column)) continue;
-    const close = didYouMean(column, header);
-    out.push({ rule: "missing-column", measured: `${prop} = '${column}'`, limit: `columns of ${props.data}: ${header.join(", ")}`, fix: close ? `set ${prop} to '${close}'` : `set ${prop} to one of ${quote(header)}, or add the column to ${props.data}` });
+    const { measured, fix } = describe(prop, column, didYouMean(column, header), header);
+    out.push({ rule: "missing-column", measured, limit: `columns of ${file}: ${header.join(", ")}`, fix });
   }
   return out;
+}
+
+/** The chart's columns in its `data` CSV: `x`, `y`, `series` and the `interval` bounds. */
+function checkColumns(env, props) {
+  const named = [["x", props.x], ["y", props.y], ["series", props.series]];
+  if (isObject(props.interval)) named.push(["interval.lower", props.interval.lower], ["interval.upper", props.interval.upper]);
+  return columnsOf(env, props.data, props.types, named, "", (prop, column, close, header) => ({
+    measured: `${prop} = '${column}'`,
+    fix: close ? `set ${prop} to '${close}'` : `set ${prop} to one of ${quote(header)}, or add the column to ${props.data}`,
+  }));
 }
 
 /**
  * chart.line `draws`: the draws file (`draws.data`) needs the chart's `x`, `y` and `series` (when set) and the
  * `draws.id` column. A column of the chart that the draws file lacks is added to that file; `draws.id` is set.
  */
-async function checkDrawsColumns(env, props) {
+function checkDrawsColumns(env, props) {
   const file = props.draws.data;
-  let text;
-  try {
-    text = await readFile(join(env.deckRoot, file), "utf8");
-    await env.load(file, isObject(props.types) ? { types: props.types } : undefined);
-  } catch (e) {
-    return [{ rule: "data-invalid", measured: `draws.data ${file}: ${(e.cause ?? e).message}`, limit: "a CSV the loader parses", fix: `fix ${file} or the declared types` }];
-  }
-  const header = csvHeader(text);
   const named = [["x", props.x], ["y", props.y], ["series", props.series], ["draws.id", props.draws.id]];
-  const out = [];
-  for (const [prop, column] of named) {
-    if (typeof column !== "string" || parseBinding(column) || header.includes(column)) continue;
-    const close = didYouMean(column, header);
-    const fix = prop === "draws.id"
+  return columnsOf(env, file, props.types, named, "draws.data ", (prop, column, close, header) => ({
+    measured: `${prop} = '${column}' in draws.data`,
+    fix: prop === "draws.id"
       ? close ? `set draws.id to '${close}'` : `set draws.id to one of ${quote(header)}, or add the column to ${file}`
-      : `add the column '${column}' to ${file} (the chart's ${prop})${close ? `, or rename its column '${close}' to '${column}'` : ""}`;
-    out.push({ rule: "missing-column", measured: `${prop} = '${column}' in draws.data`, limit: `columns of ${file}: ${header.join(", ")}`, fix });
-  }
-  return out;
+      : `add the column '${column}' to ${file} (the chart's ${prop})${close ? `, or rename its column '${close}' to '${column}'` : ""}`,
+  }));
 }
 
 async function checkBinding(env, b, whole, path) {

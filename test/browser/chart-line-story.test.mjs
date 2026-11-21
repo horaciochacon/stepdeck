@@ -609,18 +609,45 @@ test("fan lower shown equals jump", async () => {
 });
 
 test("fan: a played change of shown fades the draws in", async () => {
+  // Counted: the pixels the canvas paints that the 20 draws left blank. Only the new draws paint there (a kept draw thins and
+  // fades inside its own old footprint), and they fade in from 0, so the count never falls while 20 -> 200 plays, and it is
+  // between 0 and its end for most of the morph: from the first frame that shows a new draw to the last that completes a
+  // faint rim, not a narrow window a slow runner can miss.
   await withPage({ root, url: pages.url("fan", "step=few&motion=full") }, async (page, ctx) => {
-    const painted = (el) => {
+    const before = await page.evaluate(async () => {
+      // Reading a canvas back makes Chrome take it off the GPU, and the two draw thin lines with different anti-aliasing.
+      // Read it a few times, then paint `few` again (back to `none` and on to `few`, both without motion), so the picture
+      // kept here and every frame below are drawn the same way.
+      const canvas = () => document.querySelector('[data-el="chart"] canvas.sd-canvas-layer');
+      for (let i = 0; i < 5; i++) canvas().getContext("2d").getImageData(0, 0, canvas().width, canvas().height);
+      await window.STEPDECK.goTo("fan", "none");
+      await window.STEPDECK.settled();
+      await window.STEPDECK.goTo("fan", "few");
+      await window.STEPDECK.settled();
+      const el = document.querySelector('[data-el="chart"]');
+      el.__fanBefore = canvas().getContext("2d").getImageData(0, 0, canvas().width, canvas().height).data;
+      let n = 0;
+      for (let i = 3; i < el.__fanBefore.length; i += 4) if (el.__fanBefore[i]) n++;
+      return n;
+    });
+    const counts = (el) => {
       const c = el.querySelector("canvas.sd-canvas-layer");
       const a = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
-      let n = 0;
-      for (let i = 3; i < a.length; i += 4) if (a[i]) n++;
-      return { painted: n };
+      let painted = 0;
+      let added = 0;
+      for (let i = 3; i < a.length; i += 4) {
+        if (!a[i]) continue;
+        painted++;
+        if (!el.__fanBefore[i]) added++;
+      }
+      return { painted, added };
     };
-    const r = await sampleFrames(page, "fan", "many", "chart", painted);
-    const [start, end] = [r.frames[0].painted, r.end.painted];
-    assert.ok(end > start * 1.5, `more draws cover more of the plot (${start} -> ${end})`);
-    assert.ok(r.frames.some((f) => f.painted > start + 1000 && f.painted < end - 1000), "the canvas was seen between the two states");
+    const r = await sampleFrames(page, "fan", "many", "chart", counts);
+    const seen = r.frames.map((f) => f.added).join(" ");
+    assert.ok(r.end.painted > before * 1.5, `more draws cover more of the plot (${before} -> ${r.end.painted})`);
+    assert.ok(r.end.added > 1000, `the new draws paint where the 20 did not (${r.end.added} pixels)`);
+    for (let i = 1; i < r.frames.length; i++) assert.ok(r.frames[i].added >= r.frames[i - 1].added, `the new draws only fade in: ${seen}`);
+    assert.ok(r.frames.some((f) => f.added > 0 && f.added < r.end.added), `the canvas was seen between the two states: ${seen}`);
     assert.ok(r.settledMs >= 400, `the change plays over the morph's duration (${r.settledMs.toFixed(0)} ms)`);
     assert.deepEqual(ctx.errors, []);
   });
