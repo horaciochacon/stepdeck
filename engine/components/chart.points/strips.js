@@ -6,7 +6,7 @@
 // Markup of one strip row (g.sd-points-row, placed by index.js): g.sd-strip holding circle.sd-dot[data-id] (data
 // order), line.sd-summary, then the followed item's circle.sd-dot.sd-focus (raised to the end of its strip); then
 // g.sd-overflow[data-side="low" | "high"] (rect.sd-overflow-box, text.sd-overflow-count). The join is
-// g.sd-focus-joins > path.sd-focus-join, above every row, on a halo.
+// g.sd-focus-joins > path.sd-focus-join, above every row (no halo: it would cut channels through the dim dots).
 //
 // Like the rest of the chart, each mark is a pure function of (model, view): stripAt gives the view of one strip at
 // time t of a change, joinStrip and placeStrip write it. Motion (a forward step by exactly one):
@@ -18,7 +18,7 @@
 //   - the focus ring, the raise and the join switch at once, the join fading in or out, while the other dots'
 //     colours tween to the dim colour (index.js, over --sd-duration-fast; never opacity).
 import { d3 } from "../../core/d3.js";
-import { keyed, dot, halo } from "../../core/chart.js";
+import { keyed, dot } from "../../core/chart.js";
 import { lerp, clamp01 } from "../../core/kit.js";
 import { overflowText, overflowWidth, OVERFLOW_GAP } from "./model.js";
 
@@ -95,11 +95,6 @@ export function joinStrip(row, d, m) {
   });
 }
 
-/** Copies each halo copy's opacity from the mark just after it (`halo` copies geometry only). */
-const haloOpacity = (copies) => copies.attr("opacity", function () {
-  return this.nextSibling?.getAttribute("opacity") ?? null;
-});
-
 /**
  * Writes one strip of `view` (s, from stripAt): its dots, summary tick and overflow boxes. `x` is the value scale of
  * the view, `r` the dot radius, `band` the row's height, `out` the opacity of a mark that leaves.
@@ -155,19 +150,21 @@ function segments(points, trim) {
 
 /**
  * Writes the join of `view`: through the item's dots in row order, in the strips on screen (a strip without the
- * item is skipped), wherever they are now. It fades in with `view.in` when it appears (with `view.join` at an
- * entrance, the end of the build) and out with `view.out` when it goes.
+ * item is skipped), wherever they are now: top to bottom as the dots are at this moment, so while the rows re-sort
+ * the line follows them and never doubles back (at rest that is the model's row order: a dot stays inside its band).
+ * It fades in with `view.in` when it appears (with `view.join` at an entrance, the end of the build) and out with
+ * `view.out`.
  */
 export function placeFocus(g, m, view, { x, yOf, r }) {
-  const joins = g.selectAll(JOIN).each(function (j) {
+  g.selectAll(JOIN).each(function (j) {
     const points = [];
     for (const row of m.rows) {
       const s = view.rows.get(row.key);
       const q = s.visible ? s.points?.get(j.key) : null;
       if (q) points.push([x(q.v), yOf(s.slot) + q.dy]);
     }
+    points.sort((a, b) => a[1] - b[1]); // stable: dots at the same height keep the model's order
     const o = gone(this) ? view.out : view.join ?? (this.__sdSeen ? 1 : view.in);
     d3.select(this).attr("d", segments(points, r + 3)).attr("opacity", opacity(o));
   });
-  haloOpacity(halo(joins, { under: true }));
 }

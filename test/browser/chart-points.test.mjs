@@ -792,7 +792,7 @@ const joinOf = (page) =>
     const p = paths[0];
     if (!p) return { count: 0 };
     const segments = [...(p.getAttribute("d") ?? "").matchAll(/M([-\d.e]+),([-\d.e]+)L([-\d.e]+),([-\d.e]+)/g)].map((m) => m.slice(1).map(Number));
-    return { count: paths.length, segments, stroke: getComputedStyle(p).stroke, fill: getComputedStyle(p).fill, halo: p.previousElementSibling?.classList.contains("sd-halo-under") ?? false };
+    return { count: paths.length, segments, stroke: getComputedStyle(p).stroke, fill: getComputedStyle(p).fill, halo: p.parentNode.querySelectorAll(".sd-halo-under").length > 0 };
   });
 
 /** Asserts that the join's segments run between consecutive centres (row order), each on the line between them. */
@@ -827,7 +827,8 @@ test("focus: ring, raise and join line; others dim", async () => {
     const r = at.Norte.dots[0].r;
     const join = await joinOf(page);
     assert.equal(join.count, 1, "one join line");
-    assert.deepEqual([join.stroke, join.fill, join.halo], [ink, "none", true], "an ink line on a halo");
+    // No halo: it would cut background channels through the dim dots and bite into the rings it ends at.
+    assert.deepEqual([join.stroke, join.fill, join.halo], [ink, "none", false], "a plain ink line");
     assertJoins(join, centresOf(at), r, "focus");
     const opacities = await page.evaluate(() => [...document.querySelectorAll('[data-el="points"] svg *')].map((n) => getComputedStyle(n).opacity));
     assert.ok(opacities.every((o) => o === "1"), "nothing is faded");
@@ -849,6 +850,25 @@ test("focus: ring, raise and join line; others dim", async () => {
     assert.ok(move.moved >= 2, `the colour was seen part-way (${move.moved} frames)`);
     assert.ok(move.arrived >= 150, `200 ms, not a snap (arrived at ${move.arrived.toFixed(0)} ms)`);
     assert.ok(played.frames.every((f) => f.opacity === "1"), "opacity never changes");
+    await errorsClean(page, ctx);
+  });
+});
+
+test("focus: the join follows the rows down the plot while they re-sort", async () => {
+  await withPage({ root, url: pages.url("focus", "step=focus&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "focus", "resort", "points", (el) => {
+      const p = el.querySelector("path.sd-focus-join");
+      const ys = [...(p?.getAttribute("d") ?? "").matchAll(/M([-\d.e]+),([-\d.e]+)L([-\d.e]+),([-\d.e]+)/g)].flatMap((m) => [Number(m[2]), Number(m[4])]);
+      const norte = el.querySelector('g.sd-points-row[data-key="Norte"]').getAttribute("transform");
+      return { ys, norte };
+    });
+    const moving = r.frames.filter((f) => f.norte !== r.frames[0].norte && f.norte !== r.end.norte);
+    assert.ok(moving.length > 0, "the rows are seen sliding");
+    // Down the plot at every frame: each segment runs downward and starts below the end of the one before.
+    const crossed = r.frames.filter((f) => f.ys.some((y, i) => i > 0 && y < f.ys[i - 1]));
+    assert.deepEqual(crossed.map((f) => [Math.round(f.ms), f.ys.map(Math.round)]), [], "the join never doubles back up the plot");
+    assert.equal(r.end.ys.length, 6, "three segments at the end");
+    assert.equal(await elementHtml(page, "points"), await htmlAfterJump(ctx, page, pages, "focus", "resort", "points"));
     await errorsClean(page, ctx);
   });
 });

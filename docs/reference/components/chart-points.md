@@ -141,7 +141,7 @@ On the played step that adds `from` and changes `y`, each filled dot slides from
 - **Ids.** An id appears at most once per category (a second one fails the element). The same id in several categories is the same item, which `focus` follows.
 - **Sorting.** `sort: "value"` and `"-value"` rank the strips by their summary statistic, the median when `summary` is `"none"`. `sort: { by }` reduces that column over each strip the same way (the median or the mean, numerically: a text column ranks as empty, so last).
 - **Overflow.** With a given `domain`, points outside it are not drawn. A box at that end of the row counts them: `‹ 3` between the category label and the plot, `3 ›` past the plot's right end, in `--sd-color-muted` at the label size, in a frame of `--sd-color-rule`. The margins keep room for the widest box of every step, so a step that sets `domain` does not resize the plot. The summary still counts every value; its tick is drawn only when it falls inside the domain. Without `domain` the axis covers every point, so nothing overflows.
-- **Focus.** `focus` names one id. Its dots get class `sd-focus` (an ink ring over the dot's colour) and are raised to the end of their strip. A thin ink line on a background halo (`path.sd-focus-join`) joins them from strip to strip in row order; a strip without the item, or with it outside the domain, is skipped, and the line stops at each ring. Every other dot turns `--sd-color-dim` (never faded, so nothing loses contrast). An id the data does not have fails the element.
+- **Focus.** `focus` names one id. Its dots get class `sd-focus` (an ink ring over the dot's colour) and are raised to the end of their strip. A thin ink line (`path.sd-focus-join`) joins them from strip to strip in row order; a strip without the item, or with it outside the domain, is skipped, and the line stops at each ring. Every other dot turns `--sd-color-dim` (never faded, so nothing loses contrast). An id the data does not have fails the element.
 - **Not drawn in strips.** `from`, `interval` and the value labels. `from` and `interval` do not widen the axis either.
 - **Accessibility.** Each strip's `<title>` reads `Norte: 22,0 (n = 40)`: its summary and how many values it has (`Norte (n = 40)` with `summary: "none"`).
 
@@ -234,7 +234,7 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 | Strip | The category's band holds its points as a beeswarm, each dot the size of an estimate's dot. The dots keep the background outline, so neighbours read apart. |
 | Summary tick | Ink, 4px, across the strip a little inside the band, over the dots. |
 | Overflow box | A `--sd-color-background` box with a 2px `--sd-color-rule` frame, its count in `--sd-color-muted` at the label size. The low box sits between the category label and the plot, the high box past the plot's right end, both half a font size clear of the axis ends. |
-| Focus | The followed dot keeps its colour and gets a 3px ink ring. The join is a 2.5px ink line on a background halo, cut back at each ring. |
+| Focus | The followed dot keeps its colour and gets a 3px ink ring. The join is a 2.5px ink line over the dim dots, with no halo (one would cut background channels through them), cut back at each ring. |
 | Accessibility | Each row has a `<title>` with the category, its value and the interval, formatted like the labels: `Norte: 12,4 (9,8 – 15,1)` in a Spanish deck, or `Oeste: sin datos`. A strip's reads `Norte: 22,0 (n = 40)`. |
 
 ## Labels and formats
@@ -278,7 +278,7 @@ svg.sd-chart-points
           rect.sd-overflow-box, text.sd-overflow-count
         text.sd-no-data.sd-halo             (a row without a value)
     g.sd-focus-joins
-      path.sd-halo-under, path.sd-focus-join  (strips with `focus` in two shown strips or more)
+      path.sd-focus-join                    (strips with `focus` in two shown strips or more)
   text.sd-axis-title.sd-axis-title-band
   text.sd-axis-title.sd-axis-title-value
 ```
@@ -312,7 +312,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``chart.points needs a `data` path`` | `data` is missing or empty. |
 | `<data> is not a table (use a .csv file)` | `data` points at a file that does not load as a list of rows. |
 | ``chart.points needs `<prop>` (a column name)`` | `x` or `y` is missing or not a non-empty string, or an `interval` key is empty or not a string. |
-| `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y`, `from` or `interval` is not in the CSV header. |
+| `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y`, `id`, `from` or `interval` is not in the CSV header. |
 | ``\`domain\` must be [min, max] with min < max`` | `domain` is not two finite numbers in increasing order. |
 | ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category, without `id`. |
 | `id '<id>' appears more than once in category '<k>' of <data>` | Strips: two rows of one category share an id. |

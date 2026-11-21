@@ -53,7 +53,7 @@ Behaviour:
   points outside it are not drawn and a box at that end of the row counts them (`‹ 3` left of the plot, `3 ›` right
   of it, muted, in a frame; the margins keep room for the widest at every step, so the plot never resizes). The
   summary still counts every value, but its tick is drawn only inside the domain. `focus` follows one id: its dots
-  get class `sd-focus` (an ink ring) and are raised to the end of their strip, a thin ink line on a halo
+  get class `sd-focus` (an ink ring) and are raised to the end of their strip, a thin ink line
   (`path.sd-focus-join`) joins them from strip to strip in row order, skipping a strip without the item or with it
   outside the domain, and every other dot turns `--sd-color-dim` (never faded). `from` and `interval` are not drawn
   in strips, and do not widen the axis there. The strip's `<title>` reads `Norte: 22 (n = 40)`.
@@ -128,6 +128,6 @@ Markup: `svg.sd-chart-points`; each category is `g.sd-points-row[data-key][data-
 (`rect.sd-overflow-box`, `text.sd-overflow-count`) instead of the estimate's marks; the category labels are
 `g.sd-points-labels > text.sd-points-label[data-key]`; the value axis is `g.sd-axis-value > g.tick`; the reference is
 `g.sd-references > g.sd-reference` (`line.sd-rule`, `text.sd-rule-label`); the focus join is
-`g.sd-focus-joins > path.sd-focus-join` (on a `.sd-halo-under` copy), above every row.
+`g.sd-focus-joins > path.sd-focus-join`, above every row.
 
 See `example.js` for a slide that uses it.
