@@ -66,6 +66,24 @@
       "examples": ["horizontal", "vertical"],
       "x-transition": "snap"
     },
+    "sort": {
+      "anyOf": [
+        { "enum": ["none", "value", "-value"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by"],
+          "properties": {
+            "by": { "type": "string", "description": "Column to order by.", "examples": ["agent_days"] },
+            "order": { "enum": ["asc", "desc"], "description": "Ascending (the default) or descending.", "examples": ["desc"] }
+          }
+        },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Order of the bars. \"none\" (the default) keeps the data order; \"value\" orders by `y`, lowest first, and \"-value\" highest first; { by, order } orders by another column (ascending unless `order` is \"desc\"); a list of categories puts those first, in that order, and the rest after them in data order. Ties keep data order and bars without a value come last, whichever way it runs. Hidden categories keep their place in the order. When it changes on a played step, every bar, with its label and whisker, slides to its new place; a bar that appears grows in at its place. An unknown column or category is an element error naming it.",
+      "examples": ["-value", { "by": "agent_days", "order": "desc" }, ["before", "with an agent"]],
+      "x-transition": "tween"
+    },
     "shown": {
       "type": "array",
       "items": { "type": "string" },

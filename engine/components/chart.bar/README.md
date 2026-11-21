@@ -13,6 +13,7 @@ shrinks or grows the bars, and an optional interval whisker is drawn after its b
 | `format` | `{x?, y?}` | see below | snap | d3-format specs, localized by the deck language: `y` for value labels, ticks and the interval text, `x` for numeric categories. |
 | `axes` | `{x?, y?}` | none | snap | Axis titles: `x` names the category axis, `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | Categories down the left (bars point right) or along the bottom (bars point up). |
+| `sort` | `"none"` \| `"value"` \| `"-value"` \| `{by, order?}` \| string[] | `"none"` | tween | Order of the bars: the data order, by `y` (lowest or highest first), by another column, or a list of categories first. See Sorting. |
 | `shown` | string[] | all categories | draw | Categories to show, by name. A category that appears grows from zero, then draws its whisker. |
 | `highlight` | string | none | fade | One category emphasised; the other bars turn the theme's dim color (`--sd-color-dim`) and sit below it. Use `only` so it lasts one step. |
 | `domain` | `[min, max]` | from the data | tween | Fixed value axis, used as given. |
@@ -23,9 +24,16 @@ Behaviour:
   `[min(0, every y and interval value), max(...)]` over **every row** of the data, shown or not, rounded outward to
   tick values. It moves only when `y`, `interval` or `domain` change, and then it tweens. For "weeks shrinking to
   days", keep both durations in one unit in two columns, switch `y` between them and set `domain` so the shrink is visible.
-- **Hidden categories keep their band.** Bands follow the data order whether or not a category is shown; a hidden
-  category is laid out at its final length and hidden with `visibility` (bar, whisker, value label and its category
-  label), so nothing reflows between steps.
+- **Sorting.** `sort` orders the bands (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
+  `y`, lowest first, and `"-value"` highest first; `{ by, order }` orders by another column (ascending unless `order`
+  is `"desc"`); a list of categories puts those first, in that order, and the rest after them in data order. Ties
+  keep the data order and a bar with no value comes last whichever way it runs. `sort` changes the order and nothing
+  else: the value axis and the margins do not change with it. An unknown column or category fails the element with
+  `rank`'s message.
+- **Hidden categories keep their band.** Bands follow the sorted order (the data order without `sort`) whether or not a
+  category is shown: every category is ranked, then the hidden ones are hidden. A hidden category is laid out at its
+  final length and hidden with `visibility` (bar, whisker, value label and its category label), so nothing reflows
+  between steps.
 - **Entrance.** The chart builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on
   an animated step, every shown bar grows from zero and then draws its whisker, over 2 × `--sd-duration` or the
   element's `enter.duration`, while its box stays still. It waits for its stagger slot like any entering element,
@@ -35,6 +43,8 @@ Behaviour:
   - a category that appears grows from zero, then its whisker is drawn out of the bar's end, and its label follows
     the bar; a category that leaves does the reverse;
   - a changed value tweens the bar, its whisker and its label;
+  - a changed `sort` slides every bar, with its category label, whisker and value label, from its old band to its new
+    one in the same motion; a bar that appears on that step grows in at its final band while the others slide;
   - `highlight` tweens the colors of the other bars to `--sd-color-dim` (and their value labels to `--sd-color-muted`)
     over `--sd-duration-fast`, and draws the emphasised bar after (above) the others. Opacity is never used, so label
     contrast does not drop.
@@ -50,7 +60,8 @@ Behaviour:
   theme without it), dimmed labels `--sd-color-muted`; ink, grid and axis colors are theme tokens.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
   lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
-  `shown` or `highlight` that the data does not have, and a `domain` that is not `[min, max]` with min < max.
+  `shown`, `highlight` or a `sort` list that the data does not have, a `sort` column the data lacks, a `sort` of no
+  valid form, and a `domain` that is not `[min, max]` with min < max.
   `validate` also checks the columns `x`, `y` and `interval` name, at every step.
 - **Accessibility.** Each bar carries a `<title>` with its category, value and interval, formatted like the labels
   (so a Spanish deck reads `12,5 (10,5 – 14,5)`).

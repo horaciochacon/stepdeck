@@ -103,6 +103,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - Switching `y` between columns grows or shrinks the bars. Set an explicit `domain: [min, max]` then, so the axis stays put and the change is visible.
 - `interval` adds a whisker from a lower to an upper column.
 - `shown` brings categories in one by one; hidden ones keep their band. `highlight` dims the other bars to a neutral grey.
+- `sort` orders the bands: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden bars keep their place, empty values come last, and changing it on a step slides every bar, with its label and whisker, to its new band.
 - It counts as a figure, so the slide needs a `role: "source"` line.
 - A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
 

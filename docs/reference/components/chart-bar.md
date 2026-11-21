@@ -65,6 +65,7 @@ To emphasize one bar for a single step, set `highlight` in the step's `only`, so
 | `format` | `{ x?, y? }` | see [Labels](#labels-and-formats) | snap | d3-format specs, localized by the deck language. `y` formats value labels, ticks and the interval text in each bar's title. `x` formats category labels, and applies only when the category value is a number (for example years). |
 | `axes` | `{ x?, y? }` | none | snap | Axis titles. `x` names the category axis and `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | `horizontal`: categories down the left, bars point right. `vertical`: categories along the bottom, bars point up. |
+| `sort` | `"none"` \| `"value"` \| `"-value"` \| `{ by, order? }` \| string[] | `"none"` | tween | Order of the bars. See [Sorting](#sorting). |
 | `shown` | string[] | every category | draw | Categories to show, by name. A category that appears grows from zero, then its whisker draws. Hidden categories keep their band. |
 | `highlight` | string | none | fade | One category to emphasize. The other bars turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color; the emphasized bar is drawn after (above) the others. |
 | `domain` | `[min, max]` | from the data | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). |
@@ -79,6 +80,34 @@ Each category must appear in exactly one row. A second row with the same categor
 A row whose `y` cell is empty or not a number gets a bar of length zero, no value label and no whisker. A whisker is drawn only when the row has a value and both interval bounds.
 
 Keep the values you want to compare in one unit, in separate columns of the same file, and switch `y` between them. That is how `speed.js` shows weeks shrinking to days: both columns are in days.
+
+## Sorting
+
+`sort` decides the order of the bands. Every category is ranked, shown or not, so a bar that `shown` hides keeps its place in the order and appears there.
+
+| `sort` | Order |
+| --- | --- |
+| `"none"`, or omitted | The data order. |
+| `"value"` | By `y`, lowest first. |
+| `"-value"` | By `y`, highest first. |
+| `{ by: "<column>", order: "asc" \| "desc" }` | By another column of the CSV, ascending unless `order` is `"desc"`. A text column compares by code point. |
+| `["North", "South"]` | Those categories first, in that order, then the rest in data order. |
+
+Ties keep the data order. A row with no value (an empty cell, which draws a bar of length zero and no label) comes last whichever way the order runs. Sorting changes the order and nothing else: the value axis, the margins and every bar's value are the same.
+
+```js
+{ id: "bars", region: "main", type: "chart.bar",
+  props: { data: "data/values.csv", x: "group", y: "score" } },
+// ...
+steps: [
+  { id: "data" },
+  { id: "ranked", set: { bars: { sort: "-value" } } },
+],
+```
+
+On a played step, a change of `sort` slides every bar, with its category label, whisker and value label, from its old band to its new one in one motion. A bar that appears on the same step is already in its final band while it grows, and the others slide to make room. `sort` and `y` can change together: the bars change length while they change places.
+
+The errors are the ranking's own. An unknown column fails the element with `sort column '<c>' not found (columns: a, b, …)`, an unknown category in a list with ``category '<k>' in `sort` not found (categories: …)``, and any other form with `` `sort` must be "none", "value", "-value", { by, order } or a list of categories``.
 
 ## The value axis
 
@@ -103,6 +132,7 @@ Every animated change runs as a single `ctx.animate.tween` that lasts twice the 
 | Change | What you see |
 | --- | --- |
 | `y` changes | Every bar, whisker and value label tweens to its new length. |
+| `sort` changes | Every bar, with its category label, whisker and value label, slides from its old band to its new one, in the same motion. |
 | A category enters `shown` | The bar grows from zero over the first 60% of the motion, then the whisker draws out of the bar's end over the remaining 40%. The value label follows the bar's end and its opacity rises with the growth. |
 | A category leaves `shown` | The reverse: the whisker retracts into the bar's end over the first 40%, then the bar shrinks to zero over the remaining 60% while its label fades. The category is then hidden. |
 | `highlight` set, changed or cleared | The bar fill and value label color interpolate in RGB over `--sd-duration-fast`. |
@@ -110,14 +140,14 @@ Every animated change runs as a single `ctx.animate.tween` that lasts twice the 
 | Plot size or margins change (for example an axis title is added) | The plot area tweens to its new size. |
 | The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown category grows from zero, then draws its whisker, while the box stays still (over the element's own `enter.duration` when set). The bars are at zero the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the bars are at full length at once; with `enter: "none"` nothing moves. |
 
-Hidden categories keep their band. Bands follow the data order whether or not a category is shown. A hidden category is laid out at its final length and hidden with `visibility`, together with its whisker, value label and category label, so nothing reflows when it appears.
+Hidden categories keep their band. Bands follow the [sorted](#sorting) order (the data order without `sort`) whether or not a category is shown. A hidden category is laid out at its final length and hidden with `visibility`, together with its whisker, value label and category label, so nothing reflows when it appears.
 
 `highlight` changes color, not opacity, so value labels keep their contrast. The value labels do use an `opacity` attribute, but only while a category grows in or out.
 
 No motion plays, and the new state is drawn at once, when:
 
 - `orient` changes, or
-- the set or order of categories changes (for example `data` or `x` points at different rows).
+- the set of categories changes (for example `data` or `x` points at different rows). A different order of the same categories, from `sort`, slides.
 
 The element's own entrance still grows every bar from zero.
 
@@ -211,6 +241,9 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `category '<k>' appears more than once in <data> (chart.bar needs one row per category)` | Two rows share a category. |
 | ``category '<id>' in `shown` not found in <data> (categories: …)`` | `shown` names a category the data does not have. |
 | ``category '<id>' in `highlight` not found in <data> (categories: …)`` | `highlight` names a category the data does not have. |
+| `sort column '<c>' not found (columns: a, b, …)` | `sort: { by }` names a column the CSV does not have. |
+| ``category '<k>' in `sort` not found (categories: …)`` | A `sort` list names a category the data does not have. |
+| `` `sort` must be "none", "value", "-value", { by, order } or a list of categories`` | `sort` is none of those forms. |
 
 The file errors from the data loader also apply, such as `data file not found: <path>`. See [Data and bindings](../../guide/data-and-bindings.md).
 
@@ -220,7 +253,7 @@ The file errors from the data loader also apply, such as `data file not found: <
 squash/bars · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'
 ```
 
-It does not check `domain` order, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+It does not check `domain` order, `sort`, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 squash/bars: category 'Nope' in `highlight` not found in data/speed.csv (categories: Clean the data, Write the report)

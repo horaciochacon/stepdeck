@@ -15,11 +15,14 @@
 //   - the value domain is the `domain` prop, else [min(0, every y and interval value), max(...)] over every row
 //     of the data, shown or not, rounded outward to tick values (`nice`); it moves only when `y`, `interval`
 //     or `domain` change, and then it tweens;
-//   - categories keep their band in data order whether or not they are shown; a hidden category is laid out
-//     at its final length and hidden with CSS visibility, so nothing reflows.
+//   - categories keep their band whether or not they are shown, in the sorted order (`sort`, through `rank`; the data
+//     order without it): every category is ranked, then the hidden ones are hidden, so a hidden category keeps its
+//     slot. A hidden category is laid out at its final length and hidden with CSS visibility, so nothing reflows.
 // Motion: a category that appears grows from zero and then its whisker is drawn (GROW is the share of the
 // motion given to the bar); a category that leaves does it in reverse; a changed value tweens the bar, its
-// whisker and its label; `highlight` tweens the other bars to the theme's --sd-color-dim over
+// whisker and its label; a changed `sort` slides every bar, with its band label, whisker and value label, from its old
+// band to its new one (a bar's band centre interpolates from its old slot to its new one; a bar that appears is at
+// its final slot from the start); `highlight` tweens the other bars to the theme's --sd-color-dim over
 // --sd-duration-fast (never opacity, which would lower the contrast of the labels) and draws the highlighted
 // bar after (above) them.
 // Entrance: the chart owns it (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" every shown
@@ -29,7 +32,7 @@
 // renders the end state at once.
 // Colors come from ctx.palette("categorical") (the first color) and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
+import { loadTable, tickFormat, opacityAttr, rank, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
 
 const GROW = 0.6; // share of a motion in which an entering bar grows; its whisker is drawn in the rest
@@ -94,7 +97,7 @@ function buildModel(props, rows, ctx, el) {
   const fill = colors[0] ?? tokenColor(ctx.tokens, "--sd-color-accent");
   const ink = tokenColor(ctx.tokens, "--sd-color-ink");
   const muted = tokenColor(ctx.tokens, "--sd-color-muted");
-  const bars = categories.map((row) => {
+  const made = categories.map((row) => {
     const raw = row[props.x];
     const key = String(raw);
     const value = valueOf(row, props.y);
@@ -105,11 +108,17 @@ function buildModel(props, rows, ctx, el) {
     const text = value === null ? "" : fv(value);
     const range = value !== null && lo !== null && hi !== null ? ` (${fv(lo)} – ${fv(hi)})` : "";
     return {
-      key, label, value, lo: value === null ? null : lo, hi: value === null ? null : hi,
-      text, title: `${label}: ${text}${range}`, shown: shown.has(key), dim,
-      fill: focusPaint(ctx, fill, dim), labelFill: dim && muted ? muted : ink,
+      bar: {
+        key, label, value, lo: value === null ? null : lo, hi: value === null ? null : hi,
+        text, title: `${label}: ${text}${range}`, shown: shown.has(key), dim,
+        fill: focusPaint(ctx, fill, dim), labelFill: dim && muted ? muted : ink,
+      },
+      columns: row,
     };
   });
+  // The order: every category is ranked, shown or not, so a hidden one keeps its slot. The errors are rank's.
+  const byKey = new Map(made.map(({ bar }) => [bar.key, bar]));
+  const bars = rank(made.map(({ bar, columns }) => ({ key: bar.key, value: bar.value, columns })), props.sort).map((key) => byKey.get(key));
 
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
   // Room for a value label at a bar's end. It must not depend on the current `y`, or the plot would resize (and the
@@ -126,16 +135,17 @@ function buildModel(props, rows, ctx, el) {
   // The category labels wrap to the room the plot leaves them, and the margin across the bands follows from
   // the wrapped lines, so each orientation sizes one pair of sides, then the plot, then wraps (setting
   // `b.lines`), then sizes the other pair.
+  let lineH = 0;
   const { w, h, font, margin, pw, ph } = frame(el, ctx, ({ font, charW, w, h }) => {
-    const lineH = font * 1.15;
+    lineH = font * 1.15;
     const labelW = widest * charW + font * 0.6;
     if (horizontal) {
       // Category labels left of the plot, value ticks under it, value labels past the bar ends.
       const top = Math.round(hasX ? font * 1.9 : font * 0.6);
       const bottom = Math.round(hasY ? font * 3.6 : font * 1.9);
-      const ph = Math.max(1, h - top - bottom);
+      const plotH = Math.max(1, h - top - bottom);
       const maxChars = Math.max(4, Math.floor((w * 0.34 - font * 0.6) / charW));
-      const maxLines = Math.max(1, Math.floor((ph / n) / lineH));
+      const maxLines = Math.max(1, Math.floor((plotH / n) / lineH));
       for (const b of bars) b.lines = wrapLabel(b.label, maxChars, maxLines);
       const chars = Math.max(1, ...bars.flatMap((b) => b.lines.map((l) => l.length)));
       return { top, bottom, left: chars * charW + font * 0.6 + (domain[0] < 0 ? labelW : 0), right: domain[1] > 0 ? labelW : font * 0.6 };
@@ -143,8 +153,8 @@ function buildModel(props, rows, ctx, el) {
     // Value ticks left of the plot, category labels under it, value labels above the bar ends.
     const left = Math.round(Math.max(1, ...ticks.map((t) => t.label.length)) * charW + font * 0.6);
     const right = Math.round(font * 0.6);
-    const pw = Math.max(1, w - left - right);
-    const maxChars = Math.max(3, Math.floor((pw / n) * 0.95 / charW));
+    const plotW = Math.max(1, w - left - right);
+    const maxChars = Math.max(3, Math.floor((plotW / n) * 0.95 / charW));
     for (const b of bars) b.lines = wrapLabel(b.label, maxChars, 3);
     const lines = Math.max(1, ...bars.map((b) => b.lines.length));
     return {
@@ -153,7 +163,6 @@ function buildModel(props, rows, ctx, el) {
       bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (domain[0] < 0 ? font * 1.4 : 0),
     };
   });
-  const lineH = font * 1.15;
   return {
     w, h, font, lineH, orient, margin, pw, ph, domain, ticks, bars, hasInterval,
     axes: { x: hasX ? String(props.axes.x) : "", y: hasY ? String(props.axes.y) : "" },
@@ -171,7 +180,7 @@ function geometry(m, domain, pw, ph) {
 const staticView = (m) => ({
   domain: m.domain, pw: m.pw, ph: m.ph, margin: { left: m.margin.left, top: m.margin.top },
   ticks: m.ticks.map((t) => ({ ...t, opacity: 1 })),
-  bars: new Map(m.bars.map((b) => [b.key, { v: b.value, lo: b.lo, hi: b.hi, whisker: 1, visible: b.shown, labelOpacity: 1, fill: b.fill, labelFill: b.labelFill }])),
+  bars: new Map(m.bars.map((b, i) => [b.key, { slot: i, v: b.value, lo: b.lo, hi: b.hi, whisker: 1, visible: b.shown, labelOpacity: 1, fill: b.fill, labelFill: b.labelFill }])),
 });
 
 /** The start of an entrance: every shown bar at zero length, with no whisker and no label (as a morph's t = 0). */
@@ -230,16 +239,17 @@ export default {
       baseline.attr("x1", horizontal ? g.zero : 0).attr("x2", horizontal ? g.zero : g.pw)
         .attr("y1", horizontal ? 0 : g.zero).attr("y2", horizontal ? g.ph : g.zero).raise();
 
-      // Band axis: one label per category (wrapped), hidden with its bar.
-      const centerOf = (i) => step * (i + 0.5);
+      // Band axis: one label per category (wrapped), hidden with its bar. A bar sits at its view's `slot`: its index in
+      // the sorted order, or a place between two while a re-sort plays.
+      const centerOf = (slot) => step * (slot + 0.5);
       gBand.selectAll("text.sd-band-label").data(m.bars, (d) => d.key).join((enter) => enter.append("text").attr("class", "sd-band-label"))
         .attr("data-key", (d) => d.key)
         .attr("data-visible", (d) => String(view.bars.get(d.key).visible))
-        .attr("y", (d, i) => (horizontal ? centerOf(i) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5))
+        .attr("y", (d) => (horizontal ? centerOf(view.bars.get(d.key).slot) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5))
         .attr("text-anchor", horizontal ? "end" : "middle")
         .order()
-        .each(function (d, i) {
-          const x = horizontal ? -f * 0.4 : centerOf(i);
+        .each(function (d) {
+          const x = horizontal ? -f * 0.4 : centerOf(view.bars.get(d.key).slot);
           text(d3.select(this).selectAll("tspan").data(d.lines).join("tspan")
             .attr("x", x).attr("dy", (_l, j) => (j > 0 ? m.lineH : horizontal ? "0.35em" : "0.71em")), (l) => l);
         });
@@ -256,12 +266,12 @@ export default {
         .attr("data-visible", (d) => String(view.bars.get(d.key).visible))
         .attr("data-dim", (d) => String(d.dim))
         .order()
-        .each(function (d, i) {
+        .each(function (d) {
           const s = view.bars.get(d.key);
           const sel = d3.select(this);
           const v = s.v ?? 0;
           const end = scale(v);
-          const center = centerOf(i);
+          const center = centerOf(s.slot);
           text(sel.select("title"), d.title);
           sel.select("rect")
             .attr("x", horizontal ? Math.min(g.zero, end) : center - thick / 2)
@@ -306,8 +316,10 @@ export default {
       paint(m, staticView(m));
     }
 
-    const comparable = (a, b) => a && b && a.orient === b.orient && a.bars.map((x) => x.key).join("\n") === b.bars.map((x) => x.key).join("\n");
-    const signature = (m) => JSON.stringify([m.domain, m.pw, m.ph, m.margin, m.bars.map((b) => [b.value, b.lo, b.hi, b.shown, b.dim]), m.ticks.map((t) => t.label)]);
+    // The same set of categories; their order may differ (a re-sort moves them).
+    const keysOf = (m) => m.bars.map((x) => x.key).sort().join("\n");
+    const comparable = (a, b) => a && b && a.orient === b.orient && keysOf(a) === keysOf(b);
+    const signature = (m) => JSON.stringify([m.domain, m.pw, m.ph, m.margin, m.bars.map((b) => [b.key, b.value, b.lo, b.hi, b.shown, b.dim]), m.ticks.map((t) => t.label)]);
 
     /**
      * Plays `from` -> `to` (from may be null: everything shown grows in, as when the element appears) over
@@ -343,9 +355,11 @@ export default {
           view.ticks.push({ ...tick, opacity: before.has(value) && after.has(value) ? 1 : after.has(value) ? (from ? t : 1) : 1 - t });
         }
         view.ticks.sort((a, b) => a.value - b.value);
-        for (const b of to.bars) {
+        const slotBefore = new Map((from?.bars ?? []).map((b, i) => [b.key, i]));
+        to.bars.forEach((b, slot) => {
           const p = prev.get(b.key) ?? b;
-          const from01 = enterAll || !prev.has(b.key) ? 0 : p.shown ? 1 : 0;
+          const wasShown = !enterAll && prev.has(b.key) && p.shown; // a bar that was hidden has no old place: it is at its new one from the start
+          const from01 = wasShown ? 1 : 0;
           const to01 = b.shown ? 1 : 0;
           let grow = 1; // 1 = full length (also for a bar that stays hidden: it is laid out at its final length)
           let whisker = 1;
@@ -361,12 +375,13 @@ export default {
           }
           const v = lerpNull(p.value, b.value, t);
           view.bars.set(b.key, {
+            slot: wasShown ? lerp(slotBefore.get(b.key), slot, t) : slot,
             v: v === null ? null : v * grow,
             lo: lerpNull(p.lo, b.lo, t), hi: lerpNull(p.hi, b.hi, t),
             whisker, visible: from01 > 0 || to01 > 0, labelOpacity,
             ...live.get(b.key),
           });
-        }
+        });
         paint(to, view, first);
         first = false;
       };
