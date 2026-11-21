@@ -32,24 +32,14 @@
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw, splitAt, dot, rule, halo } from "../../core/chart.js";
+import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw } from "../../core/chart.js";
+import { partsOf, dOr, lineD, forecastSeries, dotData, placeDots, placeForecast } from "./parts.js";
 import { textColor } from "../../core/color.js";
 import { SVG_NS, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const NO_SERIES = "all"; // series key when props.series is absent
 
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
-
-const HOLLOW_GROWTH = 1.2; // a hollow (forecast) dot is a little larger than a filled one: its ring is thinner
-
-/**
- * A series' points (pixels) cut at the forecast start `at` (pixels; null without a forecast): the observed part
- * and the forecast part, which share the point at the cut (see `splitAt`). Without a forecast, everything is observed.
- */
-const partsOf = (points, at) => (at == null ? { observed: points, forecast: [] } : splitAt(points, at, (p) => p.px));
-
-/** A path's `d`, with "" in place of null when `keep`, so a part that becomes empty keeps its attribute (and its place in the markup). */
-const dOr = (d, keep) => d ?? (keep ? "" : null);
 
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
@@ -155,17 +145,6 @@ function buildModel(props, rows, ctx, el) {
   };
 }
 
-const lineD = d3.line().x((p) => p.px).y((p) => p.py);
-
-/** The series that have a forecast line (and band): two or more points after the cut. */
-const forecastSeries = (m) => (m.forecast ? m.series.filter((s) => partsOf(s.points, m.forecast.at).forecast.length >= 2) : []);
-
-/** One dot per data point of every shown series (never the boundary point of a cut), while `points` is on. */
-const dotData = (m) =>
-  m.showPoints
-    ? m.series.flatMap((s) => s.points.filter((p) => Number.isFinite(p.px) && Number.isFinite(p.py)).map((p) => ({ key: p.key, series: s.name, px: p.px, py: p.py, dimmed: s.dimmed, paint: s.paint })))
-    : [];
-
 export default {
   async mount(el, props, ctx) {
     const doc = el.ownerDocument;
@@ -239,28 +218,6 @@ export default {
       plot.selectAll("g.sd-points circle.sd-dot:not(.sd-exiting)").data(dotData(m), (d) => d.key).order().filter(focused).raise();
     }
 
-    /** The dots at positions `pos(d)` (pixels), hollow past the forecast start `at`, painted `paint(d)`. */
-    function placeDots(sel, m, pos, at, paint) {
-      const r = m.font * 0.22;
-      const hollow = (d) => at != null && pos(d).px > at;
-      sel.attr("cx", (d) => pos(d).px).attr("cy", (d) => pos(d).py);
-      dot(sel, { r: (d) => (hollow(d) ? r * HOLLOW_GROWTH : r), color: paint, hollow });
-    }
-
-    /** The forecast's region and divider for the scales x, y and the forecast start `at` (pixels, which a played change interpolates). */
-    function placeForecast(m, at, x, y) {
-      const [x0, x1] = x.range();
-      const edge = Math.min(Math.max(at, x0), x1);
-      const g = plot.select("g.sd-forecast:not(.sd-exiting)");
-      g.select("rect.sd-forecast-region").attr("x", edge).attr("y", 0).attr("width", x1 - edge).attr("height", y.range()[0]);
-      // Near the plot's end the label sits before the divider (right-aligned), else after it.
-      const flip = edge > x0 + (x1 - x0) * 0.8;
-      const ph = y.range()[0];
-      const divider = g.select("g.sd-forecast-divider");
-      rule(divider, { x1: edge, y1: flip ? ph : 0, x2: edge, y2: flip ? 0 : ph, label: m.forecast.label, anchor: flip ? "end" : "start" });
-      halo(divider.select("text.sd-rule-label")).attr("y", m.font * 0.9).attr("dy", null); // inside the plot, like an annotation's label
-    }
-
     /** Writes the model exactly: the end state of every update, animated or not. */
     function renderStatic(m) {
       join(m);
@@ -279,7 +236,7 @@ export default {
       gBands.selectAll("path.sd-band-forecast").data(m.hasInterval ? forecastSeries(m) : [], (d) => d.name)
         .attr("d", (d) => band(partsOf(d.points, at).forecast) ?? "").attr("fill", (d) => d.paint);
       if (m.forecast) {
-        placeForecast(m, at, x, y);
+        placeForecast(plot, m, at, x, y);
         plot.selectAll("g.sd-forecast path.sd-forecast-line").data(forecastSeries(m), (d) => d.name)
           .attr("d", (d) => lineD(partsOf(d.points, at).forecast)).attr("stroke", (d) => d.paint);
       }
@@ -382,7 +339,7 @@ export default {
         gBands.selectAll("path.sd-band-forecast:not(.sd-exiting)").data(to.hasInterval ? forecastSeries(to) : [], (d) => d.name)
           .attr("d", (d) => band(partsOf(pts(d), at).forecast) ?? "").attr("fill", (d) => live.get(d.name).paint);
         if (to.forecast) {
-          placeForecast(to, at, x, y);
+          placeForecast(plot, to, at, x, y);
           plot.selectAll("g.sd-forecast:not(.sd-exiting) path.sd-forecast-line:not(.sd-exiting)").data(forecastSeries(to), (d) => d.name)
             .attr("d", (d) => lineD(partsOf(pts(d), at).forecast)).attr("stroke", (d) => live.get(d.name).paint);
         }
