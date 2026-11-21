@@ -240,6 +240,9 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-bar .sd-bar-label { font-weight: 600; }
 .sd-chart-bar .sd-whisker-line, .sd-chart-bar .sd-whisker-cap { stroke: var(--sd-color-ink); stroke-width: 3; stroke-linecap: round; }
 .sd-chart-bar .sd-bar-group[data-visible="false"], .sd-chart-bar .sd-band-label[data-visible="false"] { visibility: hidden !important; }
+/* A waterfall's connectors: quiet dots from one bar's end to the next bar. Its total bar's label is set like a sum. */
+.sd-chart-bar .sd-connector { stroke: var(--sd-color-muted); stroke-width: 2.5; stroke-dasharray: 0 6; stroke-linecap: round; fill: none; }
+.sd-chart-bar .sd-band-label[data-key="__total"] { font-weight: 600; }
 
 /* chart.points component: one row per category, a dot with an interval whisker and a value label. Sizes and neutral
    colours from tokens; the dot colour comes from the palette (a fill attribute), so no rule here sets the fill of a dot

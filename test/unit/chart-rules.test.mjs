@@ -19,9 +19,30 @@ test("chartProblems: ticker without until warns; with until it is clean", () => 
   assert.deepEqual(chartProblems("chart.line", { until: 2030 }), []);
 });
 
+test("chartProblems: invert and total outside waterfall warn", () => {
+  const bar = { data: "data/flow.csv", x: "item", y: "change" };
+  const found = chartProblems("chart.bar", { ...bar, invert: true, total: true });
+  assert.deepEqual(found.map((p) => p.rule), ["chart-prop-unused", "chart-prop-unused"]);
+  assert.ok(found.every((p) => p.severity === "warning"));
+  assert.deepEqual(found.map((p) => p.message), [
+    '`invert` does nothing without `mode: "waterfall"`',
+    '`total` does nothing without `mode: "waterfall"`',
+  ]);
+  for (const p of found) {
+    assert.match(p.limit, /mode: "waterfall"/);
+    assert.match(p.fix, /mode: "waterfall"/);
+  }
+  assert.deepEqual(chartProblems("chart.bar", { ...bar, mode: "bars", total: "Net" }).map((p) => p.message), ['`total` does nothing without `mode: "waterfall"`'], "a label is a total too");
+  assert.deepEqual(chartProblems("chart.bar", { ...bar, mode: "waterfall", invert: true, total: "Net" }), [], "in a waterfall they do something");
+  assert.deepEqual(chartProblems("chart.bar", { ...bar, invert: false, total: false }), [], "switched off, they say nothing");
+  assert.deepEqual(chartProblems("chart.bar", { ...bar, invert: null, total: null }), [], "cleared, they say nothing");
+});
+
 test("chartProblems: unknown types and odd props give nothing", () => {
   assert.deepEqual(chartProblems("text", { ticker: true }), []);
+  assert.deepEqual(chartProblems("text", { invert: true, total: true }), []);
   assert.deepEqual(chartProblems("chart.bar", { ticker: true }), []);
+  assert.deepEqual(chartProblems("chart.line", { invert: true, total: true }), []);
   assert.deepEqual(chartProblems("chart.line", {}), []);
   assert.deepEqual(chartProblems("chart.line", null), []);
   assert.deepEqual(chartProblems(undefined, undefined), []);

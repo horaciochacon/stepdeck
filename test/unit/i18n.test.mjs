@@ -17,3 +17,9 @@ test("noData is localized in en and es", () => {
   assert.equal(t("en", "noData"), "no data");
   assert.equal(t("es", "noData"), "sin datos");
 });
+
+test("total is localized in en and es", () => {
+  assert.equal(t("en", "total"), "Total");
+  assert.equal(t("es", "total"), "Total");
+  assert.equal(t("fr", "total"), "Total");
+});

@@ -8,6 +8,8 @@
 //
 // Rules:
 //   chart-prop-unused (warning)   chart.line: `ticker` without `until` counts nothing.
+//                                 chart.bar: `invert` (true) and `total` (true or a label) without
+//                                 `mode: "waterfall"` change nothing on plain bars.
 
 const unused = (prop, needs) => ({
   rule: "chart-prop-unused",
@@ -27,6 +29,10 @@ export function chartProblems(type, props) {
   const found = [];
   if (type === "chart.line") {
     if (props.ticker === true && (props.until === undefined || props.until === null)) found.push(unused("ticker", "until"));
+  }
+  if (type === "chart.bar" && props.mode !== "waterfall") {
+    if (props.invert === true) found.push(unused("invert", 'mode: "waterfall"'));
+    if (props.total === true || (typeof props.total === "string" && props.total !== "")) found.push(unused("total", 'mode: "waterfall"'));
   }
   return found;
 }

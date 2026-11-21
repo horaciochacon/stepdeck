@@ -328,6 +328,38 @@ test("chart-prop-unused: ticker without until is a warning", async () => {
   assert.match(p.fix, /until/);
 });
 
+test("chart-prop-unused: invert and total outside a waterfall are warnings", async () => {
+  const problems = await validate(fixture("waterfall-props-outside"));
+  assert.deepEqual(rules(problems), ["chart-prop-unused", "chart-prop-unused"], show(problems));
+  assert.ok(problems.every((p) => p.severity === "warning" && p.slide === "s" && p.element === "bars"), show(problems));
+  assert.deepEqual(problems.map((p) => p.measured).sort(), [
+    '`invert` does nothing without `mode: "waterfall"`',
+    '`total` does nothing without `mode: "waterfall"`',
+  ]);
+  assert.ok(problems.every((p) => /mode: "waterfall"/.test(p.fix)), show(problems));
+  assert.deepEqual(errors(problems), [], "warnings only: the deck still builds");
+});
+
+test("a misspelt mode gets a did-you-mean", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-mode-")));
+  try {
+    cpSync(fixture("waterfall-props-outside"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "figure-notes", title: "Mode", elements: [
+      { id: "bars", region: "main", type: "chart.bar", props: { data: "data/flow.csv", x: "item", y: "change", mode: "waterfal", total: true } },
+      { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`);
+    const problems = await validate(tmp);
+    const p = only(problems, "prop-invalid");
+    assert.equal(problems.length, 1, show(problems));
+    assert.equal(p.element, "bars");
+    assert.match(p.measured, /^mode = "waterfal"$/);
+    assert.match(p.limit, /"bars", "waterfall"/);
+    assert.match(p.fix, /^set mode to "waterfall"/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // Kicker and accent phrase (default-theme spec §5.4, §10.4, §10.5).
 test("title-accent: an unmatched * in a title is a warning", async () => {
   const problems = await validate(fixture("title-accent"));

@@ -13,6 +13,7 @@
 //   await expectAnimatedStepMoves(ctx, page, { pages, slide, from, to, id, probe? })
 //   await sampleFrames(page, slide, step, id, probe?)         // the element once per frame while a step plays
 //   paletteRgb(theme, index)                                  // `rgb(...)` of a theme's categorical palette colour
+//   paletteRoleRgb(theme, kind, role)                         // `rgb(...)` of a role of a theme's default palette of a kind
 //   easeAgainstTime(samples)                                  // how far a sampled 0..1 progress is from linear in time
 //
 // The expect* helpers throw an assertion error naming the step that differs. "Equal" is strict
@@ -216,9 +217,23 @@ export function easeAgainstTime(samples) {
  * read from the file, so a test compares what the page painted with what the theme declares.
  */
 export function paletteRgb(theme, index) {
-  const file = new URL(`../../engine/themes/${theme}/palettes.json`, import.meta.url);
-  const { default: dflt, palettes } = JSON.parse(readFileSync(file, "utf8"));
-  const hex = palettes[dflt.categorical].colors[index].value;
+  const { default: dflt, palettes } = palettesOf(theme);
+  return hexRgb(palettes[dflt.categorical].colors[index].value);
+}
+
+/**
+ * The computed `rgb(...)` of the colour a role names (`high`, `low`) in a theme's default palette of `kind`
+ * (`diverging`), read from themes/<theme>/palettes.json.
+ */
+export function paletteRoleRgb(theme, kind, role) {
+  const { default: dflt, palettes } = palettesOf(theme);
+  const palette = palettes[dflt[kind]];
+  const id = palette.roles[role];
+  return hexRgb(palette.colors.find((c) => c.id === id).value);
+}
+
+const palettesOf = (theme) => JSON.parse(readFileSync(new URL(`../../engine/themes/${theme}/palettes.json`, import.meta.url), "utf8"));
+const hexRgb = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   return `rgb(${r}, ${g}, ${b})`;
-}
+};

@@ -1,8 +1,8 @@
 # chart.bar
 
-`chart.bar` draws one bar per category from a CSV file, horizontal or vertical, with the value written at the end of each bar and an optional interval whisker. It is built for step-by-step reveals: the value axis stays put, categories can appear one at a time, and switching `y` shrinks or grows the bars. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
+`chart.bar` draws one bar per category from a CSV file, horizontal or vertical, with the value written at the end of each bar and an optional interval whisker. It is built for step-by-step reveals: the value axis stays put, categories can appear one at a time, and switching `y` shrinks or grows the bars. With `mode: "waterfall"` the same rows become contributions that add up to a running total. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`components/chart.bar/modes.js`](../../../engine/components/chart.bar/modes.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -66,6 +66,9 @@ To emphasize one bar for a single step, set `highlight` in the step's `only`, so
 | `axes` | `{ x?, y? }` | none | snap | Axis titles. `x` names the category axis and `y` the value axis, whichever way the bars point. |
 | `orient` | `"horizontal"` \| `"vertical"` | `"horizontal"` | snap | `horizontal`: categories down the left, bars point right. `vertical`: categories along the bottom, bars point up. |
 | `sort` | `"none"` \| `"value"` \| `"-value"` \| `{ by, order? }` \| string[] | `"none"` | tween | Order of the bars. See [Sorting](#sorting). |
+| `mode` | `"bars"` \| `"waterfall"` | `"bars"` | tween | `bars`: every bar stands on zero. `waterfall`: the bars are contributions that stack into a running total over the shown bars. See [Waterfall](#waterfall). |
+| `total` | `true` \| string | none | fade | Waterfall only. A last bar from zero to the sum of the shown bars, labelled `Total` (`true`) or with the string. |
+| `invert` | boolean | `false` | fade | Waterfall only. Swaps the colours of increases and decreases. |
 | `shown` | string[] | every category | draw | Categories to show, by name. A category that appears grows from zero, then its whisker draws. Hidden categories keep their band. |
 | `highlight` | string | none | fade | One category to emphasize. The other bars turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color; the emphasized bar is drawn after (above) the others. |
 | `domain` | `[min, max]` | from the data | tween | Fixed value axis, used exactly as given (not rounded). See [The value axis](#the-value-axis). |
@@ -109,9 +112,48 @@ On a played step, a change of `sort` slides every bar, with its category label, 
 
 The errors are the ranking's own. An unknown column fails the element with `sort column '<c>' not found (columns: a, b, …)`, an unknown category in a list with ``category '<k>' in `sort` not found (categories: …)``, and any other form with `` `sort` must be "none", "value", "-value", { by, order } or a list of categories``.
 
+## Waterfall
+
+With `mode: "waterfall"` the rows, in display order (after [`sort`](#sorting)), are contributions, and `y` may be negative. Each bar runs from the running total before it to the running total after it. A bridge from an opening level to a closing one, such as a budget or a population change:
+
+```js
+{ id: "bars", region: "main", type: "chart.bar",
+  props: { data: "data/flow.csv", x: "item", y: "change", mode: "waterfall", total: true,
+           shown: ["Opening", "Prices", "Costs", "Taxes", "Other"], format: { y: ",.0f" } } },
+// ...
+steps: [
+  { id: "start" },
+  { id: "growth", set: { bars: { shown: null } } },
+],
+```
+
+```text
+item,change
+Opening,40
+Growth,12
+Prices,6
+Costs,-15
+Taxes,-7
+Other,3
+```
+
+| Rule | What it means |
+| --- | --- |
+| Shown bars only | The running total counts the shown bars. A hidden category keeps its band but adds nothing: it is a point on the running total of its slot, hidden. So the bars and the total always add up what is on screen. At `growth` above, `Growth` appears between `Opening` and `Prices`, and every later base moves up by 12. |
+| Connectors | A dotted, quiet line (`line.sd-connector`) joins each shown bar's end to the next shown bar, and the last one to the total. |
+| `total` | `true` adds a last bar from zero to the sum, in `--sd-color-ink`, labelled with the engine string `total` (`Total` in English and Spanish). A string labels it with that text. The total's band is kept on every step of a slide that shows a total at some step, so it fades in and out without moving the other bars. |
+| Colours | Increases take the diverging palette's `high` role colour and decreases its `low` role colour (red and blue in both built-in themes); a palette without roles gives its last and first colours. `invert: true` swaps them, for a chart where a reduction is the good news. `highlight` dims the other bars and the total. |
+| Value labels | Signed: `+12`, `−15`, through `format.y` with a `+` sign (unless the spec names its own sign). The total's label is not signed. Each label goes past its bar's end, else inside the bar against its end, else past its start, whichever fits first (`fit` in `core/chart.js`). The side is chosen at rest and kept through a motion. A horizontal waterfall keeps a label's room on both sides of the plot, so its labels sit outside. A label inside a bar stays in ink. |
+| `interval` | Each contribution's whisker sits on its running total, from start + lower to start + upper, so it brackets the bar's end. |
+| Value axis | Without `domain`, the axis covers every running total, the total and every whisker of **every waterfall step of the slide**, each step with its own `y`, `sort`, `shown` and `total` (read from `ctx.stepProps`; steps that read another file do not count), plus zero, rounded outward to tick values. Nothing a step shows, hides or re-orders moves the axis. |
+| Layout | A slide that is a waterfall at any step lays out like one at every step: the label room, the band axis set back by it, and the total's band. So a `mode` change moves the bars and never the frame. |
+| Empty values | Every category needs a value, shown or not. An empty one fails the element with `waterfall needs a value for every category: '<key>' is empty`, rather than being drawn as no change. |
+
+Switching `mode` between `bars` and `waterfall` on a step morphs each bar between standing on zero and floating on its running total. Plain bars keep their own value axis rule (below), so the axis tweens too. Clear `total` and `invert` when you switch back to `bars` (`total: null`): plain bars do not use them, and `validate` warns about them.
+
 ## The value axis
 
-With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans:
+This section is about plain bars; a waterfall's axis is described under [Waterfall](#waterfall). With `domain`, the axis is exactly `[min, max]`. Without it, the axis spans:
 
 ```text
 [ min(0, every value), max(0, every value) ]
@@ -136,9 +178,14 @@ Every animated change runs as a single `ctx.animate.tween` that lasts twice the 
 | A category enters `shown` | The bar grows from zero over the first 60% of the motion, then the whisker draws out of the bar's end over the remaining 40%. The value label follows the bar's end and its opacity rises with the growth. |
 | A category leaves `shown` | The reverse: the whisker retracts into the bar's end over the first 40%, then the bar shrinks to zero over the remaining 60% while its label fades. The category is then hidden. |
 | `highlight` set, changed or cleared | The bar fill and value label color interpolate in RGB over `--sd-duration-fast`. |
+| Waterfall: a category enters or leaves `shown` | Its start and end tween over the whole motion: it grows from the running total before it (or shrinks into it) while every later base moves by its value. Its whisker draws after it, and its label fades with it. |
+| Waterfall: `y` or `sort` changes | Every bar, base and connector tweens together; a re-sort slides the bars to their new bands while their bases follow the new order. |
+| Waterfall: `total` set or cleared | The total bar fades in or out in its band, with its connector. |
+| Waterfall: `invert` changes | The bar colors interpolate, as for `highlight`. |
+| `mode` changes between `bars` and `waterfall` | Each bar rises from zero to float on its running total (its whisker with it), or sinks back to zero. Connectors and the total fade; the colors and the axis tween. |
 | `domain` changes, or the default axis changes with `y` or `interval` | The axis range tweens. Ticks that stay move with it; new ticks fade in and dropped ticks fade out. |
 | Plot size or margins change (for example an axis title is added) | The plot area tweens to its new size. |
-| The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown category grows from zero, then draws its whisker, while the box stays still (over the element's own `enter.duration` when set). The bars are at zero the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the bars are at full length at once; with `enter: "none"` nothing moves. |
+| The element becomes visible | Its own entrance (`"x-enter": "own"`): in the element's stagger slot, every shown category grows from zero, then draws its whisker, while the box stays still (over the element's own `enter.duration` when set). A waterfall grows out of zero as a whole, so it stays joined while it grows. The bars are at zero the moment the chart shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the bars are at full length at once; with `enter: "none"` nothing moves. |
 
 Hidden categories keep their band. Bands follow the [sorted](#sorting) order (the data order without `sort`) whether or not a category is shown. A hidden category is laid out at its final length and hidden with `visibility`, together with its whisker, value label and category label, so nothing reflows when it appears.
 
@@ -160,7 +207,7 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 | Aspect | Rule |
 | --- | --- |
 | Bar thickness | 65% of the band, capped at 4 times the label font size (`--sd-font-size-label`, 28px in academic-light, so at most 112px). |
-| Bar color | The first color of the categorical palette (blue `#1d4ed8` in `modern`, the default; `#0072b2` in academic-light's `okabe-ito-dark`). If the theme has no categorical palette, `--sd-color-accent`. |
+| Bar color | Waterfall: see [Waterfall](#waterfall). Otherwise the first color of the categorical palette (blue `#1d4ed8` in `modern`, the default; `#0072b2` in academic-light's `okabe-ito-dark`). If the theme has no categorical palette, `--sd-color-accent`. |
 | Dimmed bar color | `--sd-color-dim` (`--sd-color-rule` in a theme without it); dimmed value labels use `--sd-color-muted`. |
 | Value labels | Past the bar's end, or past the whisker's end when there is one. On the right of a horizontal bar, above a vertical bar; on the other side for negative values. Weight 600, ink color. |
 | Category labels | On the band axis, in ink. Long names wrap. Horizontal: up to about a third of the chart width per line, and as many lines as fit the band. Vertical: the band width, up to 3 lines. A label that does not fit ends with `…`. |
@@ -197,12 +244,13 @@ Neither `validate` nor `check` reports a collapsed chart. Look at `dump` boxes o
 Inside its element wrapper (`div.sd-el[data-el][data-type="chart.bar"]`) the component renders one SVG:
 
 ```text
-svg.sd-chart-bar[data-orient="horizontal|vertical"]
+svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall"]
   g.sd-plot
     g.sd-axis.sd-axis-value
       g.tick > line.sd-grid-line, text
     g.sd-axis.sd-axis-band
       text.sd-band-label[data-key][data-visible] > tspan (one per wrapped line)
+    g.sd-connectors > line.sd-connector[data-key]          (waterfall only)
     g.sd-bars
       g.sd-bar-group[data-key][data-visible][data-dim]
         title
@@ -216,7 +264,7 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"]
 
 | Selector | Meaning |
 | --- | --- |
-| `svg.sd-chart-bar[data-orient]` | The chart; `data-orient` is `horizontal` or `vertical`. |
+| `svg.sd-chart-bar[data-orient]` | The chart; `data-orient` is `horizontal` or `vertical`. A waterfall also has `data-mode="waterfall"`; plain bars have no `data-mode`. |
 | `g.sd-bar-group[data-key]` | One category. `data-key` is the category text. |
 | `[data-visible="true\|false"]` | Whether the category is shown. `core/stepdeck.css` hides `false` groups and band labels with `visibility: hidden`. |
 | `[data-dim="true\|false"]` | `true` when a `highlight` is set and this is not the highlighted category. |
@@ -224,6 +272,8 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"]
 | `g.sd-whisker` | Present only for a bar with a value and both interval bounds. |
 | `text.sd-bar-label` | The value label. |
 | `text.sd-band-label[data-key]` | The category label on the band axis. |
+| `g.sd-bar-group[data-key="__total"]` | A waterfall's total bar, with its band label `text.sd-band-label[data-key="__total"]` (set in weight 600). Present on every step of a slide that shows a total at some step; hidden (`data-visible="false"`) where it is off. |
+| `line.sd-connector[data-key]` | A waterfall connector, from the end of the bar named by `data-key` to the next shown bar (or the total). Dotted in `--sd-color-muted`. |
 
 Restyle one slide with slide `style` and these classes. Colors are written as `fill` attributes, so to override a bar color use a CSS `fill` rule, which takes precedence over the attribute.
 
@@ -244,6 +294,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `sort column '<c>' not found (columns: a, b, …)` | `sort: { by }` names a column the CSV does not have. |
 | ``category '<k>' in `sort` not found (categories: …)`` | A `sort` list names a category the data does not have. |
 | `` `sort` must be "none", "value", "-value", { by, order } or a list of categories`` | `sort` is none of those forms. |
+| `waterfall needs a value for every category: '<k>' is empty` | `mode: "waterfall"` and a category's `y` cell is empty or not a number, shown or not. |
 
 The file errors from the data loader also apply, such as `data file not found: <path>`. See [Data and bindings](../../guide/data-and-bindings.md).
 
@@ -253,7 +304,13 @@ The file errors from the data loader also apply, such as `data file not found: <
 squash/bars · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'
 ```
 
-It does not check `domain` order, `sort`, duplicate categories, or names in `shown` and `highlight`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+It also gives a misspelt `mode` a did-you-mean (`prop-invalid`, `set mode to "waterfall"`), and warns with `chart-prop-unused` when `invert` or `total` is set on a chart that is not in `mode: "waterfall"`, where they do nothing:
+
+```text
+warning: flow/bars · chart-prop-unused · `total` does nothing without `mode: "waterfall"` vs `total` together with `mode: "waterfall"` · set `mode: "waterfall"`, or remove `total`
+```
+
+It does not check `domain` order, `sort`, duplicate categories, names in `shown` and `highlight`, or empty waterfall values. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 squash/bars: category 'Nope' in `highlight` not found in data/speed.csv (categories: Clean the data, Write the report)

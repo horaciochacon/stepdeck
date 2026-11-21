@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.bar",
-  "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker. The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars.",
+  "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker, or a waterfall of contributions that add up to a running total (`mode`). The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars.",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -83,6 +83,25 @@
       "description": "Order of the bars. \"none\" (the default) keeps the data order; \"value\" orders by `y`, lowest first, and \"-value\" highest first; { by, order } orders by another column (ascending unless `order` is \"desc\"); a list of categories puts those first, in that order, and the rest after them in data order. Ties keep data order and bars without a value come last, whichever way it runs. Hidden categories keep their place in the order. When it changes on a played step, every bar, with its label and whisker, slides to its new place; a bar that appears grows in at its place. An unknown column or category is an element error naming it.",
       "examples": ["-value", { "by": "agent_days", "order": "desc" }, ["before", "with an agent"]],
       "x-transition": "tween"
+    },
+    "mode": {
+      "enum": ["bars", "waterfall"],
+      "default": "bars",
+      "description": "How the bars stand. \"bars\" (the default): every bar runs from zero. \"waterfall\": the rows, in display order, are contributions that stack into a running total over the shown bars only, each bar running from the total before it to the total after it, with dotted connectors between them; increases take the diverging palette's high colour and decreases its low colour (`invert` swaps them), value labels are signed, and `total` adds a final bar. The value axis then covers the running totals of every waterfall step of the slide. Every category needs a value: an empty one is an element error naming it. Changing it on a played step morphs each bar between standing on zero and floating on the running total.",
+      "examples": ["waterfall"],
+      "x-transition": "tween"
+    },
+    "total": {
+      "anyOf": [{ "type": "boolean" }, { "type": "string", "minLength": 1 }],
+      "description": "With `mode: \"waterfall\"`, a last bar from zero to the sum of the shown bars, in the theme's ink, joined to the last bar by a connector. `true` labels it with the engine string (\"Total\"), a string with that text. Its band is kept on every step of the slide, so it fades in and out without moving the other bars.",
+      "examples": [true, "Net change"],
+      "x-transition": "fade"
+    },
+    "invert": {
+      "type": "boolean",
+      "description": "With `mode: \"waterfall\"`, swaps the colours: increases take the diverging palette's low colour and decreases its high one, for a chart where a reduction is the good news.",
+      "examples": [true],
+      "x-transition": "fade"
     },
     "shown": {
       "type": "array",
