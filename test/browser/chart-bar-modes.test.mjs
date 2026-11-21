@@ -613,8 +613,8 @@ const PYRAMID_INTERRUPTS = [
 const AGES = ["0-14", "15-29", "30-44", "45-59", "60-74", "75+"];
 
 // Both sides of a back-to-back chart, read from the markup: the centre rule, each bar's ends, band centre, colour, value
-// label and whisker (and whether a halo copy of the whisker line sits just before it), the band labels, the ticks and
-// the side titles. Self-contained: sampleFrames sends its source to the page.
+// label and whisker, the band labels, the ticks, the side titles and how many halo copies the chart holds.
+// Self-contained: sampleFrames sends its source to the page.
 const pairs = (el) => {
   const num = (node, a) => Number(node.getAttribute(a));
   const svg = el.querySelector("svg");
@@ -624,7 +624,6 @@ const pairs = (el) => {
     const rect = g.querySelector("rect.sd-bar");
     const label = g.querySelector("text.sd-bar-label");
     const line = g.querySelector("g.sd-whisker > line.sd-whisker-line");
-    const copy = line?.previousElementSibling;
     const x = num(rect, "x");
     const width = num(rect, "width");
     (bars[g.dataset.key] ??= {})[g.dataset.side] = {
@@ -632,13 +631,13 @@ const pairs = (el) => {
       visible: g.dataset.visible, dim: g.dataset.dim, fill: getComputedStyle(rect).fill,
       text: label.textContent, labelX: num(label, "x"), anchor: label.getAttribute("text-anchor"),
       whisker: line ? [num(line, "x1"), num(line, "x2")].sort((a, b) => a - b) : null,
-      halo: Boolean(copy?.classList.contains("sd-halo-under")) && ["x1", "x2", "y1", "y2"].every((a) => copy.getAttribute(a) === line.getAttribute(a)),
     };
   }
   const [, left, top] = el.querySelector("g.sd-plot").getAttribute("transform").match(/translate\(([-\d.]+),([-\d.]+)\)/).map(Number);
   return {
     mode: svg.dataset.mode ?? null,
     plot: { left, top },
+    halos: el.querySelectorAll(".sd-halo-under").length,
     centre: rule && { x: num(rule, "x1"), x2: num(rule, "x2"), y1: num(rule, "y1"), y2: num(rule, "y2") },
     bars,
     bands: Object.fromEntries([...el.querySelectorAll("text.sd-band-label")].map((t) => [t.dataset.key, { y: num(t, "y"), visible: t.dataset.visible }])),
@@ -660,6 +659,7 @@ test("pyramid: left bars end left of the centre rule, right bars right of it, ti
     const c = s.centre.x;
     near(s.centre.x2, c, "the centre rule is upright");
     assert.ok(s.centre.y2 - s.centre.y1 > 100, "and runs down the plot");
+    assert.equal(s.halos, 0, "whiskers are drawn without a halo, which would cut a notch in the bar");
     assert.deepEqual(Object.keys(s.bars), AGES, "one band per category, in data order");
     assert.deepEqual(bandOrder(s), AGES);
     for (const age of AGES) {
@@ -675,8 +675,7 @@ test("pyramid: left bars end left of the centre rule, right bars right of it, ti
       assert.ok(right.whisker[0] < right.end && right.end < right.whisker[1], `${age}: and so does the right one`);
       assert.ok(left.anchor === "end" && left.labelX < left.whisker[0], `${age}: the left value label sits past its whisker, to the left`);
       assert.ok(right.anchor === "start" && right.labelX > right.whisker[1], `${age}: the right one past its whisker, to the right`);
-      assert.ok(left.halo && right.halo, `${age}: the whiskers sit on halos`);
-      assert.match(`${left.text} ${right.text}`, /^\d+\.\d \d+\.\d$/, `${age}: value labels are magnitudes`);
+            assert.match(`${left.text} ${right.text}`, /^\d+\.\d \d+\.\d$/, `${age}: value labels are magnitudes`);
     }
     assert.deepEqual([s.bars["0-14"].left.text, s.bars["0-14"].right.text], ["8.1", "8.6"], "Women left (the first group in the data)");
     // One scale for both sides: 30-44 Women (10.2) and 75+ Men (2.0) are drawn at the same pixels per unit.

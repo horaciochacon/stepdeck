@@ -47,7 +47,7 @@
 // Colors come from ctx.palette("categorical") (the first color; back-to-back, the first two), ctx.palette("diverging")
 // and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, opacityAttr, rank, wrapLabel, frame, whisker, halo, morph, entrance } from "../../core/chart.js";
+import { loadTable, tickFormat, opacityAttr, rank, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
 import { waterfallSteps, waterfallDomain, backToBack, backToBackSpan, valueOf, categoriesOf, hasTotal } from "./modes.js";
 import {
@@ -407,7 +407,6 @@ export default {
             .attr("opacity", s.whisker > 0 ? null : 0);
           if (hasWhisker) {
             whisker(wg, { at: center, lo: scale(lerp(v, s.lo, s.whisker)), hi: scale(lerp(v, s.hi, s.whisker)), cap: thick * 0.45, orient: m.orient });
-            if (m.mode === "back-to-back") halo(wg.select(".sd-whisker-line"), { under: true }); // over the bar's fill
           }
 
           const gap = f * 0.4;

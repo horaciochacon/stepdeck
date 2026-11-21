@@ -81,8 +81,8 @@ Behaviour:
   - Each side has a title above it (`text.sd-side-title[data-side]`), the group's name in its colour: the categorical
     palette's first colour on the left and its second on the right, darkened (or lightened) as text until it reaches
     4.5:1 on the background (`textColor` in `core/color.js`). The bars use the palette colours as they are.
-  - `interval` draws each bar's whisker on a narrow background halo (`halo` in `core/chart.js`), so it reads over the
-    bar's fill. Value labels sit past the whisker, on the bar's own side, and show magnitudes.
+  - `interval` draws each bar's whisker in ink, as plain bars do, with no halo behind it (a halo would cut a notch in the
+    bar at each end). Value labels sit past the whisker, on the bar's own side, and show magnitudes.
   - `highlight` names a category (every other band dims, on both sides) or a group (the other side dims, and its title
     turns `--sd-color-muted`). A name that is both a category and a group is an element error.
   - `sort` ranks the bands by the sum of the two sides; `{ by }` sums that column the same way (a text column, such as
@@ -145,8 +145,7 @@ holding `rect.sd-bar`, `g.sd-whisker` and `text.sd-bar-label`; the value axis is
 category labels `text.sd-band-label[data-key]`. A waterfall adds `data-mode="waterfall"` on the svg,
 `g.sd-connectors > line.sd-connector[data-key]` (one per bar a connector leaves) before `g.sd-bars`, and the total
 as `g.sd-bar-group[data-key="__total"]` with its `text.sd-band-label[data-key="__total"]`. Back-to-back adds
-`data-mode="back-to-back"`, two groups per category (`g.sd-bar-group[data-key][data-side="left|right"]`, each
-whisker line with a `line.sd-halo-under` copy before it), the class `sd-centre-rule` on `line.sd-axis-line`, and
+`data-mode="back-to-back"`, two groups per category (`g.sd-bar-group[data-key][data-side="left|right"]`), the class `sd-centre-rule` on `line.sd-axis-line`, and
 `text.sd-side-title[data-side]` after the axis titles.
 
 See `example.js` for a slide that uses it.

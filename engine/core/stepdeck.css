@@ -244,11 +244,9 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-bar .sd-connector { stroke: var(--sd-color-muted); stroke-width: 2.5; stroke-dasharray: 0 6; stroke-linecap: round; fill: none; }
 .sd-chart-bar .sd-band-label[data-key="__total"] { font-weight: 600; }
 /* Back-to-back: the centre rule both sides grow from, in ink; a side title is set like a value label, its colour a fill
-   attribute (its group's, readable as text), so no rule here sets it; whiskers sit on a narrow background halo that
-   ends at their caps. */
+   attribute (its group's, readable as text), so no rule here sets it. */
 .sd-chart-bar .sd-centre-rule { stroke: var(--sd-color-ink); }
 .sd-chart-bar text.sd-side-title { font-weight: 600; }
-.sd-chart-bar .sd-halo-under { stroke-width: 9; stroke-linecap: butt; }
 
 /* chart.points component: one row per category, a dot with an interval whisker and a value label. Sizes and neutral
    colours from tokens; the dot colour comes from the palette (a fill attribute), so no rule here sets the fill of a dot

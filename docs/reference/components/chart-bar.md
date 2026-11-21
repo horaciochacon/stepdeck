@@ -187,7 +187,7 @@ Women come first in the data, so they are on the left; `groups: ["Men", "Women"]
 | Centre rule | Both sides grow from `line.sd-centre-rule` (the axis line at zero, in `--sd-color-ink`), over the full height of the plot. |
 | Value axis | The ticks run out from the rule on both sides and read as magnitudes: `10 5 0 5 10`. Without `domain` the axis is mirrored, from zero to the largest value or drawn interval bound of **every back-to-back step of the slide** (each with its own `y` and `interval`, read from `ctx.stepProps`, over the same `data`), rounded outward to tick values. With `domain`, each side runs from zero to the larger magnitude of the two. Nothing a step shows, sorts or switches moves the axis. |
 | Side titles | Above each side, `text.sd-side-title[data-side]` names its group in the group's colour: the categorical palette's first colour on the left and its second on the right. As text, the colour is darkened (lightened on a dark background) until it reaches 4.5:1 (`textColor` in `core/color.js`), so academic-light's amber title is darker than its bars. The bars use the palette colours as they are. |
-| Whiskers | `interval` draws each bar's whisker on a narrow background halo (`halo` in `core/chart.js`), so it reads over the bar's fill. A whisker needs a value and both bounds. |
+| Whiskers | `interval` draws each bar's whisker in ink, as plain bars do, with no halo behind it (a halo would cut a notch in the bar at each end). A whisker needs a value and both bounds. |
 | Value labels | Past the bar's end, or its whisker's, on the bar's own side: left of the left bars, right of the right ones. They show magnitudes. An empty `y` cell draws no bar and no label on that side. |
 | `highlight` | A category dims every other band on both sides. A group dims the other side, and turns its title `--sd-color-muted`. A name that is both a category and a group is an element error. |
 | `sort` | Ranks the bands by the sum of the two sides. `{ by }` sums that column the same way; a text column (the category itself, for example) counts where the two rows agree. A category with a side missing has no sum and comes last. Both bars of a band slide together with its label. |
@@ -305,7 +305,7 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall|back-to
         title
         rect.sd-bar
         text.sd-bar-label
-        g.sd-whisker > line.sd-halo-under (back-to-back only), line.sd-whisker-line, line.sd-whisker-cap.sd-whisker-cap-lower, line.sd-whisker-cap.sd-whisker-cap-upper
+        g.sd-whisker > line.sd-whisker-line, line.sd-whisker-cap.sd-whisker-cap-lower, line.sd-whisker-cap.sd-whisker-cap-upper
     line.sd-axis-line[.sd-centre-rule]                         (sd-centre-rule: back-to-back only)
   text.sd-axis-title.sd-axis-title-band
   text.sd-axis-title.sd-axis-title-value
@@ -324,7 +324,7 @@ svg.sd-chart-bar[data-orient="horizontal|vertical"][data-mode="waterfall|back-to
 | `text.sd-band-label[data-key]` | The category label on the band axis. |
 | `g.sd-bar-group[data-key="__total"]` | A waterfall's total bar, with its band label `text.sd-band-label[data-key="__total"]` (set in weight 600). Present on every step of a slide that shows a total at some step; hidden (`data-visible="false"`) where it is off. |
 | `line.sd-connector[data-key]` | A waterfall connector, from the end of the bar named by `data-key` to the next shown bar (or the total). Dotted in `--sd-color-muted`. |
-| `g.sd-bar-group[data-side]` | Back-to-back: one group per category and side, `data-key` the category and `data-side` `left` or `right`. Its whisker line has a `line.sd-halo-under` copy just before it. |
+| `g.sd-bar-group[data-side]` | Back-to-back: one group per category and side, `data-key` the category and `data-side` `left` or `right`. |
 | `line.sd-centre-rule` | Back-to-back: the axis line at zero, both sides growing from it, in `--sd-color-ink`. |
 | `text.sd-side-title[data-side]` | Back-to-back: a side's title, the group's name. Its `fill` attribute is the group's color, readable as text. |
 
