@@ -371,12 +371,16 @@ test("resort while a category appears", async () => {
       const label = (k) => Number(/translate\([-\d.e]+,([-\d.e]+)\)/.exec(el.querySelector(`text.sd-points-label[data-key="${k}"]`).getAttribute("transform"))[1]);
       return {
         Este: y("Este"), EsteLabel: label("Este"), EsteR: Number(el.querySelector('g.sd-points-row[data-key="Este"] circle.sd-dot').getAttribute("r")),
+        EsteVisible: getComputedStyle(el.querySelector('g.sd-points-row[data-key="Este"]')).visibility === "visible",
         Norte: y("Norte"), Sur: y("Sur"),
       };
     });
-    // Este (15.2) ranks first: it grows in at its final place while Norte and Sur slide down to make room.
+    // Este (15.2) ranks first: it grows in at its final place while Norte and Sur slide down to make room. Frames sampled
+    // before the step's first paint (Este still hidden) show the old state, so only the frames from that paint on count.
     assert.ok(r.frames.some((f) => f.EsteR > 0 && f.EsteR < r.end.EsteR), "Este is seen growing");
-    assert.ok(r.frames.every((f) => f.Este === r.end.Este && f.EsteLabel === r.end.Este), "from its first frame, at its final place");
+    const painted = r.frames.findIndex((f) => f.EsteVisible);
+    assert.ok(painted >= 0, "the step paints Este shown");
+    assert.ok(r.frames.slice(painted).every((f) => f.Este === r.end.Este && f.EsteLabel === r.end.Este), "from its first painted frame, at its final place");
     for (const key of ["Norte", "Sur"]) {
       assert.ok(r.end[key] > first[key] + 1, `${key} slides down (${first[key]} -> ${r.end[key]})`);
       assert.ok(r.frames.some((f) => f[key] > first[key] + 1 && f[key] < r.end[key] - 1), `${key} passes between`);
