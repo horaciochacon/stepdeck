@@ -107,7 +107,7 @@ A component whose content has a natural build declares `"x-enter": "own"` at the
 |---|---|
 | `chart.line` | The lines draw along their length. |
 | `chart.bar` | The bars grow from zero, then the whiskers draw. A waterfall grows out of zero as a whole. |
-| `chart.points` | The dots grow out of the reference line (out of their `from`, for a pair) and their whiskers draw; strips fade in from left to right. |
+| `chart.points` | The dots grow out of the reference value (out of their `from`, for a pair; 0 or the start of the axis when the reference is not on the axis) and their whiskers draw; strips fade in from left to right. |
 | `big-number` | The figure fades in and counts up from 0. |
 | `list` | The visible items rise in, one after another; done ticks draw. |
 | `chat` | The visible messages rise in, one after another; with `typing`, the newest is then typed. |
@@ -235,7 +235,7 @@ How long each motion lasts:
 | [big-number](../reference/components/big-number.md) | Fades in and counts up from 0 | Counts from the previous value; a changed `label`, `ci`, `prefix`, `suffix` or `format` fades that part |
 | [chart.line](../reference/components/chart-line.md) | The lines draw | Points morph (keyed by series and x) while the axes rescale; new series in `series_shown` draw in, leaving ones fade out; `highlight` dims the others; annotations fade; `points` and `forecast` fade in or out; a changed `until` sweeps the lines along x behind a cursor, with a counting `ticker`; `draws.shown` fades draws in and out on a canvas |
 | [chart.bar](../reference/components/chart-bar.md) | Bars grow from 0, then whiskers draw | Values, `domain` and intervals tween; bars added to `shown` grow in, removed ones shrink out; `sort` slides the bars to their new bands; `highlight` dims the others; in `waterfall` the bars and bases tween together, and `bars` to `waterfall` morphs; in `back-to-back` both sides move together |
-| [chart.points](../reference/components/chart-points.md) | Dots grow out of the reference line, then whiskers draw; strips fade in from left to right | `y`, `from`, `interval` and `domain` tween (a `from` adds a connector that grows behind the sliding dot); rows added to `shown` grow in, removed ones shrink back; `sort` slides the rows; `highlight` and `focus` dim the others |
+| [chart.points](../reference/components/chart-points.md) | Dots grow out of the reference value (see above), then whiskers draw; strips fade in from left to right | `y`, `from`, `interval` and `domain` tween (a `from` adds a connector that grows behind the sliding dot); rows added to `shown` grow in, removed ones shrink back; `sort` slides the rows; `highlight` and `focus` dim the others |
 | [terminal](../reference/components/terminal.md) | Types the command (with `typing`), then the lines fade in | When `shown` grows, new lines fade in, staggered; the command types only from `shown: 0` |
 | [list](../reference/components/list.md) | The visible items rise in, staggered | Newly shown items rise in, staggered; a newly done tick draws; `active` tweens text color |
 | [chat](../reference/components/chat.md) | The visible messages rise in, staggered; the newest types (with `typing`) | Newly shown messages rise in, staggered; with `typing`, the newest is then typed |

@@ -14,13 +14,13 @@ stepdeck es un motor de presentaciones HTML paso a paso. Las diapositivas son da
 
 Esta página es la puerta de entrada. Muestra lo que incluye, un inicio rápido y una diapositiva, y luego lleva a quienes escriben mazos, a quienes operan agentes y a quienes contribuyen a la página adecuada de [docs/](docs/index.md).
 
-**Estado.** Primera versión pública (0.1.0), con un [sitio de documentación](https://horaciochacon.github.io/stepdeck/site/docs/) y una [galería](https://horaciochacon.github.io/stepdeck/site/gallery/). El kit incluido tiene 11 componentes y 5 layouts. El tema por defecto es `modern`, y `academic-light` es la alternativa sobria; véase el [registro de cambios](CHANGELOG.md). La exportación a PDF no está implementada.
+**Estado.** Primera versión pública (0.1.0), con un [sitio de documentación](https://horaciochacon.github.io/stepdeck/site/docs/) y una [galería](https://horaciochacon.github.io/stepdeck/site/gallery/). El kit incluido tiene 12 componentes y 5 layouts. El tema por defecto es `modern`, y `academic-light` es la alternativa sobria; véase el [registro de cambios](CHANGELOG.md). La exportación a PDF no está implementada.
 
 ## Qué incluye
 
 | Pieza | Qué hay | Referencia |
 |---|---|---|
-| Componentes | 11: `text`, `markdown`, `chart.line`, `chart.bar`, `big-number`, `terminal`, `list`, `diagram`, `chat`, `timeline`, `image`. Cualquier otra cosa es un componente propio con el mismo contrato. | [Componentes](docs/reference/components/index.md) |
+| Componentes | 12: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Cualquier otra cosa es un componente propio con el mismo contrato. | [Componentes](docs/reference/components/index.md) |
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Temas | 2: `modern` (el tema por defecto: Geist, un acento azul profundo, un título de portada grande) y `academic-light`, con paletas seguras para daltonismo y fuentes incluidas | [Temas](docs/reference/themes.md) |
 | Shells | 2: `reveal` para presentar (teclado, vista del presentador), `bare` para las revisiones de la CLI | |

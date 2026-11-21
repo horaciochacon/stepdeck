@@ -519,18 +519,36 @@ export default {
 
 `draws` paints a fan of uncertainty draws under the lines, from a second CSV: the chart's `x`, `y` and `series` columns and a column that names the draw. `shown` is how many. Raise it step by step, and the draws already on screen stay while more join them; lower it on a later step to go back. The y axis already covers every draw, so it does not move when the fan appears. The lines stay on top, so the story is still the trend. Keep the file small (at most 2000 draws and 500 x values per series; a few hundred draws are plenty).
 
-`data/draws.csv` has one row per draw, series and year, written by a script. This recipe's file has 300 draws, 11 years and 2 series, so 6,600 rows; its first rows:
+`data/draws.csv` has one row per draw, series and year: the columns `year`, `series`, `rate` (the same names as `data/trend.csv`) and `draw` (the draw's id). It draws on the `data/trend.csv` of the previous recipe. This script, `data/make-draws.mjs`, writes the file: 300 draws around each series, 11 years and 2 series, so 6,600 rows (about 130 KB). It is deterministic (a seeded generator, no `Math.random`), so a rerun changes nothing. Run it with `node data/make-draws.mjs`.
 
-```csv
-year,series,rate,draw
-2000,north,16.9,1
-2005,north,20.7,1
-2010,north,24.5,1
-2015,north,21.8,1
-2020,north,28.0,1
+```js
+// Writes data/draws.csv: 300 draws around each series of data/trend.csv, one row per draw, series and year.
+// The same file every run: a small seeded generator, no Math.random, no dependencies.
+import { readFileSync, writeFileSync } from "node:fs";
+
+const here = new URL("./", import.meta.url);
+const trend = readFileSync(new URL("trend.csv", here), "utf8").trim().split("\n").slice(1).map((line) => line.split(","));
+
+let state = 12345;
+const random = () => {
+  state = (state + 0x6d2b79f5) | 0;
+  let t = Math.imul(state ^ (state >>> 15), 1 | state);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const rows = ["year,series,rate,draw"];
+for (let draw = 1; draw <= 300; draw++) {
+  const lean = new Map(); // each draw leans one way or the other in each series, more and more with the year
+  for (const [year, series, rate] of trend) {
+    if (!lean.has(series)) lean.set(series, random() + random() - 1);
+    const spread = 0.3 * ((year - 2000) / 50);
+    const value = Number(rate) * (1 + spread * lean.get(series)) + (random() - 0.5) * 0.6;
+    rows.push(`${year},${series},${value.toFixed(1)},${draw}`);
+  }
+}
+writeFileSync(new URL("draws.csv", here), `${rows.join("\n")}\n`);
 ```
-
-It draws on the `data/trend.csv` of the previous recipe.
 
 ```js
 export default {

@@ -54,8 +54,8 @@ All notable changes to stepdeck are recorded here. The format follows
 - **Theme motion tokens.** `--sd-stagger` (80ms in `modern`, 60ms in `academic-light`), `--sd-enter` (`rise`,
   `fade`) and `--sd-motion-distance` (24px, 16px). `--sd-duration-fast` and `--sd-easing`, unused before, now
   time quick changes and ease every motion.
-- **Components that build themselves.** `chart.line`, `chart.bar`, `big-number`, `list`, `chat`, `diagram`,
-  `terminal` and `timeline` declare `"x-enter": "own"`: when they appear they play their build (lines draw, bars
+- **Components that build themselves.** `chart.line`, `chart.bar`, `chart.points`, `big-number`, `list`, `chat`,
+  `diagram`, `terminal` and `timeline` declare `"x-enter": "own"`: when they appear they play their build (lines draw, bars
   grow, items rise in turn, the figure counts up) while their box stays still, in their stagger slot. A list that
   appears with its items already shown now builds them. `catalog` shows each entry's `enter` (`own` or `box`).
 - **For component authors:** `ctx.motion` (`in`, `out`, `timing`), `info.entrance`, and `"x-enter": "own"` in a
@@ -79,8 +79,8 @@ All notable changes to stepdeck are recorded here. The format follows
   whisker and the value beside it, against an optional `reference` line. `from` turns each row into a before and
   after pair (a hollow dot, a connector that grows, the filled dot); `shown`, `highlight` and `sort` work as in
   `chart.bar`; an empty value reads "no data", never a dot at zero. With `id` it draws beeswarm strips of many
-  points per category, with a summary tick and one item followed across the strips (`focus`). It builds its own
-  entrance, like the other charts.
+  points per category, with a summary tick and one item followed across the strips (`focus`). Its dots grow out of the
+  reference line, or out of the `from` value of a pair.
 - **`chart.line` for data stories.** `points` puts a dot on every data point. `forecast: { from, label? }` dots the
   lines from an x on and shades the plot from there. `until` sweeps the lines along the x axis behind a cursor,
   with `ticker: true` for a large counting label of the x, so a story can run from data into forecast. `draws`
