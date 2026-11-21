@@ -98,7 +98,9 @@ All notable changes to stepdeck are recorded here. The format follows
 - **For component authors:** `ctx.stepProps` (the element's props at every step) and `ctx.chart`, 26 building
   blocks of the built-in charts: table loading, extents, the plot frame, keyed joins, dots, whiskers, rules,
   halos, a canvas layer, morph and entrance helpers, and colour helpers. The guide has a new section, "Build a
-  chart from the engine's pieces", and the contract an example per group.
+  chart from the engine's pieces", and the contract an example per group. The gallery shows them at work in a
+  group of its own, "Custom components": `gallery.slope`, a slope chart of about 100 lines with no `import`,
+  whose labels slide to their new rank, whose `highlight` dims the rest and whose lines draw in as its entrance.
 - `validate` warns `chart-prop-unused` for `ticker` without `until` and for `invert` or `total` outside a
   waterfall, and reports `chart-orient` for a back-to-back chart with `orient: "vertical"`. `dump` reports a
   chart's canvas layer, and `check --played` compares it. The engine strings gain `forecast`, `total` and

@@ -487,6 +487,8 @@ Check the figures,12,2
 
 `ctx.chart` has more for other charts: an interval whisker, a forecast band, labels kept apart, a canvas layer for many thin lines, a fixed draw order, and a colour that stays readable as text. Each group has its own example in the contract. A chart that builds its own entrance reads `C.entrance(info, ctx)` and draws its lines with `C.undraw` and `ctx.animate.drawPath`.
 
+The gallery's slope chart, [`gallery.slope`](../../site/gallery/components/gallery.slope/index.js), goes further with the same pieces in about 100 lines and no `import`: labels ranked with `C.rank` and kept apart with `C.spread` that slide to their new rank on a played step, `highlight` with `C.focusPaint` and `C.tweenColor`, and lines that draw in as its own entrance. It passes `check --played` like a built-in; its slide is `custom-slope` in the [gallery](../../site/gallery/), and the files are listed under [A complete example in the repository](#a-complete-example-in-the-repository).
+
 ## Verify it
 
 Run these after every change. All of them work on a deck made by `new`.
@@ -564,6 +566,16 @@ Run them with `STEPDECK_PLAYWRIGHT=<playwright folder> npm run test:browser`. Se
 | [`examples/spike/slides/story.js`](../../examples/spike/slides/story.js) | A slide that drives `stage` with `advance`. |
 | [`examples/spike/deck.js`](../../examples/spike/deck.js) | `components: ["demo.story"]`. |
 | [`test/browser/custom.test.mjs`](../../test/browser/custom.test.mjs) | Browser tests for it. |
+
+The gallery has a chart built the same way, from `ctx.chart` alone, `gallery.slope`:
+
+| File | What it shows |
+|---|---|
+| [`site/gallery/components/gallery.slope/index.js`](../../site/gallery/components/gallery.slope/index.js) | A slope chart with no `import`: one scale over every step (`C.extentOf` over `ctx.stepProps`), `C.keyed` joins, then `C.settle`, then every attribute; one `C.morph` for a played change, ranked labels (`C.rank`, `C.spread`) that slide to their new place, focus-dim with `C.focusPaint` and `C.tweenColor`, and an owned entrance (`C.entrance`, `C.undraw`, `ctx.animate.drawPath`). |
+| [`site/gallery/components/gallery.slope/schema.json`](../../site/gallery/components/gallery.slope/schema.json) | A closed schema with `"x-enter": "own"` and `description`, `examples` and `x-transition` on every prop. |
+| [`site/gallery/components/gallery.slope/example.js`](../../site/gallery/components/gallery.slope/example.js) | The gallery slide: the right end moves from 2010 to 2020 and 2030, then one region is highlighted. |
+| [`site/gallery/deck.js`](../../site/gallery/deck.js) | `components: ["gallery.slope"]`. |
+| [`test/browser/custom-slope.test.mjs`](../../test/browser/custom-slope.test.mjs) | Played equals jumped, a scale that never moves, labels that slide to their new rank, and the entrance drawn from a deck with a copied engine. |
 
 The cookbook recipe [A custom component driven by `stage`](../../skill/references/cookbook.md#a-custom-component-driven-by-stage) shows the starter's example slide.
 

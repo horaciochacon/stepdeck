@@ -1,10 +1,11 @@
 // The gallery deck (site/gallery) shows every built-in layout and component, stays in step with them, and
 // validates: it is where every example.js runs as a slide (test/browser/gallery.test.mjs checks it in a browser).
-// After them come the motion slides, which show the motion vocabulary and the slide devices, and the data-story slides,
-// which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid).
+// After them come the motion slides, which show the motion vocabulary and the slide devices, the data-story slides,
+// which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid), and last the custom
+// component built only from what the engine hands every component (gallery.slope).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ENGINE, REPO, listDirs, readBuiltins } from "../../cli/engine.js";
@@ -26,8 +27,9 @@ const STORY = {
   "story-waterfall": "chart-bar",
   "story-pyramid": "chart-bar",
 };
+const CUSTOM = [{ slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" }];
 
-test("every built-in component and layout has exactly one gallery entry, and every motion and story slide one", () => {
+test("every built-in component and layout has exactly one gallery entry, and every motion, story and custom slide one", () => {
   for (const name of components) {
     assert.equal(entries.filter((e) => e.kind === "component" && e.name === name).length, 1, `component ${name}`);
   }
@@ -44,20 +46,34 @@ test("every built-in component and layout has exactly one gallery entry, and eve
     assert.equal(e.doc, `docs/reference/components/${STORY[e.slide]}.md`, `${e.slide} links its component's reference page`);
     assert.ok(typeof e.name === "string" && e.name !== "", `${e.slide} has a name`);
   }
-  assert.equal(entries.length, components.length + layouts.length + MOTION.length + Object.keys(STORY).length, "no extra entries");
+  assert.deepEqual(entries.filter((e) => e.kind === "custom"), CUSTOM, "the custom component's slide links the custom-components guide");
+  assert.equal(entries.length, components.length + layouts.length + MOTION.length + Object.keys(STORY).length + CUSTOM.length, "no extra entries");
 });
 
-test("the deck lists the cover, then the layouts, then the components, then the motion slides, then the story slides, in order", () => {
+test("the deck lists the cover, then the layouts, the components, the motion slides, the story slides and the custom one, in order", () => {
   assert.equal(deck.title, "stepdeck gallery");
   assert.equal(deck.lang, "en");
   assert.equal(deck.theme, "modern");
+  assert.deepEqual(deck.components, CUSTOM.map((e) => e.name), "the deck lists its own components");
   assert.deepEqual(deck.slides, ["cover", ...entries.map((e) => e.slide)]);
   assert.deepEqual(entries.filter((e) => e.kind === "layout").map((e) => e.name), layouts);
   assert.deepEqual(entries.filter((e) => e.kind === "component").map((e) => e.name), components);
   assert.ok(entries.findIndex((e) => e.kind === "component") > entries.findLastIndex((e) => e.kind === "layout"));
   assert.ok(entries.findIndex((e) => e.kind === "motion") > entries.findLastIndex((e) => e.kind === "component"));
   assert.ok(entries.findIndex((e) => e.kind === "story") > entries.findLastIndex((e) => e.kind === "motion"));
-  assert.equal(entries.at(-1).kind, "story", "story entries come last");
+  assert.ok(entries.findIndex((e) => e.kind === "custom") > entries.findLastIndex((e) => e.kind === "story"));
+  assert.equal(entries.at(-1).kind, "custom", "the custom entry comes last");
+});
+
+// The demo's point: a chart built only from what the engine hands every component (ctx.chart and the rest) needs no
+// import, so it runs wherever the engine's files live, in this repository or in a deck's stepdeck/ copy.
+test("the slope demo imports nothing", () => {
+  const source = readFileSync(join(gallery, "components", "gallery.slope", "index.js"), "utf8");
+  assert.doesNotMatch(source, /^\s*import[\s{*"']/m, "no import statement");
+  assert.doesNotMatch(source, /\bimport\s*\(/, "no dynamic import");
+  assert.doesNotMatch(source, /\brequire\s*\(/, "no require");
+  const lines = source.trimEnd().split("\n").length;
+  assert.ok(lines <= 130, `about 100 lines (${lines})`);
 });
 
 test("every gallery slide file exists and its id equals its file name", async () => {

@@ -2,8 +2,9 @@
 // each slide re-exporting the engine's own example so the gallery cannot drift from it; then the motion slides,
 // written for the gallery, which show the named motions, a step's choreography and the slide devices (focus-dim,
 // the message line and badges, ghost placeholders); then the data-story slides, which play the chart moves
-// (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid). All content is synthetic. `entries` also feeds the landing
-// page; test/unit/gallery.test.mjs checks it covers everything.
+// (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid); last the custom component
+// (components/gallery.slope/), a slope chart built only from what the engine hands every component, with no import.
+// All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
 const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"];
 const MOTION = [
@@ -23,6 +24,8 @@ const STORY = [
   ["story-waterfall", "waterfall", "chart.bar"],
   ["story-pyramid", "back to back", "chart.bar"],
 ];
+// The deck's own components, each with the slide that shows it; their entries link the custom-components guide.
+const CUSTOM = [["custom-slope", "gallery.slope"]];
 
 // "chart.line" -> "chart-line": the name as it appears in slide ids (slides/<id>.js) and reference pages.
 const dashed = (name) => name.replaceAll(".", "-");
@@ -32,11 +35,13 @@ export const entries = [
   ...COMPONENTS.map((name) => ({ slide: `${dashed(name)}-example`, kind: "component", name, doc: `docs/reference/components/${dashed(name)}.md` })),
   ...MOTION.map(([slide, name]) => ({ slide, kind: "motion", name, doc: "docs/guide/animation-and-motion.md" })),
   ...STORY.map(([slide, name, component]) => ({ slide, kind: "story", name, doc: `docs/reference/components/${dashed(component)}.md` })),
+  ...CUSTOM.map(([slide, name]) => ({ slide, kind: "custom", name, doc: "docs/guide/custom-components.md" })),
 ];
 
 export default {
   title: "stepdeck gallery",
   lang: "en",
   theme: "modern",
+  components: CUSTOM.map(([, name]) => name),
   slides: ["cover", ...entries.map((e) => e.slide)],
 };
