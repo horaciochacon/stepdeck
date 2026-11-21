@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
-import { checkPlayed } from "../../cli/check.js";
+import { check, checkPlayed } from "../../cli/check.js";
 import { deckPages, goTo, canvasPixels, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump, expectAnimatedStepMoves, sampleFrames, tokenRgb, paletteRgb } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -182,6 +182,23 @@ test("a played step really moves: the markers fade in, the forecast fades in", a
 
 test("check --played finds no problems in the fixture deck", async () => {
   assert.deepEqual(await checkPlayed(deck), []);
+});
+
+// A line without `series` has no labels in the right margin, but the last x tick label still has to fit in the element.
+test("a line without series: the last x tick label stays inside the element box", async () => {
+  await withPage({ root, url: pages.url("single", "step=start") }, async (page, ctx) => {
+    const box = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="chart"]');
+      const r = el.getBoundingClientRect();
+      const t = el.querySelectorAll("g.sd-tick-x text");
+      const last = t[t.length - 1].getBoundingClientRect();
+      return { text: t[t.length - 1].textContent, el: [r.left, r.right], label: [last.left, last.right] };
+    });
+    assert.equal(box.text, "2050");
+    assert.ok(box.label[0] >= box.el[0] && box.label[1] <= box.el[1], `the label ${box.label} lies within the element ${box.el}`);
+    assert.deepEqual(ctx.errors, []);
+  });
+  assert.deepEqual(await check(deck, { slide: "single" }), [], "check reports no problems");
 });
 
 // The time sweep (`until`) and its ticker.

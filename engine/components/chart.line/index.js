@@ -140,7 +140,8 @@ function buildModel(props, rows, ctx, el, draws = null) {
   const { w, h, font, margin, pw, ph } = frame(el, ctx, ({ font, charW }) => ({
     top: font * 2,
     left: Math.max(4, ...yTicks.map((t) => t.label.length)) * charW + font * 0.6,
-    right: labelChars ? labelChars * charW + font : font,
+    // Room for the series labels, and at least half the widest x tick label (the last one is centred on the plot's end).
+    right: Math.max(labelChars ? labelChars * charW + font : font, (Math.max(0, ...xTicks.map((t) => t.label.length)) * charW) / 2 + font * 0.25),
     bottom: font * 3.4,
   }));
   const x = d3.scaleLinear().domain(xDomain).range([0, pw]);
