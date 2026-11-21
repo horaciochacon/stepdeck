@@ -1,8 +1,8 @@
 # chart.line
 
-`chart.line` draws one or more lines from a CSV file over a numeric x. Each line is labelled directly at its end, and the chart is built for step-by-step reveals: series draw in, one series can be highlighted for a step, vertical annotations fade in, and changing `y` morphs every line point by point. This page lists every prop, its default and transition, how the scales and colors are chosen, when the chart animates, how big it renders, the `anchor()` API, the markup, and the mistakes that are easy to make. It is for deck authors and for authors of custom components that mount a `chart.line` and need `anchor()`.
+`chart.line` draws one or more lines from a CSV file over a numeric x. Each line is labelled directly at its end, and the chart is built for step-by-step reveals: series draw in, one series can be highlighted for a step, vertical annotations fade in, point markers and a forecast segment fade in, and changing `y` morphs every line point by point. This page lists every prop, its default and transition, how the scales and colors are chosen, when the chart animates, how big it renders, the `anchor()` API, the markup, and the mistakes that are easy to make. It is for deck authors and for authors of custom components that mount a `chart.line` and need `anchor()`.
 
-Sources: [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -67,8 +67,10 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 | `format` | `{ x?, y? }` | no | precision from the tick step | snap | d3-format specs for the tick labels, localized by the deck language. Without one, ticks use fixed precision derived from the tick step (`d3.precisionFixed`), so a step of 0.5 gives one decimal. |
 | `types` | `{ <column>: "string" \| "number" \| "date" }` | no | guessed | snap | CSV column types passed to the data loader. An undeclared column is a number only when every non-empty value looks like one. |
 | `interval` | `{ lower, upper }` | no | none | tween | A shaded band between two columns around each series, such as an uncertainty interval. Both keys are required. The band morphs with the lines. |
+| `points` | boolean | no | `false` | fade | A dot on every data point of every shown series. Dots after `forecast.from` are hollow. |
+| `forecast` | `{ from, label? }` | no | none | fade | From the x value `from` on, every line is dotted with hollow points and a lighter band, over a shaded region with a labelled divider. `from` is required; `label` replaces the default word. See [Forecast and points](#forecast-and-points). |
 
-The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
+The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval`, `forecast` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
 
 Rows whose x or y cell is empty are left out of the line; the line joins the points on either side. The band is broken where `lower` or `upper` is empty. `annotate` entries whose `x` is not a finite number are dropped.
 
@@ -78,6 +80,26 @@ Rows whose x or y cell is empty are left out of the line; the line joins the poi
 - **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not. It always includes 0, and is rounded out with `nice(5)`. Because hidden series count, the y axis does not jump when a series appears; it changes only when `y`, `interval` or the data change.
 - **Ticks**: 5 y ticks and 6 x ticks (d3 tick counts, so the exact number can differ by one or two). Y ticks carry horizontal grid lines.
 - **Margins** are computed from character counts, not measured text, so the layout never depends on font loading. The left margin fits the longest y tick label; the right margin fits the longest shown series name.
+
+## Forecast and points
+
+`forecast: { from: 2025 }` marks everything from an x value on as a forecast, and `points: true` puts a dot on every data point. They are independent, and both leave no markup behind while they are unset.
+
+With `forecast`, every series is cut at `from`:
+
+- **The line.** The observed part keeps its solid `path.sd-line`; the forecast part is a separate dotted `path.sd-forecast-line[data-forecast="<name>"]` (round dots, the series' color, `--sd-color-dim` when another series is highlighted).
+- **The join.** When `from` falls between two data points, the cut adds a boundary point interpolated on the line (and on the band's bounds). Both parts include it, so the solid line ends exactly where the dotted one starts. A data point exactly at `from` is the join itself and is not drawn twice. Series are cut independently, so a series that ends before `from` has no dotted line.
+- **The band.** With `interval`, the forecast part of each band is `path.sd-band.sd-band-forecast`, lighter than the observed one (8% fill opacity against 15%).
+- **The region and divider.** `rect.sd-forecast-region` shades the plot from `from` to its end. A dashed divider (`line.sd-rule`) marks `from`, with its label inside the plot at the top: `forecast.label`, or else the deck language's word ("Forecast", "Proyección"). Near the plot's end the label moves to the left of the divider. The region's color is `--sd-color-forecast` when the theme sets it, else 5% of `--sd-color-ink` over `--sd-color-background` (see [Themes](../themes.md)).
+- **Outside the data.** With `from` before the first x, the whole line is forecast (`path.sd-line` stays but has no points) and the region covers the whole plot. With `from` at or after the last x, there is no forecast part and no region, and the chart is as without `forecast`.
+
+With `points`, `g.sd-points` holds one `circle.sd-dot[data-series]` per data point of each shown series, in the series' color (outlined in the background color). A dot after `from` is hollow (`.sd-dot-hollow`: a ring filled with the background) and 20% larger. The interpolated boundary point has no dot. Dots follow the lines when `y` changes, appear with a series, and dim with `highlight`.
+
+Both props fade: when one is set on a step that plays, its markup fades in over the morph's duration, and when it is cleared the markup fades out; while `forecast.from` moves, the cut, the divider and the region move with it. On an entrance the dots and the dotted line fade in while the solid lines draw. Jumps and backward moves write the end state at once.
+
+```js
+{ id: "projection", set: { chart: { points: true, forecast: { from: 2025, label: "Projection" } } } },
+```
 
 ## Colors
 
@@ -99,6 +121,7 @@ The chart animates only when the engine asks for it: you moved forward exactly o
 | `series_shown` removes a series | Its line, label and band fade out. |
 | `highlight` set or cleared | Line, band and label colors tween in RGB over `--sd-duration-fast`. Opacity never changes. |
 | `annotate` | New annotations fade in; removed ones fade out. Ticks that enter or leave fade the same way. |
+| `points` or `forecast` set or cleared | The dots (or the forecast group, with its dotted lines and region) fade in or out; a series that appears fades in its dots and dotted line with it. A moving `forecast.from` moves the cut, the divider and the region with the morph. |
 
 Motion lasts twice `--sd-duration` (400 ms in both built-in themes, so 800 ms), with the theme's `--sd-easing`. A step's `transition.duration` replaces it as is (it is not doubled); on the entrance, the element's own `enter.duration` wins. The one exception is color: a `highlight` change tweens line, band and label colors in their own tween over `--sd-duration-fast` (200 ms), or over the step's `transition.duration`, beside the geometry morph. An aborted step snaps to its end state. Every update ends by writing the target state from props and clearing inline styles and opacities, so the markup after a played step equals the markup after jumping to it.
 
@@ -141,6 +164,9 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="chart.line"]`) the co
 | `g.sd-axis.sd-axis-x > g.tick.sd-tick-x` | An x tick: `text`. `line.sd-axis-line` is the x baseline. |
 | `path.sd-line[data-series="<name>"]` | One line per shown series. |
 | `path.sd-band[data-band="<name>"]` | One band per shown series, only with `interval`. |
+| `g.sd-points > circle.sd-dot[data-series]` | One dot per data point, only with `points`; `.sd-dot-hollow` after the forecast start. |
+| `g.sd-forecast` | Only with `forecast`, under the axes: `rect.sd-forecast-region`, `g.sd-forecast-divider` (`line.sd-rule` and `text.sd-rule-label`) and `path.sd-forecast-line[data-forecast="<name>"]` per series with a forecast part. |
+| `path.sd-band.sd-band-forecast[data-band-forecast="<name>"]` | The forecast part of a band, with `forecast` and `interval`. |
 | `text.sd-series-label[data-label="<name>"]` | A direct label at the end of each line, only with `series`. |
 | `g.sd-annotation` | An annotation: `line.sd-annotation-rule` and `text.sd-annotation-label`. |
 | `text.sd-axis-title.sd-axis-title-x`, `.sd-axis-title-y` | The axis titles. |

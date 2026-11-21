@@ -2,7 +2,7 @@
 
 A line chart of one or more series over a numeric x, labelled directly at the end of each line.
 Built for step-by-step reveals: series draw in, one series can be highlighted for a step,
-annotations fade in, and changing `y` morphs every line point by point.
+annotations fade in, changing `y` morphs every line point by point, and point markers and a dotted forecast segment fade in.
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
@@ -17,6 +17,8 @@ annotations fade in, and changing `y` morphs every line point by point.
 | `format` | `{x?, y?}` | step precision | snap | d3-format specs for tick labels, localized by the deck language. |
 | `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). |
 | `interval` | `{lower, upper}` | none | tween | Shaded band between two columns around each series. |
+| `points` | boolean | `false` | fade | A dot on every data point of every shown series; dots after `forecast.from` are hollow and slightly larger. |
+| `forecast` | `{from, label?}` | none | fade | From the x value `from` on, each line is dotted, its points hollow and its band lighter; the plot from there to its end is shaded, with a labelled divider (`label`, default the deck language's "Forecast"). |
 
 Behaviour:
 - **Idempotent.** Every `update` ends by writing the target state straight from props, so the DOM
@@ -32,6 +34,12 @@ Behaviour:
   step snaps to its end state.
 - **Scales.** The y domain covers every series in the data (not only the shown ones) and includes 0,
   so the axis does not jump when a series appears. It changes only when `y` changes.
+- **Forecast and points.** `forecast.from` cuts every series at that x. When it falls between two data points the cut
+  adds a boundary point (interpolated, including the band), shared by both parts, so the solid line ends exactly where
+  the dotted one starts; a data point exactly at `from` is observed and is not drawn twice. Before the first x the whole
+  line is forecast; at or after the last x there is no forecast part and no shaded region. `points` and `forecast` add
+  markup only while they are set, and both fade in and out. The region's color is `--sd-color-forecast` when the theme
+  sets it, else a faint mix of `--sd-color-ink` and the background.
 - **Colors** come from `ctx.palette("categorical")` in order of first appearance in the data, so a
   series keeps its color at every step. Palette colors promise 3:1 against the background (enough
   for lines); a series label is text, so it is drawn in its series color darkened (lightened on a
@@ -42,6 +50,9 @@ Behaviour:
 - `anchor("series:<name>")` returns the canvas-pixel box `{x, y, w, h}` of a shown series, else `null`.
 
 Markup: `svg.sd-chart-line`; each line is `path.sd-line[data-series="<name>"]`, ticks are
-`g.tick > text`, annotations `g.sd-annotation`, labels `text.sd-series-label[data-label]`.
+`g.tick > text`, annotations `g.sd-annotation`, labels `text.sd-series-label[data-label]`. With `points`: `g.sd-points` holding
+`circle.sd-dot[data-series]` (`.sd-dot-hollow` after the forecast start). With `forecast`: `g.sd-forecast` holding
+`rect.sd-forecast-region`, `g.sd-forecast-divider` (the rule and its label) and `path.sd-forecast-line[data-forecast]`;
+the band's forecast part is `path.sd-band.sd-band-forecast`.
 
 See `example.js` for a slide that uses it.

@@ -223,6 +223,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-chart-line .sd-series-label { font-weight: 600; }
 .sd-chart-line .sd-annotation-rule { stroke: var(--sd-color-muted); stroke-width: 2; stroke-dasharray: 8 8; }
 .sd-chart-line text.sd-annotation-label { fill: var(--sd-color-ink); }
+/* forecast: a dotted line (zero-length dashes with round caps are dots), a lighter band, a faint region from the divider to the plot's end */
+.sd-chart-line .sd-forecast-line { fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 0 12; }
+.sd-chart-line .sd-band-forecast { fill-opacity: 0.08; }
+.sd-chart-line .sd-forecast-region { stroke: none; fill: var(--sd-color-forecast, color-mix(in srgb, var(--sd-color-ink) 5%, var(--sd-color-background))); }
 
 .sd-chart-bar .sd-axis-value text { fill: var(--sd-color-muted); }
 .sd-chart-bar .sd-band-label { fill: var(--sd-color-ink); }

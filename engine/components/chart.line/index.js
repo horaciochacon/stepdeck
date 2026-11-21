@@ -1,5 +1,5 @@
 // Built-in `chart.line`: one line per series over a numeric x, with direct series labels, optional
-// highlight, vertical annotations and an interval band (spec §6.2 trend example, §6.3).
+// highlight, vertical annotations, an interval band, point markers and a forecast segment.
 //
 // Rendering is a pure function of props: every update ends by writing the target state directly
 // (renderStatic), so the DOM after settled() is the same whether a state was jumped to or played.
@@ -22,16 +22,34 @@
 // background (enough for a line), so a series label is drawn in the same color darkened (lightened
 // on a dark background) until it reaches 4.5:1, the contrast `check` requires of text (textColor in
 // core/color.js, which text badges use too).
+//
+// `points` puts a dot on every data point. `forecast.from` cuts every series at an x value (core/chart.js `splitAt`, in
+// pixels): the observed part keeps the solid line and the band, the forecast part is a dotted line, a lighter band and
+// hollow dots, over a shaded region from a labelled divider to the plot's end. The cut adds a boundary point, shared by
+// both parts, so the solid line ends exactly where the dotted one starts. Every part is derived from a series' points
+// by `partsOf`, in the final state and in every frame of a played change alike. Both props fade in and out with the
+// element's morph, and their markup exists only while they are set.
 // Text sizes come from theme tokens via CSS (core/stepdeck.css); the token values are only read
 // here to size the margins.
 import { d3 } from "../../core/d3.js";
-import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw } from "../../core/chart.js";
+import { loadTable, tickFormat, frame, keyed, settle, spread, band, morph, entrance, undraw, splitAt, dot, rule, halo } from "../../core/chart.js";
 import { textColor } from "../../core/color.js";
 import { SVG_NS, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
 
 const NO_SERIES = "all"; // series key when props.series is absent
 
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+
+const HOLLOW_GROWTH = 1.2; // a hollow (forecast) dot is a little larger than a filled one: its ring is thinner
+
+/**
+ * A series' points (pixels) cut at the forecast start `at` (pixels; null without a forecast): the observed part
+ * and the forecast part, which share the point at the cut (see `splitAt`). Without a forecast, everything is observed.
+ */
+const partsOf = (points, at) => (at == null ? { observed: points, forecast: [] } : splitAt(points, at, (p) => p.px));
+
+/** A path's `d`, with "" in place of null when `keep`, so a part that becomes empty keeps its attribute (and its place in the markup). */
+const dOr = (d, keep) => d ?? (keep ? "" : null);
 
 /** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
 const loadRows = (props, ctx) =>
@@ -80,6 +98,11 @@ function buildModel(props, rows, ctx, el) {
   const x = d3.scaleLinear().domain(xDomain).range([0, pw]);
   const y = yScale0.copy().range([ph, 0]);
 
+  // The forecast start in pixels. At or past the plot's end there is no forecast part and no region, so no forecast.
+  const from = props.forecast?.from;
+  const at = from == null || from === "" ? NaN : x(Number(from));
+  const forecast = Number.isFinite(at) && at < pw ? { at, label: props.forecast.label ?? ctx.t("forecast") } : null;
+
   const series = seriesList.map((name) => {
     const own = d3.sort(rows.filter((r) => seriesOf(r) === name && valueOf(r, props.x) !== null && valueOf(r, props.y) !== null), (r) => valueOf(r, props.x));
     const points = own.map((r) => {
@@ -124,7 +147,8 @@ function buildModel(props, rows, ctx, el) {
   return {
     w, h, font, margin, pw, ph,
     xDomain: x.domain(), xRange: x.range(), yDomain: y.domain(), yRange: y.range(),
-    xTicks, yTicks, series, annotations,
+    xTicks, yTicks, series, annotations, forecast,
+    showPoints: Boolean(props.points),
     hasSeriesLabels: Boolean(props.series),
     hasInterval: Boolean(lower && upper),
     axes: { x: props.axes?.x == null ? "" : String(props.axes.x), y: props.axes?.y == null ? "" : String(props.axes.y) },
@@ -132,6 +156,15 @@ function buildModel(props, rows, ctx, el) {
 }
 
 const lineD = d3.line().x((p) => p.px).y((p) => p.py);
+
+/** The series that have a forecast line (and band): two or more points after the cut. */
+const forecastSeries = (m) => (m.forecast ? m.series.filter((s) => partsOf(s.points, m.forecast.at).forecast.length >= 2) : []);
+
+/** One dot per data point of every shown series (never the boundary point of a cut), while `points` is on. */
+const dotData = (m) =>
+  m.showPoints
+    ? m.series.flatMap((s) => s.points.filter((p) => Number.isFinite(p.px) && Number.isFinite(p.py)).map((p) => ({ key: p.key, series: s.name, px: p.px, py: p.py, dimmed: s.dimmed, paint: s.paint })))
+    : [];
 
 export default {
   async mount(el, props, ctx) {
@@ -173,20 +206,59 @@ export default {
       tickJoin(gx, m.xTicks, "sd-tick-x");
       keyed(gLines.selectAll("path.sd-line"), m.series, byName, (enter) => enter.append("path").attr("class", "sd-line").attr("data-series", byName));
       keyed(gLabels.selectAll("text.sd-series-label"), m.hasSeriesLabels ? m.series : [], byName, (enter) => enter.append("text").attr("class", "sd-series-label").attr("data-label", byName));
-      keyed(gBands.selectAll("path.sd-band"), m.hasInterval ? m.series : [], byName, (enter) => enter.append("path").attr("class", "sd-band").attr("data-band", byName));
+      keyed(gBands.selectAll("path.sd-band:not(.sd-band-forecast)"), m.hasInterval ? m.series : [], byName, (enter) => enter.append("path").attr("class", "sd-band").attr("data-band", byName));
+      keyed(gBands.selectAll("path.sd-band-forecast"), m.hasInterval ? forecastSeries(m) : [], byName, (enter) => enter.append("path").attr("class", "sd-band sd-band-forecast").attr("data-band-forecast", byName));
       keyed(gNotes.selectAll("g.sd-annotation"), m.annotations, (d) => d.key, (enter) => {
         const g = enter.append("g").attr("class", "sd-annotation");
         g.append("line").attr("class", "sd-annotation-rule");
         g.append("text").attr("class", "sd-annotation-label");
         return g;
       });
+      // Forecast: one group (the region, the divider, a dotted line per series) under everything, while `forecast` is set.
+      const forecastG = keyed(plot.selectAll("g.sd-forecast"), m.forecast ? [m.forecast] : [], () => "forecast", (enter) => {
+        const g = enter.append("g").attr("class", "sd-forecast");
+        g.append("rect").attr("class", "sd-forecast-region");
+        g.append("g").attr("class", "sd-forecast-divider");
+        return g;
+      });
+      forecastG.lower();
+      if (m.forecast) keyed(forecastG.selectAll("path.sd-forecast-line"), forecastSeries(m), byName, (enter) => enter.append("path").attr("class", "sd-forecast-line").attr("data-forecast", byName));
+      // Points: one group of dots over the lines, while `points` is on.
+      const pointsG = keyed(plot.selectAll("g.sd-points"), m.showPoints ? [m.showPoints] : [], () => "points", (enter) => enter.append("g").attr("class", "sd-points"));
+      if (!pointsG.empty()) gLabels.node().before(pointsG.node());
+      if (m.showPoints) keyed(pointsG.selectAll("circle.sd-dot"), dotData(m), (d) => d.key, (enter) => enter.append("circle").attr("class", "sd-dot").attr("data-series", (d) => d.series));
     }
 
     /** Draws the focused series after (above) the dimmed ones: the data order, with the dimmed first. */
     function stackFocus(m) {
       const focused = (d) => !d.dimmed;
       gLines.selectAll("path.sd-line:not(.sd-exiting)").data(m.series, byName).order().filter(focused).raise();
-      gBands.selectAll("path.sd-band:not(.sd-exiting)").data(m.hasInterval ? m.series : [], byName).order().filter(focused).raise();
+      gBands.selectAll("path.sd-band:not(.sd-band-forecast):not(.sd-exiting)").data(m.hasInterval ? m.series : [], byName).order().filter(focused).raise();
+      gBands.selectAll("path.sd-band-forecast:not(.sd-exiting)").data(m.hasInterval ? forecastSeries(m) : [], byName).order().filter(focused).raise();
+      plot.selectAll("g.sd-forecast path.sd-forecast-line:not(.sd-exiting)").data(forecastSeries(m), byName).order().filter(focused).raise();
+      plot.selectAll("g.sd-points circle.sd-dot:not(.sd-exiting)").data(dotData(m), (d) => d.key).order().filter(focused).raise();
+    }
+
+    /** The dots at positions `pos(d)` (pixels), hollow past the forecast start `at`, painted `paint(d)`. */
+    function placeDots(sel, m, pos, at, paint) {
+      const r = m.font * 0.22;
+      const hollow = (d) => at != null && pos(d).px > at;
+      sel.attr("cx", (d) => pos(d).px).attr("cy", (d) => pos(d).py);
+      dot(sel, { r: (d) => (hollow(d) ? r * HOLLOW_GROWTH : r), color: paint, hollow });
+    }
+
+    /** The forecast's region and divider for the scales x, y and the forecast start `at` (pixels, which a played change interpolates). */
+    function placeForecast(m, at, x, y) {
+      const [x0, x1] = x.range();
+      const edge = Math.min(Math.max(at, x0), x1);
+      const g = plot.select("g.sd-forecast:not(.sd-exiting)");
+      g.select("rect.sd-forecast-region").attr("x", edge).attr("y", 0).attr("width", x1 - edge).attr("height", y.range()[0]);
+      // Near the plot's end the label sits before the divider (right-aligned), else after it.
+      const flip = edge > x0 + (x1 - x0) * 0.8;
+      const ph = y.range()[0];
+      const divider = g.select("g.sd-forecast-divider");
+      rule(divider, { x1: edge, y1: flip ? ph : 0, x2: edge, y2: flip ? 0 : ph, label: m.forecast.label, anchor: flip ? "end" : "start" });
+      halo(divider.select("text.sd-rule-label")).attr("y", m.font * 0.9).attr("dy", null); // inside the plot, like an annotation's label
     }
 
     /** Writes the model exactly: the end state of every update, animated or not. */
@@ -198,10 +270,20 @@ export default {
       const x = d3.scaleLinear().domain(m.xDomain).range(m.xRange);
       const y = d3.scaleLinear().domain(m.yDomain).range(m.yRange);
       placeMarks(m, x, y);
+      const at = m.forecast?.at ?? null;
+      const keep = at !== null; // with a forecast a part can be empty: it keeps an empty `d`, so the markup does not depend on the way here
       gLines.selectAll("path.sd-line").data(m.series, (d) => d.name)
-        .attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
-      gBands.selectAll("path.sd-band").data(m.hasInterval ? m.series : [], (d) => d.name)
-        .attr("d", (d) => band(d.points)).attr("fill", (d) => d.paint);
+        .attr("d", (d) => dOr(lineD(partsOf(d.points, at).observed), keep)).attr("stroke", (d) => d.paint);
+      gBands.selectAll("path.sd-band:not(.sd-band-forecast)").data(m.hasInterval ? m.series : [], (d) => d.name)
+        .attr("d", (d) => dOr(band(partsOf(d.points, at).observed), keep)).attr("fill", (d) => d.paint);
+      gBands.selectAll("path.sd-band-forecast").data(m.hasInterval ? forecastSeries(m) : [], (d) => d.name)
+        .attr("d", (d) => band(partsOf(d.points, at).forecast) ?? "").attr("fill", (d) => d.paint);
+      if (m.forecast) {
+        placeForecast(m, at, x, y);
+        plot.selectAll("g.sd-forecast path.sd-forecast-line").data(forecastSeries(m), (d) => d.name)
+          .attr("d", (d) => lineD(partsOf(d.points, at).forecast)).attr("stroke", (d) => d.paint);
+      }
+      placeDots(plot.selectAll("g.sd-points circle.sd-dot").data(dotData(m), (d) => d.key), m, (d) => d, at, (d) => d.paint);
       stackFocus(m);
       gLabels.selectAll("text.sd-series-label").data(m.hasSeriesLabels ? m.series : [], (d) => d.name)
         .attr("x", m.pw + m.font * 0.4).attr("y", (d) => d.ly).attr("dy", "0.35em")
@@ -267,28 +349,45 @@ export default {
         return this.classList.contains("sd-exiting") ? 1 - t : this.__sdEnter ? t : null;
       });
 
-      svg.selectAll(".tick, g.sd-annotation, .sd-series-label, .sd-band").each(function () {
+      svg.selectAll(".tick, g.sd-annotation, .sd-series-label, .sd-band, .sd-points, .sd-forecast, .sd-dot, .sd-forecast-line").each(function () {
         this.__sdEnter = !this.__sdSeen;
         this.__sdSeen = true;
       });
+      // The marks of a group that enters or leaves fade with the group, not once more by themselves.
+      svg.selectAll(".sd-points, .sd-forecast").filter(function () { return this.__sdEnter; }).selectAll(".sd-dot, .sd-forecast-line").each(function () { this.__sdEnter = false; });
       // Entering series draw at their final shape while everything else morphs.
+      const toAt = to.forecast?.at ?? null;
       const lines = gLines.selectAll("path.sd-line:not(.sd-exiting)").data(to.series, (d) => d.name);
-      lines.filter((d) => entering.has(d.name)).attr("d", (d) => lineD(d.points)).attr("stroke", (d) => d.paint);
+      lines.filter((d) => entering.has(d.name)).attr("d", (d) => dOr(lineD(partsOf(d.points, toAt).observed), toAt !== null)).attr("stroke", (d) => d.paint);
       const draws = lines.filter((d) => entering.has(d.name)).nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease }));
 
       const paintAt = (t) => {
         const { x, y } = scalesAt(from, to, t);
+        // The forecast start moves with the points; a forecast that appears or leaves is cut at its own place all along (the group fades).
+        const at = from.forecast && to.forecast ? lerp(from.forecast.at, to.forecast.at, t) : toAt;
+        const keep = at !== null;
+        const pts = (s) => s.points.map((p) => ({ ...p, ...tween(p, t) }));
         // The plot origin moves with the y tick label width; interpolate it so nothing jumps at t=0.
         const margin = { left: lerp(from.margin.left, to.margin.left, t), top: lerp(from.margin.top, to.margin.top, t) };
         plot.attr("transform", `translate(${margin.left},${margin.top})`);
         placeMarks(to, x, y, margin);
-        fadeOf(svg.selectAll(".tick, g.sd-annotation"), t);
+        fadeOf(svg.selectAll(".tick, g.sd-annotation, .sd-points, .sd-forecast"), t);
         lines.filter((d) => !entering.has(d.name))
-          .attr("d", (d) => lineD(d.points.map((p) => tween(p, t))))
+          .attr("d", (d) => dOr(lineD(partsOf(pts(d), at).observed), keep))
           .attr("stroke", (d) => live.get(d.name).paint);
-        gBands.selectAll("path.sd-band:not(.sd-exiting)").data(to.hasInterval ? to.series : [], (d) => d.name)
-          .attr("d", (d) => band(d.points.map((p) => ({ ...p, ...tween(p, t) }))))
+        gBands.selectAll("path.sd-band:not(.sd-band-forecast):not(.sd-exiting)").data(to.hasInterval ? to.series : [], (d) => d.name)
+          .attr("d", (d) => dOr(band(partsOf(pts(d), at).observed), keep))
           .attr("fill", (d) => live.get(d.name).paint).attr("opacity", (d) => (entering.has(d.name) ? t : 1));
+        fadeOf(gBands.selectAll("path.sd-band-forecast"), t);
+        gBands.selectAll("path.sd-band-forecast:not(.sd-exiting)").data(to.hasInterval ? forecastSeries(to) : [], (d) => d.name)
+          .attr("d", (d) => band(partsOf(pts(d), at).forecast) ?? "").attr("fill", (d) => live.get(d.name).paint);
+        if (to.forecast) {
+          placeForecast(to, at, x, y);
+          plot.selectAll("g.sd-forecast:not(.sd-exiting) path.sd-forecast-line:not(.sd-exiting)").data(forecastSeries(to), (d) => d.name)
+            .attr("d", (d) => lineD(partsOf(pts(d), at).forecast)).attr("stroke", (d) => live.get(d.name).paint);
+        }
+        placeDots(plot.selectAll("g.sd-points:not(.sd-exiting) circle.sd-dot:not(.sd-exiting)").data(dotData(to), (d) => d.key), to, (d) => tween(d, t), at, (d) => live.get(d.series).paint);
+        fadeOf(plot.selectAll("circle.sd-dot, path.sd-forecast-line"), t);
         gLabels.selectAll("text.sd-series-label:not(.sd-exiting)").data(to.hasSeriesLabels ? to.series : [], (d) => d.name)
           .attr("x", x.range()[1] + to.font * 0.4).attr("y", (d) => lerp(prevSeries.get(d.name)?.ly ?? d.ly, d.ly, t))
           .attr("dy", "0.35em").attr("fill", (d) => live.get(d.name).label).text((d) => d.name)
@@ -308,7 +407,12 @@ export default {
         if (draw && !info.signal?.aborted) {
           // The entrance: every line draws in from its final shape.
           renderStatic(model);
-          await Promise.all(gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })));
+          // The dotted line and the dots cannot draw along their length: they fade in while the solid lines draw.
+          const late = plot.selectAll("g.sd-points, path.sd-forecast-line").attr("opacity", 0);
+          await Promise.all([
+            ...gLines.selectAll("path.sd-line").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })),
+            morph(info, ctx, (t) => late.attr("opacity", t), { duration }),
+          ]);
         } else if (info.animate && last && !info.entered && !info.signal?.aborted) {
           // A change while the chart stays shown. An element that just appeared without a draw snaps.
           await change(last, model, info);
