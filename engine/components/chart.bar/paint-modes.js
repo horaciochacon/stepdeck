@@ -134,7 +134,7 @@ export function paintConnectors(plot, view, { centerOf, thick, scale, horizontal
 }
 
 /** A waterfall bar's value label, on the side the model chose at rest, following the bar's ends (and whisker) as they move. */
-export function placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, center, hasWhisker, gap, atBaseline }) {
+export function placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, center, hasWhisker, gap }) {
   const dir = (horizontal ? 1 : -1) * (d.up ? 1 : -1); // the bar's direction in pixels
   const tip = hasWhisker ? scale(d.up ? Math.max(v, lerp(v, s.hi, s.whisker)) : Math.min(v, lerp(v, s.lo, s.whisker))) : end;
   const side = s.side ?? "end";
@@ -143,7 +143,7 @@ export function placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, c
   label
     .attr("x", horizontal ? at : center)
     .attr("y", horizontal ? center : at)
-    .attr("dy", horizontal ? "0.35em" : forward ? "0.71em" : atBaseline)
+    .attr("dy", horizontal ? "0.35em" : forward ? "0.71em" : "0em") // always written: see the plain bars' label
     .attr("text-anchor", horizontal ? (forward ? "start" : "end") : "middle");
 }
 

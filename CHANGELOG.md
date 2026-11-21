@@ -36,6 +36,9 @@ All notable changes to stepdeck are recorded here. The format follows
 - **`chart.line` keeps its last x tick label inside the element.** A chart without `series` kept one font size of
   room on the right, less than half a four-character tick label such as `2050`, which then overhung the element.
   The right margin is now at least half the widest x tick label, so in such decks the plot is about 13 px narrower.
+- **A vertical `chart.bar` whose bar changes sign ends a played step as a jump does.** A value label above its bar
+  now carries `dy="0em"`, so its attributes keep their order when it moves below the bar. Before, the played step's
+  markup differed from the jump's in attribute order (the pixels were the same).
 - **A step's `transition` has bounds.** `transition.stagger` is at most 1000 ms and `transition.duration` at most
   5000 ms (`validate` reports `spec-invalid` above them), like an element's own `delay` and `duration`.
 - **The engine lives in `engine/`.** `core/`, `components/`, `layouts/`, `themes/`, `vendor/` and `schema/` moved

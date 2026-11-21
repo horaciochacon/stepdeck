@@ -28,6 +28,7 @@ const SHRINK = ["before", "after"];
 const REVEAL = ["none", "a", "ab", "abc", "focus"];
 const INTERVAL = ["one", "two", "three", "later"];
 const VERTICAL = ["all", "focus", "later"];
+const SIGN = ["before", "after"]; // a and c change sign, so their labels change side
 const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 const focus = deckPages("test/fixtures/decks/focus/"); // modern theme: --sd-duration-fast 200ms; steps all, a, b, end
 
@@ -51,6 +52,7 @@ test("jump equals played", async () => {
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "reveal", steps: REVEAL, id: "bars" });
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "interval", steps: INTERVAL, id: "bars" });
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "vertical", steps: VERTICAL, id: "bars" });
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "sign-change", steps: SIGN, id: "bars" });
   });
 });
 
@@ -60,6 +62,7 @@ test("backward equals jump", async () => {
     await expectBackwardEqualsJump(ctx, page, { pages, slide: "reveal", steps: REVEAL, id: "bars" });
     await expectBackwardEqualsJump(ctx, page, { pages, slide: "interval", steps: INTERVAL, id: "bars" });
     await expectBackwardEqualsJump(ctx, page, { pages, slide: "vertical", steps: VERTICAL, id: "bars" });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "sign-change", steps: SIGN, id: "bars" });
   });
 });
 

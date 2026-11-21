@@ -409,13 +409,12 @@ export default {
           }
 
           const gap = f * 0.4;
-          // A label running up from its anchor has no `dy`; on a waterfall slide it gets "0em" instead, so the attribute
-          // is never dropped and re-added between steps (that would change its place in the markup).
-          const atBaseline = m.flowSlide ? "0em" : null;
+          // A label running up from its anchor gets `dy` "0em", never no `dy`: an attribute dropped at one step and
+          // added back at the next goes to the end of the element's attributes, so a played step would differ from a jump.
           const label = text(sel.select("text"), d.text);
           if (m.mode === "waterfall") {
             // On the side the model chose at rest, following the bar's ends (and whisker) as they move.
-            placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, center, hasWhisker, gap, atBaseline });
+            placeFlowLabel(label, d, s, { horizontal, scale, v, end, base, center, hasWhisker, gap });
           } else {
             // The value label sits past the bar's end, or past the whisker's when there is one (a back-to-back bar's
             // points away from the rule, whatever its length).
@@ -424,7 +423,7 @@ export default {
             label
               .attr("x", horizontal ? tip + (positive ? gap : -gap) : center)
               .attr("y", horizontal ? center : tip + (positive ? -gap : gap))
-              .attr("dy", horizontal ? "0.35em" : positive ? atBaseline : "0.71em")
+              .attr("dy", horizontal ? "0.35em" : positive ? "0em" : "0.71em")
               .attr("text-anchor", horizontal ? (positive ? "start" : "end") : "middle");
           }
           label.attr("fill", s.labelFill).attr("opacity", s.labelOpacity === 1 ? null : s.labelOpacity);
