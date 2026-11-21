@@ -63,8 +63,11 @@ All notable changes to stepdeck are recorded here. The format follows
 - **Ghost placeholders.** `ghost: true` or `ghost: "<label>"` on an element shows a dashed frame, with the label,
   in its space while it is hidden (`false`, the default, shows none). `dump` reports it; `validate` reports `ghost-collapse` for a ghost on a
   collapsing element.
-- **The gallery** ends with five motion slides: the named motions, a step's choreography, focus-dim, the message
+- **The gallery** has five motion slides: the named motions, a step's choreography, focus-dim, the message
   line with a badge, and ghost placeholders.
+- **Data stories in the gallery.** Seven more slides, in a landing-page group "Data stories", play the new chart
+  moves on synthetic data: a forecast and sweep, the draw fan, estimates with a re-sort, before and after pairs, strips
+  with a followed item, a waterfall with a total, and a back-to-back pyramid.
 - **Message line and badges.** A slide `lede` string is a muted line under the title (the `text` role `lede`, sized
   by the new theme token `--sd-font-size-lede`: 36px in `modern`, 32px in `academic-light`); a step can change it
   and the text crossfades; its box carries the new hook class `sd-lede`. The `text` component also has a `badge`
@@ -80,7 +83,7 @@ All notable changes to stepdeck are recorded here. The format follows
   after pair (a hollow dot, a connector that grows, the filled dot); `shown`, `highlight` and `sort` work as in
   `chart.bar`; an empty value reads "no data", never a dot at zero. With `id` it draws beeswarm strips of many
   points per category, with a summary tick and one item followed across the strips (`focus`). Its dots grow out of the
-  reference line, or out of the `from` value of a pair.
+  reference value, or out of the `from` value of a pair.
 - **`chart.line` for data stories.** `points` puts a dot on every data point. `forecast: { from, label? }` dots the
   lines from an x on and shades the plot from there. `until` sweeps the lines along the x axis behind a cursor,
   with `ticker: true` for a large counting label of the x, so a story can run from data into forecast. `draws`

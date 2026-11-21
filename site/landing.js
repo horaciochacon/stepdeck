@@ -6,6 +6,7 @@ const GROUPS = [
   ["layout", "Layouts"],
   ["component", "Components"],
   ["motion", "Motion"],
+  ["story", "Data stories"],
 ];
 
 const list = document.getElementById("gallery-list");

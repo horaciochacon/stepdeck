@@ -9,7 +9,7 @@ It is for two readers:
 
 Agents writing decks should follow the [step model reference](../../skill/references/step-model.md), the [cookbook](../../skill/references/cookbook.md) and the [checks reference](../../skill/references/checks.md) in the skill. Everything below comes from the engine code: `core/motion.js` (the named motions and their timing), `core/choreography.js` (which system plays an entrance), `core/controller.js` (when things move), `core/layout.js` (the element boxes), `core/kit.js`, `core/stepdeck.js` and the built-in components.
 
-The [gallery](../../site/gallery/) ends with five motion slides that show everything on this page: `motion-names`, `motion-choreography`, `motion-focus`, `motion-message` and `motion-ghost` (their files are in [`site/gallery/slides/`](../../site/gallery/slides/)).
+The [gallery](../../site/gallery/) has five motion slides that show everything on this page: `motion-names`, `motion-choreography`, `motion-focus`, `motion-message` and `motion-ghost` (their files are in [`site/gallery/slides/`](../../site/gallery/slides/)).
 
 ## The rule: played equals jumped
 
