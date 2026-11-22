@@ -17,7 +17,7 @@ const DECK = "test/fixtures/decks/map/";
 const pages = deckPages(DECK);
 const broken = deckPages("test/fixtures/decks/map-broken/");
 const STEPS = { areas: ["base", "rates", "focus", "named"], legends: ["steps", "classes", "ramp"], projection: ["equal", "conic"] };
-const RASTER_STEPS = ["base", "density", "cover", "wells", "alert", "half", "log", "gone"];
+const RASTER_STEPS = ["base", "density", "whole", "cover", "wells", "alert", "half", "log", "gone"];
 /** The main map of the fixture slides is 1400 x 700 px; the small one 140 x 76. */
 const SIZE = [1400, 700];
 const SMALL = [140, 76];
@@ -447,6 +447,58 @@ test("rasters: diverging no-data land is hatched and the legend has the row", as
   });
 });
 
+test("rasters: clipped to land by default, whole cells with clip false", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=density") }, async (page, ctx) => {
+    const [w, h] = SIZE;
+    // the land as the base layer paints it: a pixel past the coastline is one whose neighbours (3 px each way) are all clear
+    const ground = await page.evaluate(() => {
+      const canvas = document.querySelector('[data-el="map"] canvas[data-layer="main:base"]');
+      const d = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+      return Array.from({ length: d.length / 4 }, (_, i) => d[i * 4 + 3]);
+    });
+    const clearAround = (x, y) => {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (ground[(y + dy) * w + x + dx] !== 0) return false;
+      return true;
+    };
+    /** A pixel in the sea that lies inside a cell of `file` that has data and whose centre is on land: where a whole cell sticks out. */
+    const pastCoast = (file) => {
+      const [cols, rows] = file.size;
+      const land = landCells({ bounds: file.bounds, size: file.size }, LAND);
+      for (let y = 4; y < h - 4; y += 2) {
+        for (let x = 4; x < w - 4; x += 2) {
+          const lonLat = BASE.invert([x, y]);
+          if (!lonLat || !clearAround(x, y)) continue;
+          const [col, row] = file.cellAt(lonLat);
+          if (col >= 0 && col < cols && row >= 0 && row < rows && land[row * cols + col] && file.cell(col, row).data) return [x, y];
+        }
+      }
+      return null;
+    };
+    const density = rasterFile("density");
+    const sea = pastCoast(density);
+    assert.ok(sea, "the fixture has a coastal cell centred on land whose data reaches into the sea");
+    const filled = regionCell(density, "N1");
+    assert.ok(filled.data);
+
+    assert.equal((await pixelAt(page, RASTER("density"), sea))[3], 0, "clipped by default: nothing is painted past the coastline");
+    const inland = await pixelAt(page, RASTER("density"), filled.at);
+    assert.equal(inland[3], 255, "and the land has its colour");
+
+    await goTo(page, "rasters", "whole"); // `clip: false`
+    assert.equal((await pixelAt(page, RASTER("density"), sea))[3], 255, "clip false: the cell is drawn whole, so its colour reaches past the coastline");
+    assert.deepEqual(await pixelAt(page, RASTER("density"), filled.at), inland, "and the land is the same");
+
+    // a class raster and a mask clip too
+    for (const [step, name] of [["cover", "cover"], ["wells", "wells"]]) {
+      await goTo(page, "rasters", step);
+      const edge = pastCoast(rasterFile(name));
+      if (edge) assert.equal((await pixelAt(page, RASTER(name), edge))[3], 0, `${name}: clipped`);
+      else assert.equal(name, "wells", "only the mask has no cell past the coast");
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("rasters: a mask takes its role colour", async () => {
   await withPage({ root, url: pages.url("rasters", "step=wells") }, async (page, ctx) => {
     const wells = rasterFile("wells");
@@ -623,14 +675,15 @@ test("points: radius follows the area of the value", async () => {
   });
 });
 
-test("points: size key shows two circles with labels", async () => {
+test("points: size key values are round", async () => {
   await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
     const [row, ...more] = await keyOf(page);
     assert.equal(more.length, 0, "one row for the layer");
     assert.equal(row.title, "Beds");
-    // the largest, 70, and a quarter of it, at the radii those values have on the map
-    assert.deepEqual(row.labels, ["clinic", "hospital", "70", "17.5"]);
-    assert.deepEqual(row.circles, [36, 18], "their diameters");
+    // the largest, 70, and the round number (1, 2 or 5 times a power of ten) at most a quarter of it, at the radii those values have on the map
+    assert.deepEqual(row.labels, ["clinic", "hospital", "70", "10"]);
+    assert.equal(row.circles[0], 36, "the largest has the diameter of the largest point");
+    assert.ok(Math.abs(row.circles[1] - 36 * Math.sqrt(10 / 70)) < 0.01, `and the other, a round value, the area its value has: ${row.circles[1]}`);
     // a layer with no size and no colour column explains nothing
     await goTo(page, "points", "plain");
     assert.deepEqual(await keyOf(page), []);

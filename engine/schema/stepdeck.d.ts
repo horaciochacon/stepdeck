@@ -607,6 +607,8 @@ export interface MapRasterScene {
   view: MapView;
   /** The hatch where land has no data, in resolved colours (opaque); `null` for none. */
   hatch: { line: string; background: string } | null;
+  /** Whether a pixel that is not on `res.land` is clear whatever its cell holds (a coarse cell stops at the coastline); false (the default) draws every cell whole. Needs `res.land`. Hashed. */
+  clip?: boolean;
   draws: MapRasterDraw[];
 }
 
@@ -617,11 +619,11 @@ export interface MapRasterResources {
   lutData: Uint8ClampedArray;
   /** The `lookup` table for a view, for the layer's CSS size. */
   lookupFor(at: MapView): Int32Array;
-  /** The regions, in base-projected px: land outside the raster is hatched. `null` for none. */
+  /** The regions, in base-projected px: land outside the raster is hatched, and `scene.clip` clips to it (then required: without it `paintRaster` throws `paintRaster: clip needs res.land`). `null` for none. */
   land: Path2D | null;
   /** The raster's land cells (`landCells`): a cell with no data on one is hatched. `null` for none. */
   landCells: Uint8Array | null;
-  /** Pictures and land masks already built, keyed by source, frame, view, colour table, hatch and size; the caller owns it. */
+  /** Pictures and land masks already built, keyed by source, frame, view, colour table, hatch, clip and size; the caller owns it. */
   cache: Map<string, unknown>;
 }
 
@@ -672,7 +674,7 @@ export interface MapKit {
   rasterGaps(raster: MapRaster, features: MapFeature[]): Promise<boolean>;
   /**
    * Clears `canvas` (a layer made with `maxRatio: 1`) and draws each picture of `scene.draws` at its alpha; a picture
-   * hatches the land cells with no data and the land outside the raster. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded.
+   * hatches the land cells with no data and the land outside the raster, and with `scene.clip` stops at the coastline. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded, and `paintRaster: clip needs res.land` for a clipped scene without land.
    */
   paintRaster(canvas: HTMLCanvasElement, scene: MapRasterScene, res: MapRasterResources): string;
   /**

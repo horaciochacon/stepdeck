@@ -10,6 +10,11 @@
 // adds a "no data" row exactly when there is hatch to explain. A mask has no no-data: the cells that are not the class
 // stay clear. A file with `frames` shows its first frame; the others are not decoded.
 //
+// A raster is clipped to the land outline by default: a coarse cell whose centre is on land stops at the coastline instead
+// of sticking out over the sea, whatever it holds (data or hatch), for every look. `clip: false` draws every cell whole,
+// for a raster that covers the sea too. `clip` is part of the layer's definition, so a change of it crossfades like a
+// change of data.
+//
 // The interface is that of every layer kind (see ./areas.js). A raster is painted in CSS px with the view's lookup table,
 // so its canvas is made with `maxRatio: 1`; the lookup tables (`geo.lookupFor`) and the pictures and land masks
 // (`geo.pictures`, a `PictureCache`) are the element's (index.js). A picture is made for one view and drawn at another
@@ -97,7 +102,7 @@ function scratchOf(canvas) {
  * at the flight's two ends (`flightDraws`).
  */
 const sceneOf = (prepared, view, alpha, flight) => ({
-  source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch,
+  source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, clip: prepared.clip,
   draws: flight ? flightDraws(flight, alpha) : [{ frame: 0, at: view, alpha }],
 });
 
@@ -143,11 +148,11 @@ export default {
     const hatch = mask ? null : { line: geo.colors.dim, background: geo.colors.surface };
     const res = {
       raster, lutData, cache: geo.pictures,
-      land: hatch ? landOf(geo) : null,
+      land: landOf(geo),
       landCells: hatch ? landCells(raster, geo.features) : null,
       lookupFor: (at) => geo.lookupFor(at, raster), // a table serves every raster with these bounds and this grid, in every frame
     };
-    return { source: `${geo.key}|${raster.path}`, title: layer.label, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
+    return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
   },
 
   scene(prepared, { view, flight, alpha, from, change }) {

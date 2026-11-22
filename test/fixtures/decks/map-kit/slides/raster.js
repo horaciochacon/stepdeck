@@ -1,7 +1,8 @@
 // A raster over the one square region (Mercator, -14 to -12 degrees of longitude), four columns of 1.5 degrees from -16
 // to -10: level 0, no data, 254, 255. Steps: the raster with its no-data land hatched, without the hatch, two frames
 // mixed, the picture built at one view drawn at another, then rasters over the square that are complete, have a hole,
-// reach half the land, and cover the land with cells whose centres are on it.
+// reach half the land, and cover the land with cells whose centres are on it. The last step is the first raster again, clipped
+// to the coastline.
 const map = { data: "data/square-cw.geojson", projection: "mercator", fills: "background", raster: "data/levels.json", about: [-14, -27] };
 
 export default {
@@ -22,5 +23,6 @@ export default {
     { id: "hole", set: { map: { raster: "data/patched.json", rasterDraws: [{ frame: 1 }] } } },
     { id: "half", set: { map: { raster: "data/half.json", rasterDraws: [{ frame: 0 }] } } },
     { id: "coast", set: { map: { raster: "data/coast.json", rasterDraws: [{ frame: 0 }] } } },
+    { id: "clip", set: { map: { raster: "data/levels.json", rasterDraws: [{ frame: 0 }], rasterClip: true } } },
   ],
 };
