@@ -5,7 +5,7 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -135,8 +135,8 @@ function deckOf(lang) {
 const read = (deck, file) => readFileSync(join(deck, "data", file));
 const sidecar = (deck, file) => JSON.parse(read(deck, file).toString("utf8"));
 /** The decoded image: its grey levels and whether each pixel has data (alpha 255), row by row from the north-west. */
-function image(deck, file) {
-  const { width, height, channels, data } = pngPixels(read(deck, file));
+function decoded(bytes) {
+  const { width, height, channels, data } = pngPixels(bytes);
   const grey = [];
   const has = [];
   for (let i = 0; i < width * height; i++) {
@@ -145,6 +145,7 @@ function image(deck, file) {
   }
   return { width, height, grey, has };
 }
+const image = (deck, file) => decoded(read(deck, file));
 const at = (img, r, c) => ({ level: img.grey[r * img.width + c], data: img.has[r * img.width + c] });
 
 /** Every data cell holds its value's level, floor((v - min) / (max - min) * 255 + 0.5); every gap is clear. */
@@ -214,4 +215,127 @@ test("writers: the Python grid writer takes NumPy arrays, with NaN for no data",
   const [lists, arrays] = [deckOf("python"), deckOf("numpy")];
   for (const file of ["density.json", "years.json"]) assert.deepEqual(sidecar(arrays, file), sidecar(lists, file), file);
   for (const file of ["density.png", "years/001.png", "years/002.png", "years/003.png"]) assert.deepEqual(image(arrays, file), image(lists, file), file);
+});
+
+// --- what the writers refuse ---------------------------------------------------------------------------------------
+
+// Each case is one call that a careless input could turn into a file `validate` rejects. A writer must refuse it with a
+// message (the same in both languages) and write nothing, or write a file that is right: class names as text, values
+// past a fixed range at its ends.
+const CELLS = "cells must be finite numbers, or NA, None or NaN for no data";
+const CASES = {
+  inf: { error: `${CELLS} (row 2, column 1)` },
+  "minus-inf": { error: `${CELLS} (row 1, column 2)` },
+  "range-inf": { error: "`min` and `max` must be finite numbers" },
+  "far-apart": { error: "`min` and `max` are too far apart to compute levels" },
+  "class-codes": { ok: true },
+  "classes-twice": { error: "class names must be unique (found 'a' twice)" },
+  clamp: { ok: true },
+  "bounds-order": { error: "`bounds` must be west, south, east, north in degrees: four finite numbers, with west < east and south < north, within -180 to 180 and -90 to 90" },
+  "numbers-nan": { error: "`numbers` needs one finite number per frame for every key" },
+};
+const PY_REFUSE = `import json, sys
+sys.path.insert(0, sys.argv[1])
+from stepdeck_map import write_stepdeck_grid
+out = sys.argv[2]
+b = [-19, -31, -10, -23]
+inf, nan = float("inf"), float("nan")
+w = lambda name, grid, *rest, **options: write_stepdeck_grid(out + "/" + name + ".json", grid, *rest, **options)
+cases = {
+    "inf": lambda: w("inf", [[1, 2], [inf, 4]], b),
+    "minus-inf": lambda: w("minus-inf", [[1, -inf], [3, 4]], b, value={"scale": "linear", "min": 0, "max": 10}),
+    "range-inf": lambda: w("range-inf", [[1, 2], [3, 4]], b, value={"scale": "linear", "min": 0, "max": inf}),
+    "far-apart": lambda: w("far-apart", [[1, 2], [3, 4]], b, value={"scale": "linear", "min": -1e308, "max": 1e308}),
+    "class-codes": lambda: w("class-codes", [[1, 2], [None, 1]], b, value={"classes": [1, 2]}),
+    "classes-twice": lambda: w("classes-twice", [["a", "b"], ["a", None]], b, value={"classes": ["a", "b", "a"]}),
+    "clamp": lambda: w("clamp", [[-50, 0], [100, 150]], b, value={"scale": "linear", "min": 0, "max": 100}),
+    "bounds-order": lambda: w("bounds-order", [[1, 2], [3, 4]], [-19, -10, -31, -23]),
+    "numbers-nan": lambda: w("numbers-nan", [[[1, 2], [3, 4]], [[1, 2], [3, 4]]], b, labels=["a", "b"], numbers={"people": [1, nan]}),
+}
+result = {}
+for name, call in cases.items():
+    try:
+        call()
+        result[name] = {"ok": True}
+    except ValueError as e:
+        result[name] = {"error": str(e)}
+json.dump(result, open(out + "/result.json", "w"))
+`;
+const R_REFUSE = `args <- commandArgs(trailingOnly = TRUE)
+source(file.path(args[1], "stepdeck-map.R"))
+out <- args[2]
+b <- c(-19, -31, -10, -23)
+m <- function(...) matrix(c(...), 2, byrow = TRUE)
+w <- function(name, m, ...) write_stepdeck_grid(m, path = file.path(out, paste0(name, ".json")), ...)
+cases <- list(
+  "inf" = function() w("inf", m(1, 2, Inf, 4), b),
+  "minus-inf" = function() w("minus-inf", m(1, -Inf, 3, 4), b, value = list(scale = "linear", min = 0, max = 10)),
+  "range-inf" = function() w("range-inf", m(1, 2, 3, 4), b, value = list(scale = "linear", min = 0, max = Inf)),
+  "far-apart" = function() w("far-apart", m(1, 2, 3, 4), b, value = list(scale = "linear", min = -1e308, max = 1e308)),
+  "class-codes" = function() w("class-codes", m(1, 2, NA, 1), b, value = list(classes = c(1, 2))),
+  "classes-twice" = function() w("classes-twice", m("a", "b", "a", NA), b, value = list(classes = c("a", "b", "a"))),
+  "clamp" = function() w("clamp", m(-50, 0, 100, 150), b, value = list(scale = "linear", min = 0, max = 100)),
+  "bounds-order" = function() w("bounds-order", m(1, 2, 3, 4), c(-19, -10, -31, -23)),
+  "numbers-nan" = function() w("numbers-nan", list(m(1, 2, 3, 4), m(1, 2, 3, 4)), b, labels = c("a", "b"), numbers = list(people = c(1, NaN)))
+)
+result <- lapply(cases, function(call) tryCatch({ call(); list(ok = TRUE) }, error = function(e) list(error = conditionMessage(e))))
+jsonlite::write_json(result, file.path(out, "result.json"), auto_unbox = TRUE)
+`;
+
+const refused = new Map();
+/** The folder a language's refusal cases ran in, run once: result.json and the files of the cases that wrote. */
+function refusalsOf(lang) {
+  if (!refused.has(lang)) {
+    const dir = join(tmp, `refuse-${lang}`);
+    mkdirSync(dir, { recursive: true });
+    const script = join(tmp, `refuse-${lang}.script`);
+    writeFileSync(script, lang === "python" ? PY_REFUSE : R_REFUSE);
+    const [cmd, args] = lang === "python" ? ["python3", ["-I"]] : ["Rscript", []];
+    const run = spawnSync(cmd, [...args, script, WRITERS, dir], { encoding: "utf8" });
+    assert.equal(run.status, 0, `${cmd} failed:\n${run.stdout}${run.stderr}`);
+    refused.set(lang, dir);
+  }
+  return refused.get(lang);
+}
+const json = (dir, file) => JSON.parse(readFileSync(join(dir, file), "utf8"));
+/** The levels of a PNG as rows, null where a pixel has no data. */
+function levelRows(dir, file) {
+  const img = decoded(readFileSync(join(dir, file)));
+  return Array.from({ length: img.height }, (_, r) => Array.from({ length: img.width }, (_, c) => (at(img, r, c).data ? at(img, r, c).level : null)));
+}
+
+/** Each case is refused with its message and writes no sidecar, or writes the right file. */
+async function assertRefusals(t, dir) {
+  const result = json(dir, "result.json");
+  for (const [name, expected] of Object.entries(CASES)) {
+    await t.test(name, () => {
+      assert.deepEqual(result[name], expected);
+      if (expected.error) assert.equal(existsSync(join(dir, `${name}.json`)), false, "a refused call writes no sidecar");
+    });
+  }
+  await t.test("class-codes: class names that are numbers are written as text, and cells match them as text", () => {
+    assert.deepEqual(json(dir, "class-codes.json").value, { classes: ["1", "2"] });
+    assert.deepEqual(levelRows(dir, "class-codes.png"), [[0, 1], [null, 0]]);
+  });
+  await t.test("clamp: values past a fixed range are written at its ends", () => {
+    assert.deepEqual(json(dir, "clamp.json").value, { scale: "linear", min: 0, max: 100 });
+    assert.deepEqual(levelRows(dir, "clamp.png"), [[0, 0], [255, 255]]);
+  });
+}
+
+test("writers: the Python grid writer refuses what validate would reject", { skip: !PYTHON && "python3 is not installed" }, async (t) => {
+  await assertRefusals(t, refusalsOf("python"));
+});
+
+test("writers: the R grid writer refuses what validate would reject", { skip: !R && "Rscript with png and jsonlite is not installed" }, async (t) => {
+  await assertRefusals(t, refusalsOf("r"));
+});
+
+test("writers: R and Python refuse the same inputs with the same messages", { skip: !(PYTHON && R) && "needs both python3 and Rscript" }, () => {
+  const [py, r] = [refusalsOf("python"), refusalsOf("r")];
+  assert.deepEqual(json(r, "result.json"), json(py, "result.json"));
+  for (const name of ["class-codes", "clamp"]) {
+    assert.deepEqual(json(r, `${name}.json`), json(py, `${name}.json`), name);
+    assert.deepEqual(levelRows(r, `${name}.png`), levelRows(py, `${name}.png`), name);
+  }
 });

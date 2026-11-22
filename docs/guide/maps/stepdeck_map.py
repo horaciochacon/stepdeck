@@ -43,19 +43,22 @@ __all__ = ["write_stepdeck_grid", "write_stepdeck_raster"]
 
 
 def write_stepdeck_grid(path, grid, bounds, value=None, labels=None, numbers=None):
-    """Writes `grid` (or a list of grids, one per frame) as the raster JSON `path` and its PNGs. Returns `path`."""
+    """Writes `grid` (or a list of grids, one per frame) as the raster JSON `path` and its PNGs. Returns `path`.
+
+    Everything is checked before anything is written: a call that raises ValueError leaves no file behind."""
     if not path.endswith(".json"):
-        raise ValueError("path must end in .json")
-    bounds = [_plain(b) for b in bounds]
-    if len(bounds) != 4:
-        raise ValueError("bounds must be [west, south, east, north]")
+        raise ValueError("`path` must end in .json")
+    bounds = _bounds(bounds)
     frames, lapse = _frames(grid)
-    size = (len(frames[0]), len(frames[0][0]) if frames[0] else 0)
-    for frame in frames:
-        if len(frame) != size[0] or any(len(row) != size[1] for row in frame) or size[1] == 0:
-            raise ValueError("every frame must be a grid of one size, with at least one cell")
     if not lapse and (labels is not None or numbers is not None):
-        raise ValueError("labels and numbers are for a time-lapse: pass a list of grids")
+        raise ValueError("`labels` and `numbers` are for a time-lapse: pass a list of grids")
+    if lapse:
+        labels = [_text(label) for label in ([] if labels is None else labels)]
+        if len(labels) != len(frames) or len(set(labels)) != len(labels) or "" in labels:
+            raise ValueError("a time-lapse needs `labels`: one per frame, unique and not empty")
+        numbers = {key: [_plain(v) for v in values] for key, values in (numbers or {}).items()}
+        if any(len(values) != len(frames) or not all(_finite(v) for v in values) for values in numbers.values()):
+            raise ValueError("`numbers` needs one finite number per frame for every key")
     value, levels = _levels(frames, dict(value or {"scale": "linear"}))
 
     folder, name = os.path.split(path[: -len(".json")])
@@ -65,12 +68,6 @@ def write_stepdeck_grid(path, grid, bounds, value=None, labels=None, numbers=Non
         sidecar["src"] = name + ".png"
         _png(os.path.join(folder, sidecar["src"]), levels[0])
     else:
-        labels = [str(_plain(label)) for label in ([] if labels is None else labels)]
-        if len(labels) != len(frames) or len(set(labels)) != len(labels) or "" in labels:
-            raise ValueError("a time-lapse needs labels: one per frame, unique and not empty")
-        numbers = {key: list(values) for key, values in (numbers or {}).items()}
-        if any(len(values) != len(frames) for values in numbers.values()):
-            raise ValueError("numbers needs one value per frame for every key")
         os.makedirs(os.path.join(folder, name), exist_ok=True)
         sidecar["frames"] = []
         for i, frame_levels in enumerate(levels):
@@ -78,7 +75,7 @@ def write_stepdeck_grid(path, grid, bounds, value=None, labels=None, numbers=Non
             _png(os.path.join(folder, src), frame_levels)
             frame = {"src": src, "label": labels[i]}
             if numbers:
-                frame["numbers"] = {key: _plain(values[i]) for key, values in numbers.items()}
+                frame["numbers"] = {key: values[i] for key, values in numbers.items()}
             sidecar["frames"].append(frame)
     with open(path, "w", encoding="utf-8") as out:
         json.dump(sidecar, out, indent=2, ensure_ascii=False, allow_nan=False)
@@ -106,73 +103,124 @@ def _plain(x):
     return x.tolist() if hasattr(x, "tolist") else x
 
 
+def _missing(v):
+    """No data: None or NaN."""
+    return v is None or (isinstance(v, float) and math.isnan(v))
+
+
+def _finite(v):
+    """A finite number (not a bool)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _text(v):
+    """A class name or a label as text, written as R's as.character writes it: 2.0 is "2", True is "TRUE"."""
+    v = _plain(v)
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v)
+
+
+def _where(frame, row, col, lapse):
+    """A cell's place in a message, counted from 1."""
+    return "(frame %d, row %d, column %d)" % (frame + 1, row + 1, col + 1) if lapse else "(row %d, column %d)" % (row + 1, col + 1)
+
+
+def _bounds(bounds):
+    """`bounds` as four plain numbers, if they describe a box in degrees."""
+    b = [_plain(x) for x in bounds]
+    if not (len(b) == 4 and all(_finite(x) for x in b) and b[0] < b[2] and b[1] < b[3] and -180 <= b[0] and b[2] <= 180 and -90 <= b[1] and b[3] <= 90):
+        raise ValueError("`bounds` must be west, south, east, north in degrees: four finite numbers, with west < east and south < north, within -180 to 180 and -90 to 90")
+    return b
+
+
 def _frames(grid):
-    """The frames of `grid` as lists of rows of plain cells, and whether it is a time-lapse."""
+    """The frames of `grid` as lists of rows of plain cells, all one size, and whether it is a time-lapse."""
     grid = [_plain(item) for item in _plain(grid)]
     lapse = bool(grid) and isinstance(grid[0], (list, tuple)) and bool(grid[0]) and isinstance(_plain(grid[0][0]), (list, tuple))
-    frames = grid if lapse else [grid]
-    if not frames or not frames[0]:
-        raise ValueError("grid has no rows")
-    return [[list(_plain(row)) for row in frame] for frame in frames], lapse
+    frames = [[list(_plain(row)) for row in frame] for frame in (grid if lapse else [grid])]
+    rows = len(frames[0]) if frames else 0
+    cols = len(frames[0][0]) if rows else 0
+    if cols == 0 or any(len(frame) != rows or any(len(row) != cols for row in frame) for frame in frames):
+        raise ValueError("every frame must be a grid of one size, with at least one cell")
+    return frames, lapse
 
 
-def _missing(v):
-    return v is None or (isinstance(v, float) and math.isnan(v))
+def _cells(frames):
+    """Every cell with data, row by row and frame by frame: (frame, row, column, value)."""
+    for f, frame in enumerate(frames):
+        for r, row in enumerate(frame):
+            for c, v in enumerate(row):
+                if not _missing(v):
+                    yield f, r, c, v
 
 
 def _levels(frames, value):
     """The sidecar's `value`, completed, and each frame as rows of levels 0 to 255 (None for no data)."""
+    lapse = len(frames) > 1
     if "classes" in value:
         if "scale" in value:
-            raise ValueError("value takes classes or scale, not both")
-        if isinstance(value["classes"], str):
-            raise ValueError('classes must be a list of names: {"classes": ["Forest"]}')
-        index = {name: i for i, name in enumerate(value["classes"])}
-
-        def level(v):
-            if _missing(v):
-                return None
-            if v not in index:
-                raise ValueError("%r is not one of the classes (with classes, cells hold class names)" % (v,))
-            return index[v]
-
-        value["classes"] = list(value["classes"])
-        return value, [[[level(v) for v in row] for row in frame] for frame in frames]
+            raise ValueError("`value` takes `classes` or `scale`, not both")
+        classes = value["classes"]
+        classes = [classes] if isinstance(classes, str) else list(_plain(classes))
+        if not 1 <= len(classes) <= 256:
+            raise ValueError("`classes` must list 1 to 256 names")
+        if any(_missing(name) for name in classes):
+            raise ValueError("class names must not be empty")
+        names = [_text(name) for name in classes]
+        if "" in names:
+            raise ValueError("class names must not be empty")
+        twice = [name for i, name in enumerate(names) if name in names[:i]]
+        if twice:
+            raise ValueError("class names must be unique (found '%s' twice)" % twice[0])
+        index = {name: i for i, name in enumerate(names)}
+        for f, r, c, v in _cells(frames):
+            if _text(v) not in index:
+                raise ValueError("'%s' is not one of `classes`: with `classes`, cells hold class names %s" % (_text(v), _where(f, r, c, lapse)))
+        value["classes"] = names
+        return value, [[[None if _missing(v) else index[_text(v)] for v in row] for row in frame] for frame in frames]
 
     scale = value.get("scale", "linear")
     if scale not in ("linear", "log"):
-        raise ValueError('scale must be "linear" or "log"')
-    data = []
-    for frame in frames:
-        for row in frame:
-            for v in row:
-                if _missing(v):
-                    continue
-                if isinstance(v, bool) or not isinstance(v, (int, float)):
-                    raise ValueError("cells must be numbers, None or NaN (found %r)" % (v,))
-                if scale == "log" and v <= 0:
-                    raise ValueError("a log scale needs every value above 0 (found %r)" % (v,))
-                data.append(v)
+        raise ValueError('`scale` must be "linear" or "log"')
+    for f, r, c, v in _cells(frames):
+        if not _finite(v):
+            raise ValueError("cells must be finite numbers, or NA, None or NaN for no data %s" % _where(f, r, c, lapse))
+    if scale == "log":
+        for f, r, c, v in _cells(frames):
+            if v <= 0:
+                raise ValueError("a log scale needs every value above 0 %s" % _where(f, r, c, lapse))
+    data = [v for _, _, _, v in _cells(frames)]
     if not data:
         raise ValueError("the grid has no data")
     lo = _plain(value.get("min", min(data)))
     hi = _plain(value.get("max", max(data)))
+    if not (_finite(lo) and _finite(hi)):
+        raise ValueError("`min` and `max` must be finite numbers")
     if not lo < hi:
-        raise ValueError("min must be less than max (are all the values equal? then give value with min and max)")
+        raise ValueError("`min` must be less than `max` (are all the values equal? then give `value` with `min` and `max`)")
     if scale == "log" and not lo > 0:
-        raise ValueError("a log scale needs min above 0")
+        raise ValueError("a log scale needs `min` above 0")
+    if not math.isfinite(hi - lo if scale == "linear" else hi / lo):
+        raise ValueError("`min` and `max` are too far apart to compute levels")
     rest = {key: v for key, v in value.items() if key not in ("scale", "min", "max")}
     value = dict({"scale": scale, "min": lo, "max": hi}, **rest)
 
     if scale == "log":
         def share(v):
-            return math.log(v / lo) / math.log(hi / lo)
+            q = v / lo  # 0 when v is far below min: log would refuse it
+            return -math.inf if q == 0 else math.log(q) / math.log(hi / lo)
     else:
         def share(v):
             return (v - lo) / (hi - lo)
 
-    def level(v):
-        return None if _missing(v) else min(255, max(0, math.floor(share(v) * 255 + 0.5)))
+    def level(v):  # a value past the range is written at its nearer end
+        if _missing(v):
+            return None
+        g = share(v) * 255 + 0.5
+        return 0 if g < 1 else 255 if g >= 255 else math.floor(g)
 
     return value, [[[level(v) for v in row] for row in frame] for frame in frames]
 

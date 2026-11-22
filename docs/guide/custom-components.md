@@ -607,6 +607,7 @@ export default {
         }
         legend.replaceChildren(C.legendRow(el.ownerDocument, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
 
+        if (next.focus && !byId.has(next.focus)) throw new Error(`region '${next.focus}' not found`);
         const view = M.view(base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
         const moves = last && (last.k !== view.k || last.x !== view.x || last.y !== view.y);
         if (info.animate && moves && !info.entered && !info.signal?.aborted) {
