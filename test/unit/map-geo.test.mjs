@@ -6,9 +6,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { d3 } from "#engine/core/d3.js";
-import { applyView, boundaries, lookup, lut, mapKit, projection, view } from "#engine/core/map.js";
+import { applyView, boundaries, landCells, lookup, lut, mapKit, projection, view } from "#engine/core/map.js";
 import { SlideController } from "#engine/core/controller.js";
 import { makeFormat } from "#engine/core/format.js";
+import { landGrid, landOf } from "../../site/gallery/data/map/fictional.mjs";
 
 const DATA = fileURLToPath(new URL("../fixtures/decks/map/data/", import.meta.url));
 const read = (name) => JSON.parse(readFileSync(DATA + name, "utf8"));
@@ -312,8 +313,8 @@ test("lookup: a world raster keeps its place across the antimeridian seam", () =
 test("mapKit: frozen, exactly the public names", () => {
   assert.ok(Object.isFrozen(mapKit));
   assert.deepEqual(Object.keys(mapKit).sort(), [
-    "applyView", "boundaries", "insetFrame", "loadRaster", "lookup", "lut", "paintAreas", "paintPoints", "paintRaster", "projection",
-    "rasterGaps", "scaleBar", "view",
+    "applyView", "boundaries", "insetFrame", "landCells", "loadRaster", "lookup", "lut", "paintAreas", "paintPoints", "paintRaster",
+    "projection", "rasterGaps", "scaleBar", "view",
   ]);
   for (const [name, value] of Object.entries(mapKit)) assert.equal(typeof value, "function", name);
 });
@@ -373,4 +374,32 @@ test("lut: a log scale asks for log values, a class list for names, and a level 
   assert.deepEqual(Array.from(table.slice(0, 4)), [16, 32, 48, 255]);
   assert.ok(table.slice(4).every((byte) => byte === 0), "every other level is transparent black");
   assert.throws(() => lut({ value: { classes: ["A"] } }, () => "not a colour"), /^Error: lut: 'not a colour' is not a colour$/);
+});
+
+// --- landCells ------------------------------------------------------------------------------------------------------
+
+test("landCells: the cells whose centres are on land, as the generators mark them", () => {
+  const gallery = JSON.parse(readFileSync(fileURLToPath(new URL("../../site/gallery/data/map/regions.geojson", import.meta.url)), "utf8"));
+  const { features } = boundaries(gallery, { id: "code" });
+  const bounds = [-20, -32, -8, -22];
+  for (const size of [[160, 120], [37, 23], [1, 1]]) {
+    const cells = landCells({ bounds, size }, features);
+    const expected = landGrid({ land: landOf(gallery), bounds, cols: size[0], rows: size[1] });
+    assert.ok(cells instanceof Uint8Array);
+    assert.deepEqual(Array.from(cells), Array.from(expected), `${size.join("x")}`);
+  }
+  assert.ok(landCells({ bounds, size: [160, 120] }, features).some((v) => v === 1), "there is land");
+  assert.equal(landCells({ bounds, size: [160, 120] }, features), landCells({ bounds, size: [160, 120] }, features), "cached per features and grid");
+});
+
+test("landCells: holes stay holes, polygons join, a raster reaching only part of the land gets that part", () => {
+  const square = (x, y, size) => [[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]];
+  const feature = (type, coordinates) => ({ type: "Feature", properties: {}, geometry: { type, coordinates } });
+  const holed = feature("Polygon", [square(0, 0, 8), square(2, 2, 4).reverse()]);
+  const two = feature("MultiPolygon", [[square(0, 0, 3)], [square(5, 5, 3)]]);
+  const grid = (features, bounds = [0, 0, 8, 8]) => Array.from(landCells({ bounds, size: [8, 8] }, features), String).join("");
+  const rowsOf = (flat) => flat.match(/.{8}/g).join("\n");
+  assert.equal(rowsOf(grid([holed])), ["11111111", "11111111", "11000011", "11000011", "11000011", "11000011", "11111111", "11111111"].join("\n"));
+  assert.equal(rowsOf(grid([two])), ["00000111", "00000111", "00000111", "00000000", "00000000", "11100000", "11100000", "11100000"].join("\n"));
+  assert.equal(rowsOf(grid([two], [0, 0, 4, 4])), ["00000000", "00000000", ...Array(6).fill("11111100")].join("\n"), "cells of half a degree over the first square only");
 });

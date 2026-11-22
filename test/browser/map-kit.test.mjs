@@ -394,6 +394,8 @@ test("loadRaster: an image is read next to its JSON and must be a path inside th
       out.frame = await asking("data/a/b.json", { bounds, value, frames: [{ src: "f/1.png", label: "x" }, { src: "../2.png", label: "y" }] });
       out.rootFolder = await asking("b.json", { bounds, value, src: "1.png" });
       out.problem = await asking("data/a/b.json", { bounds, value });
+      out.noAssetUrl = await M.loadRaster("data/levels.json", { data: ctx.data }).then(() => null, (e) => e.message);
+      out.otherError = await M.loadRaster("data/a/b.json", { data: async () => ({ bounds, value, src: "x.png" }), assetUrl: () => { throw new Error("boom"); } }).then(() => null, (e) => e.message);
       return out;
     });
     for (const src of ["../x.png", "f/../x.png", "/x.png", "https://host/x.png", "a\\b.png", "%2e%2e/x.png"]) {
@@ -402,6 +404,8 @@ test("loadRaster: an image is read next to its JSON and must be a path inside th
     assert.equal(got.resolved, "data/a/f/1.png: not found", "f/1.png beside data/a/b.json is data/a/f/1.png");
     assert.equal(got.frame, "data/a/b.json: '../2.png' is not a path inside the deck", "every frame's path is checked before any is read");
     assert.equal(got.rootFolder, "1.png: not found", "a JSON at the root has the root as its folder");
+    assert.equal(got.noAssetUrl, "loadRaster needs ctx.assetUrl");
+    assert.equal(got.otherError, "boom", "only the loader's path error is reworded");
     assert.equal(got.problem, "data/a/b.json: needs `src` or `frames`", "what rasterProblems finds is thrown");
   });
 });
@@ -432,13 +436,14 @@ test("paintRaster: two draws at 1 and 0.5 mix", async () => {
   });
 });
 
-test("paintRaster: no-data land is hatched, ocean stays clear", async () => {
+test("paintRaster: no-data land is hatched, and nothing is hatched where there is no land cell", async () => {
   await withPage({ root, url: pages.url("raster", "step=a") }, async (page, ctx) => {
     const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
     const [x, y] = await pixelOf(page, -13.5, -27); // column 1, on the land
     const land = new Set((await readPixels(page, "raster", x - 10, y - 10, 20, 20)).map(rgb));
     assert.ok(land.has(dim) && land.has(surface), `the stripes and what is between them (${[...land].join(" | ")})`);
-    assert.equal(await rasterPixel(page, await pixelOf(page, -14.25, -27)), "clear", "column 1 over the ocean");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -17, -27)), "clear", "west of the raster, over the ocean");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -15, -27)), paletteRgb(THEME, 0), "and column 0, which has data, is not hatched");
     assert.equal(await rasterPixel(page, await pixelOf(page, -12.25, -27)), rampRgb(254), "where there is data, it covers the hatch");
 
     await goTo(page, "raster", "bare");
@@ -448,6 +453,93 @@ test("paintRaster: no-data land is hatched, ocean stays clear", async () => {
   });
 });
 
+/** How many pixels of the raster layer are hatch: opaque and in the dim or surface colour, or between them (the stripes' edges mix). */
+async function hatchPixels(page) {
+  const [dim, surface] = [parse(await tokenRgb(page, "--sd-color-dim")), parse(await tokenRgb(page, "--sd-color-surface"))];
+  return page.evaluate(([dim, surface]) => {
+    const canvas = document.querySelector('[data-el="map"] canvas[data-layer="raster"]');
+    const d = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    let count = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 255 && [0, 1, 2].every((c) => d[i + c] >= Math.min(dim[c], surface[c]) - 2 && d[i + c] <= Math.max(dim[c], surface[c]) + 2)) count++;
+    }
+    return count;
+  }, [dim, surface]);
+}
+
+test("paintRaster: a raster of land cells has no hatch along its coast", async () => {
+  await withPage({ root, url: pages.url("raster", "step=coast") }, async (page, ctx) => {
+    // 1.2 degree pixels from -14.7: the first and third are centred in the sea but cover land (-14 to -13.5, -12.3 to -12)
+    assert.equal(await rasterPixel(page, await pixelOf(page, -13.7, -27)), "clear", "land under a sea-centred pixel is not hatched");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -12.2, -27)), "clear", "on the other side too");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -12.9, -27)), rampRgb(128), "the land pixel has its data");
+    assert.equal(await hatchPixels(page), 0, "no hatch anywhere");
+    assert.equal(await withKit(page, async (M, ctx) => {
+      const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+      return M.rasterGaps(await M.loadRaster("data/coast.json", ctx), features);
+    }), false, "and no gap for a legend to explain");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: a land cell with no data, and land outside the raster, are hatched; rasterGaps agrees in every case", async () => {
+  await withPage({ root, url: pages.url("raster", "step=hole") }, async (page, ctx) => {
+    const gaps = (file) => withKit(page, async (M, ctx, file) => {
+      const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+      return M.rasterGaps(await M.loadRaster(file, ctx), features);
+    }, file);
+    const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
+    /** Whether the 20 x 20 px around a lon/lat show both hatch colours. */
+    const hatched = async (lon, lat) => {
+      const [x, y] = await pixelOf(page, lon, lat);
+      const seen = new Set((await readPixels(page, "raster", x - 10, y - 10, 20, 20)).map(rgb));
+      return seen.has(dim) && seen.has(surface);
+    };
+
+    // frame 1 of `patched` has a hole of 0.4 degrees around (-13, -27); the pixels around it have data
+    assert.equal(await hatched(-13, -27), true, "an interior land cell with no data is hatched");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -13.6, -27)), rampRgb(128), "and the cells around it are not");
+    assert.equal(await gaps("data/patched.json"), true);
+    assert.ok((await hatchPixels(page)) > 100);
+
+    await goTo(page, "raster", "half"); // data over the west half of the square only
+    assert.equal(await rasterPixel(page, await pixelOf(page, -13.5, -27)), rampRgb(128), "the west half has its data");
+    assert.equal(await hatched(-12.5, -27), true, "land outside the raster's bounds is hatched");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -11, -27)), "clear", "and the sea beyond it is clear");
+    assert.equal(await gaps("data/half.json"), true);
+
+    await goTo(page, "raster", "covered");
+    assert.equal(await hatchPixels(page), 0, "a raster with data on all the land has no hatch");
+    assert.equal(await gaps("data/covered.json"), false);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: the same picture at any devicePixelRatio, in CSS px", async () => {
+  const signatures = new Set();
+  for (const ratio of [0.8, 1, 2]) {
+    await withPage({ root }, async (page, ctx) => {
+      await page.addInitScript((r) => Object.defineProperty(window, "devicePixelRatio", { get: () => r }), ratio);
+      await ctx.open(pages.url("raster", "step=a"));
+      const backing = Math.min(1, ratio); // a raster layer is made with maxRatio: 1
+      const size = await page.evaluate(() => { const c = document.querySelector('canvas[data-layer="raster"]'); return [c.width, c.height]; });
+      assert.deepEqual(size, [Math.round(W * backing), Math.round(H * backing)], `ratio ${ratio}: the backing store`);
+      const at = async (lon, lat, half = 0) => {
+        const [x, y] = await pixelOf(page, lon, lat);
+        return readPixels(page, "raster", Math.round(x * backing) - half, Math.round(y * backing) - half, 2 * half + 1, 2 * half + 1);
+      };
+      assert.equal(rgb((await at(-15, -27))[0]), paletteRgb(THEME, 0), `ratio ${ratio}: a known cell has its colour where CSS px say`);
+      assert.equal(rgb((await at(-11, -27))[0]), paletteRgb(THEME, 1));
+      const hatch = new Set((await at(-13.5, -27, 10)).map(rgb));
+      assert.ok(hatch.size > 2 && (await at(-13.5, -27, 10)).every((p) => p[3] === 255), `ratio ${ratio}: the no-data land is hatched (${hatch.size} colours)`);
+      assert.equal((await at(-17, -27))[0][3], 0, `ratio ${ratio}: and nothing is painted west of the raster`);
+      signatures.add(await signatureOf(page, "raster"));
+      assert.deepEqual(ctx.errors, []);
+    });
+  }
+  assert.equal(signatures.size, 1, "the scene, and so its signature, does not depend on the ratio");
+});
+
 test("paintRaster: drawn at another view moves as a picture", async () => {
   await withPage({ root, url: pages.url("raster", "step=moved") }, async (page, ctx) => {
     // The picture is built for zoom 1 and the map shows zoom 2 about (-14, -27): edges land where applyView says.
@@ -455,8 +547,8 @@ test("paintRaster: drawn at another view moves as a picture", async () => {
     const [oldWest] = await pixelOf(page, -14.5, -27, 1);
     assert.ok(west[0] > 0 && west[0] < 700 && Math.abs(west[0] - oldWest) > 100, `the edge at -14.5 is at ${west[0]}, not at ${oldWest}`);
     assert.equal(await rasterPixel(page, [west[0] - 4, west[1]]), paletteRgb(THEME, 0), "column 0 to the west of its edge");
-    assert.equal(await rasterPixel(page, [west[0] + 4, west[1]]), "clear", "and clear to the east of it, over the ocean");
-    assert.equal(await rasterPixel(page, [oldWest - 4, west[1]]), "clear", "nothing is left where the edge was");
+    assert.notEqual(await rasterPixel(page, [west[0] + 4, west[1]]), paletteRgb(THEME, 0), "and not to the east of it, where column 1 has no data");
+    assert.notEqual(await rasterPixel(page, [oldWest - 4, west[1]]), paletteRgb(THEME, 0), "nothing is left where the edge was");
     assert.equal(await rasterPixel(page, [mid[0] + 4, mid[1]]), rampRgb(254), "column 2 starts where applyView puts -13");
     assert.notEqual(await rasterPixel(page, [mid[0] - 4, mid[1]]), rampRgb(254), "and column 1 ends there");
     assert.deepEqual(ctx.errors, []);
@@ -477,7 +569,7 @@ test("paintRaster: a frame that is not decoded throws, and the signature is the 
         error = e.message;
       }
       // with the picture already built nothing is read from the raster, and `res` is never hashed
-      for (const lut of ["a", "b"]) res.cache.set(`r.json|3|1.000|0.000|0.000|${lut}|4×4`, document.createElement("canvas"));
+      for (const lut of ["a", "b"]) res.cache.set(`r.json|3|1.000|0.000|0.000|${lut}|none|4×4`, document.createElement("canvas"));
       const sig = (lut, alpha, r = res) => paint.paintRaster(canvas, scene(lut, alpha), r);
       return { error, same: sig("a", 1) === sig("a", 1, { ...res, lutData: new Uint8ClampedArray(1024).fill(9) }), lut: sig("a", 1) !== sig("b", 1), alpha: sig("a", 1) !== sig("a", 0.5) };
     });
@@ -487,7 +579,7 @@ test("paintRaster: a frame that is not decoded throws, and the signature is the 
   });
 });
 
-test("rasterGaps: true with the patch, false without, true for land beyond the bounds", async () => {
+test("rasterGaps: true with the patch, false without, true for land beyond the bounds, false for coastal pixels", async () => {
   await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
     const got = await withKit(page, async (M, ctx) => {
       const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
@@ -497,20 +589,22 @@ test("rasterGaps: true with the patch, false without, true for land beyond the b
         patched: await gaps("data/patched.json"),
         half: await gaps("data/half.json"),
         levels: await gaps("data/levels.json"),
+        coast: await gaps("data/coast.json"),
         noLand: await gaps("data/patched.json", []),
       };
     });
     assert.equal(got.covered, false, "data on every pixel of the land: no gap");
     assert.equal(got.patched, true, "a hole in a later frame is a gap (the first frame has none)");
     assert.equal(got.half, true, "no hole at all, but half the land is outside the raster");
-    assert.equal(got.levels, false, "the one pixel with no data is land only in part (this raster has 1.5 degree pixels): not a gap");
+    assert.equal(got.levels, true, "the pixel centred on -13.75 is a land cell with no data");
+    assert.equal(got.coast, false, "pixels centred in the sea have no data, and that is not a gap");
     assert.equal(got.noLand, false, "no land, no gap");
     assert.deepEqual(ctx.errors, []);
   });
 });
 
 test("the painters keep played equal to jumped, forward and backward", async () => {
-  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone"]]]) {
+  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone", "covered", "hole", "half", "coast"]]]) {
     await withPage({ root, url: pages.url(slide, "step=a") }, async (page, ctx) => {
       const run = { pages, slide, id: "map", steps };
       await expectJumpEqualsPlayed(ctx, page, run);

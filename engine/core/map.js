@@ -11,7 +11,8 @@
 //                                             the raster cell under every canvas pixel (or -1), from a coarse inverse grid
 //   loadRaster(path, ctx)                     a raster file's grids, decoded exactly: { bounds, value, frames, size, grid, decoded }
 //   lut(raster, colorOf)                      the 256 colours of a raster's levels, as 1,024 RGBA bytes
-//   rasterGaps(raster, features)              whether some land has no data in the raster (in any frame)
+//   landCells(raster, features)               the raster cells whose centres are on land
+//   rasterGaps(raster, features)              whether some land has no data in the raster (in any frame) or lies outside it
 //   paintAreas, paintRaster, paintPoints, insetFrame, scaleBar   the painters and the map furniture (core/map-paint.js)
 //
 // A view is a 2D transform of the base's pixels (d3's fitExtent changes only scale and translate), so a flight between
@@ -42,8 +43,6 @@ const EDGE_SAMPLES = 64;
 
 /** The most decoded frames a raster keeps: the least recently used goes. */
 export const MAX_DECODED_FRAMES = 12;
-/** A pixel of land counts for `rasterGaps` when the land covers all of it, so an antialiased edge never does. */
-const LAND_ALPHA = 250;
 /** Slack, in degrees, when `rasterGaps` asks whether the land lies inside a raster's bounds. */
 const BOUNDS_SLACK = 1e-6;
 /** A PNG is decoded as stored: no colour conversion, no premultiplied alpha. */
@@ -286,6 +285,7 @@ async function decodeImage(url, name, first) {
 const decoders = new WeakMap();
 
 async function readRaster(path, ctx) {
+  if (typeof ctx.assetUrl !== "function") throw new Error("loadRaster needs ctx.assetUrl");
   const json = await ctx.data(path);
   const problems = rasterProblems(json, path);
   if (problems.length > 0) throw new Error(problems[0]);
@@ -296,7 +296,9 @@ async function readRaster(path, ctx) {
   const frames = (lapse ? json.frames : [{ src: json.src }]).map((entry) => {
     try {
       ctx.assetUrl(entry.src);
-    } catch {
+    } catch (error) {
+      // the loader's own rule, as ctx.data states it ("data path must be relative to the deck root: ..."); nothing else is rewritten
+      if (!/^data path /.test(error?.message ?? "")) throw error;
       throw new Error(`${path}: '${entry.src}' is not a path inside the deck`);
     }
     return { label: lapse ? String(entry.label) : "", numbers: { ...entry.numbers }, src: folder + entry.src };
@@ -364,7 +366,7 @@ const rasters = new WeakMap();
  * Frames are decoded when asked for, and a raster keeps at most 12 decoded frames, the least recently used going first
  * (reading one with `grid` or `decoded` uses it). The first frame is decoded here, since it gives `size`.
  *
- * Throws, with the file's path first: the problems `rasterProblems` finds in the JSON, `data/f/1.png: not found`,
+ * Throws `loadRaster needs ctx.assetUrl` when `ctx` has none, and otherwise, with the file's path first: the problems `rasterProblems` finds in the JSON, `data/f/1.png: not found`,
  * `data/wide.json: '../x.png' is not a path inside the deck`, `data/f/9.png: 2400×1800 is more than 2,000×2,000
  * pixels`, and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
  * @param {string} path
@@ -406,25 +408,79 @@ export function lut(raster, colorOf) {
   return table;
 }
 
+/** The polygons of `features` as ring lists, whatever each feature's geometry type. */
+const polygonsOf = (features) => features.flatMap(({ geometry }) => (geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates));
+
+const landGrids = new WeakMap();
+
 /**
- * Whether some land has no data in `raster`: true when a pixel the land covers entirely has no data in any frame, or
- * when any of the land lies outside the raster's bounds (a painter hatches both). The land is `features` (from
- * `boundaries`, so wound for d3), drawn into the raster's own grid in lon/lat (equirectangular, as `lookup` reads the
- * raster), polygon by polygon with the even-odd rule. A pixel the land covers only in part, as at a coast, is not
- * counted: a raster made by taking the cells whose centres are on land has no gaps. Frames are decoded one at a time,
- * apart from the raster's cache, and the search stops at the first gap; it costs a pass over every frame, so a caller
- * keeps the answer for the raster.
- * @param {{ bounds: number[], size: [number, number], frames: any[] }} raster
+ * The land cells of a raster: a `Uint8Array` of `cols * rows` (row-major from the north-west cell) holding 1 where the
+ * cell's centre is on land and 0 elsewhere. This is the one definition of land for a raster: a raster made by marking
+ * the cells whose centres are on land has data on every land cell, and a cell whose centre is in the sea is not land
+ * even where it covers some. The land is `features` (from `boundaries`), read as plain lon/lat (the raster is a grid of
+ * degrees, so edges are straight), a polygon at a time with the even-odd rule so holes stay holes, and the polygons
+ * joined. Only `bounds` and `size` of `raster` are read. The grid is cached per `features` array and raster geometry,
+ * so keep passing the array `boundaries` returned; it is shared, and must not be changed.
+ * @param {{ bounds: number[], size: [number, number] }} raster
  * @param {{ geometry: { type: string, coordinates: number[][][] | number[][][][] } }[]} features
+ * @returns {Uint8Array}
+ */
+export function landCells({ bounds, size }, features) {
+  const key = `${bounds}|${size}`;
+  if (!landGrids.has(features)) landGrids.set(features, new Map());
+  const cached = landGrids.get(features);
+  if (cached.has(key)) return cached.get(key);
+
+  const [west, south, east, north] = bounds, [cols, rows] = size;
+  const [dx, dy] = [(east - west) / cols, (north - south) / rows];
+  const cells = new Uint8Array(cols * rows);
+  for (const rings of polygonsOf(features)) {
+    // where each row's centre line crosses the polygon's edges: a cell is inside between a crossing and the next
+    const crossings = new Map();
+    for (const ring of rings) {
+      for (let i = 0; i < ring.length; i++) {
+        const [[x1, y1], [x2, y2]] = [ring[i], ring[(i + 1) % ring.length]];
+        if (y1 === y2) continue;
+        const [low, high] = y1 < y2 ? [y1, y2] : [y2, y1];
+        const first = Math.max(0, Math.floor((north - high) / dy - 0.5) - 1), last = Math.min(rows - 1, Math.ceil((north - low) / dy - 0.5) + 1);
+        for (let row = first; row <= last; row++) {
+          const lat = north - (row + 0.5) * dy;
+          if (y1 > lat === y2 > lat) continue;
+          if (!crossings.has(row)) crossings.set(row, []);
+          crossings.get(row).push(x1 + ((lat - y1) * (x2 - x1)) / (y2 - y1));
+        }
+      }
+    }
+    for (const [row, xs] of crossings) {
+      xs.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        // the cells whose centres are in [xs[k], xs[k + 1])
+        const from = Math.max(0, Math.ceil((xs[k] - west) / dx - 0.5)), to = Math.min(cols, Math.ceil((xs[k + 1] - west) / dx - 0.5));
+        cells.fill(1, row * cols + from, row * cols + Math.max(from, to));
+      }
+    }
+  }
+  cached.set(key, cells);
+  return cells;
+}
+
+/**
+ * Whether some land has no data in `raster`: true when a land cell (see `landCells`) has no data in any frame, or when
+ * any of the land lies outside the raster's bounds. These are the places a painter hatches, so a legend shows its "No
+ * data" row exactly when there is hatch to explain. A coastal cell whose centre is in the sea is not a gap. Frames are
+ * decoded one at a time, apart from the raster's cache, and the search stops at the first gap; it costs a pass over
+ * every frame, so a caller keeps the answer for the raster.
+ * @param {{ bounds: number[], size: [number, number], frames: any[] }} raster a raster from `loadRaster`
+ * @param {{ geometry: { type: string, coordinates: number[][][] | number[][][][] } }[]} features from `boundaries`
  * @returns {Promise<boolean>}
  */
 export async function rasterGaps(raster, features) {
   if (features.length === 0) return false;
+  const decode = decoders.get(raster);
+  if (!decode) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
   const [west, south, east, north] = raster.bounds;
-  const polygons = features.flatMap(({ geometry }) => (geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates));
-  // The raster is a plain grid of degrees, so its land is the coordinates as written: straight edges in lon/lat.
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const rings of polygons) {
+  for (const rings of polygonsOf(features)) {
     for (const ring of rings) {
       for (const [lon, lat] of ring) {
         x0 = Math.min(x0, lon); x1 = Math.max(x1, lon);
@@ -434,24 +490,10 @@ export async function rasterGaps(raster, features) {
   }
   if (x0 < west - BOUNDS_SLACK || x1 > east + BOUNDS_SLACK || y0 < south - BOUNDS_SLACK || y1 > north + BOUNDS_SLACK) return true;
 
-  const [cols, rows] = raster.size;
-  const canvas = scratchCanvas(cols, rows);
-  const g = canvas.getContext("2d", { willReadFrequently: true });
-  g.fillStyle = "#000";
-  for (const rings of polygons) {
-    const path = new Path2D();
-    for (const ring of rings) {
-      ring.forEach(([lon, lat], i) => path[i === 0 ? "moveTo" : "lineTo"](((lon - west) / (east - west)) * cols, ((north - lat) / (north - south)) * rows));
-      path.closePath();
-    }
-    g.fill(path, "evenodd");
-  }
-  const land = g.getImageData(0, 0, cols, rows).data;
-  const decode = decoders.get(raster);
-  if (!decode) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
+  const land = landCells(raster, features);
   for (let i = 0; i < raster.frames.length; i++) {
     const { data } = await decode(i);
-    for (let p = 0; p < data.length; p++) if (land[p * 4 + 3] >= LAND_ALPHA && !data[p]) return true;
+    for (let p = 0; p < data.length; p++) if (land[p] && !data[p]) return true;
   }
   return false;
 }
@@ -461,5 +503,5 @@ export async function rasterGaps(raster, features) {
  * Its public names are the contract (docs/reference/component-contract.md).
  */
 export const mapKit = Object.freeze({
-  boundaries, projection, view, applyView, lookup, loadRaster, lut, rasterGaps, paintAreas, paintRaster, paintPoints, insetFrame, scaleBar,
+  boundaries, projection, view, applyView, lookup, loadRaster, lut, landCells, rasterGaps, paintAreas, paintRaster, paintPoints, insetFrame, scaleBar,
 });
