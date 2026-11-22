@@ -120,9 +120,10 @@ test("paintAreas: the view transform moves pixels, widths stay", async () => {
     const run = async (x, y, n, vertical) =>
       (await readPixels(page, "areas", x, y, vertical ? 1 : n, vertical ? n : 1)).map((p) => inkOf(p, background, ink));
     const total = (xs) => xs.reduce((s, v) => s + v, 0);
-    /** The left edge of the square: where, along the middle row, the ink peaks, and how much ink is within 6 px of it. */
+    /** The left edge of the square: where, along the left half of the middle row, the ink peaks, and how much ink is within 6 px of it.
+     *  Only the left half is searched: the right edge is as thick, and which of the two the rasteriser inks more varies by platform. */
     const leftEdge = async () => {
-      const row = await run(0, CY, W, false);
+      const row = await run(0, CY, CX, false);
       const peak = row.indexOf(Math.max(...row));
       return { at: peak, width: total(row.slice(peak - 6, peak + 7)) };
     };
