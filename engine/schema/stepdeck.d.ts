@@ -387,9 +387,9 @@ export interface ColorScalePalettes {
 export interface ColorScaleSpec {
   /** Ascending breaks of stepped classes (`n` breaks, `n + 1` classes). */
   classes?: number[];
-  /** Colours from the diverging palette around this value; with `classes` it must be one of them. */
+  /** Colours from the diverging palette around this value; with `classes` it must be one of them. On a ramp, an explicit `domain` runs lo, midpoint, hi through 0, 0.5, 1 as given; a domain read from `values` is made symmetric about it. */
   midpoint?: number;
-  /** A ramp's ends; default the extent of `values`. */
+  /** A ramp's ends, used as given (a zero-width one, v to v, is read as `[v, v + 1]`, or `[v, 10 v]` with `log`); default the extent of `values`. */
   domain?: [number, number];
   /** Place a ramp's values by their logarithm (the domain must be above 0). */
   log?: boolean;

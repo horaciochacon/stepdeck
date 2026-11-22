@@ -331,8 +331,9 @@ test("chart-layout.js has no imports", async () => {
 test("classIndex: breaks are lower bounds", () => {
   const breaks = [5, 10, 20];
   assert.deepEqual([4.9, 5, 9.99, 10, 19, 20, 1e9, -3].map((v) => classIndex(v, breaks)), [0, 1, 1, 2, 2, 3, 3, 0]);
-  for (const v of [null, undefined, "", NaN, Infinity, "text"]) assert.equal(classIndex(v, breaks), null, String(v));
+  for (const v of [null, undefined, "", " ", "\t", NaN, Infinity, "text"]) assert.equal(classIndex(v, breaks), null, String(v));
   assert.equal(classIndex("7", breaks), 1, "a numeric string is a number");
+  assert.equal(classIndex(" 7 ", breaks), 1, "trimmed, as cellValue reads it");
   assert.equal(classIndex(7, []), 0, "no breaks: one class");
 });
 
