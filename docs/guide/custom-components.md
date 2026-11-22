@@ -314,7 +314,7 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 | Get an engine string in the deck language | `ctx.t(key)`, for example `ctx.t("ci95")`. |
 | Get data colors | `ctx.palette(kind)` for `categorical`, `sequential` or `diverging`: `{ name, kind, colors, names, roles }`, or `null`. `roles.accent` is the accent color. |
 | Read a theme value in JavaScript | `ctx.tokens["--sd-font-size-note"]` |
-| Know the element's size | `ctx.size` is `{ w, h }` in canvas pixels, measured at mount. Read `el.offsetWidth` and `el.offsetHeight` yourself if you need the size later. |
+| Know the element's size | `ctx.size` is `{ w, h }` in canvas pixels, measured at mount, before the slide's other elements have settled the box. For geometry, read `el.offsetWidth || ctx.size.w` (and the height) at each `update`. |
 | Animate a part with a named motion | `ctx.motion.in(node, name, opts)` and `ctx.motion.out(node, name, opts)`, with `fade`, `rise`, `wipe`, `pop`; `ctx.motion.timing(info)` for the theme's timing. They put back the inline styles they touched. |
 | Animate anything else | `ctx.animate.fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also on abort. |
 | Know whether this is a screenshot render | `ctx.capture` |
@@ -567,24 +567,37 @@ And `components/my.regions/index.js`:
 export default {
   async mount(el, props, ctx) {
     const { map: M, chart: C, d3 } = ctx;
-    const { w, h } = ctx.size;
+    const doc = el.ownerDocument;
     const token = (name) => ctx.tokens[name].trim();
-    // The geometry is fixed for the element's life: the regions, the base projection, one Path2D per region.
+    // The regions are fixed for the element's life.
     const { features, byId, ids } = M.boundaries(await ctx.data(props.boundaries), { id: props.id, file: props.boundaries });
-    const base = M.projection("equal-earth", features, [w, h]);
-    const path = d3.geoPath(base);
-    const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
-    const res = { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) };
-    const areas = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "areas" });
-    const borders = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "borders" }); // made second: on top
-    const legend = el.appendChild(el.ownerDocument.createElement("div"));
-    legend.className = "sd-map-legend"; // the core's legend panel, on the background colour
-    legend.dataset.at = "bottom-left";
     const palettes = { sequential: ctx.palette("sequential"), diverging: ctx.palette("diverging"), categorical: ctx.palette("categorical") };
+    let stage = null; // everything that depends on the element's size: built at an update, and again when the size changes
     let last = null; // the view the map ended at: where a played step flies from
+
+    /** The stage for a box of `w` × `h`: the base projection, one Path2D per region, the canvases and the legend. */
+    function build(w, h) {
+      const base = M.projection("equal-earth", features, [w, h]);
+      const path = d3.geoPath(base);
+      const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
+      const res = { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) };
+      const areas = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "areas" });
+      const borders = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "borders" }); // made second: on top
+      const legend = el.appendChild(doc.createElement("div"));
+      legend.className = "sd-map-legend"; // the core's legend panel, on the background colour
+      legend.dataset.at = "bottom-left";
+      return { w, h, base, res, areas, borders, legend };
+    }
+
+    /** Removes the stage's nodes. */
+    function dispose() {
+      if (stage) for (const node of [stage.areas, stage.borders, stage.legend]) node.remove();
+      stage = null;
+    }
 
     /** Paints the regions with their fills (a Map; no entry is the hatch) and their borders, through `view`. */
     function paint(fills, view) {
+      const { areas, borders, res } = stage;
       const hatch = { line: token("--sd-color-dim"), background: token("--sd-color-surface") };
       const stroke = token("--sd-color-background");
       areas.setAttribute("data-sig", M.paintAreas(areas, { source: props.boundaries, view, alpha: 1, hatch,
@@ -595,6 +608,12 @@ export default {
 
     return {
       async update(next, info = {}) {
+        // The size is the element's now: `ctx.size` was measured at mount, before the slide's other elements had settled
+        // the box, and an element that appears on a later step has no box until then (`ctx.size` is the fallback).
+        const [w, h] = [el.offsetWidth || ctx.size.w, el.offsetHeight || ctx.size.h];
+        if (stage && (stage.w !== w || stage.h !== h)) { dispose(); last = null; } // a new size: a new stage, no flight
+        if (!w || !h) return; // no box to draw in yet: the update that shows the element draws everything
+        stage ??= build(w, h);
         // The join: every row names a region, as text. A key that matches none is an error, never a missing value.
         const rows = await C.loadTable(next, ctx, "my.regions", [["id", next.id], ["value", next.value]]);
         const scale = C.colorScale({ classes: next.classes }, palettes, { format: ctx.format(",") });
@@ -605,10 +624,10 @@ export default {
           const color = scale.color(row[next.value]);
           if (color) fills.set(key, color);
         }
-        legend.replaceChildren(C.legendRow(el.ownerDocument, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
+        stage.legend.replaceChildren(C.legendRow(doc, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
 
         if (next.focus && !byId.has(next.focus)) throw new Error(`region '${next.focus}' not found`);
-        const view = M.view(base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
+        const view = M.view(stage.base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
         const moves = last && (last.k !== view.k || last.x !== view.x || last.y !== view.y);
         if (info.animate && moves && !info.entered && !info.signal?.aborted) {
           const from = last;
@@ -617,9 +636,7 @@ export default {
         paint(fills, view); // the end state, however the step ended
         last = view;
       },
-      destroy() {
-        for (const node of [areas, borders, legend]) node.remove();
-      },
+      destroy: dispose,
     };
   },
 };
@@ -630,15 +647,15 @@ The pieces, in the order `mount` and `update` take them:
 | Step | Piece | Why |
 |---|---|---|
 | Regions | `M.boundaries` | Checks the GeoJSON (Polygons and MultiPolygons, an id on every feature, no id twice, within the limits) and fixes the winding, so a file from `sf` or `geopandas` draws right. It returns new features, `byId` and the `ids`; never draw the raw file. |
-| Projection | `M.projection`, `d3.geoPath` | The base projection, fitted to the regions in the element's size once, at mount. A `Path2D` per region, in base-projected pixels, is drawn again at every view without projecting again. |
-| Canvases | `C.canvasLayer` | One named layer per painter, stacked in the order they are made: the borders over the areas. |
+| Projection | `M.projection`, `d3.geoPath` | The base projection, fitted to the regions in the element's size, which `update` reads from the element (`el.offsetWidth || ctx.size.w`) and which can differ from the size at mount; the stage is built again when it changes. A `Path2D` per region, in base-projected pixels, is drawn again at every view without projecting again. |
+| Canvases | `C.canvasLayer` | One named layer per painter, stacked in the order they are made: the borders over the areas. They are made with the stage, at the element's size. |
 | Join | `C.loadTable`, then your own check | `loadTable` checks that the columns exist. The join is yours: a key that names no region throws, so a mismatch in the data is an error on the slide, never a region quietly left blank. |
 | Colours | `C.colorScale`, `C.legendRow` | Stepped classes from the theme's sequential palette, and the legend row with a "no data" swatch when a region has no value. `.sd-map-legend` is the core's legend panel, on the background colour. |
 | View | `M.view` | The transform that fits the `focus` region, or the whole map. A view is three numbers, `k`, `x` and `y`. |
 | Motion | `C.morph`, `C.lerp` | A played change of `focus` blends the three numbers from the last view to the new one over twice `--sd-duration`, or the step's `transition`, and paints every frame through the view of the moment. A straight blend is enough here; the built-in follows `d3.interpolateZoom`, which zooms out and in again on a long flight. |
 | Paint | `M.paintAreas`, `M.paintBorders` | Clear the canvas, paint the scene, return a signature of it. A region with no fill is hatched. The signatures go on the canvases as `data-sig`, so `dump` shows what was painted. |
 
-`update` ends by painting the end state from its props, whether the step played, jumped or was aborted, so a played step ends where a jump does, pixels included. The boundaries are read once, at mount, so a step cannot change them here (the built-in can).
+`update` ends by painting the end state from its props, whether the step played, jumped or was aborted, so a played step ends where a jump does, pixels included. The boundaries are read once, at mount, so a step cannot change them here (the built-in can). The size is read at every update, not taken from `ctx.size`: that is measured at mount, before the slide's other elements have settled the box, and an element that is hidden with `collapse: true` has no box until it appears.
 
 The example slide flies from the whole map to one region, then to another. The source line is in `footer`, so the map is alone in `main` and fills it.
 
@@ -665,7 +682,7 @@ Its data files are the gallery's: copy [`site/gallery/data/map/regions.geojson`]
 
 For a raster, the same order holds with the Rasters group of the contract: `M.loadRaster` reads the file, `M.lut` turns a colour scale into a colour per grey level, and `M.paintRaster` draws it through a lookup table per view (`M.lookup`), hatching land without data. The inset's box, leader lines and scale bar are `M.insetFrame` and `M.scaleBar` on an SVG over the canvases.
 
-The gallery's before/after swipe, [`gallery.swipe`](../../site/gallery/components/gallery.swipe/index.js), is a map story the built-in does not tell, built the same way in about 100 lines and no `import`. It lays two frames of one raster on two canvases (`C.canvasLayer` with `maxRatio: 1`, each painted with `M.paintRaster` through `M.lookup` and `M.lut` and a `C.colorScale` over the raster's value range), clips the second from the divider to the right edge with a CSS `clip-path`, and draws the borders over both with `M.paintBorders`. A played change of `at` is one `C.morph` of the clip and a line; every canvas carries `data-frame`, `data-at` and `data-sig`, so `check --played` sees what it shows. It builds its canvases at the first `update`, from `el.offsetWidth` and `el.offsetHeight`, because `ctx.size` is measured at mount, before the slide's other elements have settled the box. Its slide is `map-swipe` in the [gallery](../../site/gallery/), and its test is [`custom-swipe.test.mjs`](../../test/browser/custom-swipe.test.mjs).
+The gallery's before/after swipe, [`gallery.swipe`](../../site/gallery/components/gallery.swipe/index.js), is a map story the built-in does not tell, built the same way in about 100 lines and no `import`. It lays two frames of one raster on two canvases (`C.canvasLayer` with `maxRatio: 1`, each painted with `M.paintRaster` through `M.lookup` and `M.lut` and a `C.colorScale` over the raster's value range), clips the second from the divider to the right edge with a CSS `clip-path`, and draws the borders over both with `M.paintBorders`. A played change of `at` is one `C.morph` of the clip and a line; every canvas carries `data-frame`, `data-at` and `data-sig`, so `check --played` sees what it shows. It reads its size at every `update` (`el.offsetWidth || ctx.size.w`) and builds its canvases again when it changes, because `ctx.size` is measured at mount, before the slide's other elements have settled the box, and a swipe that appears on a later step has no box until then. Its slide is `map-swipe` in the [gallery](../../site/gallery/), and its test is [`custom-swipe.test.mjs`](../../test/browser/custom-swipe.test.mjs).
 
 ## Verify it
 

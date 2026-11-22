@@ -18,5 +18,5 @@ export default {
     { id: "swipe", set: { swipe: { at: 0.5 } } },
     { id: "after", set: { swipe: { at: 0 } } },
   ],
-  notes: "A custom component built only from ctx.map, ctx.chart and ctx.motion, with no import. Guide: docs/guide/custom-components.md",
+  notes: "A custom component built only from ctx.map and ctx.chart (canvasLayer, colorScale, morph), with no import. Guide: docs/guide/custom-components.md",
 };
