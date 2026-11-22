@@ -149,6 +149,12 @@ test("rasterProblems: each rule", () => {
   only(lapse([{ label: "a" }]), /`src`/);
   only(lapse([{ src: "a.png", label: "a", numbers: { n: 1 } }, { src: "b.png", label: "b", numbers: { m: 1 } }]), /same `numbers` keys/);
   only(lapse([{ src: "a.png", label: "a", numbers: { n: 1 } }, { src: "b.png", label: "b" }]), /same `numbers` keys/);
+  // a frame's numbers are numbers: a panel never shows "NaN"
+  for (const bad of ["1.2M", null, "", true, { n: 1 }]) {
+    const found = lapse([{ src: "a.png", label: "a", numbers: { n: 1 } }, { src: "b.png", label: "b", numbers: { n: bad } }]);
+    assert.deepEqual(found, [`data/r.json: frame 2 \`numbers\` 'n' must be a finite number, not ${JSON.stringify(bad)}`], JSON.stringify(bad));
+  }
+  assert.deepEqual(lapse([{ src: "a.png", label: "a", numbers: { n: -1.5e9 } }, { src: "b.png", label: "b", numbers: { n: 0 } }]), []);
 });
 
 test("rasterProblems: more than 200 frames", () => {
@@ -169,6 +175,12 @@ test("pngProblems: depth, colour type and colour chunks", () => {
   assert.deepEqual(pngProblems(info({ chunks }), "f.png"), [
     "f.png: has a gAMA chunk; color chunks are not allowed",
     "f.png: has a sRGB chunk; color chunks are not allowed",
+  ]);
+});
+
+test("pngProblems: a tRNS chunk, which would make one grey level transparent", () => {
+  assert.deepEqual(pngProblems(info({ colorType: 0, chunks: ["IHDR", "tRNS", "IDAT", "IEND"] }), "d/f.png"), [
+    "d/f.png: has a tRNS chunk (one grey level made transparent); write no data as an alpha channel instead",
   ]);
 });
 
