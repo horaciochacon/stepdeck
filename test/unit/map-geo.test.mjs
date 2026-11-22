@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { d3 } from "#engine/core/d3.js";
-import { applyView, boundaries, lookup, mapKit, projection, view } from "#engine/core/map.js";
+import { applyView, boundaries, lookup, lut, mapKit, projection, view } from "#engine/core/map.js";
 import { SlideController } from "#engine/core/controller.js";
 import { makeFormat } from "#engine/core/format.js";
 
@@ -311,7 +311,10 @@ test("lookup: a world raster keeps its place across the antimeridian seam", () =
 
 test("mapKit: frozen, exactly the public names", () => {
   assert.ok(Object.isFrozen(mapKit));
-  assert.deepEqual(Object.keys(mapKit).sort(), ["applyView", "boundaries", "insetFrame", "lookup", "paintAreas", "paintPoints", "projection", "scaleBar", "view"]);
+  assert.deepEqual(Object.keys(mapKit).sort(), [
+    "applyView", "boundaries", "insetFrame", "loadRaster", "lookup", "lut", "paintAreas", "paintPoints", "paintRaster", "projection",
+    "rasterGaps", "scaleBar", "view",
+  ]);
   for (const [name, value] of Object.entries(mapKit)) assert.equal(typeof value, "function", name);
 });
 
@@ -340,4 +343,34 @@ test("controller gives every component and child ctx.map === mapKit", async () =
   assert.deepEqual(c.errors, []);
   assert.deepEqual(seen.map(([who]) => who).sort(), ["child", "child", "parent"]);
   for (const [who, map] of seen) assert.equal(map, mapKit, `${who} ctx.map`);
+});
+
+// --- lut ------------------------------------------------------------------------------------------------------------
+
+test("lut: a colour per level from the level's value, 1,024 RGBA bytes", () => {
+  const seen = [];
+  const table = lut({ value: { scale: "linear", min: 0, max: 255 } }, (value, level) => {
+    seen.push([level, value]);
+    return level === 255 ? "rgba(10, 20, 30, 0.5)" : `rgb(${level}, ${255 - level}, 7)`;
+  });
+  assert.ok(table instanceof Uint8ClampedArray);
+  assert.equal(table.length, 1024);
+  assert.equal(seen.length, 256);
+  assert.deepEqual(seen[3], [3, 3], "colorOf gets the level's value and the level");
+  assert.deepEqual(Array.from(table.slice(0, 4)), [0, 255, 7, 255]);
+  assert.deepEqual(Array.from(table.slice(254 * 4, 255 * 4)), [254, 1, 7, 255]);
+  assert.deepEqual(Array.from(table.slice(255 * 4)), [10, 20, 30, 128], "opacity is the alpha byte");
+});
+
+test("lut: a log scale asks for log values, a class list for names, and a level without a colour is transparent", () => {
+  const log = [];
+  lut({ value: { scale: "log", min: 1, max: 1000 } }, (value, level) => (log.push(value), level < 128 ? null : "#fff"));
+  assert.equal(log[0], 1);
+  assert.ok(Math.abs(log[255] - 1000) < 1e-9);
+  const classes = [];
+  const table = lut({ value: { classes: ["Forest", "Urban"] } }, (name) => (classes.push(name), name === "Forest" ? "#102030" : undefined));
+  assert.deepEqual(classes, ["Forest", "Urban"], "levels past the list are not asked about");
+  assert.deepEqual(Array.from(table.slice(0, 4)), [16, 32, 48, 255]);
+  assert.ok(table.slice(4).every((byte) => byte === 0), "every other level is transparent black");
+  assert.throws(() => lut({ value: { classes: ["A"] } }, () => "not a colour"), /^Error: lut: 'not a colour' is not a colour$/);
 });

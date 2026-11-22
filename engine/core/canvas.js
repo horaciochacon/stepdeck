@@ -1,6 +1,7 @@
-// Canvas layers and the signature hasher, shared by the chart code (core/chart-marks.js) and the components that
-// stack canvases of their own: `canvasLayer` places a canvas under an element's SVG (several, by name), and
-// `signature` hashes what was painted into 8 hex digits, so a dump can stand in for the pixels.
+// Canvas layers, scratch canvases and the signature hasher, shared by the chart code (core/chart-marks.js) and the
+// components that stack canvases of their own: `canvasLayer` places a canvas under an element's SVG (several, by name),
+// `scratchCanvas` makes one that is never shown, and `signature` hashes what was painted into 8 hex digits, so a dump
+// can stand in for the pixels.
 
 /**
  * The canvas layers of an element: `canvas.sd-canvas-layer` children, each placed absolutely at `left`/`top` (the
@@ -36,6 +37,18 @@ export function canvasLayer(el, { left, top, pw, ph, name, maxRatio = 3 }) {
   canvas.style.height = `${ph}px`;
   canvas.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
   return canvas;
+}
+
+/**
+ * A canvas of `width` x `height` that is never put in the page: an `OffscreenCanvas`, or a detached `<canvas>` where
+ * there is none. For building an image once and drawing it often, or reading pixels back.
+ * @param {number} width
+ * @param {number} height
+ * @returns {OffscreenCanvas | HTMLCanvasElement}
+ */
+export function scratchCanvas(width, height) {
+  if (typeof OffscreenCanvas === "function") return new OffscreenCanvas(width, height);
+  return Object.assign(globalThis.document.createElement("canvas"), { width, height });
 }
 
 const FNV_OFFSET = 0x811c9dc5;

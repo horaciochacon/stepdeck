@@ -1,0 +1,9 @@
+{
+  "bounds": [-16, -28, -10, -26],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 255
+  },
+  "src": "levels.png"
+}

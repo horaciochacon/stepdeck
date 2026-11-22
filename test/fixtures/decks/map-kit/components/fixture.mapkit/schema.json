@@ -15,6 +15,25 @@
     "about": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "A [lon, lat] that keeps its place when the view zooms.", "examples": [[-14, -27]], "x-transition": "snap" },
     "points": { "type": "boolean", "default": false, "description": "Draw a point on the first region's centre.", "examples": [true], "x-transition": "snap" },
     "inset": { "type": "boolean", "default": false, "description": "Draw an inset frame and its leaders.", "examples": [true], "x-transition": "snap" },
-    "scale": { "type": "boolean", "default": false, "description": "Draw a scale bar.", "examples": [true], "x-transition": "snap" }
+    "scale": { "type": "boolean", "default": false, "description": "Draw a scale bar.", "examples": [true], "x-transition": "snap" },
+    "raster": { "type": "string", "description": "A raster file of the deck, drawn over the regions.", "examples": ["data/levels.json"], "x-transition": "snap" },
+    "rasterHatch": { "type": "boolean", "default": true, "description": "Hatch the land under the raster.", "examples": [false], "x-transition": "snap" },
+    "rasterDraws": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["frame"],
+        "properties": {
+          "frame": { "type": "integer", "minimum": 0, "description": "The frame drawn.", "examples": [0] },
+          "zoom": { "type": "number", "exclusiveMinimum": 0, "default": 1, "description": "The scale of the view the picture is built for.", "examples": [1] },
+          "alpha": { "type": "number", "minimum": 0, "maximum": 1, "default": 1, "description": "The opacity of the picture.", "examples": [0.5] }
+        }
+      },
+      "default": [{ "frame": 0 }],
+      "description": "The pictures of the raster, drawn in order; each is built for a zoom and drawn at the element's own.",
+      "examples": [[{ "frame": 0 }]],
+      "x-transition": "snap"
+    }
   }
 }
