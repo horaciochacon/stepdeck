@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "map",
-  "description": "A map of regions from a GeoJSON file, with layers of data over them: a choropleth that colours each region by a value from a CSV, a raster (a picture over the land: a value ramp, classes or a mask) or points (places sized and coloured by a column), in the theme's palettes, with a hatch for a region or land that has no value and a dot for a region too small to see. Steps bring layers in and out (each adds its legend row), highlight regions and put names on the map.",
+  "description": "A map of regions from a GeoJSON file, with layers of data over them: a choropleth that colours each region by a value from a CSV, a raster (a picture over the land: a value ramp, classes or a mask) or points (places sized and coloured by a column), in the theme's palettes, with a hatch for a region or land that has no value and a dot for a region too small to see. Steps bring layers in and out (each adds its legend row), highlight regions and put names on the map, fly the map and an inset to a region, and play a time-lapse raster through its frames with a corner panel of the frame's label and numbers.",
   "type": "object",
   "additionalProperties": false,
   "required": ["boundaries"],
@@ -45,7 +45,7 @@
         ],
         "properties": {
           "areas": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per region, relative to the deck root: a choropleth. A layer has exactly one of `areas`, `raster` and `points`.", "examples": ["data/rates.csv"] },
-          "raster": { "type": "string", "minLength": 1, "description": "Path to a raster file, relative to the deck root: a JSON that gives `bounds`, what the grey levels mean in `value` and a greyscale PNG in `src`. A value raster takes the scale props (`classes`, `midpoint`, `domain`), a raster of classes the categorical palette in order, and a raster of one class (a mask) the layer's `color`. Land the raster has no data for is hatched, and the legend adds a \"no data\" row. Clipped to the land outline unless `clip` is false.", "examples": ["data/density.json"] },
+          "raster": { "type": "string", "minLength": 1, "description": "Path to a raster file, relative to the deck root: a JSON that gives `bounds`, what the grey levels mean in `value` and a greyscale PNG in `src`, or, for a time-lapse, a list of labelled PNGs in `frames` (see `frame`). A value raster takes the scale props (`classes`, `midpoint`, `domain`), a raster of classes the categorical palette in order, and a raster of one class (a mask) the layer's `color`. Land the raster has no data for is hatched, and the legend adds a \"no data\" row. Clipped to the land outline unless `clip` is false.", "examples": ["data/density.json"] },
           "points": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per place, relative to the deck root: circles at the `lon` and `lat` of each row, over the borders. A layer has exactly one of `areas`, `raster` and `points`.", "examples": ["data/sites.csv"] },
           "lon": { "type": "string", "minLength": 1, "description": "For `points`: the column of longitudes, in degrees. A row whose longitude is empty or not a number is an element error.", "examples": ["lon"] },
           "lat": { "type": "string", "minLength": 1, "description": "For `points`: the column of latitudes, in degrees. A row whose latitude is empty or not a number is an element error.", "examples": ["lat"] },
@@ -115,6 +115,37 @@
       ],
       "description": "A second, zoomed view of the same shown layers, in a corner of the element: 36% of its width, with its aspect, 3% of its width in from the two edges. It shows what the map would at `inset.view`, with the same layers, colours, highlight and names. A box on the map marks the part it shows, two dashed lines join the box to the inset (none while the inset covers the box), and a scale bar gives a round length in km. The inset fades in and out; a change of `inset.view` flies the inset only, the box following. Null or absent: no inset.",
       "examples": [{ "view": "N1" }, { "view": ["W1", "S2"], "at": "bottom-right", "scale": false }, null],
+      "x-transition": "fade"
+    },
+    "frame": {
+      "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "number" }],
+      "description": "The frame of the time-lapse layers on screen, by its label in their raster files (compared as text: 2015 and \"2015\" are one frame). One value for the whole map, so every time-lapse layer on it must have the same labels. Default: the first frame. A change on a forward step runs through every frame in between, in the files' order (backward when the new frame comes first), each crossfading into the next at `pace` ms a frame, after everything else the step changes (a flight first, then the run at the end view). The corner panel shows the label of the frame on screen and the `numbers`. A label the files do not have is an element error.",
+      "examples": ["2015", 2015],
+      "x-transition": "tween"
+    },
+    "pace": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 2000,
+      "default": 700,
+      "description": "How long a run spends on each frame it moves, in ms: a step that moves `frame` on by 18 frames at 700 ms runs for 12.6 s. A step's run, with whatever the step changes before it, may last at most 20 s: split a longer one across steps.",
+      "examples": [700, 300],
+      "x-transition": "snap"
+    },
+    "numbers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "format"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1, "description": "A key of the frames' `numbers` in a time-lapse raster file. Exactly one time-lapse layer of the map must have it." },
+          "label": { "type": "string", "description": "The number's label in the panel, in the deck's language. Without it, the number alone." },
+          "format": { "type": "string", "minLength": 1, "description": "d3-format specifier for the number, localized by the deck language (as `big-number`'s `format`)." }
+        }
+      },
+      "description": "The numbers of the frame on screen that the corner panel shows under its label, each after its own label and formatted as declared. During a run each counts linearly from one frame's value to the next. The panel sits at the top-left, or the top-right when the inset is there, while a time-lapse layer is shown. A key no time-lapse layer has, or that two have, is an element error.",
+      "examples": [[{ "key": "people", "label": "People", "format": ",.0f" }]],
       "x-transition": "fade"
     },
     "labels": {

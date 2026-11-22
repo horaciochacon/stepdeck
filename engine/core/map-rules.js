@@ -36,7 +36,7 @@ export const MAX_FRAMES = 200;
 /** The most pixels in one raster image: 2,000 x 2,000. */
 export const MAX_RASTER_PIXELS = 2000 * 2000;
 /** The default `pace`, ms per frame. */
-const DEFAULT_PACE = 700;
+export const DEFAULT_PACE = 700;
 
 const COLOR_CHUNKS = ["gAMA", "cHRM", "iCCP", "sRGB"];
 
