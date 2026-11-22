@@ -176,6 +176,41 @@ test("areas: legend rows read < 5, 5–10, 10–20, ≥ 20 and No data", async (
   });
 });
 
+/**
+ * The legend panel's inner width, and its rows' lines: each row's title text width, the width of its swatches from the
+ * first to the last, and whether the title sits above the swatches.
+ */
+const legendBox = (page) =>
+  page.evaluate(() => {
+    const box = document.querySelector('[data-el="map"] .sd-map-legend');
+    const style = getComputedStyle(box);
+    const inner = box.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const rows = [...box.querySelectorAll(".sd-legend-row")].map((row) => {
+      const title = row.querySelector(".sd-legend-title");
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const text = range.getBoundingClientRect();
+      const rest = [...row.children].filter((n) => n !== title).map((n) => n.getBoundingClientRect());
+      return { title: text.width, swatches: rest.at(-1).right - rest[0].left, above: title.getBoundingClientRect().bottom <= rest[0].top + 0.5 };
+    });
+    return { inner, rows };
+  });
+
+test("areas: the legend panel is as wide as its widest line, its title above the swatches", async () => {
+  // A title that fills a line of its own must not widen the panel to the title and the swatches side by side: the
+  // panel is opaque, and would hide that much of the map.
+  await withPage({ root, url: pages.url("areas", "step=rates") }, async (page, ctx) => {
+    for (const url of [pages.url("areas", "step=rates"), pages.url("legends", "step=ramp")]) {
+      await ctx.open(url);
+      const { inner, rows } = await legendBox(page);
+      const widest = Math.max(...rows.flatMap((r) => [r.title, r.swatches]));
+      assert.ok(Math.abs(inner - widest) <= 1, `${url}: the panel's inner width ${inner.toFixed(1)} is its widest line ${widest.toFixed(1)} (${JSON.stringify(rows)})`);
+      assert.ok(rows.every((r) => r.above), `${url}: every title is a line above its swatches (${JSON.stringify(rows)})`);
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("areas: legend in Spanish uses decimal commas", async () => {
   await withPage({ root, url: pages.url("legends", "step=steps&lang=es") }, async (page, ctx) => {
     const [row] = await legendOf(page);

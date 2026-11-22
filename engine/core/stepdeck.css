@@ -315,7 +315,9 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
    background colour; the legend in the corner `legend` names (data-at), on a panel of the background colour so its text
    keeps its contrast over coloured regions, its rows stacked away from that corner, their titles in the note size and
-   their swatches 28 px (the label size). */
+   their swatches 28 px (the label size). A row there is a block: its title a line of its own, its swatches inline after
+   it, so the panel is as wide as the row's widest line (a wrapping flex row with a full-width title is as wide as the
+   title and every swatch side by side, and the panel would hide that much of the map). */
 .sd-map-labels { display: block; overflow: visible; }
 .sd-map-label { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); stroke: var(--sd-color-background); stroke-width: 8; stroke-linejoin: round; paint-order: stroke; }
 .sd-map-legend { position: absolute; display: flex; flex-direction: column; gap: var(--sd-grid); padding: var(--sd-grid) calc(var(--sd-grid) * 1.5); border-radius: calc(var(--sd-grid) / 2); background: var(--sd-color-background); }
@@ -323,7 +325,11 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-map-legend[data-at^="bottom"] { bottom: var(--sd-space); flex-direction: column-reverse; }
 .sd-map-legend[data-at$="left"] { left: var(--sd-space); align-items: flex-start; }
 .sd-map-legend[data-at$="right"] { right: var(--sd-space); align-items: flex-end; }
-.sd-map-legend .sd-legend-title { flex-basis: 100%; font-size: var(--sd-font-size-note); }
+.sd-map-legend .sd-legend-row { display: block; }
+.sd-map-legend .sd-legend-title { display: block; margin-bottom: calc(var(--sd-grid) / 4); font-size: var(--sd-font-size-note); }
+.sd-map-legend .sd-legend-row > :not(.sd-legend-title) { vertical-align: middle; margin: calc(var(--sd-grid) / 4) var(--sd-grid) calc(var(--sd-grid) / 4) 0; }
+.sd-map-legend .sd-legend-row > :last-child { margin-right: 0; }
+.sd-map-legend .sd-legend-ramp { display: inline-block; }
 
 /* the corner panel of a map's time-lapse (components/map/panel.js): the frame's label in the statement size and, under
    it, the numbers in the note size, each after its label in the muted colour, all in tabular figures so a run's digits
