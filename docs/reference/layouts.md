@@ -211,7 +211,7 @@ With a 96px gutter each half is (1728 − 96) / 2 = 816px wide.
 
 Components measure their element's size at mount (`offsetWidth` and `offsetHeight`). An element in a region only gets height if a CSS rule lets it grow; otherwise it is as tall as its content, and a chart, whose SVG has no intrinsic height, would come out about 150px tall.
 
-One rule in [`core/stepdeck.css`](../../engine/core/stepdeck.css) applies to every layout: in a region, an element of type `chart.line`, `chart.bar`, `diagram`, `image` or `terminal` gets `flex: 1 1 0; min-height: 0`. It takes the height the other elements in the region leave, alone or not (`image`, `terminal` and the charts only while not collapsed or failed). `timeline` does not fill: it is a horizontal strip sized by its labels.
+One rule in [`core/stepdeck.css`](../../engine/core/stepdeck.css) applies to every layout: in a region, an element of type `chart.line`, `chart.bar`, `chart.points`, `diagram`, `image`, `map` or `terminal` gets `flex: 1 1 0; min-height: 0`. It takes the height the other elements in the region leave, alone or not (`image`, `terminal` and the charts only while not collapsed or failed). `timeline` does not fill: it is a horizontal strip sized by its labels.
 
 A layout can add a second rule, `> .sd-el:only-child { flex: 1 1 0; min-height: 0; }`, for a region. It fills any other component, such as a deck's own, when it is the only element there. These regions have it:
 

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "map",
+  "description": "A map of regions from a GeoJSON file, with layers of data over them: a choropleth that colours each region by a value from a CSV, in the theme's palettes, with a hatch for a region that has no value and a dot for one too small to see. Steps bring layers in and out (each adds its legend row), highlight regions and put names on the map.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["boundaries"],
+  "properties": {
+    "boundaries": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a GeoJSON FeatureCollection of Polygon and MultiPolygon features, relative to the deck root: the regions, drawn as land in the surface colour with borders in the rule colour. Files written by `sf` or `geopandas` (counter-clockwise, RFC 7946) work as they are. Fixed for the element: a change on a step redraws the map at once.",
+      "examples": ["data/regions.geojson"],
+      "x-transition": "snap"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The feature property that identifies a region (compared as text), which `highlight`, `labels` and a layer's `key` column refer to. Without it, each feature's own `id`.",
+      "examples": ["code", "shapeISO"],
+      "x-transition": "snap"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The feature property whose text `labels` show. Without it (or for a feature without that property), a label shows the region's id.",
+      "examples": ["name", "shapeName"],
+      "x-transition": "snap"
+    },
+    "projection": {
+      "enum": ["equal-earth", "natural-earth", "mercator", "conic-equal-area"],
+      "description": "The map projection, centred on the regions and fitted to the element with a margin. \"equal-earth\" (the default) keeps areas true; \"conic-equal-area\" suits a mid-latitude country wider than it is tall (its two parallels sit a sixth of the way in from each end of the regions' latitudes).",
+      "examples": ["equal-earth", "conic-equal-area"],
+      "x-transition": "snap"
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["areas", "value"],
+        "properties": {
+          "areas": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per region, relative to the deck root: a choropleth.", "examples": ["data/rates.csv"] },
+          "key": { "type": "string", "minLength": 1, "description": "The column that names each row's region, compared as text with the map's `id` (\"07\" is not 7: declare it in `types`). Default: the map's `id`. A key that matches no region, or a region in two rows, is an element error.", "examples": ["code"] },
+          "value": { "type": "string", "minLength": 1, "description": "The column of values that colours each region. An empty cell, or a region without a row, is hatched and adds a \"no data\" row to the legend: never a colour of the scale.", "examples": ["rate"] },
+          "label": { "type": "string", "description": "The title of the layer's legend row.", "examples": ["Cases per 1,000"] },
+          "types": { "type": "object", "additionalProperties": { "enum": ["string", "number", "date"] }, "description": "CSV column types, passed to the data loader. Declare a key column of codes with leading zeros as \"string\".", "examples": [{ "code": "string" }] },
+          "classes": { "type": "array", "items": { "type": "number" }, "minItems": 1, "description": "Class breaks, in increasing order: n breaks make n + 1 classes, coloured in even steps along the sequential palette and labelled `< 5`, `5–10`, …, `≥ 20` in the legend. A value equal to a break is in the class above it.", "examples": [[5, 10, 20]] },
+          "midpoint": { "type": "number", "description": "A value that splits the diverging palette: below it one hue, above it the other. With `classes` it must be one of the breaks.", "examples": [0, 1] },
+          "domain": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "The ends of a continuous ramp (no `classes`), used as given; a value past an end takes the end colour. Default: the values' extent, made symmetric about `midpoint` when there is one.", "examples": [[0, 25]] }
+        }
+      },
+      "description": "The layers of data, keyed by an id that `shown` refers to. A layer with `areas` is a choropleth: its `value` column colours the regions its `key` column names, through a scale of the theme's palettes (`classes` for stepped classes, `midpoint` for a diverging one, `domain` to fix a ramp's ends), with `label` as the title of its legend row. An object, not a list, so a step can change one layer. A change to a shown layer's data or scale crossfades its colours.",
+      "examples": [{ "rate": { "areas": "data/rates.csv", "key": "code", "value": "rate", "label": "Cases per 1,000", "classes": [5, 10, 20] } }],
+      "x-transition": "fade"
+    },
+    "shown": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The layers on screen, by id, painted in the order `layers` declares them. Default: none (the regions alone). A layer that appears fades in with its legend row; one that leaves fades out. An id `layers` does not have is an element error.",
+      "examples": [["rate"]],
+      "x-transition": "fade"
+    },
+    "highlight": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Regions to emphasize, by id: they are outlined in ink, and every other region of an areas layer turns the theme's dim colour (a hatched region stays hatched). Usually set with `only` so it lasts one step. An unknown id is an element error.",
+      "examples": [["N1", "W1"]],
+      "x-transition": "fade"
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Regions to name on the map, by id: each label is the region's `name` (else its id) at the centroid of its largest polygon, on a halo of the background colour. Labels that come or go fade. An unknown id is an element error.",
+      "examples": [["N1", "S2"]],
+      "x-transition": "fade"
+    },
+    "legend": {
+      "anyOf": [
+        { "enum": ["bottom-left", "bottom-right", "top-left", "top-right"] },
+        { "const": false }
+      ],
+      "description": "The corner the legend sits in, its rows stacked away from it: one row per shown layer, with its classes or ramp and, when some region has no value, a hatched \"no data\" swatch. Default \"bottom-left\"; false shows no legend.",
+      "examples": ["bottom-left", false],
+      "x-transition": "snap"
+    }
+  }
+}

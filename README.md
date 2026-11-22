@@ -20,7 +20,7 @@ This page is the front door. It shows what you get, a quick start and one slide,
 
 | Piece | What there is | Reference |
 |---|---|---|
-| Components | 12: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Anything else is a custom component under the same contract. | [Components](docs/reference/components/index.md) |
+| Components | 13: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`, `map`. Anything else is a custom component under the same contract. | [Components](docs/reference/components/index.md) |
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Themes | 2: `modern` (the default: Geist, a deep blue accent, a large cover title) and `academic-light`, with color-vision-safe palettes and vendored fonts | [Themes](docs/reference/themes.md) |
 | Shells | 2: `reveal` for presenting (keyboard, presenter view), `bare` for the CLI checks | |

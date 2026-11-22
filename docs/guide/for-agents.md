@@ -200,7 +200,7 @@ Known drift at the time of writing:
 
 | Where | What the doc says | What the code does |
 |---|---|---|
-| `skill/SKILL.md` frontmatter | Lists line chart, big number, terminal session, text and markdown. | `components/index.json` has 12 built-ins, adding `chart.bar`, `chart.points`, `list`, `diagram`, `chat`, `timeline` and `image`. |
+| `skill/SKILL.md` frontmatter | Lists line chart, big number, terminal session, text and markdown. | `components/index.json` has 13 built-ins, adding `chart.bar`, `chart.points`, `list`, `diagram`, `chat`, `timeline`, `image` and `map`. |
 | `skill/references/checks.md`, `unknown-layout` | Use `title`, `figure-notes` or `full-bleed`. | `statement` and `halves` exist too. The problem's `limit` lists every known layout (`figure-notes`, `full-bleed`, `halves`, `statement`, `title`), and its `fix` suggests the closest one or lists them all. |
 | `skill/references/checks.md` | Has no `diagram-id` or `diagram-overlap` rows. | `validate` reports both for `diagram` elements. |
 | `skill/references/checks.md`, `figure-source` | A figure is `chart.*` or `big-number`. | `cli/validate.js` also counts `map` and `map.*` (no such component exists yet). |

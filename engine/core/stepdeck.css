@@ -40,10 +40,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-el { position: relative; min-width: 0; }
 .sd-el[data-box] { position: absolute; }
 /* Figures fill the room their region leaves after the other elements take their own height: chart.line, chart.bar,
-   chart.points, diagram, image and terminal. A timeline does not (a strip sized by its labels), nor does a deck
+   chart.points, diagram, image, map and terminal. A timeline does not (a strip sized by its labels), nor does a deck
    component: it fills only when it is the only element of a filling region, or when it is placed with `box`. */
 .sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="chart.points"], [data-type="diagram"],
-  [data-type="image"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+  [data-type="image"], [data-type="map"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
 
 /* Visibility (spec §6.2): hidden keeps its space; collapse removes it. State rules are !important: an
    important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
@@ -305,6 +305,18 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-map-inset-leader { stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
 .sd-map-scale-bar, .sd-map-scale-caps { stroke: var(--sd-color-ink); stroke-width: calc(var(--sd-rule-width) * 1.5); }
 .sd-map-scale text { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); font-variant-numeric: tabular-nums; stroke: var(--sd-color-background); stroke-width: 4; stroke-linejoin: round; paint-order: stroke; }
+
+/* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
+   background colour; the legend in the corner `legend` names (data-at), its rows stacked away from that corner, their
+   titles in the note size and their swatches 28 px (the label size). */
+.sd-map-labels { display: block; overflow: visible; }
+.sd-map-label { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); stroke: var(--sd-color-background); stroke-width: 8; stroke-linejoin: round; paint-order: stroke; }
+.sd-map-legend { position: absolute; display: flex; flex-direction: column; gap: var(--sd-grid); }
+.sd-map-legend[data-at^="top"] { top: var(--sd-space); }
+.sd-map-legend[data-at^="bottom"] { bottom: var(--sd-space); flex-direction: column-reverse; }
+.sd-map-legend[data-at$="left"] { left: var(--sd-space); align-items: flex-start; }
+.sd-map-legend[data-at$="right"] { right: var(--sd-space); align-items: flex-end; }
+.sd-map-legend .sd-legend-title { flex-basis: 100%; font-size: var(--sd-font-size-note); }
 
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the

@@ -42,7 +42,7 @@ Put the logic that does not need the DOM in a separate pure module, the way `lis
 Add the name to `components/index.json`. That file is the only list of built-ins. Nothing scans the folders, but `test/unit/components-index.test.mjs` checks that the list matches exactly the folders of `components/` that hold an `index.js`. The order of the file is the order that `docs/reference/components/index.md` uses.
 
 ```json
-["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"]
+["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"]
 ```
 
 Check the name against these rules:
@@ -170,11 +170,11 @@ Errors: throw an `Error` whose message names the bad value and what is allowed, 
 
 A region is a column flexbox, and an element takes only the height of its content. A component that draws to the size of its box, such as an SVG that measures itself, needs a rule that stretches it. There are two mechanisms:
 
-- **By type, in any layout.** `core/stepdeck.css` stretches six types wherever they are (`chart.line`, `chart.bar`, `chart.points`, `diagram`, `image` and `terminal`), with one rule; `terminal` and `image` add their own `display` in their sections:
+- **By type, in any layout.** `core/stepdeck.css` stretches seven types wherever they are (`chart.line`, `chart.bar`, `chart.points`, `diagram`, `image`, `map` and `terminal`), with one rule; `terminal` and `image` add their own `display` in their sections:
 
   ```css
   .sd-region > .sd-el:is([data-type="chart.line"], [data-type="chart.bar"], [data-type="chart.points"], [data-type="diagram"],
-    [data-type="image"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
+    [data-type="image"], [data-type="map"], [data-type="terminal"]):not(.sd-collapsed):not(.sd-failed) { flex: 1 1 0; min-height: 0; }
   .sd-el[data-type="terminal"]:not(.sd-collapsed):not(.sd-failed) { display: flex; flex-direction: column; }
   ```
 

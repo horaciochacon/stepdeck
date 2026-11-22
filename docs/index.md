@@ -54,7 +54,7 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | Page | What it covers |
 | --- | --- |
 | [Deck and slide spec](reference/deck-and-slide.md) | Every key of `deck.js`, slide files, elements and steps. |
-| [Components](reference/components/index.md) | The 12 built-in components and what they share. |
+| [Components](reference/components/index.md) | The 13 built-in components and what they share. |
 | [Layouts](reference/layouts.md) | The five built-in layouts, their regions and variables. |
 | [Themes](reference/themes.md) | Theme files, tokens and palettes. |
 | [CLI](reference/cli.md) | Every command, option, output format and exit code. |
@@ -78,6 +78,7 @@ One page per built-in component, in the order of `components/index.json`:
 | [chat](reference/components/chat.md) | A conversation shown as bubbles or a card. |
 | [timeline](reference/components/timeline.md) | Stops along a line with a progress fill. |
 | [image](reference/components/image.md) | An image file from the deck, with alt text and an optional caption. |
+| [map](reference/components/map.md) | Regions from a GeoJSON file coloured by a value from a CSV, with highlights, names on the map and a legend. |
 
 ## Concepts
 

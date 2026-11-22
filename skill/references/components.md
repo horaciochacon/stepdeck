@@ -136,6 +136,14 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `src` is relative to the deck root, under `assets/`. Remote URLs, paths that leave the deck and paths with `%` are refused.
 - The image finishes loading before the step settles. A missing file is an element error naming the path.
 
+**`map`** (`catalog map`). The regions of a GeoJSON file, with layers of data over them.
+- `boundaries` (required) names the GeoJSON. `id` is the feature property that identifies a region: `highlight`, `labels` and a layer's `key` refer to regions by it. `name` is the property labels show. Files written by `sf` or `geopandas` work as they are.
+- `layers` declares the layers by id. A layer with `areas` is a choropleth: `{ areas: "data/rates.csv", key: "code", value: "rate", label: "Cases per 1,000", classes: [5, 10, 20] }`. `classes` gives stepped classes, `midpoint` a diverging scale, `domain` a ramp's ends; the colours are the theme's.
+- Keys compare with region ids as text. A key that matches no region, or a region in two rows, is an element error. Declare a column of codes with leading zeros as `"string"` in `types`, or `07` becomes `7`.
+- `shown` lists the layers on screen (none by default): a layer that appears fades in with its legend row. Show one areas layer at a time. `highlight` outlines regions in ink and dims the rest: use `only`. `labels` names regions at their centroids; pick regions far enough apart for their names. `legend` picks the corner, or `false`.
+- A region without a value is hatched, and its legend row adds a "no data" swatch. A region too small to see is drawn as a dot.
+- It counts as a figure, so the slide needs a `role: "source"` line. It fills the room its region leaves, like a chart.
+
 ## Bindings: `{{path#/pointer | format}}`
 
 Any string prop, at any depth (inside arrays and objects too), can bind to a data file:

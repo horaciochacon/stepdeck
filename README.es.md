@@ -20,7 +20,7 @@ Esta página es la puerta de entrada. Muestra lo que incluye, un inicio rápido 
 
 | Pieza | Qué hay | Referencia |
 |---|---|---|
-| Componentes | 12: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Cualquier otra cosa es un componente propio con el mismo contrato. | [Componentes](docs/reference/components/index.md) |
+| Componentes | 13: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`, `map`. Cualquier otra cosa es un componente propio con el mismo contrato. | [Componentes](docs/reference/components/index.md) |
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Temas | 2: `modern` (el tema por defecto: Geist, un acento azul profundo, un título de portada grande) y `academic-light`, con paletas seguras para daltonismo y fuentes incluidas | [Temas](docs/reference/themes.md) |
 | Shells | 2: `reveal` para presentar (teclado, vista del presentador), `bare` para las revisiones de la CLI | |

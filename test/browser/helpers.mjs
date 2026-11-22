@@ -9,7 +9,7 @@
 //   await htmlAfterJump(ctx, page, pages, slide, step, id)    // fresh load at `step`
 //   await expectJumpEqualsPlayed(ctx, page, { pages, slide, steps, id })
 //   await expectBackwardEqualsJump(ctx, page, { pages, slide, steps, id })
-//   await expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id })
+//   await expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id, keep? })
 //   await expectAnimatedStepMoves(ctx, page, { pages, slide, from, to, id, probe? })
 //   await sampleFrames(page, slide, step, id, probe?)         // the element once per frame while a step plays
 //   paletteRgb(theme, index)                                  // `rgb(...)` of a theme's categorical palette colour
@@ -97,9 +97,11 @@ export async function expectBackwardEqualsJump(ctx, page, { pages, slide, steps,
 
 /**
  * Start an animated move from -> via, re-target to `to` 100 ms in, settle: the html equals a jump to `to`
- * and no element inside it keeps an inline style (a canvas layer's own size and position excepted).
+ * and no element inside it keeps an inline style (a canvas layer's own size and position excepted). `keep` is a
+ * selector of other nodes whose inline style is their content, written the same by a jump (a legend swatch's
+ * colour), so they are not motion residue.
  */
-export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id }) {
+export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from, via, to, id, keep }) {
   const jumped = await stateAfterJump(ctx, page, pages, slide, to, id);
   await openAnimated(ctx, page, pages, slide, from);
   await page.evaluate(
@@ -113,7 +115,8 @@ export async function expectInterruptEqualsJump(ctx, page, { pages, slide, from,
   await settled(page);
   assertSameState(await stateOf(page, id), jumped, `${slide}/${id}: interrupted '${from}' -> '${via}' -> '${to}' differs from a jump`);
   // A canvas layer keeps its inline size and position (it is placed, not animated).
-  const styled = await page.evaluate((id) => document.querySelectorAll(`[data-el="${id}"] [style]:not(.sd-canvas-layer)`).length, id);
+  const exempt = keep ? `.sd-canvas-layer, ${keep}` : ".sd-canvas-layer";
+  const styled = await page.evaluate(([id, exempt]) => document.querySelectorAll(`[data-el="${id}"] [style]:not(${exempt})`).length, [id, exempt]);
   assert.equal(styled, 0, "no inline styles are left inside the element");
   assert.deepEqual(ctx.errors, []);
 }

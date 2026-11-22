@@ -13,6 +13,7 @@
 //   levels.json + levels.png                            4×1 px, grey + alpha: levels 0, 1, 254, 255, the second transparent
 // Broken files, in ../../map-broken/data (kept apart, as the points fixtures are, so `map` stays clean):
 //   regions.geojson, rates.csv                          copies of the clean ones
+//   twice.csv                                           rates.csv with the first region's row given twice
 //   years30.json + years30/                             30 frames, 8×6 px: 29 moves, 20.3 s, longer than a run may be
 //   wide.json + wide.png                                2001×2000 px at one level: over the pixel limit
 //   mismatch.json + mismatch/                           two frames; the second is a different size
@@ -62,6 +63,9 @@ const files = valueFiles({
 });
 for (const [name, content] of Object.entries(files)) write(name, content);
 writeBroken("rates.csv", files["rates.csv"]);
+// the same rates with the first region's row given twice
+const rateLines = files["rates.csv"].trimEnd().split("\n");
+writeBroken("twice.csv", `${[...rateLines, rateLines[1]].join("\n")}\n`);
 
 write("sites.csv", csvText(["id", "lon", "lat", "beds", "kind"], mainland.map((f, i) => {
   const [lon, lat] = centroid(f);
