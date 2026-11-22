@@ -254,7 +254,7 @@ A real line, from `test/fixtures/decks/played-mismatch`:
 log/log/one · played-mismatch · text "count 0 count 1 count 0" arriving from 'two' (+3 more differing arrivals) vs "count 0" when jumped to · make update() idempotent: …
 ```
 
-If the page reports that animation is off (`STEPDECK.flags.animate` is not `true`), the played pass stops with an error and exit 2. It never compares a jump with a jump.
+If the page reports that animation is off (`STEPDECK.flags.animate` is not `true`), or the page is hidden (`document.visibilityState` is not `"visible"`: a hidden page renders end states only), the played pass stops with an error and exit 2. It never compares a jump with a jump.
 
 ## catalog
 
