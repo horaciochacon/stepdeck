@@ -323,6 +323,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `frame '1999' not found (frames: 2010, 2011, 2012, 2013, 2014, …)` | `frame` names a label the time-lapse files do not have. The first five labels are listed. |
 | `time-lapse layers 'years' and 'rain' have different frame labels` | Two time-lapse layers the step declares have different label lists. |
 | `data/years/2011.png: 8×7 does not match the first frame (8×6)` | A frame's PNG is another size than the first frame's. |
+| `data/years.json: 30 frames of 2000×2000 is 120 million pixels, more than 100 million; use fewer or smaller frames` | A time-lapse holds more than 100 million pixels, every frame together. It is refused as soon as its first frame is read, before any other is decoded. `validate` reports it too. |
 | `a run of 20.3 s is longer than 20 s; split it across steps` | A played step's first phase and run together last more than 20 s. |
 | ``\`numbers\` key 'pop' is in no time-lapse layer (keys: people)`` | A `numbers` key no time-lapse layer of the step has. |
 | ``\`numbers\` key 'people' is in time-lapse layers 'years' and 'rain'`` | A `numbers` key two time-lapse layers have. |

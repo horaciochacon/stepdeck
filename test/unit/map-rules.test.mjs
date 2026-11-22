@@ -14,6 +14,8 @@ import {
   firstPhase,
   stepRun,
   niceLength,
+  lapsePixelProblems,
+  MAX_LAPSE_PIXELS,
 } from "#engine/core/map-rules.js";
 
 test("levelValue: linear, log and classes at 0, 1, 254, 255", () => {
@@ -183,6 +185,20 @@ test("pngProblems: more than 2,000×2,000 pixels", () => {
   assert.deepEqual(pngProblems(info({ width: 3000, height: 1000 }), "f.png"), [], "the limit is the pixel count, not each side");
 });
 
+test("lapsePixelProblems: a time-lapse holds at most 100 million pixels, every frame together", () => {
+  assert.equal(MAX_LAPSE_PIXELS, 100_000_000);
+  assert.deepEqual(lapsePixelProblems(25, [2000, 2000], "d/a.json"), [], "exactly 100 million is within it");
+  assert.deepEqual(lapsePixelProblems(26, [2000, 2000], "d/a.json"), [
+    "d/a.json: 26 frames of 2000×2000 is 104 million pixels, more than 100 million; use fewer or smaller frames",
+  ]);
+  assert.deepEqual(lapsePixelProblems(200, [2000, 2000], "d/a.json"), [
+    "d/a.json: 200 frames of 2000×2000 is 800 million pixels, more than 100 million; use fewer or smaller frames",
+  ]);
+  // a total just past the limit never reads as the limit itself
+  assert.match(lapsePixelProblems(1, [10_000_001, 10], "d/a.json")[0], /is 100\.1 million pixels, more than 100 million/);
+  assert.deepEqual(lapsePixelProblems(200, [8, 6], "d/a.json"), []);
+});
+
 test("niceLength", () => {
   assert.equal(niceLength(1), 1);
   assert.equal(niceLength(1.9), 1);
@@ -303,6 +319,19 @@ test("mapProblems: map-raster for sidecars, PNGs and frame sizes", () => {
   const size = at("size");
   assert.deepEqual(rules(size), ["map-raster:error"]);
   assert.match(size[0].message, /d\/b\.png: 90×80 is not 100×80/);
+});
+
+test("mapProblems: map-raster for a time-lapse over 100 million pixels, every frame together", () => {
+  const sized = (n, width, height) => {
+    const labels = labels30.slice(0, n);
+    return { json: lapseFile(labels).json, pngs: Object.fromEntries(labels.map((label) => [`f/${label}.png`, info({ width, height })])) };
+  };
+  const at = (file) => mapProblems({ layers: { big: { raster: "d/big.json" } }, shown: ["big"] }, { "d/big.json": file });
+  assert.deepEqual(at(sized(25, 2000, 2000)), [], "25 frames of 2000×2000 is exactly 100 million");
+  const over = at(sized(30, 2000, 2000));
+  assert.deepEqual(rules(over), ["map-raster:error"]);
+  assert.equal(over[0].message, "d/big.json: 30 frames of 2000×2000 is 120 million pixels, more than 100 million; use fewer or smaller frames");
+  assert.match(over[0].limit, /100 million pixels/);
 });
 
 const timing = { duration: 400 };

@@ -16,6 +16,7 @@
 // Raster files (`path` prefixes every message)
 //   rasterProblems(json, path)             a sidecar JSON: bounds, value, src or frames, labels, numbers
 //   pngProblems(info, path)                a PNG's header and chunk list, as `cli/png.js` `pngInfo` reads them
+//   lapsePixelProblems(frames, size, path) a time-lapse's pixels, every frame together, against MAX_LAPSE_PIXELS
 //
 // What `validate` reports, as [{ rule, severity: "warning" | "error", message, limit, fix }] like `chartProblems`
 //   `files` is { [rasterPath]: { json, pngs: { [src]: info } } }: for each raster layer, keyed by the layer's
@@ -31,7 +32,8 @@
 //   map-layer (error)         `shown` names an id that is not in `layers`.
 //   map-frame (error)         `frame` is not a label of the time-lapse; two time-lapse layers have different label
 //                             lists; a `numbers` key is found in two time-lapse layers.
-//   map-raster (error)        a sidecar, a PNG (an interlaced one included) or a frame size outside the raster format.
+//   map-raster (error)        a sidecar, a PNG (an interlaced one included) or a frame size outside the raster format,
+//                             or a time-lapse of more than MAX_LAPSE_PIXELS, every frame together.
 //   map-run (error)          the first phase plus frames moved x `pace` is longer than `maxRun`.
 //   map-prop-unused (warning) `frame` or `pace` without a time-lapse layer; a `numbers` key no frame has.
 import { numberOf } from "./chart-layout.js";
@@ -40,6 +42,8 @@ import { numberOf } from "./chart-layout.js";
 export const MAX_FRAMES = 200;
 /** The most pixels in one raster image: 2,000 x 2,000. */
 export const MAX_RASTER_PIXELS = 2000 * 2000;
+/** The most pixels in one time-lapse, every frame together (frames x columns x rows): what a deck may ask a page to decode. */
+export const MAX_LAPSE_PIXELS = 100_000_000;
 /** The default `pace`, ms per frame. */
 export const DEFAULT_PACE = 700;
 
@@ -281,6 +285,22 @@ export function pngProblems(info, path) {
   return found.map((message) => `${path}: ${message}`);
 }
 
+/**
+ * What is wrong with the size of a time-lapse of `frames` frames of `cols` x `rows` pixels: more than `MAX_LAPSE_PIXELS`
+ * every frame together. One message, starting `${path}: ` (the sidecar's path), or none. `validate` asks it with the
+ * first frame's header, and `loadRaster` as soon as the first frame is decoded, before it decodes another.
+ * @param {number} frames
+ * @param {[number, number]} size the first frame's [cols, rows]
+ * @param {string} path
+ * @returns {string[]}
+ */
+export function lapsePixelProblems(frames, [cols, rows], path) {
+  const total = frames * cols * rows;
+  if (total <= MAX_LAPSE_PIXELS) return [];
+  const millions = Math.ceil(total / 1e5) / 10; // rounded up, so a total past the limit never reads as the limit
+  return [`${path}: ${frames} frames of ${cols}×${rows} is ${millions} million pixels, more than ${MAX_LAPSE_PIXELS / 1e6} million; use fewer or smaller frames`];
+}
+
 // --- what `validate` reports ----------------------------------------------------------------------------------
 
 const item = (rule, severity, message, limit, fix) => ({ rule, severity, message, limit, fix });
@@ -356,6 +376,9 @@ function rasterFileProblems(layers) {
       else if (bad.length === 0 && (info.width !== first.info.width || info.height !== first.info.height)) {
         report([`${png}: ${info.width}×${info.height} is not ${first.info.width}×${first.info.height}, the size of ${first.png}`], "every frame has the same size", "export every frame at one size");
       }
+    }
+    if (file.json.frames && first) {
+      report(lapsePixelProblems(srcs.length, [first.info.width, first.info.height], path), `at most ${MAX_LAPSE_PIXELS / 1e6} million pixels in a time-lapse, every frame together`, "use fewer frames, or export them smaller");
     }
   }
   return found;
