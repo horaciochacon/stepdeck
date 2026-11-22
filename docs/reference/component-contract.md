@@ -577,7 +577,7 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 | `lut` | `lut(raster, colorOf) → Uint8ClampedArray` | The colour of each of a raster's 256 levels, as 1,024 RGBA bytes. See Rasters. |
 | `landCells` | `landCells(raster, features) → Uint8Array` | The raster cells whose centres are on land, 1 or 0 each. See Rasters. |
 | `rasterGaps` | `rasterGaps(raster, features) → Promise<boolean>` | Whether a land cell has no data in some frame, or some land lies outside the raster's bounds. See Rasters. |
-| `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer and draws pictures of a raster, each built for one view and drawn at another, hatching land without data. Returns the scene's signature. See Rasters. |
+| `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer and draws pictures of a raster, each built for one view and drawn at another, hatching land without data and, with `clip`, stopping at the coastline. Returns the scene's signature. See Rasters. |
 | `paintAreas` | `paintAreas(canvas, scene, res) → string` | Clears a canvas layer and paints regions, hatched when the fill is `null`, or as dots. Returns the scene's signature. See Painting. |
 | `paintBorders` | `paintBorders(canvas, scene, res) → string` | Clears a canvas layer and strokes region outlines and dot rings, filling nothing, so the layer goes over others. Returns the scene's signature. See Painting. |
 | `paintPoints` | `paintPoints(canvas, scene) → string` | Clears a canvas layer and paints circles at screen size. Returns the scene's signature. |
@@ -631,11 +631,12 @@ canvas.setAttribute("data-sig", ctx.map.paintRaster(canvas, {
   source: "data/density.json", lut: "blues",                          // both are hashed: `lut` is any name for the colour table
   view,                                                               // the view the canvas shows now
   hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },   // or null
+  clip: true,                                                         // clear past the coastline (needs `land`); false, the default, draws every cell whole
   draws: [{ frame: 0, at: view, alpha: 1 }],                          // in order, each at its alpha
 }, {
   raster, lutData,
   lookupFor: (at) => lookups.get(at) ?? lookups.set(at, ctx.map.lookup(base, at, [w, h], raster.bounds, raster.size)).get(at), // for [w, h] in CSS px
-  land,                                                               // a Path2D of the regions in base-projected px, or null
+  land,                                                               // a Path2D of the regions in base-projected px; null for none, unless `clip`
   landCells: ctx.map.landCells(raster, features),                     // or null
   cache: new Map(),                                                   // yours: pictures are kept in it
 }));
@@ -643,9 +644,10 @@ canvas.setAttribute("data-sig", ctx.map.paintRaster(canvas, {
 
 - **A draw is a picture.** Each `draws` entry is a frame as seen through the view `at`: every CSS pixel takes the colour of the raster cell `lookupFor(at)` gives it (`lutData` colours its level). The picture is drawn under the transform that carries `at` to `view`, so `at` can differ from `view` and a flight or a crossfade moves pictures instead of repainting them. Pictures are drawn in order, each at its `alpha`.
 - **The hatch is part of the picture.** Where a pixel has no data it shows the hatch if it is on land and stays clear otherwise. On land means: inside the raster, the pixel's cell is a land cell (`res.landCells`); outside the raster (`lookup` gives -1), the regions `res.land` cover the whole pixel. So no-data land is hatched, land the raster does not reach is hatched, and the sea, and the coast under a sea-centred cell, stay clear. The stripes are at 45°, 6 px apart and 1.5 px wide, `hatch.line` over `hatch.background`, measured in CSS px from the canvas's origin, so they look the same at every ratio. `hatch: null` draws none; a `null` `land` or `landCells` leaves that part unhatched. Use the hatch for value rasters; a mask has no "no data".
-- **The cache.** `res.cache` holds the pictures (and the land masks they were made from), keyed by source, frame, `at` (rounded to three decimals), colour table, hatch colours and size: the same draw is built once. You own it: empty it when the colour table, the land or a raster file behind a `source` changes. The painter never hashes `res`.
+- **`clip`.** With `clip: true`, a pixel inside the raster that is not on land is clear whatever its cell holds, hatch included, so a coarse cell centred on land stops at the coastline instead of sticking out over the sea. "On land" is the same test as for the hatch outside the raster: the regions `res.land` cover the whole pixel (so the fringe of a coastal pixel the regions only partly cover is clear). `res.land` is then required: without it the painter throws `paintRaster: clip needs res.land`. With `clip: false` (the default when the scene leaves it out) every cell is drawn whole.
+- **The cache.** `res.cache` holds the pictures (and the land masks they were made from), keyed by source, frame, `at` (rounded to three decimals), colour table, hatch colours, `clip` and size: the same draw is built once, and a clipped and a whole picture of one raster never share an entry. You own it: empty it when the colour table, the land or a raster file behind a `source` changes. The painter never hashes `res`.
 - **Undecoded frames.** A draw whose picture is not cached needs `res.raster.decoded(frame)`; without it the painter throws `paintRaster: frame 3 is not decoded`. Await `raster.grid(frame)` first.
-- **The signature** hashes `source`, `lut`, the view, the hatch colours (or none) and every draw's frame, `at` and alpha, never `res`.
+- **The signature** hashes `source`, `lut`, the view, the hatch colours (or none), `clip` and every draw's frame, `at` and alpha, never `res`.
 
 **Painting.** A painter is pure: it takes plain data, clears its canvas, paints, and returns a signature, 8 hex digits that hash the whole scene (a dump can stand in for the pixels). Make the canvas with `ctx.chart.canvasLayer` (one named layer per painter, so regions and points stack in creation order), and paint again after any change of size.
 

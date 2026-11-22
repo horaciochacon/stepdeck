@@ -1,5 +1,5 @@
 // Raster layers, one shown at a time: density (a value raster on a diverging scale about 400, with a patch of land that
-// has no data), cover (three classes), wells (a mask, in the accent colour, then in the alert colour), half (a raster
+// has no data; then with `clip: false`, every cell whole), cover (three classes), wells (a mask, in the accent colour, then in the alert colour), half (a raster
 // over the west half of the land, so the east half has no data) and the same density image on a log scale. The last
 // step shows nothing, so a layer can fade out.
 export default {
@@ -21,6 +21,7 @@ export default {
   steps: [
     { id: "base" },
     { id: "density", set: { map: { shown: ["density"] } } },
+    { id: "whole", set: { map: { layers: { density: { clip: false } } } } },
     { id: "cover", set: { map: { shown: ["cover"] } } },
     { id: "wells", set: { map: { shown: ["wells"] } } },
     { id: "alert", set: { map: { layers: { wells: { color: "alert" } } } } },

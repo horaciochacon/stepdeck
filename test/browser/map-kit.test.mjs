@@ -622,12 +622,82 @@ test("paintRaster: a frame that is not decoded throws, and the signature is the 
         error = e.message;
       }
       // with the picture already built nothing is read from the raster, and `res` is never hashed
-      for (const lut of ["a", "b"]) res.cache.set(`r.json|3|1.000|0.000|0.000|${lut}|none|4×4`, document.createElement("canvas"));
+      for (const lut of ["a", "b"]) res.cache.set(`r.json|3|1.000|0.000|0.000|${lut}|none|whole|4×4`, document.createElement("canvas"));
       const sig = (lut, alpha, r = res) => paint.paintRaster(canvas, scene(lut, alpha), r);
       return { error, same: sig("a", 1) === sig("a", 1, { ...res, lutData: new Uint8ClampedArray(1024).fill(9) }), lut: sig("a", 1) !== sig("b", 1), alpha: sig("a", 1) !== sig("a", 0.5) };
     });
     assert.equal(got.error, "paintRaster: frame 3 is not decoded");
     assert.deepEqual([got.same, got.lut, got.alpha], [true, true, true]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: clip keeps cells inside the coastline", async () => {
+  await withPage({ root, url: pages.url("raster", "step=a") }, async (page, ctx) => {
+    const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
+    /** Whether the 21 x 21 px around a lon/lat show both hatch colours. */
+    const hatched = async (lon, lat) => {
+      const [x, y] = await pixelOf(page, lon, lat);
+      const seen = new Set((await readPixels(page, "raster", x - 10, y - 10, 21, 21)).map(rgb));
+      return seen.has(dim) && seen.has(surface);
+    };
+    // The square is -14 to -12 degrees. Column 2 (-13 to -11.5) is centred on land and reaches 0.5 degrees into the sea;
+    // column 1 (-14.5 to -13, no data) is centred on land too, and its west third is sea; column 0 is all sea.
+    assert.equal(await rasterPixel(page, await pixelOf(page, -11.75, -27)), rampRgb(254), "whole cells: the sea side of a land-centred cell is coloured");
+    assert.equal(await hatched(-14.25, -27), true, "and so is the hatch of a land-centred cell with no data");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -15, -27)), paletteRgb(THEME, 0), "and a cell in the sea");
+
+    await goTo(page, "raster", "clip");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -11.75, -27)), "clear", "clipped: past the coastline nothing is painted, whatever the cell's value");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -12.25, -27)), rampRgb(254), "on land the cell has its colour");
+    assert.equal(await hatched(-14.25, -27), false, "the hatch stops at the coast too");
+    assert.equal(await hatched(-13.5, -27), true, "and is still there on land");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -15, -27)), "clear", "a cell with data in the sea is clear");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: clip is in the signature, and in the picture's cache entry", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await inPage(page, (paint) => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 4, height: 4 });
+      const view = { k: 1, x: 0, y: 0 };
+      const scene = (clip) => ({ source: "r.json", lut: "a", view, hatch: null, clip, draws: [{ frame: 0, at: view, alpha: 1 }] });
+      // every cell has data, in an opaque colour, and there is no land: a clipped picture is clear
+      const res = {
+        raster: { decoded: () => ({ levels: new Uint8Array(16), data: new Uint8Array(16).fill(1) }) },
+        lutData: new Uint8ClampedArray(1024).fill(255), lookupFor: () => Int32Array.from({ length: 16 }, (_, i) => i), land: new Path2D(), landCells: null, cache: new Map(),
+      };
+      const alpha = () => canvas.getContext("2d").getImageData(1, 1, 1, 1).data[3];
+      const sigs = [paint.paintRaster(canvas, scene(true), res)];
+      const alphas = [alpha()];
+      sigs.push(paint.paintRaster(canvas, scene(false), res));
+      alphas.push(alpha());
+      sigs.push(paint.paintRaster(canvas, scene(true), res));
+      alphas.push(alpha());
+      return { same: sigs[0] === sigs[2], differs: sigs[0] !== sigs[1], alphas };
+    });
+    assert.deepEqual([got.same, got.differs], [true, true], "clip changes the signature");
+    assert.deepEqual(got.alphas, [0, 255, 0], "and a clipped and a whole picture of one raster at one view do not share a cache entry");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: clip without res.land throws", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const error = await inPage(page, (paint) => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 4, height: 4 });
+      const view = { k: 1, x: 0, y: 0 };
+      const scene = { source: "r.json", lut: "a", view, hatch: null, clip: true, draws: [{ frame: 0, at: view, alpha: 1 }] };
+      const res = { raster: { decoded: () => ({ levels: new Uint8Array(16), data: new Uint8Array(16) }) }, lutData: new Uint8ClampedArray(1024), lookupFor: () => new Int32Array(16), land: null, landCells: null, cache: new Map() };
+      try {
+        paint.paintRaster(canvas, scene, res);
+        return null;
+      } catch (e) {
+        return e.message;
+      }
+    });
+    assert.equal(error, "paintRaster: clip needs res.land");
     assert.deepEqual(ctx.errors, []);
   });
 });
@@ -657,7 +727,7 @@ test("rasterGaps: true with the patch, false without, true for land beyond the b
 });
 
 test("the painters keep played equal to jumped, forward and backward", async () => {
-  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone", "covered", "hole", "half", "coast"]]]) {
+  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone", "covered", "hole", "half", "coast", "clip"]]]) {
     await withPage({ root, url: pages.url(slide, "step=a") }, async (page, ctx) => {
       const run = { pages, slide, id: "map", steps };
       await expectJumpEqualsPlayed(ctx, page, run);

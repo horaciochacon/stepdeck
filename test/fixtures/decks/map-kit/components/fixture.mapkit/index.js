@@ -48,7 +48,7 @@ export default {
         },
       };
       const hatch = p.rasterHatch === false ? null : { line: token("--sd-color-dim"), background: token("--sd-color-surface") };
-      canvas.setAttribute("data-sig", M.paintRaster(canvas, { source: p.raster ?? "", lut: colors.slice(0, 2).join(), view, hatch, draws }, res));
+      canvas.setAttribute("data-sig", M.paintRaster(canvas, { source: p.raster ?? "", lut: colors.slice(0, 2).join(), view, hatch, clip: p.rasterClip === true, draws }, res));
     }
 
     function paint(p) {

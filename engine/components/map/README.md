@@ -38,6 +38,7 @@ Layers (`layers.<id>`):
 | `classes` | (`areas` and value rasters.) Breaks, in increasing order: stepped classes along the sequential palette, labelled `< 5`, `5–10`, …, `≥ 20`. |
 | `midpoint` | (`areas` and value rasters.) Splits the diverging palette; with `classes`, one of the breaks. |
 | `domain` | (`areas` and value rasters.) `[lo, hi]`: the ends of a continuous ramp, used as given. Default: the values' extent (symmetric about `midpoint`); for a raster, the file's `min` and `max`. |
+| `clip` | (Rasters.) Whether the picture is clipped to the land outline. Default `true`; `false` draws every cell whole, for a raster that covers the sea. |
 | `color` | A mask's colour, or the colour of `points`: a theme colour role (`accent`, `alert`, `ink`, `muted`, …), default `accent`. For `points`, the name of a column of the CSV instead, when it has one: each distinct value takes a colour of the categorical palette, in order of first appearance. |
 
 Behaviour:
@@ -48,7 +49,7 @@ Behaviour:
   the view, ringed in the background colour. With `size`, its area is true to the value: radius 18 px × √(value ÷
   largest value), so the largest is 18 px and a quarter of its value has half the radius; the larger circles are drawn
   first. The legend row then shows a size key: two circles, the largest value rounded down to two significant figures
-  and a quarter of it, with their labels. A `color` that names a column gives each distinct value a colour of the
+  and the round number (1, 2 or 5 × a power of ten) at most a quarter of it (70 gives 70 and 10), with their labels. A `color` that names a column gives each distinct value a colour of the
   categorical palette, with a swatch each in the legend; a row with no value there is `--sd-color-muted` and has no
   swatch. A `color` that is not a column is a theme colour role. A layer with no `size` and a role colour has no legend row.
 - **No data.** A region without a value is hatched: lines at 45°, 6 px apart and 1.5 px wide, `--sd-color-dim` over
@@ -57,7 +58,9 @@ Behaviour:
   `areas` does (the ramp spans the file's `min` to `max` unless `domain` says otherwise); a raster of two or more classes takes the
   categorical palette in order; a raster of one class is a mask, painted in `color`. A value raster or a raster of
   classes hatches the land it has no data for (a land cell without data, and land beyond its bounds) in its own
-  canvas, and its legend row adds "no data"; a mask has no no-data and never gets the row. A file with `frames` shows
+  canvas, and its legend row adds "no data"; a mask has no no-data and never gets the row. A raster is clipped to the
+  land outline (`clip`, default `true`): a coarse cell centred on land stops at the coastline; `clip: false` draws every
+  cell whole. A file with `frames` shows
   its first frame. Rasters are drawn at one pixel per CSS pixel and are not dimmed by `highlight`.
 - **Small regions.** A region under 6 px across in both directions is drawn as a dot of radius 5 px at its centroid,
   in its colour, ringed in the background colour, so a tiny island stays visible.
@@ -77,7 +80,7 @@ Behaviour:
   two rows are element errors, never a silently missing value.
 - **Motion** (a forward step by one, the map already on screen): a layer that appears or leaves fades over the step's
   duration (`--sd-duration`, or the step's `transition`), with its legend row; labels that come or go fade with it; a
-  change to a shown layer's data or scale (a raster's file, scale or `color` too) crossfades its colours (a point that stays moves, resizes and changes colour from one to the other; a new point grows,
+  change to a shown layer's data or scale (a raster's file, scale, `color` or `clip` too) crossfades its colours (a point that stays moves, resizes and changes colour from one to the other; a new point grows,
   one that has gone shrinks); `highlight` tweens the colours over
   `--sd-duration-fast`; a change of `view` flies the map there over twice the step's duration (or the step's
   `transition`), along d3's zoom path (out and in again as far as the distance asks): the land, borders, areas, points

@@ -77,12 +77,15 @@ A `raster` layer names a raster file: a JSON that gives the `bounds` (west, sout
 | `label` | string | none | The title of the layer's legend row. |
 | `classes`, `midpoint`, `domain` | as for `areas` | none | The scale of a value raster (see [Colour scales](#colour-scales)). Without `domain` the ramp spans the file's `min` to `max` (made symmetric about `midpoint`). A raster of classes ignores them. |
 | `color` | a theme colour role | `"accent"` | The colour of a mask. `accent`, `alert`, `ink`, `muted`, … any `--sd-color-<role>` the theme defines. |
+| `clip` | boolean | `true` | Whether the picture is clipped to the land outline. With `false` every cell is drawn whole. A change crossfades. |
 
 What the file's `value` makes of the layer:
 
 - **A value raster** (`{ scale: "linear" | "log", min, max }`): level *g* (0 to 255) is the value *min + g/255 × (max − min)* (for `log`, *min × (max/min)^(g/255)*), coloured by the scale: a continuous ramp over the file's range, stepped `classes`, or a diverging palette around `midpoint`.
 - **A raster of classes** (`{ classes: ["Forest", "Cropland", "Urban"] }`): level *g* is class *g*, one colour each from the categorical palette in order, and one legend swatch per class.
 - **A mask** (one class): the pixels that have data are painted in `color`; the others stay clear. One swatch in the legend.
+
+**Clipped to the land.** A raster is clipped to the land outline by default: a coarse cell whose centre is on land stops at the coastline instead of sticking out over the sea, whatever the cell holds (data or hatch), for a value raster, a raster of classes and a mask alike. A pixel is land when the regions cover all of it, so a coastal pixel the regions cover only in part is clear. Set `clip: false` to draw every cell whole, for a raster that covers the sea as well (a sea surface, say); changing `clip` on a forward step crossfades between the two pictures. A raster laid over land that the boundaries do not outline (so nothing is land under it) needs `clip: false`, or it is all clear.
 
 Only the first frame of a file with `frames` is shown. Rasters are not dimmed by `highlight`. A raster is a picture of the whole map's size, so it is drawn at one pixel per CSS pixel on any screen.
 
@@ -104,7 +107,7 @@ A `points` layer puts a circle at each row of a CSV, over the borders, at screen
 
 **Colour.** A `color` that names a column gives each distinct value a colour of the categorical palette, in order of first appearance, and the legend row one swatch each; a row with no value in the column is `--sd-color-muted` and has no swatch. A `color` that is not a column is a theme colour role, as for a mask. A name that is neither a column nor a role is an element error that lists both.
 
-**The size key.** A layer with `size` adds two circles to its legend row, outlined in `--sd-color-muted`: the largest value rounded down to two significant figures (142 gives 140, 70 gives 70), and a quarter of it (35, 17.5), each at the radius that value has on the map and labelled with it. A layer with no `size` and a role colour has no legend row.
+**The size key.** A layer with `size` adds two circles to its legend row, outlined in `--sd-color-muted`: the largest value rounded down to two significant figures (142 gives 140, 70 gives 70), and the round number (1, 2 or 5 × a power of ten) at most a quarter of it (140 gives 20, 70 gives 10), each at the radius that value has on the map and labelled with it. A layer with no `size` and a role colour has no legend row.
 
 Each point is ringed in 1.5 px of the background colour, so points that overlap stay apart. A row whose point the projection cannot place is not drawn.
 
@@ -120,7 +123,7 @@ The colours come from the theme's palettes (`ctx.palette`), the same scales a ch
 
 A region without a value is **hatched**: lines at 45°, 6 px apart and 1.5 px wide, in `--sd-color-dim` over `--sd-color-surface`. The layer's legend row then ends with a hatched swatch labelled "no data" (`sin datos` in Spanish), the CSS class `.sd-legend-nodata`. The hatch is never a colour of the scale.
 
-A value raster or a raster of classes hatches **land it has no data for**, inside its own canvas: a land cell (one whose centre is on land) with no data, and land beyond the raster's bounds. Its data pixels cover the hatch, so it shows exactly where the land is missing, and the sea stays clear. The legend row gets the "no data" swatch when some land is missing. A mask has no "no data": the cells that are not the class are simply clear, and its row never has the swatch.
+A value raster or a raster of classes hatches **land it has no data for**, inside its own canvas: a land cell (one whose centre is on land) with no data, and land beyond the raster's bounds. Its data pixels cover the hatch, so it shows exactly where the land is missing, and the sea stays clear (so does the sea under a cell that reaches past the coast, unless `clip` is `false`). The legend row gets the "no data" swatch when some land is missing. A mask has no "no data": the cells that are not the class are simply clear, and its row never has the swatch.
 
 A region whose box is under 6 px across in both directions is drawn as a **dot**: a disc of radius 5 px at the centroid of its largest polygon, in the region's colour (the land colour on the bare map, the hatch for no data), ringed with 1.5 px of the background colour. An island of a few pixels stays visible this way.
 
@@ -162,7 +165,7 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | --- | --- |
 | `view` changes | The map flies there over twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration`. See [Views and flights](#views-and-flights). |
 | A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. |
-| A shown layer's data or scale changes (a raster's file, scale or `color` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. |
+| A shown layer's data or scale changes (a raster's file, scale, `color` or `clip` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. |
 | `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`. |
 | `labels` changes | Labels that come fade in, labels that go fade out. |
 | `boundaries`, `id`, `name`, `projection`, `legend` change | Drawn at once. |

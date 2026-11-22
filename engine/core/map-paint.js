@@ -243,15 +243,17 @@ function landMask([w, h], land, at) {
  * One picture of a raster frame as a scratch canvas of `size` CSS px: each pixel is the colour of its cell (`table`
  * gives the cell, `lutData` the colour), or the hatch where there is no data on land, or clear. Land is the cells in
  * `landCells` (a cell with no data and land at its centre) and, for a pixel outside the raster (`table` is -1), the
- * pixels of `mask` (those the land covers entirely). Either may be null for no hatch there.
+ * pixels of `mask` (those the land covers entirely). Either may be null for no hatch there. With `clip`, a pixel that is
+ * not in `mask` is clear whatever its cell holds, hatch included.
  */
-function rasterImage([w, h], table, grid, lutData, hatch, landCells, mask) {
+function rasterImage([w, h], table, grid, lutData, hatch, landCells, mask, clip) {
   if (table.length !== w * h) throw new Error(`paintRaster: the lookup table has ${table.length} cells, not ${w}×${h}`);
   const pixels = new ImageData(w, h);
   const out = pixels.data;
   const stripe = hatch ? hatchAt(hatch) : null;
   for (let p = 0; p < table.length; p++) {
     const cell = table[p];
+    if (clip && cell >= 0 && !mask[p]) continue;
     if (cell >= 0 && grid.data[cell]) {
       out.set(lutData.subarray(grid.levels[cell] * 4, grid.levels[cell] * 4 + 4), p * 4);
     } else if (stripe && (cell >= 0 ? landCells?.[cell] : mask?.[p])) {
@@ -273,30 +275,35 @@ function rasterImage([w, h], table, grid, lutData, hatch, landCells, mask) {
  * `res.lookupFor(at)` gives it (`res.lutData` colours the cell's level). Where there is no data, and `scene.hatch` is set,
  * the picture shows the hatch on land and is clear elsewhere: a land cell (`res.landCells`, the cells whose centres are
  * on land) is hatched, and so is a pixel outside the raster that is on `res.land` (so land the raster does not reach
- * is hatched too); a coastal cell whose centre is in the sea is clear. The picture is drawn under the transform that
- * carries `at` to `scene.view`, so a flight is a move of one picture, not a repaint.
+ * is hatched too); a coastal cell whose centre is in the sea is clear. With `scene.clip`, a pixel that is not on
+ * `res.land` is clear whatever the cell holds, so a coarse cell centred on land stops at the coastline (without it,
+ * every cell is drawn whole). The picture is drawn under the transform that carries `at` to `scene.view`, so a flight is
+ * a move of one picture, not a repaint.
  *
  * `res` is `{ raster, lutData, lookupFor, land, landCells, cache }`: `raster.decoded(frame)` is the frame's grid, which
  * the caller has awaited with `raster.grid(frame)` (a frame that is not decoded and has no picture yet throws
  * `paintRaster: frame 3 is not decoded`); `lutData` is the 256-colour table of `lut()`; `lookupFor(at)` is the table of
- * `lookup()` for a view and the canvas's CSS size; `land` is a Path2D of the regions in base-projected px, and
- * `landCells` the grid of `landCells()` for the raster (either may be null: no hatch there); `cache` is a Map the caller
- * owns, holding pictures and land masks under `source|frame|at|lut|hatch|size` (empty it when the colour table, the
- * land or the data behind a `source` changes). `res` is never hashed. `scene.source` names the raster file and
- * `scene.lut` the colour table (any string that differs when the table does); the signature covers both, the view,
- * the hatch colours and every draw. Without a 2D context (a canvas that cannot paint), only the signature is computed.
+ * `lookup()` for a view and the canvas's CSS size; `land` is a Path2D of the regions in base-projected px (required when
+ * `scene.clip` is set: without it the painter throws `paintRaster: clip needs res.land`), and `landCells` the grid of
+ * `landCells()` for the raster (either may be null: no hatch there); `cache` is a Map the caller owns, holding pictures
+ * and land masks under `source|frame|at|lut|hatch|clip|size` (empty it when the colour table, the land or the data
+ * behind a `source` changes). `res` is never hashed. `scene.source` names the raster file and `scene.lut` the colour
+ * table (any string that differs when the table does); the signature covers both, the view, the hatch colours, `clip`
+ * and every draw. Without a 2D context (a canvas that cannot paint), only the signature is computed.
  * @param {HTMLCanvasElement} canvas  a layer from `canvasLayer`, made with `maxRatio: 1`
- * @param {{ source: string, lut: string, view: { k: number, x: number, y: number }, hatch: { line: string, background: string } | null, draws: { frame: number, at: { k: number, x: number, y: number }, alpha: number }[] }} scene
+ * @param {{ source: string, lut: string, view: { k: number, x: number, y: number }, hatch: { line: string, background: string } | null, clip?: boolean, draws: { frame: number, at: { k: number, x: number, y: number }, alpha: number }[] }} scene
  * @param {{ raster: { decoded(frame: number): { levels: Uint8Array, data: Uint8Array } | undefined }, lutData: Uint8ClampedArray, lookupFor(at: { k: number, x: number, y: number }): Int32Array, land: Path2D | null, landCells: Uint8Array | null, cache: Map<string, any> }} res
  * @returns {string}  the signature of the scene: 8 hex digits
  */
 export function paintRaster(canvas, scene, res) {
   const { source, lut, view: v, hatch, draws } = scene;
+  const clip = scene.clip === true;
   const sig = signature();
-  sig.text(`${source}|${lut}|${fixed(v.k)}|${fixed(v.x)}|${fixed(v.y)}|${hatch ? `${hatch.line}|${hatch.background}` : "none"}\n`);
+  sig.text(`${source}|${lut}|${fixed(v.k)}|${fixed(v.x)}|${fixed(v.y)}|${hatch ? `${hatch.line}|${hatch.background}` : "none"}|${clip ? "clip" : "whole"}\n`);
   for (const { frame, at, alpha } of draws) sig.text(`${frame}|${fixed(at.k)}|${fixed(at.x)}|${fixed(at.y)}|${Math.round(alpha * 1000) / 1000}\n`);
   const g = canvas.getContext("2d");
   if (!g) return sig.hex();
+  if (clip && !res.land) throw new Error("paintRaster: clip needs res.land");
 
   clear(g, canvas);
   g.globalAlpha = 1;
@@ -304,13 +311,13 @@ export function paintRaster(canvas, scene, res) {
   const size = cssSizeOf(canvas), ratio = ratioOf(canvas);
   for (const { frame, at, alpha } of draws) {
     const where = `${fixed(at.k)}|${fixed(at.x)}|${fixed(at.y)}`;
-    const key = `${source}|${frame}|${where}|${lut}|${hatch ? `${hatch.line}|${hatch.background}` : "none"}|${size[0]}×${size[1]}`;
+    const key = `${source}|${frame}|${where}|${lut}|${hatch ? `${hatch.line}|${hatch.background}` : "none"}|${clip ? "clip" : "whole"}|${size[0]}×${size[1]}`;
     if (!res.cache.has(key)) {
       const grid = res.raster.decoded(frame);
       if (!grid) throw new Error(`paintRaster: frame ${frame} is not decoded`);
       const maskKey = `${source}|land|${where}|${size[0]}×${size[1]}`;
-      if (hatch && res.land && !res.cache.has(maskKey)) res.cache.set(maskKey, landMask(size, res.land, at));
-      res.cache.set(key, rasterImage(size, res.lookupFor(at), grid, res.lutData, hatch, res.landCells, res.cache.get(maskKey)));
+      if ((hatch || clip) && res.land && !res.cache.has(maskKey)) res.cache.set(maskKey, landMask(size, res.land, at));
+      res.cache.set(key, rasterImage(size, res.lookupFor(at), grid, res.lutData, hatch, res.landCells, res.cache.get(maskKey), clip));
     }
     const s = v.k / at.k;
     g.setTransform(ratio * s, 0, 0, ratio * s, ratio * (v.x - s * at.x), ratio * (v.y - s * at.y));

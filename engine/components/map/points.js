@@ -2,7 +2,7 @@
 // size (`paintPoints`, core/map-paint.js) over the borders. A circle has a radius of 6 px, or, with `size`, an area
 // true to its value: radius 18 × √(value / largest value) px, so the largest is 18 px and a quarter of the area is
 // half the radius. The legend then shows a size key of two circles: the largest value rounded down to two
-// significant figures, and a quarter of it. `color` is a column (a colour from the categorical palette for each
+// significant figures, and the largest 1, 2 or 5 × 10ⁿ that is at most a quarter of it (70 gives 70 and 10). `color` is a column (a colour from the categorical palette for each
 // distinct value, in order of first appearance, with a legend swatch each) when the CSV has a column of that name,
 // else a theme colour role (default `accent`). A circle is ringed in the background colour so overlapping points stay
 // apart; outside a highlight it takes the theme's dim colour, and a highlighted point is ringed in ink.
@@ -17,6 +17,7 @@ import { colorScale } from "../../core/chart-scale.js";
 import { signature } from "../../core/canvas.js";
 import { lerp } from "../../core/kit.js";
 import { paintPoints } from "../../core/map-paint.js";
+import { niceLength } from "../../core/map-rules.js";
 import { DEFAULT_ROLE, blend, roleColor, roleNames } from "./colors.js";
 
 /** The radius of a point with no `size`, in px. */
@@ -30,11 +31,14 @@ function floorTo2(v) {
   return Number((Math.floor(Number((v / unit).toPrecision(12))) * unit).toPrecision(12));
 }
 
-/** The size key for sizes up to `max`: the circles of `floorTo2(max)` and a quarter of it, with their labels; null when no size is positive. */
+/**
+ * The size key for sizes up to `max`: the circles of `floorTo2(max)` and of the round number (1, 2 or 5 × 10ⁿ) at most a
+ * quarter of it, each at the radius its value has on the map, with their labels; null when no size is positive.
+ */
 function sizeKey(max, format) {
   if (!(max > 0)) return null;
   const top = floorTo2(max);
-  return { items: [top, top / 4].map((value) => ({ r: LARGEST * Math.sqrt(value / max), label: format(value) })) };
+  return { items: [top, niceLength(top / 4)].map((value) => ({ r: LARGEST * Math.sqrt(value / max), label: format(value) })) };
 }
 
 /** A point as it is `change` of the way from `was` (before) to `item` (now); a point with no `was` grows from nothing. */
