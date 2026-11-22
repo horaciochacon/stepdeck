@@ -148,6 +148,20 @@ test("gallery geography: 16 regions and 2 islands, each with a short code and a 
   }
 });
 
+test("a region's name agrees with its code: a compass word names the code's side, N1 is North, an E region is Eastport", () => {
+  const SIDES = { North: "N", East: "E", South: "S", West: "W" };
+  for (const dir of [GALLERY, FIXTURES]) {
+    const features = featuresOf(dir, "regions.geojson");
+    for (const { properties: { code, name } } of features) {
+      for (const [word, side] of Object.entries(SIDES)) {
+        if (name.startsWith(word)) assert.equal(code[0], side, `${name} is ${code}`);
+      }
+    }
+    assert.equal(features.find((f) => f.properties.code === "N1").properties.name, "North");
+    assert.equal(features.find((f) => f.properties.name === "Eastport").properties.code[0], "E");
+  }
+});
+
 test("the islands sit offshore: clear of every other region's box", () => {
   for (const dir of [GALLERY, FIXTURES]) {
     const features = featuresOf(dir, "regions.geojson").map((f) => ({ code: f.properties.code, box: planarBounds(f) }));
@@ -259,14 +273,21 @@ test("rasters are north to south and mark exactly the land (rows run from the no
 });
 
 test("density.png is 160×120, 0 to 800, with a transparent patch on land", () => {
-  const sidecar = json(GALLERY, "density.json");
-  assert.deepEqual(sidecar.value, { scale: "linear", min: 0, max: 800, unit: "people per km²" });
-  const { width, height, data } = pixels(GALLERY, "density.png");
+  assert.deepEqual(json(GALLERY, "density.json").value, { scale: "linear", min: 0, max: 800, unit: "people per km²" });
+  const { width, height } = pixels(GALLERY, "density.png");
   assert.deepEqual([width, height], [160, 120]);
-  const land = landGrid({ land: galleryLand(), bounds: sidecar.bounds, cols: width, rows: height });
-  let patch = 0;
-  for (let i = 0; i < width * height; i++) if (land[i] && data[i * 2 + 1] === 0) patch += 1;
-  assert.ok(patch >= 20, `${patch} land pixels without data`);
+});
+
+test("density.png has land without data, in the gallery and in the fixtures", () => {
+  for (const dir of [GALLERY, FIXTURES]) {
+    const sidecar = json(dir, "density.json");
+    const { width, height, data } = pixels(dir, "density.png");
+    const land = landGrid({ land: landOf(json(dir, "regions.geojson")), bounds: sidecar.bounds, cols: width, rows: height });
+    let patch = 0;
+    for (let i = 0; i < width * height; i++) if (land[i] && data[i * 2 + 1] === 0) patch += 1;
+    assert.ok(patch > 0, `${dir}: ${patch} land pixels without data`);
+    if (dir === GALLERY) assert.ok(patch >= 20, `${patch} land pixels without data`);
+  }
 });
 
 test("cover has three classes and wells is a one-class mask", () => {

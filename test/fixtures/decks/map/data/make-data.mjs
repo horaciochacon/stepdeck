@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodePng } from "../../../../../cli/png.js";
 import {
-  centroid, country, csvText, extent, field, geojsonText, jsonText, landGrid, levelImage, timelapse,
+  centroid, country, csvText, extent, geojsonText, jsonText, timelapse, valueFiles,
 } from "../../../../../site/gallery/data/map/fictional.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -45,41 +45,28 @@ const regionsText = geojsonText(regions);
 write("regions.geojson", regionsText);
 writeBroken("regions.geojson", regionsText);
 
-// --- values ----------------------------------------------------------------------------------------------------
+// --- values and rasters ----------------------------------------------------------------------------------------
 
 const COLS = 40;
 const ROWS = 30;
-const surface = field({ seed: 21, bounds, cols: COLS, rows: ROWS, bumps: 6 });
-const at = (feature) => {
-  const [lon, lat] = centroid(feature);
-  const col = Math.min(COLS - 1, Math.floor(((lon - bounds[0]) / (bounds[2] - bounds[0])) * COLS));
-  const row = Math.min(ROWS - 1, Math.floor(((bounds[3] - lat) / (bounds[3] - bounds[1])) * ROWS));
-  return surface[row * COLS + col];
-};
-const values = regions.features.map((f) => ({ code: f.properties.code, level: at(f) }));
-const ratesText = csvText(["code", "rate"], values.filter((_, i) => i !== 2).map((v) => ({ code: v.code, rate: (2 + 17 * v.level).toFixed(1) })));
-write("rates.csv", ratesText);
-writeBroken("rates.csv", ratesText);
-const low = Math.min(...values.map((v) => v.level));
-const high = Math.max(...values.map((v) => v.level));
-write("change.csv", csvText(["code", "change"], values.map((v) => ({ code: v.code, change: (-8 + (16 * (v.level - low)) / (high - low)).toFixed(1) }))));
+const files = valueFiles({
+  regions,
+  land,
+  bounds,
+  cols: COLS,
+  rows: ROWS,
+  bumps: { density: 6, cover: 8, wells: 6 },
+  missing: [2], // the third region has no rate
+  wellsAbove: 0.7,
+  patch: (col, row) => col > 18 && col < 23 && row > 13 && row < 17, // land with no data
+});
+for (const [name, content] of Object.entries(files)) write(name, content);
+writeBroken("rates.csv", files["rates.csv"]);
+
 write("sites.csv", csvText(["id", "lon", "lat", "beds", "kind"], mainland.map((f, i) => {
   const [lon, lat] = centroid(f);
   return { id: `S${i + 1}`, lon: lon.toFixed(3), lat: lat.toFixed(3), beds: 10 * (i + 1), kind: ["clinic", "hospital"][i % 2] };
 })));
-
-// --- rasters ---------------------------------------------------------------------------------------------------
-
-const valid = landGrid({ land, bounds, cols: COLS, rows: ROWS });
-const density = valid.map((v, i) => (v && !(i % COLS > 18 && i % COLS < 23 && Math.floor(i / COLS) > 13 && Math.floor(i / COLS) < 17) ? 1 : 0));
-write("density.png", encodePng(levelImage(COLS, ROWS, Array.from(surface, (v) => Math.round(255 * v)), density)));
-write("density.json", jsonText({ bounds, value: { scale: "linear", min: 0, max: 800, unit: "people per km²" }, src: "density.png" }));
-const cover = field({ seed: 31, bounds, cols: COLS, rows: ROWS, bumps: 8 });
-write("cover.png", encodePng(levelImage(COLS, ROWS, Array.from(cover, (v) => (v < 0.45 ? 0 : v < 0.78 ? 1 : 2)), valid)));
-write("cover.json", jsonText({ bounds, value: { classes: ["Forest", "Cropland", "Urban"] }, src: "cover.png" }));
-const wells = field({ seed: 41, bounds, cols: COLS, rows: ROWS, bumps: 6 });
-write("wells.png", encodePng(levelImage(COLS, ROWS, new Uint8Array(COLS * ROWS), valid.map((v, i) => (v && wells[i] > 0.7 ? 1 : 0)))));
-write("wells.json", jsonText({ bounds, value: { classes: ["Near a well"] }, src: "wells.png" }));
 
 // levels: the four levels the decoding formulas must get exactly right, the second pixel with no data
 write("levels.png", encodePng({ width: 4, height: 1, channels: 2, data: Uint8Array.of(0, 255, 1, 0, 254, 255, 255, 255) }));

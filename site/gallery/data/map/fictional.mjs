@@ -11,14 +11,17 @@
 //   field({ seed, bounds, cols, rows, bumps })
 //                                   a smooth surface of seeded bumps, 0 to 1, as a Float64Array
 //   timelapse({ ... })              rising fields as raster frames, with a people count each
+//   valueFiles({ ... })             the region values (rates.csv, change.csv) and the density, cover and wells rasters,
+//                                   as { fileName: text or PNG bytes }; sizes, bump counts and the patch are options
 //
 // Raster orientation, matching the raster format: `bounds` are [west, south, east, north], the outer edges of the edge
 // cells; rows run north to south (row 0 is the northern edge) and columns west to east; each pixel is sampled at its
 // centre.
 //
-// Small helpers the two generators share: centroid, onLand, landOf, extent, landGrid, levelImage, jsonText, csvText,
-// geojsonText.
+// Small helpers the two generators share: centroid, onLand, landOf, extent, landGrid, levelImage, discPatch, jsonText,
+// csvText, geojsonText.
 
+import { encodePng } from "../../../../cli/png.js";
 import { d3 } from "../../../../engine/core/d3.js";
 
 /** The ocean the country sits in: [west, south, east, north], in degrees. */
@@ -40,12 +43,17 @@ const round = (x, digits = 4) => Math.round(x * 10 ** digits) / 10 ** digits;
 
 // --- the country -----------------------------------------------------------------------------------------------------
 
-/** Fixed generic names; the northernmost region is "North". None is a real region. */
-const NAMES = [
-  "North", "Eastport", "Lowmarsh", "Highfield", "Westmere", "Southmouth", "Redcliff", "Greenvale", "Stoneford",
-  "Pinewold", "Clearmere", "Ashvale", "Brightwater", "Larkmoor", "Marshby", "Ironridge", "Saltbay", "Windmere",
-  "Thornfield", "Foxdale", "Heronsgate", "Cragmoor", "Sunhollow", "Mistvale",
-];
+/**
+ * Fixed generic names for each compass side, in the order a side's regions are met from the north: N1 is "North", E1 is
+ * "Eastport". A name with a compass word sits on that side's list, so a slide never shows "Westmere" in the east.
+ * None is a real country or region.
+ */
+const NAMES = {
+  N: ["North", "Highfield", "Cragmoor", "Thornfield", "Heronsgate", "Windmere"],
+  E: ["Eastport", "Redcliff", "Sunhollow", "Saltbay", "Stoneford", "Greenvale", "Foxdale", "Mistvale"],
+  S: ["Southmouth", "Marshby", "Lowmarsh", "Clearmere", "Ashvale", "Pinewold"],
+  W: ["Westmere", "Brightwater", "Larkmoor", "Ironridge", "Greywater", "Duskfield"],
+};
 const ISLAND_NAMES = ["Outer Skerry", "Little Holm"];
 
 const signedArea = (ring) => {
@@ -121,11 +129,11 @@ export function country({ seed, cells }) {
     cell.side = angle >= 45 && angle < 135 ? "N" : angle >= -45 && angle < 45 ? "E" : angle >= -135 && angle < -45 ? "S" : "W";
   }
   land.sort((a, b) => b.centre[1] - a.centre[1] || a.centre[0] - b.centre[0]);
-  if (land.length > NAMES.length) throw new Error(`${land.length} regions: more than the name list holds`);
   const count = {};
-  const features = land.map((cell, i) => {
-    count[cell.side] = (count[cell.side] ?? 0) + 1;
-    return polygonFeature(`${cell.side}${count[cell.side]}`, NAMES[i], [cell.ring]);
+  const features = land.map((cell) => {
+    const n = (count[cell.side] = (count[cell.side] ?? 0) + 1);
+    if (n > NAMES[cell.side].length) throw new Error(`${n} regions on the ${cell.side} side: more than its name list holds`);
+    return polygonFeature(`${cell.side}${n}`, NAMES[cell.side][n - 1], [cell.ring]);
   });
 
   // two tiny triangles, each in a far corner of the box (the blob stays well clear of them)
@@ -267,6 +275,64 @@ export function timelapse({ seed, bounds, land, cols, rows, labels, max }) {
     for (let i = 0; i < levels.length; i++) if (valid[i]) people += (levels[i] / 255) * max * km2(Math.floor(i / cols));
     return { label, image: levelImage(cols, rows, levels, valid), people: Math.round(people) };
   });
+}
+
+/**
+ * A disc of pixels, as a `patch` for `valueFiles`: true within `radius` pixels of the pixel that holds [lon, lat].
+ * @param {{ bounds: number[], cols: number, rows: number, at: number[], radius: number }} options
+ * @returns {(col: number, row: number) => boolean}
+ */
+export function discPatch({ bounds, cols, rows, at, radius }) {
+  const x = ((at[0] - bounds[0]) / (bounds[2] - bounds[0])) * cols;
+  const y = ((bounds[3] - at[1]) / (bounds[3] - bounds[1])) * rows;
+  return (col, row) => Math.hypot(col + 0.5 - x, row + 0.5 - y) <= radius;
+}
+
+/**
+ * The values and rasters of one country, from fixed seeds: `rates.csv` (a rate per region, `missing` regions left out)
+ * and `change.csv` (a change per region, from -8 to +8), read off a smooth surface at each region's centroid; and three
+ * rasters over the land: density (that surface, linear 0 to 800, with a `patch` of land left without data), cover (three
+ * classes) and wells (a one-class mask). Only the sizes, bump counts and the patch differ between the gallery and the
+ * fixtures.
+ * @param {object} options
+ * @param {object} options.regions the FeatureCollection of `country`
+ * @param {object} options.land the land feature of `country`
+ * @param {number[]} options.bounds the rasters' bounds
+ * @param {number} options.cols raster width in pixels
+ * @param {number} options.rows raster height in pixels
+ * @param {{ density: number, cover: number, wells: number }} options.bumps bumps in each surface
+ * @param {number[]} options.missing indexes of the regions that get no rate
+ * @param {number} options.wellsAbove the surface level above which land is a well
+ * @param {(col: number, row: number) => boolean} options.patch pixels of land that get no density
+ * @returns {Record<string, string | Buffer>} file name to its text or PNG bytes
+ */
+export function valueFiles({ regions, land, bounds, cols, rows, bumps, missing, wellsAbove, patch }) {
+  const surface = field({ seed: 21, bounds, cols, rows, bumps: bumps.density });
+  const levelAt = (feature) => {
+    const [lon, lat] = centroid(feature);
+    const col = Math.min(cols - 1, Math.floor(((lon - bounds[0]) / (bounds[2] - bounds[0])) * cols));
+    const row = Math.min(rows - 1, Math.floor(((bounds[3] - lat) / (bounds[3] - bounds[1])) * rows));
+    return surface[row * cols + col];
+  };
+  const values = regions.features.map((f) => ({ code: f.properties.code, level: levelAt(f) }));
+  const low = Math.min(...values.map((v) => v.level));
+  const high = Math.max(...values.map((v) => v.level));
+
+  const valid = landGrid({ land, bounds, cols, rows });
+  const dense = valid.map((v, i) => (v && !patch(i % cols, Math.floor(i / cols)) ? 1 : 0));
+  const cover = field({ seed: 31, bounds, cols, rows, bumps: bumps.cover });
+  const wells = field({ seed: 41, bounds, cols, rows, bumps: bumps.wells });
+  const unit = "people per km²";
+  return {
+    "rates.csv": csvText(["code", "rate"], values.filter((_, i) => !missing.includes(i)).map((v) => ({ code: v.code, rate: (2 + 17 * v.level).toFixed(1) }))),
+    "change.csv": csvText(["code", "change"], values.map((v) => ({ code: v.code, change: (-8 + (16 * (v.level - low)) / (high - low)).toFixed(1) }))),
+    "density.png": encodePng(levelImage(cols, rows, Array.from(surface, (v) => Math.round(255 * v)), dense)),
+    "density.json": jsonText({ bounds, value: { scale: "linear", min: 0, max: 800, unit }, src: "density.png" }),
+    "cover.png": encodePng(levelImage(cols, rows, Array.from(cover, (v) => (v < 0.45 ? 0 : v < 0.78 ? 1 : 2)), valid)),
+    "cover.json": jsonText({ bounds, value: { classes: ["Forest", "Cropland", "Urban"] }, src: "cover.png" }),
+    "wells.png": encodePng(levelImage(cols, rows, new Uint8Array(cols * rows), valid.map((v, i) => (v && wells[i] > wellsAbove ? 1 : 0)))),
+    "wells.json": jsonText({ bounds, value: { classes: ["Near a well"] }, src: "wells.png" }),
+  };
 }
 
 // --- text files ------------------------------------------------------------------------------------------------------
