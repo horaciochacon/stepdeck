@@ -544,6 +544,66 @@ export interface MapAreaResources {
   centroid(id: string): [number, number];
 }
 
+/** One decoded frame of a raster: `levels` and `data` hold `cols * rows` bytes, row-major from the north-west pixel. */
+export interface MapRasterGrid {
+  cols: number;
+  rows: number;
+  /** The grey of each pixel, exactly as stored. 0 under a pixel with no data. */
+  levels: Uint8Array;
+  /** 1 where the pixel has data (alpha of at least 128), else 0. */
+  data: Uint8Array;
+}
+
+/** A raster file read by `ctx.map.loadRaster`. */
+export interface MapRaster {
+  /** The raster JSON's deck path. */
+  path: string;
+  /** `[west, south, east, north]`: the outer edges of the edge cells. */
+  bounds: [number, number, number, number];
+  /** How a level reads as a value: `{ scale: "linear" | "log", min, max }` or `{ classes }`. */
+  value: { scale?: "linear" | "log"; min?: number; max?: number; unit?: string; classes?: string[] };
+  /** One per image, in file order; `src` is the image's deck path. A file with a single `src` has one frame, labelled "". */
+  frames: { label: string; numbers: Record<string, number>; src: string }[];
+  /** `[cols, rows]` of every frame. */
+  size: [number, number];
+  /** Decodes frame `i` (a raster keeps its 12 most recently used decoded frames). Rejects with the file's path first on a bad frame. */
+  grid(i: number): Promise<MapRasterGrid>;
+  /** Frame `i`'s grid if it is decoded now, else `undefined`: a synchronous read, for painters. */
+  decoded(i: number): MapRasterGrid | undefined;
+}
+
+/** One picture of a `paintRaster` scene: a frame as seen through the view `at`, drawn at `alpha` under the transform from `at` to the scene's view. */
+export interface MapRasterDraw {
+  frame: number;
+  at: MapView;
+  alpha: number;
+}
+
+/** Everything `paintRaster` draws, as plain data: the painter hashes all of it. Views are in the raster canvas's own pixels. */
+export interface MapRasterScene {
+  /** Names the raster file; hashed. */
+  source: string;
+  /** Names the colour table of `res.lutData`: any string that differs when the table does; hashed. */
+  lut: string;
+  view: MapView;
+  /** The hatch under the data, on the land, in resolved colours; `null` for none. */
+  hatch: { line: string; background: string } | null;
+  draws: MapRasterDraw[];
+}
+
+/** What `paintRaster` draws with. Never hashed. */
+export interface MapRasterResources {
+  raster: Pick<MapRaster, "decoded">;
+  /** 1,024 RGBA bytes: the colour of each level (`lut`). */
+  lutData: Uint8ClampedArray;
+  /** The `lookup` table for a view, for a canvas of the layer's own size. */
+  lookupFor(at: MapView): Int32Array;
+  /** The land, in base-projected px, for the hatch; `null` for none. */
+  land: Path2D | null;
+  /** Pictures already built, keyed `source|frame|at|lut|size`; the caller owns it. */
+  cache: Map<string, unknown>;
+}
+
 /** Everything `paintPoints` draws. `x` and `y` are base-projected px, seen through the view; `r` is in screen px. */
 export interface MapPointScene {
   view: MapView;
@@ -577,6 +637,21 @@ export interface MapKit {
    * spacing in pixels of the grid inverted exactly (default 8), the rest interpolated.
    */
   lookup(base: any, view: MapView, size: [number, number], bounds: [number, number, number, number], grid: [number, number], options?: { step?: number }): Int32Array;
+  /**
+   * Reads the raster file at `path` (JSON of the raster format) through `ctx.data` and `ctx.assetUrl`, and decodes its
+   * first image. Images are read relative to the JSON's folder and must be paths inside the deck. Cached per
+   * `ctx.data` and path.
+   */
+  loadRaster(path: string, ctx: { data: (path: string) => Promise<any>; assetUrl: (path: string) => string }): Promise<MapRaster>;
+  /** The 256 colours of a raster's levels as RGBA bytes: `colorOf(value, level)` returns a CSS colour, or null for transparent. */
+  lut(raster: Pick<MapRaster, "value">, colorOf: (value: number | string, level: number) => string | null | undefined): Uint8ClampedArray;
+  /** Whether some land has no data in any frame of `raster`, or lies outside its bounds. `features` are from `boundaries`. */
+  rasterGaps(raster: MapRaster, features: MapFeature[]): Promise<boolean>;
+  /**
+   * Clears `canvas` (a layer made with `maxRatio: 1`), hatches the land, and draws each picture of `scene.draws` at its
+   * alpha. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded.
+   */
+  paintRaster(canvas: HTMLCanvasElement, scene: MapRasterScene, res: MapRasterResources): string;
   /**
    * Clears `canvas` and paints the regions of `scene` under one transform that holds the backing-store ratio and the
    * view (line widths are divided by the view's scale). Returns the scene's signature, 8 hex digits.

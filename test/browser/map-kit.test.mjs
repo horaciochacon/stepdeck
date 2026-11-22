@@ -1,10 +1,11 @@
-// The vector painters, the inset frame and the scale bar of `ctx.map` in Chrome. The painters are exercised through a
-// deck component that uses nothing else (test/fixtures/decks/map-kit), the SVG pieces directly. Run with:
+// The painters, the raster loader, the inset frame and the scale bar of `ctx.map` in Chrome. The painters are exercised
+// through a deck component that uses nothing else (test/fixtures/decks/map-kit), the loader and the SVG pieces directly. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map-kit.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
+import { d3 } from "../../engine/core/d3.js";
 import { deckPages, goTo, canvasPixels, tokenRgb, paletteRgb, expectJumpEqualsPlayed, expectBackwardEqualsJump } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -36,6 +37,19 @@ const inPage = (page, fn, arg) =>
     const paint = await import(new URL("map-paint.js", document.baseURI).href);
     const { d3 } = await import(new URL("d3.js", document.baseURI).href);
     return (${fn})(paint, d3, ${JSON.stringify(arg ?? null)});
+  })()`);
+
+/**
+ * Runs `fn(M, ctx, arg)` in the page, where `M` is the module of `core/map.js` and `ctx` is what a component reads of its
+ * own: `ctx.data` and `ctx.assetUrl` of the map-kit deck (the engine's own data loader, so the paths are the deck's).
+ */
+const withKit = (page, fn, arg) =>
+  page.evaluate(`(async () => {
+    const M = await import(new URL("map.js", document.baseURI).href);
+    const { createDataLoader } = await import(new URL("data.js", document.baseURI).href);
+    const root = new URL("../../test/fixtures/decks/map-kit", document.baseURI).href;
+    const data = createDataLoader({ root, read: (url) => fetch(url) });
+    return (${fn})(M, { data, assetUrl: data.url }, ${JSON.stringify(arg ?? null)});
   })()`);
 
 test("paintAreas: same scene same signature, any change in fills changes it", async () => {
@@ -260,8 +274,243 @@ test("scaleBar: a round length", async () => {
   });
 });
 
+// --- rasters -----------------------------------------------------------------------------------------------------------
+
+const HOME = "test/fixtures/decks/map-kit/";
+/** The canvas pixel of a lon/lat on the raster slide's map (Mercator, the square region), zoomed by `zoom` about [-14, -27] as `about` says. */
+const pixelOf = (page, lon, lat, zoom = 1) =>
+  withKit(page, async (M, ctx, [lon, lat, zoom]) => {
+    const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+    const base = M.projection("mercator", features, [1400, 760]);
+    const [ax, ay] = base([-14, -27]);
+    return M.applyView({ k: zoom, x: ax * (1 - zoom), y: ay * (1 - zoom) }, base([lon, lat])).map(Math.round);
+  }, [lon, lat, zoom]);
+/** The colour of a raster level on the fixture's ramp (the first palette colour up to the second), as "rgb(r, g, b)". */
+const rampRgb = (level) => d3.scaleLinear().domain([0, 255]).range([paletteRgb(THEME, 0), paletteRgb(THEME, 1)])(level);
+/** The pixel of the raster layer at (x, y), as "rgb(r, g, b)" or "clear". */
+const rasterPixel = async (page, [x, y]) => {
+  const [pixel] = await readPixels(page, "raster", x, y, 1, 1);
+  return pixel[3] === 0 ? "clear" : pixel[3] === 255 ? rgb(pixel) : `partial ${pixel}`;
+};
+
+test("loadRaster: levels decode exactly", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const raster = await M.loadRaster("data/levels.json", ctx);
+      const grid = await raster.grid(0);
+      return {
+        size: raster.size, bounds: raster.bounds, value: raster.value, frames: raster.frames,
+        cols: grid.cols, rows: grid.rows, levels: Array.from(grid.levels), data: Array.from(grid.data),
+        kinds: [grid.levels.constructor.name, grid.data.constructor.name], decoded: raster.decoded(0) === grid,
+        again: (await M.loadRaster("data/levels.json", ctx)) === raster,
+        otherLoader: (await M.loadRaster("data/levels.json", { ...ctx, data: (path) => ctx.data(path) })) !== raster,
+      };
+    });
+    assert.deepEqual(got.size, [4, 1]);
+    assert.deepEqual([got.cols, got.rows], [4, 1]);
+    assert.deepEqual(got.bounds, [-16, -28, -10, -26]);
+    assert.deepEqual(got.value, { scale: "linear", min: 0, max: 255 });
+    assert.deepEqual(got.frames, [{ label: "", numbers: {}, src: "data/levels.png" }], "a single image is one frame, named by its deck path");
+    // 0, 254 and 255 come back as written (no colour conversion); the second pixel has no data, and its level is 0
+    assert.deepEqual(got.levels, [0, 0, 254, 255]);
+    assert.deepEqual(got.data, [1, 0, 1, 1]);
+    assert.deepEqual(got.kinds, ["Uint8Array", "Uint8Array"]);
+    assert.ok(got.decoded, "decoded(0) is the grid grid(0) resolved to");
+    assert.ok(got.again, "a second load shares the first");
+    assert.ok(got.otherLoader, "another ctx.data has its own rasters");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("loadRaster: a time-lapse lists its frames, and keeps the 12 most recently used decoded", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const raster = await M.loadRaster("data/lapse.json", ctx);
+      const decoded = () => Array.from({ length: 13 }, (_, i) => raster.decoded(i) !== undefined);
+      const out = { labels: raster.frames.map((f) => f.label), srcs: [raster.frames[0].src, raster.frames[12].src], start: decoded() };
+      const grids = [];
+      for (let i = 1; i < 12; i++) grids.push(await raster.grid(i));
+      out.levels = grids.map((grid) => grid.levels[0]);
+      out.full = decoded();
+      const old = grids[0];
+      await raster.grid(0); // uses frame 0 again, so frame 1 is now the least recently used
+      await raster.grid(12);
+      out.after = decoded();
+      out.redecoded = (await raster.grid(1)) !== old;
+      out.missing = await raster.grid(13).catch((e) => e.message);
+      return out;
+    });
+    assert.deepEqual(got.labels, Array.from({ length: 13 }, (_, i) => `f${i}`));
+    assert.deepEqual(got.srcs, ["data/lapse/f0.png", "data/lapse/f12.png"]);
+    assert.deepEqual(got.start, [true, ...Array(12).fill(false)], "only the first frame is decoded on load");
+    assert.deepEqual(got.levels, Array.from({ length: 11 }, (_, i) => 20 * (i + 1)), "each frame holds its own level");
+    assert.deepEqual(got.full, [...Array(12).fill(true), false], "12 frames are kept");
+    assert.deepEqual(got.after, [true, false, ...Array(11).fill(true)], "frame 1, the least recently used, went");
+    assert.ok(got.redecoded, "and a frame that went decodes again on request");
+    assert.equal(got.missing, "data/lapse.json: there is no frame 13");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("loadRaster: a frame of another size errors", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const raster = await M.loadRaster("data/mismatch.json", ctx);
+      const first = await raster.grid(0);
+      return { size: raster.size, first: [first.cols, first.rows], error: await raster.grid(1).then(() => null, (e) => e.message), decoded: raster.decoded(1) };
+    });
+    assert.deepEqual(got.size, [8, 6]);
+    assert.deepEqual(got.first, [8, 6]);
+    assert.equal(got.error, "data/mismatch/2001.png: 9×6 does not match the first frame (8×6)");
+    assert.equal(got.decoded, undefined, "a frame that failed is not kept");
+  });
+});
+
+test("loadRaster: too many pixels errors, as an element error on a slide", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const attempt = () => M.loadRaster("data/wide.json", ctx).then(() => null, (e) => e.message);
+      return [await attempt(), await attempt()];
+    });
+    const message = "data/wide.png: 2001×2000 is more than 2,000×2,000 pixels";
+    assert.deepEqual(got, [message, message], "the limit is on the area: 2001 wide is fine on its own, and a failure is tried again");
+  });
+  await withPage({ root, url: pages.url("broken", "step=a") }, async (page) => {
+    const errors = await page.evaluate(() => window.STEPDECK.errors);
+    assert.deepEqual(errors, [`broken/map: data/wide.png: 2001×2000 is more than 2,000×2,000 pixels`]);
+  });
+});
+
+test("loadRaster: an image is read next to its JSON and must be a path inside the deck", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const bounds = [-16, -28, -10, -26], value = { scale: "linear", min: 0, max: 1 };
+      const asking = (file, json) => M.loadRaster(file, { data: async () => json, assetUrl: ctx.assetUrl }).then(() => null, (e) => e.message);
+      const out = {};
+      for (const src of ["../x.png", "f/../x.png", "/x.png", "https://host/x.png", "a\\b.png", "%2e%2e/x.png"]) {
+        out[src] = await asking("data/a/b.json", { bounds, value, src });
+      }
+      out.resolved = await asking("data/a/b.json", { bounds, value, src: "f/1.png" });
+      out.frame = await asking("data/a/b.json", { bounds, value, frames: [{ src: "f/1.png", label: "x" }, { src: "../2.png", label: "y" }] });
+      out.rootFolder = await asking("b.json", { bounds, value, src: "1.png" });
+      out.problem = await asking("data/a/b.json", { bounds, value });
+      return out;
+    });
+    for (const src of ["../x.png", "f/../x.png", "/x.png", "https://host/x.png", "a\\b.png", "%2e%2e/x.png"]) {
+      assert.equal(got[src], `data/a/b.json: '${src}' is not a path inside the deck`, src);
+    }
+    assert.equal(got.resolved, "data/a/f/1.png: not found", "f/1.png beside data/a/b.json is data/a/f/1.png");
+    assert.equal(got.frame, "data/a/b.json: '../2.png' is not a path inside the deck", "every frame's path is checked before any is read");
+    assert.equal(got.rootFolder, "1.png: not found", "a JSON at the root has the root as its folder");
+    assert.equal(got.problem, "data/a/b.json: needs `src` or `frames`", "what rasterProblems finds is thrown");
+  });
+});
+
+test("paintRaster: the pixel over a known cell has its LUT colour", async () => {
+  await withPage({ root, url: pages.url("raster", "step=a") }, async (page, ctx) => {
+    // columns of 1.5 degrees from -16: level 0 | no data | level 254 | level 255
+    assert.equal(await rasterPixel(page, await pixelOf(page, -15, -27)), paletteRgb(THEME, 0), "column 0, level 0: the first colour exactly");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -12.25, -27)), rampRgb(254), "column 2, level 254");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -11, -27)), paletteRgb(THEME, 1), "column 3, level 255: the second colour exactly");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -15, -25.5)), "clear", "north of the raster nothing is painted");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -17, -27)), "clear", "nor west of it");
+    assert.match(await signatureOf(page, "raster"), /^[0-9a-f]{8}$/);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: two draws at 1 and 0.5 mix", async () => {
+  await withPage({ root, url: pages.url("raster", "step=mix") }, async (page, ctx) => {
+    // frame 0 is level 0 and frame 12 level 240, everywhere; the second goes over the first at half strength
+    const [low, high] = [parse(rampRgb(0)), parse(rampRgb(240))];
+    const pixel = (await readPixels(page, "raster", ...(await pixelOf(page, -15, -27)), 1, 1))[0];
+    assert.equal(pixel[3], 255);
+    low.forEach((c, i) => assert.ok(Math.abs(pixel[i] - (c + high[i]) / 2) <= 2, `channel ${i}: ${pixel[i]} is the mean of ${c} and ${high[i]}`));
+    assert.notDeepEqual(pixel.slice(0, 3), low);
+    assert.notDeepEqual(pixel.slice(0, 3), high);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: no-data land is hatched, ocean stays clear", async () => {
+  await withPage({ root, url: pages.url("raster", "step=a") }, async (page, ctx) => {
+    const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
+    const [x, y] = await pixelOf(page, -13.5, -27); // column 1, on the land
+    const land = new Set((await readPixels(page, "raster", x - 10, y - 10, 20, 20)).map(rgb));
+    assert.ok(land.has(dim) && land.has(surface), `the stripes and what is between them (${[...land].join(" | ")})`);
+    assert.equal(await rasterPixel(page, await pixelOf(page, -14.25, -27)), "clear", "column 1 over the ocean");
+    assert.equal(await rasterPixel(page, await pixelOf(page, -12.25, -27)), rampRgb(254), "where there is data, it covers the hatch");
+
+    await goTo(page, "raster", "bare");
+    const bare = new Set((await readPixels(page, "raster", x - 3, y - 3, 6, 6)).map((p) => p[3]));
+    assert.deepEqual([...bare], [0], "without a hatch the land stays clear too");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: drawn at another view moves as a picture", async () => {
+  await withPage({ root, url: pages.url("raster", "step=moved") }, async (page, ctx) => {
+    // The picture is built for zoom 1 and the map shows zoom 2 about (-14, -27): edges land where applyView says.
+    const [west, mid] = [await pixelOf(page, -14.5, -27, 2), await pixelOf(page, -13, -27, 2)];
+    const [oldWest] = await pixelOf(page, -14.5, -27, 1);
+    assert.ok(west[0] > 0 && west[0] < 700 && Math.abs(west[0] - oldWest) > 100, `the edge at -14.5 is at ${west[0]}, not at ${oldWest}`);
+    assert.equal(await rasterPixel(page, [west[0] - 4, west[1]]), paletteRgb(THEME, 0), "column 0 to the west of its edge");
+    assert.equal(await rasterPixel(page, [west[0] + 4, west[1]]), "clear", "and clear to the east of it, over the ocean");
+    assert.equal(await rasterPixel(page, [oldWest - 4, west[1]]), "clear", "nothing is left where the edge was");
+    assert.equal(await rasterPixel(page, [mid[0] + 4, mid[1]]), rampRgb(254), "column 2 starts where applyView puts -13");
+    assert.notEqual(await rasterPixel(page, [mid[0] - 4, mid[1]]), rampRgb(254), "and column 1 ends there");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("paintRaster: a frame that is not decoded throws, and the signature is the scene's", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await inPage(page, (paint) => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 4, height: 4 });
+      const view = { k: 1, x: 0, y: 0 };
+      const scene = (lut, alpha) => ({ source: "r.json", lut, view, hatch: null, draws: [{ frame: 3, at: view, alpha }] });
+      const res = { raster: { decoded: () => undefined }, lutData: new Uint8ClampedArray(1024), lookupFor: () => new Int32Array(16), land: null, cache: new Map() };
+      let error = null;
+      try {
+        paint.paintRaster(canvas, scene("a", 1), res);
+      } catch (e) {
+        error = e.message;
+      }
+      // with the picture already built nothing is read from the raster, and `res` is never hashed
+      for (const lut of ["a", "b"]) res.cache.set(`r.json|3|1.000|0.000|0.000|${lut}|4×4`, document.createElement("canvas"));
+      const sig = (lut, alpha, r = res) => paint.paintRaster(canvas, scene(lut, alpha), r);
+      return { error, same: sig("a", 1) === sig("a", 1, { ...res, lutData: new Uint8ClampedArray(1024).fill(9) }), lut: sig("a", 1) !== sig("b", 1), alpha: sig("a", 1) !== sig("a", 0.5) };
+    });
+    assert.equal(got.error, "paintRaster: frame 3 is not decoded");
+    assert.deepEqual([got.same, got.lut, got.alpha], [true, true, true]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasterGaps: true with the patch, false without, true for land beyond the bounds", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+      const gaps = async (file, land = features) => M.rasterGaps(await M.loadRaster(file, ctx), land);
+      return {
+        covered: await gaps("data/covered.json"),
+        patched: await gaps("data/patched.json"),
+        half: await gaps("data/half.json"),
+        levels: await gaps("data/levels.json"),
+        noLand: await gaps("data/patched.json", []),
+      };
+    });
+    assert.equal(got.covered, false, "data on every pixel of the land: no gap");
+    assert.equal(got.patched, true, "a hole in a later frame is a gap (the first frame has none)");
+    assert.equal(got.half, true, "no hole at all, but half the land is outside the raster");
+    assert.equal(got.levels, false, "the one pixel with no data is land only in part (this raster has 1.5 degree pixels): not a gap");
+    assert.equal(got.noLand, false, "no land, no gap");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("the painters keep played equal to jumped, forward and backward", async () => {
-  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]]]) {
+  for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone"]]]) {
     await withPage({ root, url: pages.url(slide, "step=a") }, async (page, ctx) => {
       const run = { pages, slide, id: "map", steps };
       await expectJumpEqualsPlayed(ctx, page, run);

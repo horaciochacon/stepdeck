@@ -564,7 +564,7 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 
 ### `ctx.map`
 
-`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; the painters draw regions and points on a canvas layer and the inset frame and the scale bar on an SVG.
+`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; `loadRaster` reads a raster file; the painters draw regions, a raster and points on a canvas layer and the inset frame and the scale bar on an SVG.
 
 | Name | Signature | What it does |
 |---|---|---|
@@ -573,12 +573,18 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 | `view` | `view(base, target, [w, h]) → { k, x, y }` | A zoom transform over the base's pixels. `target` is `null` (home, `{ k: 1, x: 0, y: 0 }`), an array of features, or `{ bounds: [west, south, east, north] }` in degrees (west greater than east crosses the antimeridian). The target is centred and fitted with the same margin. |
 | `applyView` | `applyView(v, [px, py]) → [k·px + x, k·py + y]` | A base-projected point seen through a view. |
 | `lookup` | `lookup(base, v, [w, h], bounds, [cols, rows], { step }) → Int32Array` | For each pixel of the canvas, row-major from the top left, the raster cell under it as `row * cols + col`, or -1 outside the raster or the projection. See Lining a raster up. |
+| `loadRaster` | `loadRaster(path, ctx) → Promise<Raster>` | Reads a raster file (the JSON of the raster format) and decodes its first image: `{ path, bounds, value, frames, size, grid(i), decoded(i) }`. See Rasters. |
+| `lut` | `lut(raster, colorOf) → Uint8ClampedArray` | The colour of each of a raster's 256 levels, as 1,024 RGBA bytes. See Rasters. |
+| `rasterGaps` | `rasterGaps(raster, features) → Promise<boolean>` | Whether some land has no data in the raster, or lies outside its bounds. See Rasters. |
+| `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer, hatches the land, and draws pictures of a raster, each built for one view and drawn at another. Returns the scene's signature. See Rasters. |
 | `paintAreas` | `paintAreas(canvas, scene, res) → string` | Clears a canvas layer and paints regions, hatched when the fill is `null`, or as dots. Returns the scene's signature. See Painting. |
 | `paintPoints` | `paintPoints(canvas, scene) → string` | Clears a canvas layer and paints circles at screen size. Returns the scene's signature. |
 | `insetFrame` | `insetFrame(svg, { box, frame }) → SVGGElement` | One `g.sd-map-inset` on an SVG: two dashed leaders, the box and the frame, all `[x0, y0, x1, y1]` in the element's px. Idempotent. |
 | `scaleBar` | `scaleBar(svg, { base, view, at, maxWidth, format }) → SVGGElement` | One `g.sd-map-scale`: a bar of a round length in km starting at `at`, and its label. Idempotent. |
 
 **Errors.** Each begins with `<file>: `. `boundaries` throws `not a FeatureCollection`, `feature 3 has no 'code'` (features count from 1), `region 'North' appears twice`, `only Polygon and MultiPolygon features are supported (found LineString)`, `6,000 regions is more than 5,000` and `300,000 points is more than 250,000` (every coordinate of every ring counts). `projection` throws `` unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area) `` and `projection needs at least one region`; `view` throws `view: no regions to fit`.
+
+**Raster errors.** `loadRaster` throws, each starting with the file's path: what the raster format finds wrong in the JSON (`` data/a.json: needs `src` or `frames` ``), `data/f/1.png: not found`, `data/a.json: '../x.png' is not a path inside the deck`, `data/f/1.png: 2400×1800 is more than 2,000×2,000 pixels` (an area limit: 2,001 × 2,000 is over, 2,400 × 1,500 is not) and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
 
 **Winding.** GeoJSON written by `sf` or `geopandas` follows RFC 7946, with outer rings counter-clockwise; d3-geo expects the opposite and would read each region as everything but itself. `boundaries` reverses the rings of any polygon whose `d3.geoArea` is above 2π, on copies, so the file you got from `ctx.data` (which is shared and read-only) is untouched. Give `projection`, `view` and your paths the `features` it returns, never the raw file.
 
@@ -596,6 +602,45 @@ const [x, y] = ctx.map.applyView(north, base([-14, -25]));                      
 const cells = ctx.map.lookup(base, north, [ctx.size.w, ctx.size.h], [-19, -31, -10, -23], [40, 30]);
 const cell = cells[Math.floor(y) * ctx.size.w + Math.floor(x)];                       // row * 40 + col in the raster, or -1
 ```
+
+**Rasters.** A raster file is one JSON and its 8-bit greyscale PNGs (with or without alpha; alpha is 0 or 255, and 0 means no data): `bounds` `[west, south, east, north]` in degrees, the outer edges of the edge cells; `value`, `{ scale: "linear" | "log", min, max }` or `{ classes: [...] }`, which says what a grey level 0 to 255 means (`levelValue` in `core/map-rules.js`); and a `src`, or `frames` of `{ src, label, numbers? }` for a time-lapse. `loadRaster` reads it through `ctx.data` and fetches each image with `ctx.assetUrl`, so the paths are the deck's: an image's `src` is read relative to the JSON's folder (`data/a/b.json` with `f/1.png` names `data/a/f/1.png`) and must be a path inside the deck (no `..`, no absolute path, no scheme). The raster is cached per `ctx.data` and path, so every element that names the file shares one, and a failed load is retried on the next call.
+
+```js
+const raster = await ctx.map.loadRaster("data/density.json", ctx);   // { bounds, value, frames, size: [cols, rows], grid, decoded }
+const { levels, data } = await raster.grid(0);                       // Uint8Array(cols * rows) each, from the north-west pixel
+const palette = d3.scaleSequential([0, 800], d3.interpolateBlues);
+const lutData = ctx.map.lut(raster, (value) => palette(value));    // 1,024 RGBA bytes: the colour of each level
+const gaps = await ctx.map.rasterGaps(raster, features);            // true: some land has no data, so show a "No data" row
+```
+
+- **Decoding is exact.** Each image is decoded without colour conversion or premultiplied alpha. `levels[i]` is the pixel's grey (0 to 255, as stored) and `data[i]` is 1 where its alpha is at least 128, else 0. The level under a pixel with no data is 0. `raster.frames` has one entry per image (`{ label, numbers, src }`, `src` the image's deck path; a single `src` gives one frame, labelled `""`) and `raster.size` is the first image's `[cols, rows]`.
+- **Frames on demand.** `grid(i)` decodes frame `i` and resolves to its grid; the first frame is decoded by `loadRaster`, since it gives the size. A raster keeps at most 12 decoded frames, the least recently used going first (`grid(i)` and `decoded(i)` both use a frame). `decoded(i)` returns the grid if it is decoded now and `undefined` otherwise, without decoding: it is how a painter, which cannot wait, reads a frame the component has already awaited.
+- **`lut`.** `colorOf(value, level)` is called for each level with `levelValue`'s value (a number, or a class name) and returns a CSS colour, or `null` for a level with no colour. A level past the end of a class list is never asked about and is transparent, as is one that gets `null`.
+- **`rasterGaps`.** True when land lacks data: the land (`features`, as `boundaries` returns them) is drawn into the raster's own grid in lon/lat, and a pixel it covers entirely with no data in any frame counts; so does any land outside the raster's bounds, which `paintRaster` hatches. A pixel the land covers only in part, as at a coast, does not count, so a raster made from the cells whose centres are on land has no gaps. It decodes every frame once, so keep the answer.
+
+**Painting a raster.** Make the layer with `ctx.chart.canvasLayer(el, { ..., name: "raster", maxRatio: 1 })`: a raster is painted per pixel, so its backing store is never larger than its CSS size, and everything `paintRaster` takes (the views and the lookup tables) is in that canvas's own pixels.
+
+```js
+const canvas = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "raster", maxRatio: 1 });
+await Promise.all(draws.map((d) => raster.grid(d.frame)));           // the painter reads decoded frames only
+canvas.setAttribute("data-sig", ctx.map.paintRaster(canvas, {
+  source: "data/density.json", lut: "blues",                          // both are hashed: `lut` is any name for the colour table
+  view,                                                               // the view the canvas shows now
+  hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },   // or null
+  draws: [{ frame: 0, at: view, alpha: 1 }],                          // in order, each at its alpha
+}, {
+  raster, lutData,
+  lookupFor: (at) => lookups.get(at) ?? lookups.set(at, ctx.map.lookup(base, at, [w, h], raster.bounds, raster.size)).get(at), // for [w, h] = the canvas
+  land,                                                               // a Path2D of the regions in base-projected px, or null
+  cache: new Map(),                                                   // yours: pictures are kept in it
+}));
+```
+
+- **A draw is a picture.** Each `draws` entry is a frame as seen through the view `at`: every canvas pixel takes the colour of the raster cell `lookupFor(at)` gives it (`lutData` colours its level; a cell with no data, and a pixel outside the raster, stay clear). The picture is drawn under the transform that carries `at` to `view`, so `at` can differ from `view` and a flight or a crossfade moves pictures instead of repainting them. Pictures are drawn in order, each at its `alpha`, over the hatch.
+- **The hatch** is drawn first, on the land (`res.land` filled at `view` with the pattern of `paintAreas`: lines at 45°, 6 px apart and 1.5 px wide), so it shows only where the data does not cover the land; the ocean stays clear. `hatch: null`, or no `land`, draws none. Use it for value rasters; a mask has no "no data".
+- **The cache.** `res.cache` holds the pictures, keyed `source|frame|at|lut|size` (the view rounded to three decimals): the same draw is built once. You own it: empty it when the colour table or a raster file behind a `source` changes. The painter never hashes `res`.
+- **Undecoded frames.** A draw whose picture is not cached needs `res.raster.decoded(frame)`; without it the painter throws `paintRaster: frame 3 is not decoded`. Await `raster.grid(frame)` first.
+- **The signature** hashes `source`, `lut`, the view, the hatch colours (or none) and every draw's frame, `at` and alpha, never `res`.
 
 **Painting.** A painter is pure: it takes plain data, clears its canvas, paints, and returns a signature, 8 hex digits that hash the whole scene (a dump can stand in for the pixels). Make the canvas with `ctx.chart.canvasLayer` (one named layer per painter, so regions and points stack in creation order), and paint again after any change of size.
 
@@ -627,7 +672,7 @@ The built-ins import small helpers from a few engine modules. They are internal:
 | `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
 | `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
 | `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
-| `core/map.js`, `core/map-paint.js` | `boundaries`, `projection`, `view`, `applyView`, `lookup`, the painters (`paintAreas`, `paintPoints`, `insetFrame`, `scaleBar`) and `mapKit`, which is `ctx.map`. Use `ctx.map`, not an import. |
+| `core/map.js`, `core/map-paint.js` | `boundaries`, `projection`, `view`, `applyView`, `lookup`, `loadRaster`, `lut`, `rasterGaps`, the painters (`paintAreas`, `paintRaster`, `paintPoints`, `insetFrame`, `scaleBar`) and `mapKit`, which is `ctx.map`. Use `ctx.map`, not an import. |
 | `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`, and `chartKit`, which is `ctx.chart` (built from `core/chart-layout.js`, `core/chart-marks.js` and `core/chart-motion.js`). Use `ctx.chart`, not an import. |
 
 ## `schema.json`

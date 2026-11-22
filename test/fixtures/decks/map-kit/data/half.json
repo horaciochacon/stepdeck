@@ -1,0 +1,9 @@
+{
+  "bounds": [-14, -28, -13, -26],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 255
+  },
+  "src": "half.png"
+}

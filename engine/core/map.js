@@ -9,7 +9,10 @@
 //   applyView(v, [px, py])                    a base-projected point seen through a view
 //   lookup(base, v, [w, h], bounds, [cols, rows], { step })
 //                                             the raster cell under every canvas pixel (or -1), from a coarse inverse grid
-//   paintAreas, paintPoints, insetFrame, scaleBar   the vector painters and the map furniture (core/map-paint.js)
+//   loadRaster(path, ctx)                     a raster file's grids, decoded exactly: { bounds, value, frames, size, grid, decoded }
+//   lut(raster, colorOf)                      the 256 colours of a raster's levels, as 1,024 RGBA bytes
+//   rasterGaps(raster, features)              whether some land has no data in the raster (in any frame)
+//   paintAreas, paintRaster, paintPoints, insetFrame, scaleBar   the painters and the map furniture (core/map-paint.js)
 //
 // A view is a 2D transform of the base's pixels (d3's fitExtent changes only scale and translate), so a flight between
 // two views is affine: a component redraws cached paths with one `setTransform` instead of re-projecting.
@@ -17,7 +20,9 @@
 // The lookup is for one view and one size. A component that asks for the same table often keeps its own cache (per
 // element, cleared on destroy and on a size change), because the table's identity is the element's.
 import { d3 } from "./d3.js";
-import { paintAreas, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
+import { scratchCanvas } from "./canvas.js";
+import { MAX_RASTER_PIXELS, levelValue, pngProblems, rasterProblems } from "./map-rules.js";
+import { paintAreas, paintRaster, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
 
 /** The most regions in one boundaries file. */
 export const MAX_REGIONS = 5000;
@@ -34,6 +39,15 @@ export const PROJECTIONS = Object.freeze({
 const PADDING = 0.06;
 /** The points along each edge of a `{ bounds }` box that `view` projects: the edges curve. */
 const EDGE_SAMPLES = 64;
+
+/** The most decoded frames a raster keeps: the least recently used goes. */
+export const MAX_DECODED_FRAMES = 12;
+/** A pixel of land counts for `rasterGaps` when the land covers all of it, so an antialiased edge never does. */
+const LAND_ALPHA = 250;
+/** Slack, in degrees, when `rasterGaps` asks whether the land lies inside a raster's bounds. */
+const BOUNDS_SLACK = 1e-6;
+/** A PNG is decoded as stored: no colour conversion, no premultiplied alpha. */
+const DECODE = Object.freeze({ colorSpaceConversion: "none", premultiplyAlpha: "none" });
 
 const count = d3.format(",");
 const isBlank = (v) => v === undefined || v === null || v === "";
@@ -233,8 +247,219 @@ export function lookup(base, v, [w, h], [west, south, east, north], [cols, rows]
   return out;
 }
 
+// --- rasters ---------------------------------------------------------------------------------------------------------
+
+/**
+ * One PNG as grids: `levels` (the grey of each pixel) and `data` (1 where the pixel has data, 0 where its alpha is below
+ * 128), row-major from the top-left pixel. The level under a pixel with no data is 0. `name` is the image's deck path,
+ * for messages; `first` is the first frame's `[cols, rows]`, or null when this is the first frame.
+ */
+async function decodeImage(url, name, first) {
+  const response = await fetch(url).catch(() => null);
+  if (!response?.ok) throw new Error(`${name}: not found`);
+  const bitmap = await createImageBitmap(await response.blob(), DECODE).catch((cause) => {
+    throw new Error(`${name}: not a PNG the browser can read`, { cause });
+  });
+  const [cols, rows] = [bitmap.width, bitmap.height];
+  const fail = (message) => {
+    bitmap.close();
+    throw new Error(message);
+  };
+  if (cols * rows > MAX_RASTER_PIXELS) fail(pngProblems({ width: cols, height: rows, bitDepth: 8, colorType: 4, chunks: [] }, name)[0]);
+  if (first && (cols !== first[0] || rows !== first[1])) fail(`${name}: ${cols}×${rows} does not match the first frame (${first[0]}×${first[1]})`);
+
+  const canvas = scratchCanvas(cols, rows);
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  g.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const rgba = g.getImageData(0, 0, cols, rows).data;
+  const levels = new Uint8Array(cols * rows), data = new Uint8Array(cols * rows);
+  for (let i = 0; i < levels.length; i++) {
+    if (rgba[i * 4 + 3] < 128) continue;
+    data[i] = 1;
+    levels[i] = rgba[i * 4];
+  }
+  return { cols, rows, levels, data };
+}
+
+/** The decoders of the rasters `loadRaster` made: `rasterGaps` reads frames through them without touching a raster's own cache. */
+const decoders = new WeakMap();
+
+async function readRaster(path, ctx) {
+  const json = await ctx.data(path);
+  const problems = rasterProblems(json, path);
+  if (problems.length > 0) throw new Error(problems[0]);
+
+  // An image is named relative to the JSON's folder, and must be a path inside the deck by the rules of `ctx.data`.
+  const folder = path.slice(0, path.lastIndexOf("/") + 1);
+  const lapse = Array.isArray(json.frames);
+  const frames = (lapse ? json.frames : [{ src: json.src }]).map((entry) => {
+    try {
+      ctx.assetUrl(entry.src);
+    } catch {
+      throw new Error(`${path}: '${entry.src}' is not a path inside the deck`);
+    }
+    return { label: lapse ? String(entry.label) : "", numbers: { ...entry.numbers }, src: folder + entry.src };
+  });
+  const urls = frames.map(({ src }) => ctx.assetUrl(src));
+
+  const firstGrid = await decodeImage(urls[0], frames[0].src, null);
+  const size = [firstGrid.cols, firstGrid.rows];
+  const decode = (i) => decodeImage(urls[i], frames[i].src, size);
+
+  // Decoded frames, least recently used first. An entry is its promise at once, and its grid when that settles.
+  const cache = new Map([[0, { promise: Promise.resolve(firstGrid), grid: firstGrid }]]);
+  const touch = (i, entry) => {
+    cache.delete(i);
+    cache.set(i, entry);
+    while (cache.size > MAX_DECODED_FRAMES) cache.delete(cache.keys().next().value);
+  };
+  const raster = {
+    path,
+    bounds: [...json.bounds],
+    value: json.value,
+    frames,
+    size,
+    grid(i) {
+      if (!Number.isInteger(i) || i < 0 || i >= frames.length) return Promise.reject(new Error(`${path}: there is no frame ${i}`));
+      const entry = cache.get(i) ?? {};
+      entry.promise ??= decode(i).then(
+        (grid) => (entry.grid = grid),
+        (error) => {
+          if (cache.get(i) === entry) cache.delete(i);
+          throw error;
+        },
+      );
+      touch(i, entry);
+      return entry.promise;
+    },
+    decoded(i) {
+      const entry = cache.get(i);
+      if (!entry?.grid) return undefined;
+      touch(i, entry);
+      return entry.grid;
+    },
+  };
+  decoders.set(raster, decode);
+  return raster;
+}
+
+const rasters = new WeakMap();
+
+/**
+ * Reads the raster file at `path` (a deck path to the JSON of the raster format) and its first image. `ctx` is a
+ * component's `ctx`: `ctx.data` reads the JSON, `ctx.assetUrl` locates the images. Each image's `src` is read relative
+ * to the JSON's folder (`data/a/b.json` with `f/1.png` names `data/a/f/1.png`) and must be a path inside the deck, by the
+ * rules of `ctx.data`. The raster is cached per `ctx.data` and path (a failure is not kept, so a fixed file loads on a
+ * retry), so every layer and element that names the file shares one.
+ *
+ * Resolves to `{ path, bounds, value, frames, size, grid, decoded }`:
+ * - `bounds`, `value`: as in the file; `frames`: `[{ label, numbers, src }]`, one per frame in file order (`src` is the
+ *   image's deck path; a file with a single `src` has one frame, labelled "" and with no numbers); `size`: `[cols, rows]`;
+ * - `grid(i)`: a Promise of frame `i` as `{ cols, rows, levels, data }`, two `Uint8Array`s of `cols * rows`, row-major
+ *   from the north-west pixel. `levels` is the grey of the pixel (the exact byte: no colour conversion happens) and
+ *   `data` is 1 where its alpha is at least 128, else 0. The level under a pixel with no data is 0.
+ * - `decoded(i)`: the grid of frame `i` if it is decoded now, else `undefined` (a synchronous read, for painters).
+ *
+ * Frames are decoded when asked for, and a raster keeps at most 12 decoded frames, the least recently used going first
+ * (reading one with `grid` or `decoded` uses it). The first frame is decoded here, since it gives `size`.
+ *
+ * Throws, with the file's path first: the problems `rasterProblems` finds in the JSON, `data/f/1.png: not found`,
+ * `data/wide.json: '../x.png' is not a path inside the deck`, `data/f/9.png: 2400×1800 is more than 2,000×2,000
+ * pixels`, and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
+ * @param {string} path
+ * @param {{ data: (path: string) => Promise<any>, assetUrl: (path: string) => string }} ctx
+ * @returns {Promise<{ path: string, bounds: number[], value: any, frames: { label: string, numbers: Record<string, number>, src: string }[], size: [number, number], grid(i: number): Promise<{ cols: number, rows: number, levels: Uint8Array, data: Uint8Array }>, decoded(i: number): { cols: number, rows: number, levels: Uint8Array, data: Uint8Array } | undefined }>}
+ */
+export function loadRaster(path, ctx) {
+  if (!rasters.has(ctx.data)) rasters.set(ctx.data, new Map());
+  const byPath = rasters.get(ctx.data);
+  if (!byPath.has(path)) {
+    const loading = readRaster(path, ctx);
+    byPath.set(path, loading);
+    loading.catch(() => {
+      if (byPath.get(path) === loading) byPath.delete(path);
+    });
+  }
+  return byPath.get(path);
+}
+
+/**
+ * The colours of a raster's 256 levels as RGBA bytes, `level * 4` on: `colorOf(value, level)` is called with each level's
+ * data value (`levelValue`: a number, or the class name) and returns a CSS colour, or null for a level with no colour. A
+ * level past the end of a class list, and a level `colorOf` gives null, are transparent.
+ * @param {{ value: any }} raster
+ * @param {(value: number | string, level: number) => string | null | undefined} colorOf
+ * @returns {Uint8ClampedArray} 1,024 bytes
+ * @throws {Error} `lut: 'x' is not a colour` for a colour d3 cannot read
+ */
+export function lut(raster, colorOf) {
+  const table = new Uint8ClampedArray(256 * 4);
+  for (let level = 0; level < 256; level++) {
+    const value = levelValue(level, raster.value);
+    const css = value === null ? null : colorOf(value, level);
+    if (css === null || css === undefined) continue;
+    const colour = d3.rgb(css);
+    if (Number.isNaN(colour.r + colour.g + colour.b + colour.opacity)) throw new Error(`lut: '${css}' is not a colour`);
+    table.set([colour.r, colour.g, colour.b, colour.opacity * 255], level * 4);
+  }
+  return table;
+}
+
+/**
+ * Whether some land has no data in `raster`: true when a pixel the land covers entirely has no data in any frame, or
+ * when any of the land lies outside the raster's bounds (a painter hatches both). The land is `features` (from
+ * `boundaries`, so wound for d3), drawn into the raster's own grid in lon/lat (equirectangular, as `lookup` reads the
+ * raster), polygon by polygon with the even-odd rule. A pixel the land covers only in part, as at a coast, is not
+ * counted: a raster made by taking the cells whose centres are on land has no gaps. Frames are decoded one at a time,
+ * apart from the raster's cache, and the search stops at the first gap; it costs a pass over every frame, so a caller
+ * keeps the answer for the raster.
+ * @param {{ bounds: number[], size: [number, number], frames: any[] }} raster
+ * @param {{ geometry: { type: string, coordinates: number[][][] | number[][][][] } }[]} features
+ * @returns {Promise<boolean>}
+ */
+export async function rasterGaps(raster, features) {
+  if (features.length === 0) return false;
+  const [west, south, east, north] = raster.bounds;
+  const polygons = features.flatMap(({ geometry }) => (geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates));
+  // The raster is a plain grid of degrees, so its land is the coordinates as written: straight edges in lon/lat.
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const rings of polygons) {
+    for (const ring of rings) {
+      for (const [lon, lat] of ring) {
+        x0 = Math.min(x0, lon); x1 = Math.max(x1, lon);
+        y0 = Math.min(y0, lat); y1 = Math.max(y1, lat);
+      }
+    }
+  }
+  if (x0 < west - BOUNDS_SLACK || x1 > east + BOUNDS_SLACK || y0 < south - BOUNDS_SLACK || y1 > north + BOUNDS_SLACK) return true;
+
+  const [cols, rows] = raster.size;
+  const canvas = scratchCanvas(cols, rows);
+  const g = canvas.getContext("2d", { willReadFrequently: true });
+  g.fillStyle = "#000";
+  for (const rings of polygons) {
+    const path = new Path2D();
+    for (const ring of rings) {
+      ring.forEach(([lon, lat], i) => path[i === 0 ? "moveTo" : "lineTo"](((lon - west) / (east - west)) * cols, ((north - lat) / (north - south)) * rows));
+      path.closePath();
+    }
+    g.fill(path, "evenodd");
+  }
+  const land = g.getImageData(0, 0, cols, rows).data;
+  const decode = decoders.get(raster);
+  if (!decode) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
+  for (let i = 0; i < raster.frames.length; i++) {
+    const { data } = await decode(i);
+    for (let p = 0; p < data.length; p++) if (land[p * 4 + 3] >= LAND_ALPHA && !data[p]) return true;
+  }
+  return false;
+}
+
 /**
  * The geography building blocks a component gets as `ctx.map`: one frozen object, the same for every component and child.
  * Its public names are the contract (docs/reference/component-contract.md).
  */
-export const mapKit = Object.freeze({ boundaries, projection, view, applyView, lookup, paintAreas, paintPoints, insetFrame, scaleBar });
+export const mapKit = Object.freeze({
+  boundaries, projection, view, applyView, lookup, loadRaster, lut, rasterGaps, paintAreas, paintRaster, paintPoints, insetFrame, scaleBar,
+});

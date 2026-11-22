@@ -1,5 +1,6 @@
 // The synthetic map data: a fictional country, rasters and time-lapse frames, made by two seeded generators
-// (site/gallery/data/map/make-data.mjs for the gallery, test/fixtures/decks/map/data/make-data.mjs for the fixtures).
+// (site/gallery/data/map/make-data.mjs for the gallery, test/fixtures/decks/map/data/make-data.mjs for the fixtures, and
+// test/fixtures/decks/map-kit/data/make-data.mjs for the raster files of the map-kit fixture).
 // The repository holds no real country's data, so every map example and fixture comes from these. The committed
 // files must be exactly what the generators write, and every raster must follow the raster format.
 import { test } from "node:test";
@@ -18,6 +19,7 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const GALLERY = join(ROOT, "site/gallery/data/map");
 const FIXTURES = join(ROOT, "test/fixtures/decks/map/data");
 const BROKEN = join(ROOT, "test/fixtures/decks/map-broken/data");
+const KIT = join(ROOT, "test/fixtures/decks/map-kit/data");
 const DIRS = [GALLERY, FIXTURES, BROKEN];
 
 const read = (dir, file) => readFileSync(join(dir, file));
@@ -73,6 +75,29 @@ test("generators are deterministic and match the committed files", () => {
   }
 });
 
+test("the map-kit generator writes the committed raster files, and they follow the raster format except the oversize one", () => {
+  const out = mkdtempSync(join(tmpdir(), "stepdeck-map-kit-data-"));
+  try {
+    execFileSync(process.execPath, [join(KIT, "make-data.mjs"), "--out", out], { stdio: "pipe" });
+    const written = outputs(join(out, "map-kit"));
+    assert.deepEqual(written, outputs(KIT).filter((name) => !["regions.geojson", "square-cw.geojson"].includes(name)), "the same files");
+    for (const name of written) {
+      const [actual, expected] = [read(join(out, "map-kit"), name), read(KIT, name)];
+      if (!name.endsWith(".png")) {
+        assert.ok(actual.equals(expected), `${name} is not what the generator writes`);
+        continue;
+      }
+      assert.deepEqual(pngInfo(actual), pngInfo(expected), `${name} header`);
+      assert.deepEqual(pngPixels(actual), pngPixels(expected), `${name} pixels`);
+      const problems = pngProblems(pngInfo(expected), name);
+      assert.deepEqual(problems, name === "wide.png" ? ["wide.png: 2001×2000 is more than 2,000×2,000 pixels"] : [], name);
+    }
+    for (const name of written.filter((file) => file.endsWith(".json"))) assert.deepEqual(rasterProblems(json(KIT, name), name), [], name);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});
+
 const TWO_PI = 2 * Math.PI;
 const galleryLand = () => landOf(json(GALLERY, "regions.geojson"));
 const featuresOf = (dir, file) => json(dir, file).features;
@@ -110,7 +135,7 @@ test("fixture regions are counter-clockwise too, and the square comes in both wi
 });
 
 test("every map data file is under 200 KB", () => {
-  for (const dir of DIRS) {
+  for (const dir of [...DIRS, KIT]) {
     for (const name of outputs(dir)) assert.ok(statSync(join(dir, name)).size < 200 * 1024, `${name} is under 200 KB`);
   }
 });

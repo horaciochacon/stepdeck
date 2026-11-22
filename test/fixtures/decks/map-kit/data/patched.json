@@ -1,0 +1,18 @@
+{
+  "bounds": [-14, -28, -12, -26],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 255
+  },
+  "frames": [
+    {
+      "src": "patched/a.png",
+      "label": "a"
+    },
+    {
+      "src": "patched/b.png",
+      "label": "b"
+    }
+  ]
+}

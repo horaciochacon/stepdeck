@@ -1,0 +1,62 @@
+{
+  "bounds": [-16, -28, -10, -26],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 255
+  },
+  "frames": [
+    {
+      "src": "lapse/f0.png",
+      "label": "f0"
+    },
+    {
+      "src": "lapse/f1.png",
+      "label": "f1"
+    },
+    {
+      "src": "lapse/f2.png",
+      "label": "f2"
+    },
+    {
+      "src": "lapse/f3.png",
+      "label": "f3"
+    },
+    {
+      "src": "lapse/f4.png",
+      "label": "f4"
+    },
+    {
+      "src": "lapse/f5.png",
+      "label": "f5"
+    },
+    {
+      "src": "lapse/f6.png",
+      "label": "f6"
+    },
+    {
+      "src": "lapse/f7.png",
+      "label": "f7"
+    },
+    {
+      "src": "lapse/f8.png",
+      "label": "f8"
+    },
+    {
+      "src": "lapse/f9.png",
+      "label": "f9"
+    },
+    {
+      "src": "lapse/f10.png",
+      "label": "f10"
+    },
+    {
+      "src": "lapse/f11.png",
+      "label": "f11"
+    },
+    {
+      "src": "lapse/f12.png",
+      "label": "f12"
+    }
+  ]
+}
