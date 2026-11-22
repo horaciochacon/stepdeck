@@ -1,0 +1,19 @@
+{
+  "bounds": [-19, -31, -10, -23],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 800,
+    "unit": "people per km²"
+  },
+  "frames": [
+    {
+      "src": "gaps/whole.png",
+      "label": "whole"
+    },
+    {
+      "src": "gaps/holed.png",
+      "label": "holed"
+    }
+  ]
+}

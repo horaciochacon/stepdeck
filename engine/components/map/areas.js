@@ -9,7 +9,8 @@
 //   scene(prepared, state)            what the layer shows at one moment, as plain data (the painter's scene)
 //   paint(canvas, scene, prepared)    paints the scene on the layer's canvas; returns its signature (a canvas with no 2D
 //                                     context is only signed: the stage signs a scene first to leave a canvas showing it)
-//   legend(prepared, state)           the layer's legend row, { title, legend, noData }, or null for none
+//   legend(prepared, layer)           the layer's legend row, { title, legend, noData }, or null for none; `layer` is the
+//                                     layer's part of the moment, whose `noData`, when set, is the step state's (raster.js)
 // and, optionally, `maxRatio`, the canvas's backing-store ratio limit (a raster sets 1; the default is `canvasLayer`'s).
 // `state` is { view, flight, alpha, highlight, size, from, change, frame, fromFrame }: the view { k, x, y } of the
 // moment; while the view flies, `flight` { from, to, t }, the views at its two ends and how far it has gone (else null:

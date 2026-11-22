@@ -1363,6 +1363,33 @@ test("timelapse: hiding mid-run leaves it at its end", async () => {
   });
 });
 
+test("timelapse: the no-data row reflects the frames the steps show", async () => {
+  await withPage({ root, url: pages.url("gaps", "step=whole") }, async (page, ctx) => {
+    for (const step of ["whole", "named"]) {
+      await goTo(page, "gaps", step);
+      const [row] = await legendOf(page);
+      assert.equal(row.title, "People per km²");
+      assert.ok(row.items.every((item) => !item.nodata), `${step}: no "no data" swatch, though a frame no step shows lacks data`);
+    }
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: in a map mounted by a component, the no-data row follows the frame each step shows", async () => {
+  await withPage({ root, url: pages.url("child", "step=whole") }, async (page, ctx) => {
+    const noData = async () => (await legendOf(page))[0].items.some((item) => item.nodata);
+    assert.equal(await noData(), false, "the whole frame: no row");
+    await goTo(page, "child", "holed");
+    assert.equal(await noData(), true, "the holed frame: the row");
+    await goTo(page, "child", "again");
+    assert.equal(await noData(), false, "the whole frame again: no row");
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "child", steps: ["whole", "holed", "again"], id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("timelapse: frames of another size error", async () => {
   await withPage({ root, url: broken.url("mismatch", "") }, async (page, ctx) => {
     assert.deepEqual(await errorsOf(page), ["mismatch/map: data/mismatch/2001.png: 8×7 does not match the first frame (8×6)"]);

@@ -204,7 +204,8 @@ function slotsOf(propsList) {
  * way, for the rasters. The inset is the same: `inset` is `{ at, scale, alpha, view, flight }` (null when neither state has
  * one), its alpha going with `f` and its view that of `insetFlight`, or of the state that has one. Each layer shows the
  * frame of its state (`frame`, a still pair: a layer going away keeps `a`'s, and the old picture of a change of data
- * shows `a`'s as `fromFrame`); `frame` is the label `b` is at, and `panel` the corner panel (`panelBetween`). With
+ * shows `a`'s as `fromFrame`), and the `noData` of its state, when the state decides it (see `stateOf`); `frame` is the
+ * label `b` is at, and `panel` the corner panel (`panelBetween`). With
  * `a === b`, both at 1 and no flight it is `b` at rest, with the exact colours a jump writes.
  */
 function between(a, b, f, c, flight = null, insetFlight = null) {
@@ -215,8 +216,8 @@ function between(a, b, f, c, flight = null, insetFlight = null) {
     const from = a.layers[i];
     const alpha = lerp(from.alpha, to.alpha, f);
     // A layer going away shows what it showed; one that stays and changes crossfades from its old data.
-    if (to.alpha === 0) return { prepared: from.prepared, alpha, from: null, change: 1, frame: aFrame };
-    return { prepared: to.prepared, alpha, from: from.alpha > 0 && from.prepared !== to.prepared ? from.prepared : null, change: f, frame: bFrame, fromFrame: aFrame };
+    if (to.alpha === 0) return { prepared: from.prepared, alpha, from: null, change: 1, frame: aFrame, noData: from.noData };
+    return { prepared: to.prepared, alpha, from: from.alpha > 0 && from.prepared !== to.prepared ? from.prepared : null, change: f, frame: bFrame, fromFrame: aFrame, noData: to.noData };
   });
   const lapse = b.lapse ?? a.lapse;
   return {
@@ -367,6 +368,11 @@ export default {
       checkView(p.view);
       const s = { stage, props: p, view: viewOf(geo, p.view ?? null), inset: insetOf(geo, p.inset, checkView), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers, lapse: lapseOf(p, stage.slots, layers, ctx) };
       await decodeFrame(s);
+      // A time-lapse layer prepared without the slide's steps (a `ctx.mount` child) has its "no data" row from the frame
+      // this step shows, never from a frame a run passes through, so the row stays still while frames play (raster.js).
+      await Promise.all(layers.map(async (layer) => {
+        if (layer.prepared?.noDataAt) layer.noData = await layer.prepared.noDataAt(s.lapse.index);
+      }));
       return s;
     }
 
@@ -383,7 +389,7 @@ export default {
       }
       const rows = s.stage.slots.flatMap(({ id, module }, i) => {
         const { prepared, alpha } = moment.layers[i];
-        const row = alpha > 0 ? module.legend(prepared, moment) : null;
+        const row = alpha > 0 ? module.legend(prepared, moment.layers[i]) : null;
         return row ? [{ id, ...row, opacity: alpha }] : [];
       });
       legend.write(s.legend, rows);

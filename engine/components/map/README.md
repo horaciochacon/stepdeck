@@ -75,7 +75,9 @@ Behaviour:
   top-right when the inset is there) shows the frame's label in the statement size, tabular figures, and under it the
   `numbers` in the note size, each after its label, formatted with the deck language; each `numbers` key comes from the
   one time-lapse layer whose frames have it. The panel is on the background colour, like the legend: keep the legend
-  out of its corner. Frames are decoded for display as they are needed, four ahead of a run, never all at mount.
+  out of its corner. Frames are decoded as they are needed, four ahead of a run, never all at mount, and a time-lapse
+  holds at most 100 million pixels, every frame together. Its "no data" row reflects the frames the slide's steps show
+  (a map mounted with `ctx.mount`: the frame of each update).
 - **Small regions.** A region under 6 px across in both directions is drawn as a dot of radius 5 px at its centroid,
   in its colour, ringed in the background colour, so a tiny island stays visible.
 - **Highlight.** The highlighted regions keep their colour and get an ink outline (a dot's ring turns ink); the other
