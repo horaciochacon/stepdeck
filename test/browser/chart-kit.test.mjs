@@ -150,6 +150,78 @@ test("canvas layer sits on the plot at the device pixel ratio", async () => {
   });
 });
 
+/** Runs `fn(canvasLayer, box)` in the page on a scratch div (one svg inside) appended to the page, removed after: a stand-in for an element. */
+const withBox = (page, fn) => page.evaluate(async (src) => {
+  const { chartKit } = await import("/engine/core/chart.js");
+  const box = document.body.appendChild(document.createElement("div"));
+  box.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "svg"));
+  try {
+    return await new Function("canvasLayer", "box", `return (${src})(canvasLayer, box);`)(chartKit.canvasLayer, box);
+  } finally {
+    box.remove();
+  }
+}, fn.toString());
+
+test("canvasLayer: named layers stack in call order", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    const out = await withBox(page, (canvasLayer, box) => {
+      const rect = { left: 1, top: 2, pw: 30, ph: 20 };
+      const a = canvasLayer(box, { ...rect, name: "a" });
+      const b = canvasLayer(box, { ...rect, name: "b" });
+      const again = [canvasLayer(box, { ...rect, name: "a" }) === a, canvasLayer(box, { ...rect, name: "b" }) === b];
+      return {
+        order: [...box.children].map((c) => c.localName + (c.dataset.layer ? `:${c.dataset.layer}` : "")),
+        again,
+        classes: [a.getAttribute("class"), b.getAttribute("class")],
+      };
+    });
+    assert.deepEqual(out.order, ["canvas:a", "canvas:b", "svg"], "b follows a, both before the svg");
+    assert.deepEqual(out.again, [true, true], "a named layer is found again by its name");
+    assert.deepEqual(out.classes, ["sd-canvas-layer", "sd-canvas-layer"]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("canvasLayer: unnamed lookup ignores named layers", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    const out = await withBox(page, (canvasLayer, box) => {
+      const rect = { left: 0, top: 0, pw: 10, ph: 10 };
+      const named = canvasLayer(box, { ...rect, name: "n" });
+      const plain = canvasLayer(box, rect);
+      return {
+        distinct: plain !== named,
+        unnamed: plain.hasAttribute("data-layer"),
+        again: canvasLayer(box, rect) === plain,
+        order: [...box.children].map((c) => c.localName + (c.dataset.layer ? `:${c.dataset.layer}` : "")),
+      };
+    });
+    assert.equal(out.distinct, true, "an unnamed call does not return the named layer");
+    assert.equal(out.unnamed, false, "the unnamed layer has no data-layer");
+    assert.equal(out.again, true, "and is found again");
+    assert.deepEqual(out.order, ["canvas:n", "canvas", "svg"], "a new layer goes after the last one");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("canvasLayer: maxRatio caps the backing store", async () => {
+  await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
+    await page.evaluate(() => Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => 2 }));
+    const out = await withBox(page, (canvasLayer, box) => {
+      const rect = { left: 0, top: 0, pw: 40, ph: 30 };
+      const size = (c) => [c.width, c.height];
+      return {
+        raster: size(canvasLayer(box, { ...rect, name: "raster", maxRatio: 1 })),
+        vector: size(canvasLayer(box, { ...rect, name: "vector" })),
+        capped: size(canvasLayer(box, { ...rect, name: "capped", maxRatio: 1.5 })),
+      };
+    });
+    assert.deepEqual(out.raster, [40, 30], "maxRatio 1 at devicePixelRatio 2: one backing pixel per css pixel");
+    assert.deepEqual(out.vector, [80, 60], "the default cap of 3 leaves a ratio of 2");
+    assert.deepEqual(out.capped, [60, 45]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("the SVG paints above the canvas", async () => {
   await withPage({ root, url: pages.url("marks", "step=a") }, async (page, ctx) => {
     const probe = await page.evaluate(() => {

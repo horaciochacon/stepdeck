@@ -82,10 +82,10 @@ test("chartKit: frozen, exactly the public names", () => {
   assert.ok(Object.isFrozen(chartKit));
   assert.deepEqual(Object.keys(chartKit).sort(), [
     "axis", "band", "canvasLayer", "dot", "drawOrder", "entrance", "extentOf", "fit", "focusPaint", "frame", "halo",
-    "keyed", "lerp", "loadTable", "morph", "paintLines", "rank", "rule", "settle", "splitAt", "spread", "swarm",
+    "keyed", "lerp", "loadTable", "morph", "paintLines", "rank", "rule", "settle", "signature", "splitAt", "spread", "swarm",
     "textColor", "tickFormat", "tweenColor", "undraw", "whisker", "wrapLabel",
   ]);
-  assert.equal(Object.keys(chartKit).length, 28);
+  assert.equal(Object.keys(chartKit).length, 29);
   for (const [name, value] of Object.entries(chartKit)) assert.equal(typeof value, "function", name);
 });
 

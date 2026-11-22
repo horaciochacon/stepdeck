@@ -427,8 +427,10 @@ export interface ChartKit {
   axis(g: any, options: { scale: (v: number) => number; orient?: "y" | "x"; length?: number; ticks?: number[]; format?: (v: number) => string; fade?: number }): any;
   /** Adds class `sd-halo` for text (a dot has its outline already: no change), returns the selection; or with `under: true` ensures a `.sd-halo-under` copy of each node's geometry and `transform` before it (returns the copies). A copy has the node's tag: in a parent that holds copies, select marks by class. */
   halo(selection: any, options?: { under?: boolean }): any;
-  /** One `canvas.sd-canvas-layer` per element, placed on the plot; its context is scaled so you draw in plot pixels. */
-  canvasLayer(el: HTMLElement, plot: { left: number; top: number; pw: number; ph: number }): HTMLCanvasElement;
+  /** A `canvas.sd-canvas-layer` of the element, placed on the plot; its context is scaled so you draw in plot pixels. Without `name` it is the one unnamed layer (named layers are ignored); with `name` it is `[data-layer=name]`. A new layer goes after the element's last canvas layer, so creation order is stacking order. The backing store is the size x min(`maxRatio`, devicePixelRatio). */
+  canvasLayer(el: HTMLElement, plot: { left: number; top: number; pw: number; ph: number; name?: string; maxRatio?: number }): HTMLCanvasElement;
+  /** A 32-bit FNV-1a hasher fed piece by piece: `text` hashes a string's UTF-16 units, `char` one unit, `tenth` the characters of `${Math.round(v * 10) / 10}`; `hex()` is the hash so far, 8 hex digits. The same feeds in the same order give the same hash. */
+  signature(): { text(s: string): void; tenth(v: number): void; char(code: number): void; hex(): string };
   /** Clears the canvas and strokes the lines (a non-finite coordinate breaks a line); returns a signature (hex) of what was painted. */
   paintLines(canvas: HTMLCanvasElement, lines: CanvasLine[], defaults?: { width?: number; alpha?: number }): string;
   /** `ctx.animate.tween(0, 1, frame)` over the step's duration (else `factor` x --sd-duration), the theme's easing and the step's signal. */
