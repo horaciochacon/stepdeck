@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -327,13 +327,18 @@ test("boundaries: a timeout is could not reach", async () => {
   );
 });
 
-test("boundaries: a failed write leaves a source file but no truncated or licence-less GeoJSON", async () => {
+test("boundaries: a failed write leaves an existing pair as it was", async () => {
   await inDeck(async (deck) => {
-    const out = join(deck, "regions.geojson");
-    mkdirSync(out); // the GeoJSON cannot be put there
-    await assert.rejects(boundaries({ iso3: "XYZ", level: "ADM1", deck, out, fetch: xyz().fetch }));
-    assert.ok(existsSync(join(deck, "regions.source.json")), "the licence is written first");
-    assert.deepEqual(readdirSync(deck).sort(), ["regions.geojson", "regions.source.json"], "no temp files are left");
+    const first = await boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch: xyz().fetch });
+    const before = [readFileSync(first.file, "utf8"), readFileSync(first.sourceFile, "utf8")];
+    // The licence changes, so a new sidecar beside the old GeoJSON would be visible; the GeoJSON's temp file cannot be written.
+    const api = JSON.stringify({ ...JSON.parse(API), boundaryLicense: "Another licence" });
+    const { fetch } = serve({ [API_URL]: api, [SIMPLIFIED_URL]: text("full.geojson") });
+    const blocked = `${first.file}.${process.pid}.tmp`;
+    mkdirSync(blocked);
+    await assert.rejects(boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch }));
+    assert.deepEqual([readFileSync(first.file, "utf8"), readFileSync(first.sourceFile, "utf8")], before, "the old pair is untouched");
+    assert.deepEqual(readdirSync(join(deck, "data")).sort(), ["xyz-adm1.geojson", "xyz-adm1.geojson." + process.pid + ".tmp", "xyz-adm1.source.json"], "only the blocker is left: the sidecar's temp file is gone");
   });
 });
 
@@ -353,4 +358,23 @@ test("boundaries: the command takes a country and a level", () => {
   const precision = cli("boundaries", "XYZ", "ADM1", "--precision", "many");
   assert.match(precision.stderr, /precision must be a whole number from 0 to 10/);
   assert.match(cli("--help").stdout, /boundaries <ISO3> <ADM0-ADM5>/);
+});
+
+test("boundaries: the command says which files it replaced", async () => {
+  await inDeck(async (deck) => {
+    // The CLI has no injected fetch: preload a stand-in that serves the fixtures, so nothing reaches the network.
+    const stub = join(deck, "stub-fetch.mjs");
+    writeFileSync(stub, `import { readFileSync } from "node:fs";
+const files = { "https://www.geoboundaries.org/api/current/gbOpen/XYZ/ADM1/": "api.json", "${SIMPLIFIED_URL}": "simplified.geojson" };
+globalThis.fetch = async (url) => (files[url] ? new Response(readFileSync(${JSON.stringify(FIXTURES)} + files[url], "utf8")) : new Response("", { status: 404 }));
+`);
+    const run = () => spawnSync(process.execPath, ["--import", stub, CLI, "boundaries", "XYZ", "1"], { cwd: deck, encoding: "utf8" });
+    const first = run();
+    assert.equal(first.status, 0, first.stderr);
+    assert.match(first.stdout, /^wrote data\/xyz-adm1\.geojson \(2 regions, 10 points\) and data\/xyz-adm1\.source\.json\n/);
+    assert.doesNotMatch(first.stdout, /replaced/);
+    const second = run();
+    assert.equal(second.status, 0, second.stderr);
+    assert.match(second.stdout, /\nreplaced data\/xyz-adm1\.geojson\nreplaced data\/xyz-adm1\.source\.json\n/);
+  });
 });
