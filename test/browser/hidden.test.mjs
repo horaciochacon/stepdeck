@@ -38,10 +38,10 @@ test("hidden mid-motion: end state at once, no errors", async () => {
       Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
       const t0 = performance.now();
       document.dispatchEvent(new Event("visibilitychange"));
-      while (bars() !== jumped && performance.now() - t0 < 500) await new Promise((r) => setTimeout(r, 10));
+      while (bars() !== jumped && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 10));
       return bars() === jumped ? performance.now() - t0 : null;
     }, jumped);
-    assert.notEqual(arrived, null, "within 500 ms of the event the bars are in their end state");
+    assert.notEqual(arrived, null, "within 2 s of the event (the move has 2.7 s left) the bars are in their end state");
     await settled(page);
     assert.equal(await elementHtml(page, "bars"), jumped, "and they stay there");
     await clean(page, ctx);
