@@ -26,8 +26,15 @@
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
 //             theme's tokens.css), and every element goes through chartProblems (core/chart-rules.js:
-//             chart-prop-unused, a warning; chart-orient, an error). Each problem is reported once, at the first step
-//             where it appears.
+//             chart-prop-unused, a warning; chart-orient, an error); a `map` that matches its schema goes through
+//             mapProblems (core/map-rules.js, with each layer's raster JSON and the headers of its PNGs read from the
+//             deck: map-layer, map-frame, map-raster, errors; map-prop-unused, a warning). A map's layers name CSV
+//             columns too: areas key (else the map's id) and value, points lon, lat, id, size, and a color that is
+//             neither a column nor a theme colour role. Each problem is reported once, at the first step where it
+//             appears.
+//   run       a map that changes `frame` from one step to the next, played forward and not entering, plays a run:
+//             the first phase (a flight, or the other motion of the step, or the step's transition) plus the frames it
+//             moves x pace may not pass MAX_RUN_MS, 20 s (map-run, error). Reported at the step that plays it.
 //   ghost     an element may not set ghost together with collapse: true (ghost-collapse, error).
 //   exit      an exit object with a delay is a warning (exit-delay-ignored): exits start at t = 0.
 //   budget    an element that enters on a step (k >= 1) must settle well inside the 10 s watchdog: its stagger
@@ -47,7 +54,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { stateAt, stepIndex, stepCount, initialElements } from "#engine/core/fold.js";
-import { DEFAULT_THEME, DEFAULT_LAYOUT, REGION_HOOKS } from "#engine/core/constants.js";
+import { DEFAULT_THEME, DEFAULT_LAYOUT, MAX_RUN_MS, REGION_HOOKS } from "#engine/core/constants.js";
 import { accentMarks } from "#engine/core/accent.js";
 import { parseBinding, lookupPointer, resolveBindings } from "#engine/core/bindings.js";
 import { createDataLoader } from "#engine/core/data.js";
@@ -56,10 +63,12 @@ import { makeFormat } from "#engine/core/format.js";
 import { problem, componentProblem } from "./problems.js";
 import { diagramProblems, diagramSpacing } from "#engine/components/diagram/place.js";
 import { chartProblems } from "#engine/core/chart-rules.js";
+import { mapProblems, mapRunProblems } from "#engine/core/map-rules.js";
 import { DEFAULT_ENTER, motionParts, resolveEntrance, slotDelays } from "#engine/core/choreography.js";
 import { MOTION_NAMES, timing } from "#engine/core/motion.js";
 import { TYPE_MAX_MS, typingMs } from "#engine/core/animate.js";
 import { checkPalette } from "./palettes.js";
+import { pngInfo } from "./png.js";
 import { createAjv, compile, readSchema } from "./ajv.js";
 import { THEME_NAME, engineFor, exactCase, findTheme, importDeck, isObject, listDirs, readBuiltins } from "./engine.js";
 
@@ -462,7 +471,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   const load = createDataLoader({ root: deckRoot, read: (p) => readFile(p) });
   const layouts = new Map();
 
-  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, ownsFor, knownComponents, deckComponents, builtinSet, layouts, spacing, tokens: themeTokens };
+  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, ownsFor, knownComponents, deckComponents, builtinSet, layouts, spacing, tokens: themeTokens, rasters: new Map() };
   for (const id of selected) {
     const where = exact(join(deckRoot, "slides"), `${id}.js`);
     if (!where.ok) {
@@ -715,7 +724,10 @@ async function validateSlide(spec, env) {
     if (prev && isDeepStrictEqual(prev, state.elements)) {
       add({ slide, step, rule: "noop-step", measured: "same elements, props and visibility as the previous step", limit: "a step changes something on screen", fix: `merge step '${step}' into the previous step (move its notes there), or give it a patch` }, "warning");
     }
-    if (prev) checkBudget(step, prev, state);
+    if (prev) {
+      checkBudget(step, prev, state);
+      await checkRuns(step, prev, state);
+    }
     prev = state.elements;
 
     const changed = Object.entries(state.elements).filter(([id, el]) => !(checked.has(id) && isDeepStrictEqual(checked.get(id), el.props)));
@@ -750,6 +762,23 @@ async function validateSlide(spec, env) {
         fix: "shorten its delay or duration, or the step's transition.stagger, or split the step so fewer elements enter at once",
       }, "warning");
     });
+  }
+
+  /**
+   * The runs of the maps on this step, played forward from the previous step: for each map that is not entering (an
+   * entering map plays no run), what `mapRunProblems` finds, with the theme's duration and the step's own transition.
+   */
+  async function checkRuns(step, before, state) {
+    const t = { duration: timing(env.tokens, {}).duration, transition: state.transition?.duration };
+    for (const id of elementIds.filter((name) => typeOf.get(name) === "map")) {
+      const [was, now] = [before[id], state.elements[id]];
+      if (!was || !now || (now.visible && !was.visible)) continue;
+      if (![was.props, now.props].every((props) => isObject(props) && (props.pace === undefined || typeof props.pace === "number"))) continue;
+      const { files } = await rasterFilesOf(env, was.props, now.props);
+      for (const item of mapRunProblems(was.props, now.props, files, t, MAX_RUN_MS)) {
+        report(`${id}|${item.rule}|${step}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
+      }
+    }
   }
 
   async function checkElement(id, el, k, step) {
@@ -802,6 +831,10 @@ async function validateSlide(spec, env) {
       for (const p of await checkDrawsColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
     }
 
+    if (type === "map") {
+      for (const p of await checkMapColumns(env, props)) report(`${id}|${p.rule}|${p.measured}`, { slide, element: id, step, ...p });
+    }
+
     const validate = validator.get(id);
     if (!validate || bindingFailed) return;
     let resolved;
@@ -815,6 +848,13 @@ async function validateSlide(spec, env) {
         for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
       }
       for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
+      if (type === "map") {
+        const { files, unreadable } = await rasterFilesOf(env, resolved);
+        for (const message of unreadable) {
+          report(`${id}|map-raster|${message}`, { slide, element: id, step, rule: "map-raster", measured: message, limit: "a raster file that parses as JSON", fix: "fix the JSON of the raster file" });
+        }
+        for (const item of mapProblems(resolved, files)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
+      }
       return;
     }
     for (const e of schemaErrors(validate.errors, resolved)) {
@@ -890,6 +930,116 @@ function checkDrawsColumns(env, props) {
       ? close ? `set draws.id to '${close}'` : `set draws.id to one of ${quote(header)}, or add the column to ${file}`
       : `add the column '${column}' to ${file} (the chart's ${prop})${close ? `, or rename its column '${close}' to '${column}'` : ""}`,
   }));
+}
+
+/** The names of the theme's colour roles (`accent`, `alert`, …), from its tokens. */
+const colorRoles = (tokens) => Object.keys(tokens).filter((name) => name.startsWith("--sd-color-")).map((name) => name.slice("--sd-color-".length));
+
+/**
+ * The columns a map's layers name in their CSVs (each layer reads its own file): `areas` layers `key` (else the map's
+ * `id`) and `value`; `points` layers `lon`, `lat`, `id`, `size`, and a `color` that is not a theme colour role (the
+ * runtime reads such a `color` as a column, and fails when the file has none by that name). Reported as the chart's
+ * columns are, with the layer's path in the prop: `layers.rate.value = 'rat'`.
+ */
+async function checkMapColumns(env, props) {
+  const roles = colorRoles(env.tokens);
+  const out = [];
+  for (const [layerId, layer] of Object.entries(isObject(props.layers) ? props.layers : {})) {
+    if (!isObject(layer)) continue;
+    const at = (prop) => `layers.${layerId}.${prop}`;
+    let file;
+    let named;
+    if (typeof layer.areas === "string") {
+      file = layer.areas;
+      named = [[at("key"), layer.key ?? props.id], [at("value"), layer.value]];
+    } else if (typeof layer.points === "string") {
+      file = layer.points;
+      named = [[at("lon"), layer.lon], [at("lat"), layer.lat], [at("id"), layer.id], [at("size"), layer.size]];
+      if (typeof layer.color === "string" && !roles.includes(layer.color)) named.push([at("color"), layer.color]);
+    } else {
+      continue;
+    }
+    if (!/\.csv$/i.test(file) || !env.exact(env.deckRoot, file).ok) continue;
+    out.push(...(await columnsOf(env, file, layer.types, named, "", (prop, column, close, header) => {
+      const byDefault = prop === at("key") && layer.key === undefined; // the key is the map's id
+      const choices = prop === at("color") ? `${quote(header)} or a theme colour (${roles.join(", ")})` : quote(header);
+      return {
+        measured: `${prop} = '${column}'${byDefault ? " (the map's id)" : ""}`,
+        fix: close
+          ? `set ${prop} to '${close}'${byDefault ? `, or set the map's id to a column of ${file}` : ""}`
+          : `set ${prop} to one of ${choices}, or add the column to ${file}`,
+      };
+    })));
+  }
+  return out;
+}
+
+/** The folder part of a deck path, with its trailing slash ("" for a bare file name). */
+const folderOf = (path) => path.slice(0, path.lastIndexOf("/") + 1);
+
+/**
+ * What `mapProblems` reads of one image a raster file names: its `pngInfo`; `{ error }` for one that cannot be read
+ * (not inside the deck, in another case on disk, or not a PNG); undefined for one that is not there.
+ */
+function pngOf(env, folder, src) {
+  try {
+    env.load.url(src); // the runtime's rule for an image path: relative and inside the deck
+  } catch {
+    return { error: "is not a path inside the deck" };
+  }
+  const path = folder + src;
+  const where = env.exact(env.deckRoot, path);
+  if (where.actual) return { error: `is ${where.actual} on disk; paths are case-sensitive once published` };
+  if (!where.ok) return undefined;
+  try {
+    return pngInfo(readFileSync(join(env.deckRoot, path)));
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/**
+ * A raster file as `mapProblems` reads it, read once per path: { json, pngs } with the `pngOf` of each image it names
+ * (keyed as the sidecar writes `src`); `{ error }` for a sidecar that does not parse; null for a file that is not in
+ * the deck, which the file checks report as `file-missing` or `path-case`.
+ */
+function rasterFile(env, path) {
+  if (!env.rasters.has(path)) {
+    env.rasters.set(path, (async () => {
+      if (!env.exact(env.deckRoot, path).ok) return null;
+      let json;
+      try {
+        json = await env.load(path);
+      } catch (e) {
+        return { error: e.message };
+      }
+      const pngs = Object.create(null);
+      for (const entry of Array.isArray(json?.frames) ? json.frames : [json]) {
+        const src = entry?.src;
+        if (typeof src !== "string" || src === "" || src in pngs) continue;
+        const info = pngOf(env, folderOf(path), src);
+        if (info) pngs[src] = info;
+      }
+      return { json, pngs };
+    })());
+  }
+  return env.rasters.get(path);
+}
+
+/** The raster files the layers of each of `propsList` name: `files` as `mapProblems` takes it, and the messages of the sidecars that do not parse. */
+async function rasterFilesOf(env, ...propsList) {
+  const paths = new Set();
+  for (const props of propsList) {
+    for (const layer of Object.values(isObject(props?.layers) ? props.layers : {})) if (isObject(layer) && typeof layer.raster === "string") paths.add(layer.raster);
+  }
+  const files = {};
+  const unreadable = [];
+  for (const path of paths) {
+    const file = await rasterFile(env, path);
+    if (file?.error) unreadable.push(file.error);
+    else if (file) files[path] = file;
+  }
+  return { files, unreadable };
 }
 
 async function checkBinding(env, b, whole, path) {

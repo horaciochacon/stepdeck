@@ -1,0 +1,13 @@
+{
+  "bounds": [
+    -14,
+    -28,
+    -12
+  ],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 100
+  },
+  "src": "cell.png"
+}

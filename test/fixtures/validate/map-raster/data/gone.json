@@ -1,0 +1,29 @@
+{
+  "bounds": [
+    -14,
+    -28,
+    -12,
+    -26
+  ],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 100
+  },
+  "frames": [
+    {
+      "src": "cell.png",
+      "label": "2001",
+      "numbers": {
+        "people": 10
+      }
+    },
+    {
+      "src": "missing.png",
+      "label": "2002",
+      "numbers": {
+        "people": 20
+      }
+    }
+  ]
+}

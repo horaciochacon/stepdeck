@@ -33,7 +33,7 @@ function header(width, height, colorType) {
 test("png: encode then read back", () => {
   const grey = { width: 3, height: 2, channels: 1, data: Uint8Array.from([0, 10, 20, 255, 128, 1]) };
   const bytes = encodePng(grey);
-  assert.deepEqual(pngInfo(bytes), { width: 3, height: 2, bitDepth: 8, colorType: 0, chunks: ["IHDR", "IDAT", "IEND"] });
+  assert.deepEqual(pngInfo(bytes), { width: 3, height: 2, bitDepth: 8, colorType: 0, interlace: 0, chunks: ["IHDR", "IDAT", "IEND"] });
   assert.deepEqual(pngPixels(bytes), { ...grey, data: grey.data });
 
   const alpha = { width: 2, height: 2, channels: 2, data: Uint8Array.from([5, 255, 6, 0, 7, 255, 8, 255]) };
@@ -104,6 +104,16 @@ test("png: color chunks are reported", () => {
 test("png: not a PNG", () => {
   assert.throws(() => pngInfo(Buffer.from("GIF89a, not a png at all")), /not a PNG/);
   assert.throws(() => pngPixels(Buffer.alloc(4)), /not a PNG/);
+});
+
+test("png: an interlaced PNG is reported by pngInfo and refused by pngPixels", () => {
+  const bytes = encodePng({ width: 2, height: 2, channels: 1, data: Uint8Array.of(1, 2, 3, 4) });
+  const body = Buffer.from(bytes.subarray(16, 29)); // the IHDR body
+  body[12] = 1; // Adam7
+  const interlaced = Buffer.concat([bytes.subarray(0, 8), chunk("IHDR", body), bytes.subarray(33)]);
+  assert.equal(pngInfo(bytes).interlace, 0);
+  assert.equal(pngInfo(interlaced).interlace, 1);
+  assert.throws(() => pngPixels(interlaced), /interlaced PNGs are not supported/);
 });
 
 test("png: pngPixels refuses what the raster format does not allow", () => {

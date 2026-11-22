@@ -1,0 +1,36 @@
+{
+  "bounds": [
+    -14,
+    -28,
+    -12,
+    -26
+  ],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 100
+  },
+  "frames": [
+    {
+      "src": "cell.png",
+      "label": "2001",
+      "numbers": {
+        "households": 0
+      }
+    },
+    {
+      "src": "cell.png",
+      "label": "2002",
+      "numbers": {
+        "households": 1
+      }
+    },
+    {
+      "src": "cell.png",
+      "label": "2004",
+      "numbers": {
+        "households": 2
+      }
+    }
+  ]
+}

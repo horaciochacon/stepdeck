@@ -2,12 +2,13 @@
 // test/fixtures/validate/<case>/; the spike deck must validate clean.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { validate } from "../../cli/validate.js";
 import { copyEngine } from "../../cli/engine.js";
 import { formatProblem } from "../../cli/problems.js";
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { pngInfo, pngPixels } from "../../cli/png.js";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -469,6 +470,206 @@ test("a map layer has exactly one kind: areas with value, raster with color, or 
     for (const p of problems.filter((p) => !p.measured.startsWith("layers.raster-clip"))) assert.match(p.fix, /^make layers\.[a-z-]+ an object with 'areas' and 'value' \(without 'raster', 'points', 'lon', 'lat', 'id', 'size', 'color', 'clip'\) or an object with 'raster' \(without 'areas', 'points', 'value', 'key', 'lon', 'lat', 'id', 'size', 'types'\) or an object with 'points', 'lon' and 'lat' \(without 'areas', 'raster', 'value', 'key', 'clip'\)/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// Maps: the layers, frames, raster files and run length `validate` checks before the map is shown.
+const atSlide = (problems, slide) => problems.filter((p) => p.slide === slide);
+const decks = (name) => join(repo, "test/fixtures/decks", name);
+
+test("map-layer: shown names a layer that layers does not have", async () => {
+  const problems = await validate(fixture("map-layer"));
+  assert.deepEqual(rules(problems), ["map-layer"], show(problems));
+  const p = problems[0];
+  assert.notEqual(p.severity, "warning");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "map");
+  assert.equal(p.measured, "`shown` lists 'pop', which is not a layer (layers: rate)");
+  assert.match(p.fix, /add a layer 'pop', or remove it from `shown`/);
+});
+
+test("map-frame: a frame that is not a label of the time-lapse", async () => {
+  const problems = atSlide(await validate(fixture("map-frame")), "unknown");
+  assert.deepEqual(rules(problems), ["map-frame"], show(problems));
+  assert.equal(problems[0].element, "map");
+  assert.equal(problems[0].measured, "frame '1999' not found (frames: 2001, 2002, 2003)");
+  assert.match(problems[0].fix, /frame labels/);
+});
+
+test("map-frame: time-lapse layers whose label lists differ", async () => {
+  const problems = atSlide(await validate(fixture("map-frame")), "labels");
+  assert.deepEqual(rules(problems), ["map-frame"], show(problems));
+  assert.match(problems[0].measured, /'years' and 'other' have different frame labels/);
+});
+
+test("map-frame: a numbers key found in two time-lapse layers", async () => {
+  const problems = atSlide(await validate(fixture("map-frame")), "numbers");
+  assert.deepEqual(rules(problems), ["map-frame"], show(problems));
+  assert.match(problems[0].measured, /`numbers` key 'people' is in time-lapse layers 'years' and 'twin'/);
+});
+
+test("map-raster: a bad sidecar", async () => {
+  const problems = atSlide(await validate(fixture("map-raster")), "sidecar");
+  assert.deepEqual(rules(problems), ["map-raster"], show(problems));
+  assert.match(problems[0].measured, /^data\/bad\.json: `bounds` must be \[west, south, east, north\], four numbers/);
+  assert.notEqual(problems[0].severity, "warning");
+});
+
+test("map-raster: a colour chunk and the wrong colour type", async () => {
+  const problems = atSlide(await validate(fixture("map-raster")), "colour");
+  assert.deepEqual(rules(problems), ["map-raster", "map-raster"], show(problems));
+  assert.deepEqual(problems.map((p) => p.measured).sort(), [
+    "data/colour.png: color type 2 is not 0 (grey) or 4 (grey with alpha)",
+    "data/colour.png: has a gAMA chunk; color chunks are not allowed",
+  ]);
+});
+
+test("map-raster: a frame file that is missing", async () => {
+  const problems = atSlide(await validate(fixture("map-raster")), "missing");
+  assert.deepEqual(rules(problems), ["map-raster"], show(problems));
+  assert.equal(problems[0].measured, "data/missing.png: not found");
+});
+
+test("map-raster: an interlaced PNG, which the decoder refuses", async () => {
+  const problems = atSlide(await validate(fixture("map-raster")), "interlaced");
+  assert.deepEqual(rules(problems), ["map-raster"], show(problems));
+  assert.match(problems[0].measured, /^data\/interlaced\.png: is interlaced/);
+});
+
+test("map-raster: a file that is not a PNG, an image in the wrong case or outside the deck, frames of two sizes, a sidecar that is not JSON", async () => {
+  const problems = await validate(fixture("map-raster"));
+  const one = (slide) => {
+    const found = atSlide(problems, slide);
+    assert.deepEqual(rules(found), ["map-raster"], show(found));
+    return found[0].measured;
+  };
+  assert.equal(one("junk"), "data/junk.png: not a PNG");
+  assert.match(one("case"), /^data\/Cell\.png: .*cell\.png on disk/);
+  assert.equal(one("outside"), "data/../cell.png: is not a path inside the deck");
+  assert.equal(one("size"), "data/tall.png: 4×4 is not 4×3, the size of data/cell.png");
+  assert.match(one("parse"), /^invalid data file data\/parse\.json: /);
+  assert.deepEqual(rules(problems.filter((p) => !["sidecar", "colour", "missing", "interlaced", "junk", "case", "outside", "size", "parse"].includes(p.slide))), []);
+});
+
+test("map-run: a run of 29 frame moves is over 20 s", async () => {
+  const problems = atSlide(await validate(fixture("map-run")), "long");
+  assert.deepEqual(rules(problems), ["map-run"], show(problems));
+  const p = problems[0];
+  assert.notEqual(p.severity, "warning");
+  assert.equal(p.element, "map");
+  assert.equal(p.step, "last");
+  assert.equal(p.measured, "first phase 0 ms + 29 frame moves × 700 ms = 20300 ms");
+  assert.equal(p.limit, "at most 20000 ms");
+  assert.match(p.fix, /pace/);
+});
+
+test("map-run counts the flight: 28 moves fit alone, not after a flight of 2 x --sd-duration", async () => {
+  const problems = await validate(fixture("map-run"));
+  assert.deepEqual(atSlide(problems, "plain"), [], "the same 19.6 s run without a flight is clean");
+  const found = atSlide(problems, "flight");
+  assert.deepEqual(rules(found), ["map-run"], show(found));
+  assert.equal(found[0].measured, "first phase 800 ms + 28 frame moves × 700 ms = 20400 ms");
+});
+
+test("map-run: a map that enters on the step plays no run, so a long frame change there is not budgeted", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-enter-")));
+  try {
+    cpSync(fixture("map-run"), tmp, { recursive: true });
+    writeFileSync(join(tmp, "slides", "long.js"), `export default { id: "long", layout: "full-bleed", title: "A map", elements: [
+      { id: "map", type: "map", from: "last", box: { x: 160, y: 200, w: 1400, h: 700 }, props: { boundaries: "data/regions.geojson", id: "code", layers: { years: { raster: "data/years30.json" } }, shown: ["years"] } },
+      { id: "src", type: "text", box: { x: 160, y: 920, w: 1400, h: 60 }, props: { role: "source", text: "Synthetic fixture." } },
+    ], steps: [{ id: "first" }, { id: "last", set: { map: { frame: "2029" } } }] };\n`);
+    assert.deepEqual(atSlide(await validate(tmp), "long"), []);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("map-prop-unused: frame, pace and a numbers key that nothing uses are warnings", async () => {
+  const problems = await validate(fixture("map-prop-unused"));
+  assert.deepEqual(rules(problems), ["map-prop-unused", "map-prop-unused", "map-prop-unused"], show(problems));
+  assert.ok(problems.every((p) => p.severity === "warning" && p.element === "map"), show(problems));
+  assert.deepEqual(errors(problems), [], "warnings only: the map still draws");
+  assert.equal(only(atSlide(problems, "frame"), "map-prop-unused").measured, "`frame` does nothing without a time-lapse layer");
+  assert.equal(only(atSlide(problems, "pace"), "map-prop-unused").measured, "`pace` does nothing without a time-lapse layer");
+  assert.equal(only(atSlide(problems, "numbers"), "map-prop-unused").measured, "`numbers` key 'deaths' is in no frame");
+});
+
+test("missing-column in a map layer: a misspelt value, longitude and colour column, each with a did-you-mean", async () => {
+  const broken = decks("map-broken");
+  const column = only(await validate(broken, { slide: "column" }), "missing-column");
+  assert.equal(column.element, "map");
+  assert.equal(column.measured, "layers.rate.value = 'rat'");
+  assert.equal(column.limit, "columns of data/rates.csv: code, rate");
+  assert.equal(column.fix, "set layers.rate.value to 'rate'");
+  const lon = only(await validate(broken, { slide: "lon" }), "missing-column");
+  assert.equal(lon.measured, "layers.sites.lon = 'lng'");
+  assert.equal(lon.fix, "set layers.sites.lon to 'lon'");
+  const hue = only(await validate(broken, { slide: "hue" }), "missing-column");
+  assert.equal(hue.measured, "layers.sites.color = 'kinds'");
+  assert.match(hue.fix, /^set layers\.sites\.color to 'kind'/);
+});
+
+test("map layers: the key defaults to the map's id, and a theme colour role is not a column", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-columns-")));
+  try {
+    mkdirSync(join(tmp, "slides"));
+    mkdirSync(join(tmp, "data"));
+    for (const file of ["regions.geojson", "rates.csv", "sites.csv"]) cpSync(join(decks("map"), "data", file), join(tmp, "data", file));
+    writeFileSync(join(tmp, "deck.js"), `export default { title: "Columns", lang: "en", theme: "academic-light", slides: ["s"] };\n`);
+    const layers = {
+      rates: { areas: "data/rates.csv", value: "rate" },
+      roles: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "id", size: "beds", color: "alert" },
+      sizes: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "ids", size: "bed" },
+    };
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "full-bleed", title: "Columns", elements: [
+      { id: "map", type: "map", props: { boundaries: "data/regions.geojson", id: "code", layers: ${JSON.stringify(layers)} } },
+      { id: "src", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`);
+    assert.deepEqual((await validate(tmp)).map((p) => p.measured).sort(), ["layers.sizes.id = 'ids'", "layers.sizes.size = 'bed'"]);
+    writeFileSync(join(tmp, "data", "rates.csv"), "region,rate\nN1,9.3\n");
+    const keyed = await validate(tmp);
+    assert.ok(keyed.some((p) => p.measured === "layers.rates.key = 'code' (the map's id)"), show(keyed));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("the map and gallery decks validate clean; the broken map deck reports its errors by rule", async () => {
+  for (const deck of [decks("map"), join(repo, "site/gallery")]) {
+    const problems = await validate(deck);
+    assert.deepEqual(problems, [], show(problems));
+  }
+  const problems = await validate(decks("map-broken"));
+  const byRule = (rule) => problems.filter((p) => p.rule === rule).map((p) => p.slide).sort();
+  assert.deepEqual(byRule("map-layer"), ["layer"]);
+  assert.deepEqual(byRule("missing-column"), ["column", "hue", "lon"]);
+  assert.deepEqual(byRule("map-run"), ["long"]);
+  assert.deepEqual(byRule("map-raster"), ["mismatch"]);
+  assert.deepEqual(byRule("map-prop-unused"), ["numbers-none"]);
+});
+
+test("the map validate fixtures hold what their make.mjs writes", async () => {
+  const out = mkdtempSync(join(tmpdir(), "stepdeck-map-validate-"));
+  try {
+    for (const name of ["map-frame", "map-prop-unused", "map-raster", "map-run"]) {
+      execFileSync(process.execPath, [join(fixture(name), "make.mjs"), "--out", join(out, name)], { stdio: "pipe" });
+      const written = readdirSync(join(out, name, "data")).sort();
+      for (const file of written) {
+        const [actual, expected] = [join(out, name, "data", file), join(fixture(name), "data", file)];
+        if (file.endsWith(".png") && !file.startsWith("junk")) {
+          // zlib's output can differ between Node versions: compare what a PNG says and, where it can be read, holds
+          const info = pngInfo(readFileSync(expected));
+          assert.deepEqual(pngInfo(readFileSync(actual)), info, `${name}/${file} header`);
+          if (info.colorType === 0 && info.interlace === 0) assert.deepEqual(pngPixels(readFileSync(actual)), pngPixels(readFileSync(expected)), `${name}/${file} pixels`);
+        } else {
+          assert.ok(readFileSync(actual).equals(readFileSync(expected)), `${name}/${file} is not what make.mjs writes`);
+        }
+      }
+      assert.deepEqual(readdirSync(join(fixture(name), "data")).sort(), written, `${name}: every file in data/ comes from make.mjs`);
+    }
+  } finally {
+    rmSync(out, { recursive: true, force: true });
   }
 });
 

@@ -1,0 +1,165 @@
+{
+  "bounds": [
+    -14,
+    -28,
+    -12,
+    -26
+  ],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 100
+  },
+  "frames": [
+    {
+      "src": "cell.png",
+      "label": "2000",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2001",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2002",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2003",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2004",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2005",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2006",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2007",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2008",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2009",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2010",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2011",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2012",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2013",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2014",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2015",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2016",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2017",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2018",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2019",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2020",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2021",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2022",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2023",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2024",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2025",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2026",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2027",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2028",
+      "numbers": {}
+    },
+    {
+      "src": "cell.png",
+      "label": "2029",
+      "numbers": {}
+    }
+  ]
+}

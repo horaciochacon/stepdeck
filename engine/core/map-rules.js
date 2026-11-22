@@ -20,7 +20,8 @@
 // What `validate` reports, as [{ rule, severity: "warning" | "error", message, limit, fix }] like `chartProblems`
 //   `files` is { [rasterPath]: { json, pngs: { [src]: info } } }: for each raster layer, keyed by the layer's
 //   `raster` prop, the parsed sidecar and the `pngInfo` of each image it names, keyed as the sidecar writes `src`.
-//   A layer is a time-lapse when its sidecar has `frames`.
+//   An image that is not there has no entry (reported as "not found"); one that could not be read has
+//   `{ error: "not a PNG" }` (reported as `<path>: not a PNG`). A layer is a time-lapse when its sidecar has `frames`.
 //   mapProblems(props, files)              one element at one step
 //   mapRunProblems(prev, next, files, timing, maxRun)   one step that changes `frame`; `timing` is
 //                                          { duration, transition } in ms: the `--sd-duration` token, and the
@@ -30,7 +31,7 @@
 //   map-layer (error)         `shown` names an id that is not in `layers`.
 //   map-frame (error)         `frame` is not a label of the time-lapse; two time-lapse layers have different label
 //                             lists; a `numbers` key is found in two time-lapse layers.
-//   map-raster (error)        a sidecar, a PNG or a frame size outside the raster format.
+//   map-raster (error)        a sidecar, a PNG (an interlaced one included) or a frame size outside the raster format.
 //   map-run (error)          the first phase plus frames moved x `pace` is longer than `maxRun`.
 //   map-prop-unused (warning) `frame` or `pace` without a time-lapse layer; a `numbers` key no frame has.
 import { numberOf } from "./chart-layout.js";
@@ -266,13 +267,14 @@ export function rasterProblems(json, path) {
 
 /**
  * What is wrong with a PNG for the raster format, from its header and chunk list (`pngInfo` in `cli/png.js`).
- * @param {{ width: number, height: number, bitDepth: number, colorType: number, chunks: string[] }} info
+ * @param {{ width: number, height: number, bitDepth: number, colorType: number, interlace?: number, chunks: string[] }} info
  * @param {string} path the image's path, for the messages
  * @returns {string[]}
  */
 export function pngProblems(info, path) {
   const found = [];
   if (info.bitDepth !== 8) found.push(`bit depth ${info.bitDepth} is not 8`);
+  if (info.interlace) found.push("is interlaced; only non-interlaced PNGs are read");
   if (info.colorType !== 0 && info.colorType !== 4) found.push(`color type ${info.colorType} is not 0 (grey) or 4 (grey with alpha)`);
   for (const type of COLOR_CHUNKS) if (info.chunks.includes(type)) found.push(`has a ${type} chunk; color chunks are not allowed`);
   if (info.width * info.height > MAX_RASTER_PIXELS) found.push(`${info.width}×${info.height} is more than 2,000×2,000 pixels`);
@@ -344,8 +346,12 @@ function rasterFileProblems(layers) {
         report([`${png}: not found`], "every `src` names an image next to the sidecar", "add the image, or correct the `src`");
         continue;
       }
+      if (typeof info.error === "string") {
+        report([`${png}: ${info.error}`], "every `src` names a readable image next to the sidecar", "re-export the image as a PNG inside the deck");
+        continue;
+      }
       const bad = pngProblems(info, png);
-      report(bad, "8-bit greyscale PNG (type 0 or 4), no color chunks, at most 2,000×2,000 pixels", "re-export the image as 8-bit greyscale without a color profile");
+      report(bad, "8-bit greyscale PNG (type 0 or 4), not interlaced, no color chunks, at most 2,000×2,000 pixels", "re-export the image as 8-bit greyscale, not interlaced, without a color profile");
       if (bad.length === 0 && first === null) first = { info, png };
       else if (bad.length === 0 && (info.width !== first.info.width || info.height !== first.info.height)) {
         report([`${png}: ${info.width}×${info.height} is not ${first.info.width}×${first.info.height}, the size of ${first.png}`], "every frame has the same size", "export every frame at one size");
