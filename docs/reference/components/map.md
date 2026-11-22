@@ -237,6 +237,8 @@ steps: [
 
 **The "no data" row reflects the frames your steps show.** A time-lapse layer's legend row has the "no data" swatch when some land lacks data in one of the frames the slide's steps name for it (the `frame` of each step that shows the layer, the first frame where a step sets none), not in every frame of the file. The row is the same at every step of the slide, so it does not come and go while the frames play; a frame a run only passes through does not count. A map mounted by a custom component (`ctx.mount`), which has no steps of its own, takes the row from the frame each update shows.
 
+**Leaving the slide.** The reveal shell pauses a slide it leaves (the bare shell destroys it). A paused map frees its raster lookup tables and pictures; the next step it shows builds again what it needs, and draws the same. The decoded frames of a raster are not the element's: they are shared across the deck by every map that names the file (at most 12 per raster, the least recently used going first), and pausing does not free them.
+
 **Ending a run early.** A jump, a backward step, reduced motion and capture show the step's frame and its numbers at once. A click during a run ends it on its frame and applies the next step; hiding the page or leaving the slide ends it at once.
 
 ## Legend

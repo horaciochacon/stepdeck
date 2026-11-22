@@ -19,7 +19,8 @@
 //
 // `view` is a view of the geography (core/map.js `view`): home, fitted to regions, or to a box of longitude and latitude.
 // The element keeps the raster lookup tables it builds (one per view, size and raster grid) and a bounded cache of
-// raster pictures, both dropped when its size changes and when it is destroyed. At mount it builds the lookup tables of
+// raster pictures, both dropped when its size changes, when it is paused (its slide left) and when it is destroyed;
+// the decoded frames of a raster are the deck's (core/map.js) and stay. At mount it builds the lookup tables of
 // every view its slide's steps name (the inset's too, at the inset's size), for the rasters each step declares, for up to
 // 2 s, so a flight does not wait for them; the rest are built on first need (a `ctx.mount` child, with no `stepProps`,
 // builds them all on first need).
@@ -465,6 +466,12 @@ export default {
         if (gone) return;
         draw(target, between(target, target, 1, 1));
         last = target;
+      },
+      pause() {
+        // Off screen, the slide keeps only what it draws: the lookup tables and pictures are cleared in place (prepared
+        // raster layers hold `geo.pictures` by reference) and the next update builds what its step needs.
+        caches.lookups.clear();
+        caches.pictures.clear();
       },
       destroy() {
         gone = true;
