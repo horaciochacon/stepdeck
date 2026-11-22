@@ -311,7 +311,7 @@ test("lookup: a world raster keeps its place across the antimeridian seam", () =
 
 test("mapKit: frozen, exactly the public names", () => {
   assert.ok(Object.isFrozen(mapKit));
-  assert.deepEqual(Object.keys(mapKit).sort(), ["applyView", "boundaries", "lookup", "projection", "view"]);
+  assert.deepEqual(Object.keys(mapKit).sort(), ["applyView", "boundaries", "insetFrame", "lookup", "paintAreas", "paintPoints", "projection", "scaleBar", "view"]);
   for (const [name, value] of Object.entries(mapKit)) assert.equal(typeof value, "function", name);
 });
 

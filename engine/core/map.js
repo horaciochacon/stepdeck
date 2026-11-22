@@ -1,6 +1,6 @@
 // The geography of a map, and `mapKit`: the same pieces, frozen, which every component receives as `ctx.map`. A custom
 // component can read boundaries, fit a projection, move between views and line a lon/lat raster up with the regions
-// without the built-in `map`. Later pieces (rasters, painters) join the same object.
+// without the built-in `map`. The painters (core/map-paint.js) join the same object.
 //
 //   boundaries(geojson, { id, name, file })   validate a FeatureCollection of Polygons and MultiPolygons, fix the winding,
 //                                             index the regions by id: { features, byId, ids, names }
@@ -9,6 +9,7 @@
 //   applyView(v, [px, py])                    a base-projected point seen through a view
 //   lookup(base, v, [w, h], bounds, [cols, rows], { step })
 //                                             the raster cell under every canvas pixel (or -1), from a coarse inverse grid
+//   paintAreas, paintPoints, insetFrame, scaleBar   the vector painters and the map furniture (core/map-paint.js)
 //
 // A view is a 2D transform of the base's pixels (d3's fitExtent changes only scale and translate), so a flight between
 // two views is affine: a component redraws cached paths with one `setTransform` instead of re-projecting.
@@ -16,6 +17,7 @@
 // The lookup is for one view and one size. A component that asks for the same table often keeps its own cache (per
 // element, cleared on destroy and on a size change), because the table's identity is the element's.
 import { d3 } from "./d3.js";
+import { paintAreas, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
 
 /** The most regions in one boundaries file. */
 export const MAX_REGIONS = 5000;
@@ -235,4 +237,4 @@ export function lookup(base, v, [w, h], [west, south, east, north], [cols, rows]
  * The geography building blocks a component gets as `ctx.map`: one frozen object, the same for every component and child.
  * Its public names are the contract (docs/reference/component-contract.md).
  */
-export const mapKit = Object.freeze({ boundaries, projection, view, applyView, lookup });
+export const mapKit = Object.freeze({ boundaries, projection, view, applyView, lookup, paintAreas, paintPoints, insetFrame, scaleBar });

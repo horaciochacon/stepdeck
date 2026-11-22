@@ -299,6 +299,13 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-legend-ramp { flex: none; width: 6em; height: 0.6em; box-sizing: border-box; border: 1px solid var(--sd-color-rule); }
 .sd-legend-nodata { background-image: repeating-linear-gradient(45deg, var(--sd-color-dim) 0 1.5px, var(--sd-color-surface) 1.5px 6px); }
 
+/* map furniture (core/map-paint.js `insetFrame`, `scaleBar`): the inset's box and frame and the scale bar are ink, the
+   leaders between them muted and dashed (the dash is an attribute); the label sits on a halo in the background colour. */
+.sd-map-inset-box, .sd-map-inset-frame { fill: none; stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
+.sd-map-inset-leader { stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
+.sd-map-scale-bar, .sd-map-scale-caps { stroke: var(--sd-color-ink); stroke-width: calc(var(--sd-rule-width) * 1.5); }
+.sd-map-scale text { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); font-variant-numeric: tabular-nums; stroke: var(--sd-color-background); stroke-width: 4; stroke-linejoin: round; paint-order: stroke; }
+
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the
    component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */

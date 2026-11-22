@@ -34,7 +34,7 @@
 // ctx.motion is makeMotion(tokens) (core/motion.js): the named motions with the theme's defaults.
 // ctx.chart is chartKit (core/chart.js): the one frozen chart-building-blocks object, the same for every component
 // and child.
-// ctx.map is mapKit (core/map.js): the frozen geography building blocks (boundaries, projection, view, lookup), the same
+// ctx.map is mapKit (core/map.js): the frozen geography building blocks (boundaries, projection, view, lookup, painters), the same
 // for every component and child.
 //
 // ctx.mount(type, el, props) -> Promise<handle>   (spec §6.3: built-ins inside a custom component)

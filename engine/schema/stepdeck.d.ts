@@ -517,6 +517,43 @@ export interface MapView {
   y: number;
 }
 
+/** One region of a `paintAreas` scene. A `null` fill is hatched; a `dot` is a circle of 5 px at the region's centroid, at screen size. */
+export interface MapAreaItem {
+  id: string;
+  fill: string | null;
+  stroke: string;
+  /** The stroke's width in screen px. */
+  width: number;
+  dot: boolean;
+}
+
+/** Everything `paintAreas` draws, as plain data: the painter hashes all of it. Colours are resolved CSS colours. */
+export interface MapAreaScene {
+  /** Names the geometry (a file path); `res` resolves it, and it is hashed in place of the paths. */
+  source: string;
+  view: MapView;
+  alpha: number;
+  /** The hatch of a null fill: the stripe colour over the background colour (the theme's `--sd-color-dim` over `--sd-color-surface`). */
+  hatch: { line: string; background: string };
+  items: MapAreaItem[];
+}
+
+/** What `paintAreas` draws with: both in base-projected px. */
+export interface MapAreaResources {
+  path(id: string): Path2D;
+  centroid(id: string): [number, number];
+}
+
+/** Everything `paintPoints` draws. `x` and `y` are base-projected px, seen through the view; `r` is in screen px. */
+export interface MapPointScene {
+  view: MapView;
+  alpha: number;
+  items: { id: string; x: number; y: number; r: number; fill: string; stroke: string | null }[];
+}
+
+/** `[x0, y0, x1, y1]` in the element's px. */
+export type MapRect = [number, number, number, number];
+
 /**
  * The geography building blocks every component gets as `ctx.map` (one frozen object). See the component contract
  * for each one's behavior.
@@ -540,6 +577,23 @@ export interface MapKit {
    * spacing in pixels of the grid inverted exactly (default 8), the rest interpolated.
    */
   lookup(base: any, view: MapView, size: [number, number], bounds: [number, number, number, number], grid: [number, number], options?: { step?: number }): Int32Array;
+  /**
+   * Clears `canvas` and paints the regions of `scene` under one transform that holds the backing-store ratio and the
+   * view (line widths are divided by the view's scale). Returns the scene's signature, 8 hex digits.
+   */
+  paintAreas(canvas: HTMLCanvasElement, scene: MapAreaScene, res: MapAreaResources): string;
+  /** Clears `canvas` and paints circles at screen size, placed through the view. Returns the scene's signature. */
+  paintPoints(canvas: HTMLCanvasElement, scene: MapPointScene): string;
+  /**
+   * Draws (or rewrites, in place) the one `g.sd-map-inset` of `svg`: two dashed leader lines, the box on the main map
+   * and the inset's frame. Returns the group.
+   */
+  insetFrame(svg: SVGSVGElement, where: { box: MapRect; frame: MapRect }): SVGGElement;
+  /**
+   * Draws (or rewrites) the one `g.sd-map-scale` of `svg`: a bar starting at `at` whose length is the largest 1, 2 or
+   * 5 x 10^n km that fits in `maxWidth` at that point, labelled `${format(n)} km`. Returns the group.
+   */
+  scaleBar(svg: SVGSVGElement, where: { base: any; view: MapView; at: [number, number]; maxWidth: number; format: (n: number) => string }): SVGGElement;
 }
 
 export interface ComponentContext {
@@ -585,7 +639,7 @@ export interface ComponentContext {
   stepProps: ReadonlyArray<Props | null> | null;
   /** The shared chart building blocks (marks, joins, motion, canvas layer): one frozen object. */
   chart: ChartKit;
-  /** The shared geography building blocks (boundaries, projection, views, the raster lookup): one frozen object. */
+  /** The shared geography building blocks (boundaries, projection, views, the raster lookup, the vector painters): one frozen object. */
   map: MapKit;
 }
 
