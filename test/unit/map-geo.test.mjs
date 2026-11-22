@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { d3 } from "#engine/core/d3.js";
-import { applyView, boundaries, landCells, lookup, lut, mapKit, projection, view } from "#engine/core/map.js";
+import { DEFAULT_PROJECTION, applyView, boundaries, landCells, lookup, lut, mapKit, projection, view } from "#engine/core/map.js";
 import { SlideController } from "#engine/core/controller.js";
 import { makeFormat } from "#engine/core/format.js";
 import { landGrid, landOf } from "../../site/gallery/data/map/fictional.mjs";
@@ -119,6 +119,28 @@ test("projection: kinds, and the message for an unknown one", () => {
   }
   assert.throws(() => projection("x", features, SIZE), { message: "unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area)" });
   assert.throws(() => projection("equal-earth", [], SIZE), { message: "projection needs at least one region" });
+});
+
+test("projection: the default keeps a country's shape, on the equator, across it and far from it", () => {
+  // A box of a country's size, drawn as a ring of points along its edges. Its true width over height is taken from an
+  // azimuthal equidistant projection centred on it; the default must stay within 2% of that wherever the box lies.
+  // Equal Earth, the world projection, draws the same boxes a quarter too narrow near the equator and nearly twice too
+  // wide at 64°N.
+  const box = (west, south, east, north) => {
+    const edge = (a, b) => Array.from({ length: 10 }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / 10, a[1] + ((b[1] - a[1]) * i) / 10]);
+    const ring = [...edge([west, south], [west, north]), ...edge([west, north], [east, north]), ...edge([east, north], [east, south]), ...edge([east, south], [west, south]), [west, south]];
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: { code: "A" }, geometry: { type: "Polygon", coordinates: [ring] } }] };
+  };
+  const ratio = (base, fc) => { const [[x0, y0], [x1, y1]] = d3.geoPath(base).bounds(fc); return (x1 - x0) / (y1 - y0); };
+  assert.equal(DEFAULT_PROJECTION, "conic-equal-area");
+  for (const [west, south, east, north] of [[-81, -18, -69, 0], [-80, -5, -75, 5], [30, -10, 40, 10], [5, 58, 30, 71], [177, -19, 182, -16]]) {
+    const fc = box(west, south, east, north);
+    const { features, base } = fitted(DEFAULT_PROJECTION, fc);
+    const [cx, cy] = d3.geoCentroid({ type: "FeatureCollection", features });
+    const truth = ratio(d3.geoAzimuthalEquidistant().rotate([-cx, -cy]).fitSize(SIZE, fc), fc);
+    const drawn = ratio(base, { type: "FeatureCollection", features });
+    assert.ok(Math.abs(drawn / truth - 1) < 0.02, `[${west}, ${south}, ${east}, ${north}]: drawn ${drawn.toFixed(3)}, true ${truth.toFixed(3)}`);
+  }
 });
 
 test("projection: fitted with a 6% margin of the smaller side", () => {

@@ -588,7 +588,7 @@ The names are in four groups. Each group has its signatures and one short exampl
 
 ```js
 const { features, byId } = ctx.map.boundaries(await ctx.data("data/regions.geojson"), { id: "code", name: "name", file: "data/regions.geojson" });
-const base = ctx.map.projection("equal-earth", features, [w, h]);            // once, at mount
+const base = ctx.map.projection("conic-equal-area", features, [w, h]);       // once, at mount
 const home = ctx.map.view(base, null, [w, h]);                              // { k: 1, x: 0, y: 0 }
 const west = ctx.map.view(base, [byId.get("W4")], [w, h]);                  // fitted to one region
 const box = ctx.map.view(base, { bounds: [-18, -30, -11, -24] }, [w, h]);   // fitted to a box in degrees

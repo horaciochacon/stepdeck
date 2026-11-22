@@ -29,8 +29,8 @@
     },
     "projection": {
       "enum": ["equal-earth", "natural-earth", "mercator", "conic-equal-area"],
-      "description": "The map projection, centred on the regions and fitted to the element with a margin. \"equal-earth\" (the default) keeps areas true; \"conic-equal-area\" suits a mid-latitude country wider than it is tall (its two parallels sit a sixth of the way in from each end of the regions' latitudes).",
-      "examples": ["equal-earth", "conic-equal-area"],
+      "description": "The map projection, centred on the regions and fitted to the element with a margin. \"conic-equal-area\" (the default) keeps areas true and, for a country or a region of one, nearly its shape (its two parallels sit a sixth of the way in from each end of the regions' latitudes). A world or continent map names \"equal-earth\", which keeps areas but narrows shapes near the equator; \"mercator\" keeps shapes but enlarges areas away from the equator.",
+      "examples": ["conic-equal-area", "equal-earth"],
       "x-transition": "snap"
     },
     "layers": {

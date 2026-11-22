@@ -37,6 +37,10 @@ export const PROJECTIONS = Object.freeze({
   mercator: () => d3.geoMercator(),
   "conic-equal-area": () => d3.geoConicEqualArea(),
 });
+/** The projection a map element draws in when its props name none: an equal-area conic fitted to the regions keeps their
+ *  areas and, at the size of a country or a region of one, nearly their shape (within a few per cent, even for Brazil or
+ *  Russia). A world or continent map names "equal-earth". */
+export const DEFAULT_PROJECTION = "conic-equal-area";
 /** The margin around fitted content, as a share of the canvas's smaller side. */
 const PADDING = 0.06;
 /** The points along each edge of a `{ bounds }` box that `view` projects: the edges curve. */

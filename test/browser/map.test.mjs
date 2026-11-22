@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { d3 } from "../../engine/core/d3.js";
-import { applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
+import { DEFAULT_PROJECTION, applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
 import { pngPixels } from "../../cli/png.js";
 import { deckPages, goTo, settled, elementHtml, canvasPixels, tokenRgb, paletteRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
@@ -31,7 +31,7 @@ const LEGEND_COLOURS = ".sd-legend-swatch, .sd-legend-ramp";
  */
 function anchors(file, size) {
   const { features, byId } = boundaries(JSON.parse(readFileSync(`${root}${DECK}${file}`, "utf8")), { id: "code" });
-  const base = projection("equal-earth", features, size);
+  const base = projection(DEFAULT_PROJECTION, features, size);
   const path = d3.geoPath(base);
   const at = new Map([...byId].map(([id, feature]) => [id, path.centroid(feature).map(Math.round)]));
   /** The pixel under the middle of a region's first edge: on its outline. */
@@ -364,7 +364,7 @@ test("map: a projection change changes every signature", async () => {
 // --- raster layers ----------------------------------------------------------------------------------------------
 
 const { features: LAND, byId: REGIONS } = boundaries(JSON.parse(readFileSync(`${root}${DECK}data/regions.geojson`, "utf8")), { id: "code" });
-const BASE = projection("equal-earth", LAND, SIZE);
+const BASE = projection(DEFAULT_PROJECTION, LAND, SIZE);
 const RASTER = (name) => `main:raster:${name}`;
 
 /** A raster of the fixture, read from its files in Node: its bounds, size, and what each cell holds ({ level, data }). */
