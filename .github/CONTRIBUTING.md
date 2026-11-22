@@ -22,8 +22,8 @@ npm test
 ```
 
 The browser suite drives Chrome through Playwright, which is not a dependency of this repository. Install it
-where Node can find it, or point `STEPDECK_PLAYWRIGHT` at a `playwright` package folder. It runs one file at a
-time and takes several minutes:
+where Node can find it, or point `STEPDECK_PLAYWRIGHT` at a `playwright` package folder. It runs six files at a
+time and takes about five minutes:
 
 ```sh
 STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser

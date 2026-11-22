@@ -31,7 +31,7 @@
   },
   "scripts": {
     "test": "node --test 'test/unit/**/*.test.mjs'",
-    "test:browser": "node --test --test-concurrency=1 'test/browser/**/*.test.mjs'",
+    "test:browser": "node --test --test-concurrency=6 'test/browser/**/*.test.mjs'",
     "site": "node cli/serve-site.js"
   },
   "devDependencies": {

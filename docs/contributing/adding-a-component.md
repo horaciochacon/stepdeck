@@ -250,7 +250,7 @@ See [Adding a rule](adding-a-rule.md) for rules that are not tied to one compone
 
 **Unit tests** (`npm test`, plain `node:test`, no browser) for the pure modules: one file `test/unit/<name>.test.mjs` that imports `derive.js`, `place.js` or similar and checks the derived state and every error message. `test/unit/list.test.mjs` and `test/unit/diagram-place.test.mjs` are the models. The registration, schema and catalog tests named above run in the same suite and fail until the component is registered correctly.
 
-**Browser tests** (`npm run test:browser`, one file at a time, Playwright from `STEPDECK_PLAYWRIGHT`). Add:
+**Browser tests** (`npm run test:browser`, Playwright from `STEPDECK_PLAYWRIGHT`). Add:
 
 - a fixture deck `test/fixtures/decks/<name>/` with `deck.js` and one slide per behaviour (reveal, each motion, each error). Use synthetic values. `test/fixtures/decks/list/` is in Spanish, so it also covers `lang: "es"`;
 - `test/browser/<name>.test.mjs`, which opens pages with `withPage` from `cli/browser.js` and checks motion with the helpers in `test/browser/helpers.mjs`.
@@ -286,7 +286,7 @@ test("jump equals played: reveal and checklist", async () => {
 Run one file while you work:
 
 ```sh
-STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/list.test.mjs
+STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/list.test.mjs
 ```
 
 If you also add a slide to `examples/kit`, update the `STEPS` table in `test/browser/kit.test.mjs`. That test requires the kit deck to stay clean under `validate`, `check` and `check --played`. See [Testing](testing.md) for the fixture conventions.

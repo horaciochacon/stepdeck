@@ -329,10 +329,10 @@ Every rule gets a fixture deck that produces exactly that one problem. How the s
 
 3. If the line carries a number, add a match on it next to the existing `"check: measured values name the numbers"` test (`assert.match(small.measured, /20px/)`).
 
-4. Run the file with its concurrency flag:
+4. Run the file:
 
    ```sh
-   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/check.test.mjs
+   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/check.test.mjs
    ```
 
 A rule that only fires with `--played` needs a deck under `test/fixtures/decks/`, like `test/fixtures/decks/played-mismatch/`, and its own test.

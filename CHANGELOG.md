@@ -51,6 +51,7 @@ All notable changes to stepdeck are recorded here. The format follows
   to it works.
 - `.nojekyll` is gone: Pages deploys from an Actions artifact, which never runs Jekyll.
 - CI uploads the site while the fast gate runs, and splits the browser suite over six runners.
+- `npm run test:browser` runs six test files at a time, so the full suite takes about 5 minutes instead of 20.
 
 ### Added
 
