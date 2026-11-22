@@ -20,10 +20,7 @@ import { signature } from "../../core/canvas.js";
 import { colorScale } from "../../core/chart-scale.js";
 import { landCells, loadRaster, lookup, lut, rasterGaps } from "../../core/map.js";
 import { paintRaster } from "../../core/map-paint.js";
-
-const COLOR = "--sd-color-";
-/** The theme colour role a mask takes when the layer names none. */
-const DEFAULT_ROLE = "accent";
+import { DEFAULT_ROLE, roleColor, roleNames } from "./colors.js";
 
 /** What each geography keeps for its rasters: the lookup tables, the pictures `paintRaster` builds, and the land as one path. */
 const perGeo = new WeakMap();
@@ -51,12 +48,11 @@ function gapsOf(raster, features) {
   return byPath.get(raster.path);
 }
 
-/** The colour of theme role `role` (`accent`, `alert`, …), resolved; throws for a name the theme has no colour for. */
-function roleColor(role, ctx, file) {
-  const color = ctx.tokens?.[`${COLOR}${role}`]?.trim();
-  if (color) return color;
-  const roles = Object.keys(ctx.tokens ?? {}).filter((name) => name.startsWith(COLOR)).map((name) => name.slice(COLOR.length));
-  throw new Error(`${file}: color '${role}' is not a theme colour (${roles.join(", ")})`);
+/** The colour of the mask's theme role (`accent`, `alert`, …); throws for a name the theme has no colour for. */
+function maskColor(role, ctx, file) {
+  const color = roleColor(role, ctx);
+  if (!color) throw new Error(`${file}: color '${role}' is not a theme colour (${roleNames(ctx).join(", ")})`);
+  return color;
 }
 
 /** The canvas the old picture of `canvas` is painted on while a layer changes: a detached twin of it, the same size. */
@@ -97,7 +93,7 @@ export default {
     const mask = value.classes?.length === 1;
     const palettes = { sequential: ctx.palette?.("sequential"), diverging: ctx.palette?.("diverging"), categorical: ctx.palette?.("categorical") };
     const spec = value.classes
-      ? { categories: value.classes, color: mask ? roleColor(layer.color ?? DEFAULT_ROLE, ctx, layer.raster) : undefined }
+      ? { categories: value.classes, color: mask ? maskColor(layer.color ?? DEFAULT_ROLE, ctx, layer.raster) : undefined }
       : { classes: layer.classes, midpoint: layer.midpoint, domain: layer.domain, log: value.scale === "log", values: [value.min, value.max] };
     const scale = colorScale(spec, palettes, { format: ctx.format(",") });
     const lutData = lut(raster, (v) => scale.color(v));

@@ -548,3 +548,175 @@ test("rasters: a mask colour that is not a theme colour errors", async () => {
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
+
+// --- points -----------------------------------------------------------------------------------------------------
+
+const POINTS = (name) => `main:points:${name}`;
+/** The fixture's sites, read in Node: `at` is the pixel of each one (the same projection the map fits), `beds` its size. */
+const SITES = new Map(readFileSync(`${root}${DECK}data/sites.csv`, "utf8").trim().split("\n").slice(1).map((line) => {
+  const [id, lon, lat, beds, kind] = line.split(",");
+  return [id, { at: BASE([Number(lon), Number(lat)]).map(Math.round), exact: BASE([Number(lon), Number(lat)]), beds: Number(beds), kind }];
+}));
+const POINT_STEPS = ["base", "sites", "focus", "role", "plain", "alert"];
+/** The size of a point of the largest size `max`: the area is true to the value, 18 px across at the largest. */
+const radiusOf = (beds, max = 70) => 18 * Math.sqrt(beds / max);
+/** The key of the layer on screen, as the page shows it: the title, the colour swatches and the circles with their labels. */
+const keyOf = (page) =>
+  page.evaluate(() => [...document.querySelectorAll('[data-el="map"] .sd-map-legend .sd-legend-row')].map((row) => ({
+    title: row.querySelector(".sd-legend-title")?.textContent ?? null,
+    swatches: [...row.querySelectorAll(".sd-legend-swatch")].map((s) => s.style.backgroundColor),
+    labels: [...row.querySelectorAll(".sd-legend-item .sd-legend-label")].map((n) => n.textContent),
+    circles: [...row.querySelectorAll(".sd-legend-circle")].map((c) => Number(c.getAttribute("width"))),
+  })));
+/** How wide a point is along the row of its centre, as the radius its fill covers plus the half of the 1.5 px outline. */
+async function measuredRadius(page, layer, id, fill) {
+  const { exact: [x, y], at } = SITES.get(id);
+  const box = await pixelsAround(page, layer, [at[0], Math.round(y)], 30);
+  const row = box.slice(30 * 61, 31 * 61); // the middle row of the 61 x 61 box
+  return row.filter((p) => p[3] === 255 && rgb(p) === fill).length / 2 + 0.75;
+}
+
+test("points: played equals jumped", async () => {
+  await withPage({ root, url: pages.url("points", "step=base") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "points", steps: POINT_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("points: backward and interrupted equal the jump", async () => {
+  await withPage({ root, url: pages.url("points", "step=base") }, async (page, ctx) => {
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "points", steps: POINT_STEPS, id: "map" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "points", from: "base", via: "sites", to: "focus", id: "map", keep: LEGEND_COLOURS });
+    // in the middle of a recolouring, then on to another layer
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "points", from: "focus", via: "role", to: "plain", id: "map", keep: LEGEND_COLOURS });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("points: the layers stack land, borders, points, labels", async () => {
+  await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
+    const order = await page.evaluate(() => [...document.querySelector('[data-el="map"]').children].filter((n) => n.localName === "canvas" || n.localName === "svg").map((n) => n.dataset.layer ?? n.getAttribute("class")));
+    assert.deepEqual(order, ["main:base", "main:borders", POINTS("sites"), POINTS("plain"), "sd-map-labels"], "points are over the borders, the names over the points");
+    const sites = await page.evaluate(() => document.querySelector('canvas[data-layer="main:points:sites"]').dataset);
+    assert.equal(sites.shown, "sites");
+    assert.match(sites.sig, /^[0-9a-f]{8}$/);
+    assert.equal(await page.evaluate(() => document.querySelector('canvas[data-layer="main:points:plain"]').dataset.sig), "", "a layer that is not shown paints nothing");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: radius follows the area of the value", async () => {
+  await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
+    const fill = (id) => paletteRgb("academic-light", SITES.get(id).kind === "clinic" ? 0 : 1);
+    // S4 has 40 beds and S1 has 10: four times the area, twice the radius. The largest, S7 with 70, is 18 px.
+    const [big, small] = [await measuredRadius(page, POINTS("sites"), "S4", fill("S4")), await measuredRadius(page, POINTS("sites"), "S1", fill("S1"))];
+    assert.ok(Math.abs(big - radiusOf(40)) <= 1, `S4: ${big} px, expected ${radiusOf(40).toFixed(1)}`);
+    assert.ok(Math.abs(small - radiusOf(10)) <= 1, `S1: ${small} px, expected ${radiusOf(10).toFixed(1)}`);
+    assert.ok(Math.abs(big - 2 * small) <= 1, `${big} px is twice ${small} px`);
+    assert.ok(Math.abs((await measuredRadius(page, POINTS("sites"), "S7", fill("S7"))) - 18) <= 1, "the largest is 18 px");
+    // without `size` every point is 6 px
+    await goTo(page, "points", "plain");
+    const accent = await tokenRgb(page, "--sd-color-accent");
+    assert.ok(Math.abs((await measuredRadius(page, POINTS("plain"), "S4", accent)) - 6) <= 1, "6 px without a size");
+    assert.ok(Math.abs((await measuredRadius(page, POINTS("plain"), "S1", accent)) - 6) <= 1);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: size key shows two circles with labels", async () => {
+  await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
+    const [row, ...more] = await keyOf(page);
+    assert.equal(more.length, 0, "one row for the layer");
+    assert.equal(row.title, "Beds");
+    // the largest, 70, and a quarter of it, at the radii those values have on the map
+    assert.deepEqual(row.labels, ["clinic", "hospital", "70", "17.5"]);
+    assert.deepEqual(row.circles, [36, 18], "their diameters");
+    // a layer with no size and no colour column explains nothing
+    await goTo(page, "points", "plain");
+    assert.deepEqual(await keyOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: colour column takes the categorical palette in order", async () => {
+  await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
+    // clinic appears first (S1), then hospital
+    const [clinic, hospital] = [paletteRgb("academic-light", 0), paletteRgb("academic-light", 1)];
+    assert.deepEqual((await keyOf(page))[0].swatches, [clinic, hospital]);
+    for (const [id, site] of SITES) {
+      assert.equal(rgb(await pixelAt(page, POINTS("sites"), site.at)), site.kind === "clinic" ? clinic : hospital, `${id} is a ${site.kind}`);
+    }
+    // a colour that is not a column is a theme role: accent by default, then the alert colour
+    await goTo(page, "points", "role");
+    const alert = await tokenRgb(page, "--sd-color-alert");
+    assert.equal(rgb(await pixelAt(page, POINTS("sites"), SITES.get("S1").at)), alert, "the role colours every point");
+    assert.deepEqual((await keyOf(page))[0].swatches, [], "and the key keeps its size circles only");
+    await goTo(page, "points", "plain");
+    assert.equal(rgb(await pixelAt(page, POINTS("plain"), SITES.get("S1").at)), await tokenRgb(page, "--sd-color-accent"));
+    await goTo(page, "points", "alert");
+    assert.equal(rgb(await pixelAt(page, POINTS("plain"), SITES.get("S1").at)), alert);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: highlight dims the rest", async () => {
+  await withPage({ root, url: pages.url("points", "step=sites") }, async (page, ctx) => {
+    const [clinic, hospital] = [paletteRgb("academic-light", 0), paletteRgb("academic-light", 1)];
+    await goTo(page, "points", "focus");
+    const [dim, ink] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-ink")];
+    assert.equal(rgb(await pixelAt(page, POINTS("sites"), SITES.get("S4").at)), hospital, "S4 keeps its colour");
+    for (const id of ["S1", "S2", "S3", "S5", "S6", "S7"]) assert.equal(rgb(await pixelAt(page, POINTS("sites"), SITES.get(id).at)), dim, `${id} turns the dim colour`);
+    // and S4 gets an ink outline, which the others do not
+    const ring = async (id) => {
+      const [x, y] = SITES.get(id).at;
+      const r = Math.round(radiusOf(SITES.get(id).beds));
+      return (await pixelsAround(page, POINTS("sites"), [x + r, y], 2)).filter((p) => p[3] > 0).map(rgb);
+    };
+    const near = (c, target, by) => c.match(/\d+/g).map(Number).every((v, i) => Math.abs(v - target.match(/\d+/g).map(Number)[i]) <= by);
+    assert.ok((await ring("S4")).some((c) => near(c, ink, 90)), `S4's outline is ink (${(await ring("S4")).join(" | ")})`);
+    assert.ok(!(await ring("S5")).some((c) => near(c, ink, 90)), "S5's is not");
+    assert.equal((await page.evaluate(() => document.querySelector('canvas[data-layer="main:points:sites"]').dataset.highlight)), "S4");
+    await goTo(page, "points", "sites");
+    assert.equal(rgb(await pixelAt(page, POINTS("sites"), SITES.get("S1").at)), clinic, "and it lasts one step");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: a fade brings the layer in and a change of colour crossfades", async () => {
+  await withPage({ root, url: pages.url("points", "step=base&motion=full") }, async (page, ctx) => {
+    const { at } = SITES.get("S1");
+    const shows = await sampleFrames(page, "points", "sites", "map", alphaProbe(POINTS("sites"), at));
+    assert.equal(shows.frames[0].alpha, 0, "the layer starts clear");
+    assert.equal(shows.end.alpha, 255, "and ends opaque");
+    assert.ok(shows.frames.filter((f) => f.alpha > 0 && f.alpha < 255).length >= 2, "passing through partial opacity");
+    await ctx.open(pages.url("points", "step=focus&motion=full"));
+    const { frames, end } = await sampleFrames(page, "points", "role", "map", colourProbe(POINTS("sites"), at));
+    assert.equal(end.color, await tokenRgb(page, "--sd-color-alert"));
+    assert.ok(frames.some((f) => strictlyBetween(f.color, frames[0].color, end.color)), `a frame between the two colours (${frames.map((f) => f.color).join(" | ")})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("points: a row without lon or lat errors", async () => {
+  await withPage({ root, url: broken.url("row", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["row/map: data/sites.csv: row 4 has no lon"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("points: a misspelled lon column errors", async () => {
+  await withPage({ root, url: broken.url("lon", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["lon/map: column 'lng' not found in data/sites.csv (columns: id, lon, lat, beds, kind)"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("points: highlight names regions and points, and a colour that is neither a column nor a role errors", async () => {
+  await withPage({ root, url: broken.url("point", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["point/map: 'Nowhere' not found (regions: E1, I1, I2, N1, N2, …; points: S1, S2, S3, S4, S5, …)"]);
+    await ctx.open(broken.url("hue", ""));
+    const [message] = await errorsOf(page);
+    assert.match(message, /^hue\/map: data\/sites-ok\.csv: color 'kinds' is not a column \(id, lon, lat, beds, kind\) or a theme colour \(.*\baccent\b/);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});

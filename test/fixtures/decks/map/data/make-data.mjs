@@ -15,6 +15,7 @@
 //   levels.json + levels.png                            4×1 px, grey + alpha: levels 0, 1, 254, 255, the second transparent
 // Broken files, in ../../map-broken/data (kept apart, as the points fixtures are, so `map` stays clean):
 //   regions.geojson, rates.csv                          copies of the clean ones
+//   sites.csv, sites-ok.csv                             the clean sites with the fourth row's lon blank, and whole
 //   twice.csv                                           rates.csv with the first region's row given twice
 //   years30.json + years30/                             30 frames, 8×6 px: 29 moves, 20.3 s, longer than a run may be
 //   wide.json + wide.png                                2001×2000 px at one level: over the pixel limit
@@ -82,10 +83,15 @@ writeBroken("twice.csv", `${[...rateLines, rateLines[1]].join("\n")}\n`);
 // the density image on a log scale
 write("log.json", jsonText({ bounds, value: { scale: "log", min: 1, max: 1000, unit: "people per km²" }, src: "density.png" }));
 
-write("sites.csv", csvText(["id", "lon", "lat", "beds", "kind"], mainland.map((f, i) => {
+const SITE_COLUMNS = ["id", "lon", "lat", "beds", "kind"];
+const sites = mainland.map((f, i) => {
   const [lon, lat] = centroid(f);
   return { id: `S${i + 1}`, lon: lon.toFixed(3), lat: lat.toFixed(3), beds: 10 * (i + 1), kind: ["clinic", "hospital"][i % 2] };
-})));
+});
+write("sites.csv", csvText(SITE_COLUMNS, sites));
+// the same sites, one with no lon (row 4), and the same sites whole, for a slide whose only fault is elsewhere
+writeBroken("sites.csv", csvText(SITE_COLUMNS, sites.map((site, i) => (i === 3 ? { ...site, lon: "" } : site))));
+writeBroken("sites-ok.csv", csvText(SITE_COLUMNS, sites));
 
 // levels: the four levels the decoding formulas must get exactly right, the second pixel with no data
 write("levels.png", encodePng({ width: 4, height: 1, channels: 2, data: Uint8Array.of(0, 255, 1, 0, 254, 255, 255, 255) }));

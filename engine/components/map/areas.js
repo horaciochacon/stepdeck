@@ -14,21 +14,11 @@
 // opacity; `highlight` { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the frame and
 // its mix (for rasters); the stage's [w, h]; and, while the layer's data or scale changes, `from` (what it showed
 // before) and `change`, how far the change has gone. A scene at the end of a motion uses the exact colours a jump writes.
-import { d3 } from "../../core/d3.js";
 import { loadTable } from "../../core/chart.js";
 import { colorScale } from "../../core/chart-scale.js";
 import { joinValues } from "../../core/map-rules.js";
 import { DOT_OUTLINE, paintAreas } from "../../core/map-paint.js";
-
-const mixes = new Map();
-/** `a` blended toward `b` by `t` in RGB (d3.interpolateRgb), with `a` and `b` themselves at the ends. */
-function blend(a, b, t) {
-  if (t >= 1 || a === b) return b;
-  if (t <= 0) return a;
-  const key = `${a}|${b}`;
-  if (!mixes.has(key)) mixes.set(key, d3.interpolateRgb(a, b));
-  return mixes.get(key)(t);
-}
+import { blend } from "./colors.js";
 
 /**
  * The fill of region `id`: its colour (moving from `from` to the prepared one while the data changes), dimmed by how

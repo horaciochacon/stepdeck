@@ -296,6 +296,8 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-legend-title { color: var(--sd-color-ink); }
 .sd-legend-item { display: inline-flex; align-items: center; gap: calc(var(--sd-grid) / 2); }
 .sd-legend-swatch { flex: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid var(--sd-color-rule); }
+.sd-legend-circle { flex: none; }
+.sd-legend-circle circle { fill: none; stroke: var(--sd-color-muted); stroke-width: 1.5; }
 .sd-legend-ramp { flex: none; width: 6em; height: 0.6em; box-sizing: border-box; border: 1px solid var(--sd-color-rule); }
 .sd-legend-nodata { background-image: repeating-linear-gradient(45deg, var(--sd-color-dim) 0 1.5px, var(--sd-color-surface) 1.5px 6px); }
 

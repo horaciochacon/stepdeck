@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "map",
-  "description": "A map of regions from a GeoJSON file, with layers of data over them: a choropleth that colours each region by a value from a CSV, or a raster (a picture over the land: a value ramp, classes or a mask), in the theme's palettes, with a hatch for a region or land that has no value and a dot for a region too small to see. Steps bring layers in and out (each adds its legend row), highlight regions and put names on the map.",
+  "description": "A map of regions from a GeoJSON file, with layers of data over them: a choropleth that colours each region by a value from a CSV, a raster (a picture over the land: a value ramp, classes or a mask) or points (places sized and coloured by a column), in the theme's palettes, with a hatch for a region or land that has no value and a dot for a region too small to see. Steps bring layers in and out (each adds its legend row), highlight regions and put names on the map.",
   "type": "object",
   "additionalProperties": false,
   "required": ["boundaries"],
@@ -39,12 +39,18 @@
         "type": "object",
         "additionalProperties": false,
         "oneOf": [
-          { "properties": { "areas": true, "value": true, "key": true, "types": true, "raster": false, "color": false }, "required": ["areas", "value"] },
-          { "properties": { "raster": true, "color": true, "areas": false, "value": false, "key": false, "types": false }, "required": ["raster"] }
+          { "properties": { "areas": true, "value": true, "key": true, "types": true, "raster": false, "points": false, "lon": false, "lat": false, "id": false, "size": false, "color": false }, "required": ["areas", "value"] },
+          { "properties": { "raster": true, "color": true, "areas": false, "points": false, "value": false, "key": false, "lon": false, "lat": false, "id": false, "size": false, "types": false }, "required": ["raster"] },
+          { "properties": { "points": true, "lon": true, "lat": true, "id": true, "size": true, "color": true, "types": true, "areas": false, "raster": false, "value": false, "key": false }, "required": ["points", "lon", "lat"] }
         ],
         "properties": {
-          "areas": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per region, relative to the deck root: a choropleth. A layer has exactly one of `areas` and `raster`.", "examples": ["data/rates.csv"] },
+          "areas": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per region, relative to the deck root: a choropleth. A layer has exactly one of `areas`, `raster` and `points`.", "examples": ["data/rates.csv"] },
           "raster": { "type": "string", "minLength": 1, "description": "Path to a raster file, relative to the deck root: a JSON that gives `bounds`, what the grey levels mean in `value` and a greyscale PNG in `src`. A value raster takes the scale props (`classes`, `midpoint`, `domain`), a raster of classes the categorical palette in order, and a raster of one class (a mask) the layer's `color`. Land the raster has no data for is hatched, and the legend adds a \"no data\" row.", "examples": ["data/density.json"] },
+          "points": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per place, relative to the deck root: circles at the `lon` and `lat` of each row, over the borders. A layer has exactly one of `areas`, `raster` and `points`.", "examples": ["data/sites.csv"] },
+          "lon": { "type": "string", "minLength": 1, "description": "For `points`: the column of longitudes, in degrees. A row whose longitude is empty or not a number is an element error.", "examples": ["lon"] },
+          "lat": { "type": "string", "minLength": 1, "description": "For `points`: the column of latitudes, in degrees. A row whose latitude is empty or not a number is an element error.", "examples": ["lat"] },
+          "id": { "type": "string", "minLength": 1, "description": "For `points`: the column that names each point, which `highlight` refers to (compared as text). Without it a point has no name and cannot be highlighted.", "examples": ["id"] },
+          "size": { "type": "string", "minLength": 1, "description": "For `points`: the column of values that sizes each point, with an area true to the value: radius 18 px × √(value ÷ largest value), so the largest point has a radius of 18 px. The legend adds a size key of two circles: the largest value rounded down to two significant figures, and a quarter of it. Without it every point has a radius of 6 px. A row whose size is empty, not a number or negative is an element error.", "examples": ["beds"] },
           "key": { "type": "string", "minLength": 1, "description": "The column that names each row's region, compared as text with the map's `id` (\"07\" is not 7: declare it in `types`). Default: the map's `id`. A key that matches no region, or a region in two rows, is an element error.", "examples": ["code"] },
           "value": { "type": "string", "minLength": 1, "description": "For `areas`: the column of values that colours each region. An empty cell, or a region without a row, is hatched and adds a \"no data\" row to the legend: never a colour of the scale.", "examples": ["rate"] },
           "label": { "type": "string", "description": "The title of the layer's legend row.", "examples": ["Cases per 1,000"] },
@@ -52,11 +58,11 @@
           "classes": { "type": "array", "items": { "type": "number" }, "minItems": 1, "description": "For `areas` and value rasters: class breaks, in increasing order: n breaks make n + 1 classes, coloured in even steps along the sequential palette and labelled `< 5`, `5–10`, …, `≥ 20` in the legend. A value equal to a break is in the class above it.", "examples": [[5, 10, 20]] },
           "midpoint": { "type": "number", "description": "For `areas` and value rasters: a value that splits the diverging palette: below it one hue, above it the other. With `classes` it must be one of the breaks.", "examples": [0, 1] },
           "domain": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "For `areas` and value rasters: the ends of a continuous ramp (no `classes`), used as given; a value past an end takes the end colour. Default: the values' extent (a raster's `min` and `max`), made symmetric about `midpoint` when there is one.", "examples": [[0, 25]] },
-          "color": { "type": "string", "minLength": 1, "description": "For a raster of one class (a mask): the theme colour role that paints it, such as `accent` (the default), `alert`, `ink` or `muted`. A name the theme has no colour for is an element error.", "examples": ["accent", "alert"] }
+          "color": { "type": "string", "minLength": 1, "description": "For a raster of one class (a mask): the theme colour role that paints it, such as `accent` (the default), `alert`, `ink` or `muted`. For `points`: the name of a column, if the CSV has one of that name (each distinct value takes a colour of the categorical palette, in order of first appearance, with a swatch each in the legend), else a theme colour role, as for a mask (default `accent`). A name that is neither is an element error.", "examples": ["accent", "alert", "kind"] }
         }
       },
-      "description": "The layers of data, keyed by an id that `shown` refers to. A layer with `areas` is a choropleth: its `value` column colours the regions its `key` column names, through a scale of the theme's palettes (`classes` for stepped classes, `midpoint` for a diverging one, `domain` to fix a ramp's ends), with `label` as the title of its legend row. A layer with `raster` is a picture over the land, drawn between the areas and the borders, with the same scale props. An object, not a list, so a step can change one layer. A change to a shown layer's data or scale crossfades its colours.",
-      "examples": [{ "rate": { "areas": "data/rates.csv", "key": "code", "value": "rate", "label": "Cases per 1,000", "classes": [5, 10, 20] } }, { "density": { "raster": "data/density.json", "label": "People per km²", "midpoint": 400 } }],
+      "description": "The layers of data, keyed by an id that `shown` refers to. A layer with `areas` is a choropleth: its `value` column colours the regions its `key` column names, through a scale of the theme's palettes (`classes` for stepped classes, `midpoint` for a diverging one, `domain` to fix a ramp's ends), with `label` as the title of its legend row. A layer with `raster` is a picture over the land, drawn between the areas and the borders, with the same scale props. A layer with `points` puts a circle at each row's `lon` and `lat`, over the borders, sized by a `size` column and coloured by a `color` column or role. An object, not a list, so a step can change one layer. A change to a shown layer's data or scale crossfades its colours.",
+      "examples": [{ "rate": { "areas": "data/rates.csv", "key": "code", "value": "rate", "label": "Cases per 1,000", "classes": [5, 10, 20] } }, { "density": { "raster": "data/density.json", "label": "People per km²", "midpoint": 400 } }, { "sites": { "points": "data/sites.csv", "lon": "lon", "lat": "lat", "id": "id", "size": "beds", "color": "kind", "label": "Beds" } }],
       "x-transition": "fade"
     },
     "shown": {
@@ -69,7 +75,7 @@
     "highlight": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Regions to emphasize, by id: they are outlined in ink, and every other region of an areas layer turns the theme's dim colour (a hatched region stays hatched). Usually set with `only` so it lasts one step. An unknown id is an element error.",
+      "description": "Regions and points to emphasize, by id: they are outlined in ink, and every other region of an areas layer and every other point turns the theme's dim colour (a hatched region stays hatched). A point is named by the `id` column of its layer. Usually set with `only` so it lasts one step. An id that is neither a region nor a point is an element error.",
       "examples": [["N1", "W1"]],
       "x-transition": "fade"
     },
