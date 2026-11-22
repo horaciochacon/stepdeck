@@ -654,10 +654,14 @@ const keyOf = (page) =>
     labels: [...row.querySelectorAll(".sd-legend-item .sd-legend-label")].map((n) => n.textContent),
     circles: [...row.querySelectorAll(".sd-legend-circle")].map((c) => Number(c.getAttribute("width"))),
   })));
-/** How wide a point is along the row of its centre, as the radius its fill covers plus the half of the 1.5 px outline. */
+/**
+ * How wide a point is along the row of its centre, as the radius its fill covers plus the half of the 1.5 px outline.
+ * The row is the one the centre lies in, `Math.floor(y)` (pixel row k spans y from k to k + 1): a rounded y can pick
+ * the row below, half a pixel or more from the centre, whose chord is shorter.
+ */
 async function measuredRadius(page, layer, id, fill) {
-  const { exact: [x, y], at } = SITES.get(id);
-  const box = await pixelsAround(page, layer, [at[0], Math.round(y)], 30);
+  const { exact: [, y], at } = SITES.get(id);
+  const box = await pixelsAround(page, layer, [at[0], Math.floor(y)], 30);
   const row = box.slice(30 * 61, 31 * 61); // the middle row of the 61 x 61 box
   return row.filter((p) => p[3] === 255 && rgb(p) === fill).length / 2 + 0.75;
 }
