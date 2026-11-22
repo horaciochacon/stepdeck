@@ -1369,3 +1369,33 @@ test("timelapse: frames of another size error", async () => {
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
+
+test("timelapse: the inset shows the frame of the moment, and the panel keeps out of its corner", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=corner") }, async (page, ctx) => {
+    const jumped = await jumpTo(ctx, page, "corner");
+    assert.equal((await panelOf(page)).at, "top-right", "the inset is at the top-left, so the panel is at the top-right");
+    const insetFrames = () => page.evaluate(() => [...new Set([...document.querySelectorAll('[data-el="map"] .sd-map-inset-stage canvas')].map((c) => c.dataset.frame))]);
+    assert.deepEqual(await insetFrames(), ["2010"]);
+    // played: the inset fades in at 2018, then the map and the inset run back to 2010 together
+    await ctx.open(pages.url("timelapse", "step=longrun&motion=full"));
+    const probe = new Function("el", `
+      const inset = el.querySelector('canvas[data-layer="inset:base"]');
+      return { frame: el.querySelector('canvas[data-layer="main:base"]').dataset.frame, inset: inset ? inset.dataset.frame : null };`);
+    const { frames, end } = await sampleFrames(page, "timelapse", "corner", "map", probe);
+    const seen = [...new Set(frames.filter((f) => f.inset !== null).map((f) => f.inset))];
+    assert.ok(seen.length >= 3, `the inset passes ${seen.length} frames (${seen.join(" ")})`);
+    assert.ok(frames.every((f) => f.inset === null || f.inset === f.frame), "the inset shows the map's frame in every frame");
+    assert.equal(end.inset, "2010");
+    assert.equal(await elementHtml(page, "map"), jumped.html, "played equals jumped");
+    assert.deepEqual(await canvasPixels(page, "map"), jumped.pixels, "pixels too");
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: a numbers key in two time-lapse layers errors", async () => {
+  await withPage({ root, url: broken.url("numbers", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["numbers/map: `numbers` key 'people' is in time-lapse layers 'north' and 'south'"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
