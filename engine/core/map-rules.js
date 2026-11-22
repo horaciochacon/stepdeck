@@ -248,6 +248,11 @@ function framesProblems(frames) {
   const first = keys(frames[0]);
   const odd = frames.findIndex((frame) => keys(frame) !== first);
   if (odd >= 0) found.push(`every frame needs the same \`numbers\` keys: frame ${odd + 1} has (${keys(frames[odd])}), frame 1 has (${first})`);
+  frames.forEach((frame, i) => {
+    for (const [key, value] of Object.entries(isObject(frame?.numbers) ? frame.numbers : {})) {
+      if (!finite(value)) found.push(`frame ${i + 1} \`numbers\` '${key}' must be a finite number, not ${JSON.stringify(value)}`);
+    }
+  });
   return found;
 }
 
@@ -281,6 +286,8 @@ export function pngProblems(info, path) {
   if (info.interlace) found.push("is interlaced; only non-interlaced PNGs are read");
   if (info.colorType !== 0 && info.colorType !== 4) found.push(`color type ${info.colorType} is not 0 (grey) or 4 (grey with alpha)`);
   for (const type of COLOR_CHUNKS) if (info.chunks.includes(type)) found.push(`has a ${type} chunk; color chunks are not allowed`);
+  // A browser draws the grey level a tRNS chunk names as transparent: that data would read as no data.
+  if (info.chunks.includes("tRNS")) found.push("has a tRNS chunk (one grey level made transparent); write no data as an alpha channel instead");
   if (info.width * info.height > MAX_RASTER_PIXELS) found.push(`${info.width}×${info.height} is more than 2,000×2,000 pixels`);
   return found.map((message) => `${path}: ${message}`);
 }
@@ -371,7 +378,7 @@ function rasterFileProblems(layers) {
         continue;
       }
       const bad = pngProblems(info, png);
-      report(bad, "8-bit greyscale PNG (type 0 or 4), not interlaced, no color chunks, at most 2,000×2,000 pixels", "re-export the image as 8-bit greyscale, not interlaced, without a color profile");
+      report(bad, "8-bit greyscale PNG (type 0 or 4), not interlaced, no color or tRNS chunks, at most 2,000×2,000 pixels", "re-export the image as 8-bit greyscale (with an alpha channel for no data), not interlaced, without a color profile");
       if (bad.length === 0 && first === null) first = { info, png };
       else if (bad.length === 0 && (info.width !== first.info.width || info.height !== first.info.height)) {
         report([`${png}: ${info.width}×${info.height} is not ${first.info.width}×${first.info.height}, the size of ${first.png}`], "every frame has the same size", "export every frame at one size");

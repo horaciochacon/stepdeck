@@ -89,7 +89,7 @@ A raster layer names one JSON file. It says where the raster lies, what its grey
 - **`bounds`** is `[west, south, east, north]` in degrees: the outer edges of the edge cells (pixel-is-area), as `terra::ext` and rasterio's `dataset.bounds` give them. Each pixel covers an equal share of the box. If your grid is a table of cell centres, the bounds are the outermost centres plus half a cell on each side. West must be less than east: a raster cannot cross the antimeridian.
 - **Longitude and latitude only.** The grid's rows are parallels and its columns meridians (EPSG:4326). Reproject a raster in another projection first (`terra::project(r, "EPSG:4326")`, `rasterio.warp.reproject`). The map then lines it up with the boundaries in any projection.
 - **Rows run north to south, columns west to east**, so the image's top-left pixel is the north-west cell.
-- **The PNG** is 8-bit greyscale (colour type 0), or 8-bit greyscale with alpha (type 4) where some cells have no data. Alpha is 0 for no data and 255 for data; the map reads alpha below 128 as no data, and the grey under it does not matter. The image is not interlaced, has no colour chunks (`gAMA`, `cHRM`, `iCCP`, `sRGB`), so every browser decodes it to the same bytes, and has at most 2,000 × 2,000 pixels. A general image library (a plot device, Pillow, ImageMagick) easily writes colour, a colour profile or 16 bits; the writer functions below write exactly this format.
+- **The PNG** is 8-bit greyscale (colour type 0), or 8-bit greyscale with alpha (type 4) where some cells have no data. Alpha is 0 for no data and 255 for data; the map reads alpha below 128 as no data, and the grey under it does not matter. The image is not interlaced, has no colour chunks (`gAMA`, `cHRM`, `iCCP`, `sRGB`), so every browser decodes it to the same bytes, and no `tRNS` chunk (it would make one grey level transparent, so real data would show as no data), and has at most 2,000 × 2,000 pixels. A general image library (a plot device, Pillow, ImageMagick) easily writes colour, a colour profile or 16 bits; the writer functions below write exactly this format.
 - **No data is transparency only**: there is no reserved level. On the map, land a value raster has no data for is hatched, and the legend adds "no data".
 
 **`value`** says what a grey level *g* (0 to 255) means:
@@ -119,7 +119,7 @@ A raster file with `frames` is a time-lapse, one PNG per frame:
 
 - **Every frame shares `bounds` and `value`**, so a colour means the same in every frame. Compute one range over all the frames, not one per frame.
 - **`label`** is required and unique. The slide's `frame` names a frame by it, and the map shows it large while the frames play.
-- **`numbers`** is optional: figures for the corner panel, such as a total, with the same keys in every frame. They count from one frame's value to the next as the frames crossfade.
+- **`numbers`** is optional: figures for the corner panel, such as a total, with the same keys in every frame, each a finite number. They count from one frame's value to the next as the frames crossfade.
 - **Up to 200 frames, all of one size**, and at most 100 million pixels every frame together: 200 frames of 700 × 700, or 25 of 2,000 × 2,000.
 
 ## Writer functions
