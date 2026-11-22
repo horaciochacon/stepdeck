@@ -30,6 +30,7 @@ The commands at a glance:
 | [`new`](#new) | no | Creates a deck from a template, with the engine copied in. |
 | [`new-component`](#new-component) | no | Adds a deck component from the component template. |
 | [`catalog`](#catalog) | no | Writes the catalog of components, layouts and themes, or prints one entry. |
+| [`boundaries`](#boundaries) | no | Fetches one country's open admin boundaries from geoBoundaries into a deck (needs the network). |
 | [`serve`](#serve) | no (you open it in one) | Serves the deck locally with no caching. |
 | [`validate`](#validate) | no | Checks schemas, steps, props at every step, data and paths in Node. |
 | [`dump`](#dump) | yes | Per step: elements, visibility, boxes, text, resolved props, what changed. |
@@ -50,6 +51,10 @@ There is no `pdf` command yet; it is planned.
 | `--played` | none | `check` | off |
 | `--template <t>` | a template name | `new` | `talk` |
 | `--port <n>` | an integer from 0 to 65535 | `serve` | 8000 (0 picks a free port) |
+| `--deck <dir>` | a deck folder | `boundaries` | the current folder |
+| `--out <path>` | a file path | `boundaries` | `<deck>/data/<iso3>-adm<n>.geojson` |
+| `--full` | none | `boundaries` | the simplified geometry |
+| `--precision <n>` | a whole number from 0 to 10 | `boundaries` | 4 |
 | `-h`, `--help` | none | any position | |
 
 Rules that apply to every command:
@@ -59,7 +64,7 @@ Rules that apply to every command:
 - **`--step`** is resolved per slide. A value made only of digits that is less than the slide's step count is an index. Anything else is matched against the step ids. A slide with no steps has one step, `0`. See [Deck and slide spec](deck-and-slide.md) for step references.
 - **`--step` scope.** `--step` without `--slide` fails with `--step needs --slide`. Commands other than `dump`, `check`, `shoot` and `help` refuse `--step` (`help` ignores it). `validate` says `validate does not take --step: it folds and checks every step of a slide; use --slide <id>`; the others say `<command> does not take --step (dump, check and shoot do)`.
 - **Unused flags are ignored.** A command silently ignores a flag it does not use, except `--step`. For example, `validate --played --port 3 --size 999` runs a normal `validate`.
-- **Positionals.** `new-component` and `catalog` take two positionals; every other command takes one. An extra one is a parse error.
+- **Positionals.** `new-component`, `catalog` and `boundaries` take two positionals; every other command takes one. An extra one is a parse error. For `boundaries` they are the country and the level, and the deck folder is `--deck`.
 - **Parse errors** print `stepdeck: <message>`, a blank line and the usage text to stderr, and exit 2. This happens even with `--json`; stdout stays empty. The parse errors are:
   - `unknown option <x>`;
   - `<flag> needs a value` (the value is missing or starts with `--`);
@@ -84,7 +89,7 @@ What counts as a problem depends on the command:
 | `validate` | any problem has severity `error`. Warnings alone exit 0. |
 | `check` | any problem is reported. |
 | `dump` | any dumped step has a non-empty `errors` list. |
-| `shoot`, `catalog`, `new`, `new-component`, `serve` | never: they exit 0 on success. `shoot` exits 0 even when a slide shows an error; run `check` to catch that. `catalog` problems are warnings. |
+| `shoot`, `catalog`, `new`, `new-component`, `boundaries`, `serve` | never: they exit 0 on success. `shoot` exits 0 even when a slide shows an error; run `check` to catch that. `catalog` problems are warnings. |
 
 A run that fails after the arguments were parsed exits 2. It prints `stepdeck: <message>` to stderr, or with `--json` this on stdout:
 
@@ -301,6 +306,61 @@ Catalog problems are warnings and never change the exit code:
 | --- | --- |
 | `catalog-schema` | A component schema has no top-level `description`; a prop lacks `description`, `examples` or an `x-transition` of `tween`, `draw`, `fade` or `snap`; a top-level `x-enter` is neither `"own"` nor `"box"`; a `schema.json` or `palettes.json` cannot be read; a theme README has no first paragraph. |
 | `catalog-name` | A component, layout or theme shares its name with an entry of another kind. The later one is left out. |
+
+## boundaries
+
+Fetches one country's admin boundaries from [geoBoundaries](https://www.geoboundaries.org/) and writes them into a deck, for a map.
+
+```sh
+node cli/index.js boundaries <ISO3> <ADM0-ADM5> [--deck dir] [--out path] [--full] [--precision n]
+```
+
+This is for a project that has no boundaries yet. Most projects build their own boundaries, in R or Python, with their own region ids; use those when you have them. The command runs once, when you author the deck, and is the only one that needs the network. Presenting never does.
+
+- **`<ISO3>`** is the country's three-letter ISO code, in any case: `URY`, `ury`.
+- **The level** is `ADM0` to `ADM5` (country, then the admin levels below it), or just `0` to `5`. Not every country has every level.
+- **`--deck <dir>`** is the deck folder, default the current folder. The file goes to `<dir>/data/<iso3>-adm<n>.geojson`, in lower case (`data/ury-adm1.geojson`). The `data/` folder is created if it is missing. The deck folder need not exist yet.
+- **`--out <path>`** writes there instead (relative to where you run the command). The source file goes next to it.
+- **`--full`** downloads the full-resolution geometry (`gjDownloadURL`) instead of the simplified one (`simplifiedGeometryGeoJSON`). A full file can be well over the map's limits; the simplified one is what a talk usually wants.
+- **`--precision <n>`** rounds coordinates to `n` decimals (default 4, about 10 m). Points that become the same after rounding are collapsed, rings stay closed, a ring left with fewer than 4 positions is dropped, and a polygon whose outer ring is dropped goes with it. A region left with no polygon is left out of the file, and the command says so.
+
+What it does:
+
+1. Asks `https://www.geoboundaries.org/api/current/gbOpen/<ISO3>/ADM<n>/` (the gbOpen release) which files exist and under which licence.
+2. Downloads the geometry the answer names, following redirects, and rewrites it as above. Each feature keeps its properties as geoBoundaries gives them: `shapeName`, `shapeISO`, `shapeID`, `shapeGroup`, `shapeType`. A map names its region id (`id: "shapeISO"`), or you join your own data on one of them.
+3. Writes the GeoJSON, and next to it `<same name>.source.json` holding `boundaryID`, `boundarySource`, `boundaryLicense`, `licenseDetail`, `licenseSource`, `boundaryYearRepresented`, `buildDate` and `url` (the file that was downloaded).
+
+**Licences differ from one boundary to the next.** gbOpen holds open licences only (public domain, CC0, CC BY, ODbL), but which one applies is for the boundary you fetched, so the command prints it and keeps it in the source file. Check it against how you will publish the deck, and keep the credit it asks for.
+
+**Text output.**
+
+```
+wrote data/xyz-adm1.geojson (2 regions, 10 points) and data/xyz-adm1.source.json
+licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
+source line: Boundaries: geoBoundaries, Xyzland National Mapping Office (Creative Commons Attribution 4.0 International (CC BY 4.0)).
+```
+
+The source line is a suggestion for the slide's source `text` element. A warning follows when the file is over a map limit (more than 5,000 regions, or more than 250,000 points), with a `mapshaper -simplify` command to try:
+
+```
+warning: data/xyz-adm2.geojson: 6,000 regions is over the map's limit of 5,000; simplify it, for example: mapshaper data/xyz-adm2.geojson -simplify 10% -o data/xyz-adm2.geojson
+```
+
+The file is still written, but a map refuses a file over these limits when it loads it.
+
+**`--json`** prints `{ file, sourceFile, regions, points, license, sourceLine, warnings }`, with absolute paths.
+
+**Exit codes.** 0 when the files were written, warnings or not. 2 when the run cannot complete, with `stepdeck: <message>` (or `{ "error": … }` under `--json`):
+
+| Message | When |
+| --- | --- |
+| `boundaries needs a country and a level: stepdeck boundaries URY ADM1` | A positional is missing. |
+| `<level> is not an admin level (use ADM0 to ADM5)` | The level is not `ADM0` to `ADM5` or `0` to `5`. |
+| `<code> is not a country code (three letters, for example URY)` | The country is not three letters. |
+| `precision must be a whole number from 0 to 10` | `--precision` is anything else. |
+| `geoBoundaries has no gbOpen ADM2 for XYZ` | The API has no such country or level (HTTP 404). |
+| `could not reach geoBoundaries (<cause>)` | No network, a timeout, or an HTTP error other than 404. |
+| `geoBoundaries answered something stepdeck cannot read: <what>` | The answer is not JSON, lacks the file's URL, the source or the licence, or the file is not a FeatureCollection. |
 
 ## serve
 

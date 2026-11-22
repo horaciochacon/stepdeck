@@ -3,6 +3,7 @@
 //
 //   stepdeck <command> [deckDir] [--slide id] [--step ref] [--size n] [--theme name] [--json] [--played]
 //   stepdeck new <dir> [--template talk] | new-component <name> [deckDir] | catalog [name] [deckDir]
+//   stepdeck boundaries <ISO3> <ADM0-ADM5> [--deck dir] [--out path] [--full] [--precision n]
 //   stepdeck serve [deckDir] [--port n]
 //
 // deckDir defaults to the current directory. Exit codes: 0 no problems, 1 problems found,
@@ -13,6 +14,7 @@
 import { relative, resolve } from "node:path";
 import { catalog, buildCatalog, catalogTarget, formatEntry, isCatalogTarget } from "./catalog.js";
 import { newDeck, newComponent, cli } from "./new.js";
+import { boundaries, displayPath } from "./boundaries.js";
 import { serve } from "./serve.js";
 import { deckTarget } from "./browser.js";
 import { REPO } from "./engine.js";
@@ -43,6 +45,9 @@ commands:
                         (my.thing); added to deck.js components
   catalog [name]        write catalog/ (index.json + <name>.json) for the deck or the engine; with a
                         name, print that entry
+  boundaries <ISO3> <ADM0-ADM5>
+                        open admin boundaries for a country from geoBoundaries, into the deck's data/
+                        (--deck, --out, --full, --precision); needs a network connection
   serve    static server for the deck (no-store caching); prints the URL to present (--port, default 8000)
   validate in Node, no browser: schemas, props at every step, steps, data, paths, lint
   dump     per step: visible elements, boxes, text, resolved props, what changed
@@ -58,6 +63,10 @@ options:
   --theme <name> dump, check, shoot: run under another theme (the page's ?theme=), not the deck's own
   --played       check: also arrive at every step forward (animated) and backward, compare with the jump
   --template <t> new: starter template (default talk)
+  --deck <dir>   boundaries: the deck folder (default .); the file goes to <dir>/data/<iso3>-adm<n>.geojson
+  --out <path>   boundaries: write this file instead; its .source.json goes next to it
+  --full         boundaries: the full-resolution geometry, not the simplified one
+  --precision <n> boundaries: decimals kept in coordinates, 0 to 10 (default 4)
   --port <n>     serve: port (default 8000; 0 picks a free one)
   --json         machine output
 `;
@@ -65,7 +74,7 @@ options:
 class UsageError extends Error {}
 
 export function parseArgs(argv) {
-  const out = { command: undefined, deckDir: undefined, positionals: [], slide: undefined, step: undefined, size: undefined, template: undefined, theme: undefined, port: undefined, json: false, played: false };
+  const out = { command: undefined, deckDir: undefined, positionals: [], slide: undefined, step: undefined, size: undefined, template: undefined, theme: undefined, port: undefined, json: false, played: false, deck: undefined, out: undefined, full: false, precision: undefined };
   const value = (i, name) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith("--")) throw new UsageError(`${name} needs a value`);
@@ -75,6 +84,10 @@ export function parseArgs(argv) {
     const a = argv[i];
     if (a === "--json") out.json = true;
     else if (a === "--played") out.played = true;
+    else if (a === "--full") out.full = true;
+    else if (a === "--deck") out.deck = value(i++, a);
+    else if (a === "--out") out.out = value(i++, a);
+    else if (a === "--precision") out.precision = Number(value(i++, a));
     else if (a === "--slide") out.slide = value(i++, a);
     else if (a === "--step") out.step = value(i++, a);
     else if (a === "--template") out.template = value(i++, a);
@@ -94,8 +107,9 @@ export function parseArgs(argv) {
     else if (out.positionals.length < 2) out.positionals.push(a);
     else throw new UsageError(`unexpected argument ${a}`);
   }
-  // Most commands take one positional, the deck folder; new-component and catalog take a name too.
-  const two = ["new-component", "catalog"].includes(out.command);
+  // Most commands take one positional, the deck folder; new-component and catalog take a name too, and
+  // boundaries takes a country and a level (its deck folder is --deck).
+  const two = ["new-component", "catalog", "boundaries"].includes(out.command);
   if (!two && out.positionals.length > 1) throw new UsageError(`unexpected argument ${out.positionals[1]}`);
   out.deckDir = out.positionals[0];
   return out;
@@ -180,6 +194,19 @@ async function run(args) {
         for (const p of built.problems) process.stdout.write(`warning: ${formatProblem(p)}\n`);
         const count = (kind) => built.entries.filter((e) => e.kind === kind).length;
         process.stdout.write(`catalog: ${n(count("component"), "component")}, ${n(count("layout"), "layout")}, ${n(count("theme"), "theme")} -> ${relative(process.cwd(), built.outDir) || "."}/index.json\n`);
+      }
+      return 0;
+    }
+    case "boundaries": {
+      const [iso3, level] = args.positionals;
+      if (iso3 === undefined || level === undefined) throw new UsageError("boundaries needs a country and a level: stepdeck boundaries URY ADM1");
+      const made = await boundaries({ iso3, level, deck: args.deck, out: args.out, full: args.full, precision: args.precision });
+      if (args.json) emit(made);
+      else {
+        const count = (k, word) => `${k.toLocaleString("en-US")} ${word}${k === 1 ? "" : "s"}`;
+        process.stdout.write(`wrote ${displayPath(made.file)} (${count(made.regions, "region")}, ${count(made.points, "point")}) and ${displayPath(made.sourceFile)}\n`);
+        process.stdout.write(`licence: ${made.license}\nsource line: ${made.sourceLine}\n`);
+        for (const w of made.warnings) process.stdout.write(`warning: ${w}\n`);
       }
       return 0;
     }
