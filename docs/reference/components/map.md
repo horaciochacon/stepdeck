@@ -1,8 +1,8 @@
 # map
 
-`map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a mask. A layer with `points` puts a circle at the longitude and latitude of each row of a CSV, sized by a column and coloured by a column or a theme role. Steps bring layers in and out (each adds its legend row), highlight regions, put their names on the map and fly the map to a region or a box and back. A region, or land a raster has no data for, is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
+`map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a mask. A layer with `points` puts a circle at the longitude and latitude of each row of a CSV, sized by a column and coloured by a column or a theme role. Steps bring layers in and out (each adds its legend row), highlight regions, put their names on the map, fly the map to a region or a box and back, and play a time-lapse raster through its frames, with a corner panel of the frame's label and its numbers. A region, or land a raster has no data for, is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/points.js`](../../../engine/components/map/points.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/inset.js`](../../../engine/components/map/inset.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/points.js`](../../../engine/components/map/points.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/inset.js`](../../../engine/components/map/inset.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`components/map/panel.js`](../../../engine/components/map/panel.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -44,6 +44,9 @@ export default {
 | `highlight` | string[] | none | fade | Regions and points to emphasize, by id. They get an ink outline; every other region of a shown areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds: [west, south, east, north] }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of regions, or to a box in degrees; `null` is the whole map. See [Views and flights](#views-and-flights). |
 | `inset` | `{ view, at, scale }` \| `null` | none | fade | A zoomed second view of the same layers in a corner. See [Inset](#inset). |
+| `frame` | string \| number | the first frame | tween | The time-lapse frame on screen, by its label (compared as text). See [Time-lapse](#time-lapse). |
+| `pace` | number, 100 to 2000 | `700` | snap | How long a run spends on each frame it moves, in ms. |
+| `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label. |
 | `labels` | string[] | none | fade | Regions to name, by id: each region's `name` at the centroid of its largest polygon, on a halo. |
 | `legend` | `"bottom-left"` \| `"bottom-right"` \| `"top-left"` \| `"top-right"` \| `false` | `"bottom-left"` | snap | The corner the legend sits in, or no legend. |
 
@@ -70,7 +73,7 @@ A layer is an object with exactly one kind key: `areas`, `raster` or `points`. T
 
 ### Raster layers
 
-A `raster` layer names a raster file: a JSON that gives the `bounds` (west, south, east, north, the outer edges of the edge cells), what the grey levels mean in `value`, and the greyscale PNG in `src` (a path relative to the JSON). The picture is drawn from the file's pixels, each canvas pixel taking the colour of the cell under it, so the cells stay square and sharp.
+A `raster` layer names a raster file: a JSON that gives the `bounds` (west, south, east, north, the outer edges of the edge cells), what the grey levels mean in `value`, and the greyscale PNG in `src` (a path relative to the JSON), or, for a time-lapse, a list of PNGs in `frames` (see [Time-lapse](#time-lapse)). The picture is drawn from the file's pixels, each canvas pixel taking the colour of the cell under it, so the cells stay square and sharp.
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -88,7 +91,7 @@ What the file's `value` makes of the layer:
 
 **Clipped to the land.** A raster is clipped to the land outline by default: a coarse cell whose centre is on land stops at the coastline instead of sticking out over the sea, whatever the cell holds (data or hatch), for a value raster, a raster of classes and a mask alike. A pixel is land when the regions cover all of it, so a coastal pixel the regions cover only in part is clear. Set `clip: false` to draw every cell whole, for a raster that covers the sea as well (a sea surface, say); changing `clip` on a forward step crossfades between the two pictures. A raster laid over land that the boundaries do not outline (so nothing is land under it) needs `clip: false`, or it is all clear.
 
-Only the first frame of a file with `frames` is shown. Rasters are not dimmed by `highlight`. A raster is a picture of the whole map's size, so it is drawn at one pixel per CSS pixel on any screen.
+A file with `frames` shows the frame `frame` names (see [Time-lapse](#time-lapse)). Rasters are not dimmed by `highlight`. A raster is a picture of the whole map's size, so it is drawn at one pixel per CSS pixel on any screen.
 
 ### Points layers
 
@@ -184,6 +187,50 @@ steps: [
 
 The lookup tables the rasters need for the inset's views, at the inset's size, are built at mount with the map's own (see [Views and flights](#views-and-flights)).
 
+## Time-lapse
+
+A raster file with `frames` in place of `src` is a time-lapse: one PNG per frame, each with a unique `label` and, optionally, `numbers` (the same keys in every frame). All frames share the file's `bounds` and `value`, so a colour means the same in every frame.
+
+```json
+{
+  "bounds": [-19, -31, -10, -23],
+  "value": { "scale": "linear", "min": 0, "max": 800 },
+  "frames": [
+    { "src": "years/2010.png", "label": "2010", "numbers": { "people": 49848391 } },
+    { "src": "years/2011.png", "label": "2011", "numbers": { "people": 51316062 } }
+  ]
+}
+```
+
+| Prop | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `frame` | string \| number | the first frame | The frame on screen, by its label, compared as text (`2015` and `"2015"` are one frame). One value for the whole map: every time-lapse layer the step declares must have the same labels, in the same order. |
+| `pace` | number, 100 to 2000 | `700` | How long a run spends on each frame it moves, in ms. |
+| `numbers` | `{ key, label, format }[]` | none | The numbers the panel shows: `key` is a key of the frames' `numbers`, found in exactly one time-lapse layer of the map; `label` is its label in the deck's language (without it, the number alone); `format` is a d3-format specifier, localized by the deck language, as `big-number`'s. |
+
+```js
+props: { boundaries: "data/regions.geojson", id: "code",
+         layers: { years: { raster: "data/years.json", label: "People per km²" } },
+         shown: ["years"], numbers: [{ key: "people", label: "People", format: ",.0f" }] },
+steps: [
+  { id: "start" },                                            // 2010, the first frame
+  { id: "run", set: { map: { frame: "2021" } } },             // 11 frames at 700 ms: 7.7 s
+  { id: "zoom", set: { map: { view: "W4", frame: "2015" } } }, // a flight to W4, then back to 2015 there
+]
+```
+
+**The panel.** While a time-lapse layer is shown, a panel sits at the top-left of the element, or at the top-right when the inset is at the top-left. It shows the label of the frame on screen in the statement size (`--sd-font-size-statement`), in tabular figures so the digits hold still, and under it each of `numbers` in the note size, its label in `--sd-color-muted` before its value. It is on a panel of the background colour, like the legend: keep the legend (and the inset) out of its corner. It fades with its layer; numbers that `numbers` gains or loses fade in or out.
+
+**A run.** On a forward step that changes `frame`, the map runs through every frame from the old one to the new one in the file's order, backward when the new frame comes first, each crossfading into the next: the frame after the one on screen is drawn over it, more opaque as the run goes, so the picture is always whole. The run lasts frames moved × `pace` (from 2010 to 2021 at 700 ms: 11 × 700 = 7.7 s), and it is linear in time. During it the panel's numbers count linearly from one frame's value to the next, and its label (and the canvases' `data-frame`) shows the frame the crossfade is heading to once it is half way there.
+
+**Two phases.** A step that changes `frame` and other things plays them in order: first everything else together (layers fading in or out, a highlight, labels, a flight of the map or the inset), at the frame the step starts from; then the run, at the end view. The audience sees the map go somewhere, then the frames play there; frames never crossfade during a flight. The first phase lasts twice the step's duration when `view` or `inset.view` changes, the step's duration when anything else on screen changes, and nothing when only `frame` does.
+
+**Long runs.** An update normally has 10 s to settle. A run tells the engine how long it will be (`info.expect`, with both phases together), so a run of 12.6 s (18 frames at 700 ms) plays out. Both phases together may last at most 20 s: a longer step is an element error, `a run of 20.3 s is longer than 20 s; split it across steps`. Lower `pace`, or move `frame` over two steps.
+
+**Decoding.** A frame is decoded when it is first needed: the step's own frame, and during a run the next four frames ahead of the one on screen, in the run's direction. A raster keeps its 12 most recently used frames decoded. The map never decodes every frame at mount for display; it reads the frames once when the layer is first shown or declared (stopping at the first gap it finds) to decide whether the legend needs a "no data" row.
+
+**Ending a run early.** A jump, a backward step, reduced motion and capture show the step's frame and its numbers at once. A click during a run ends it on its frame and applies the next step; hiding the page or leaving the slide ends it at once.
+
 ## Legend
 
 The legend sits in the corner `legend` names, 16 px in from the edges, on a panel of the background colour (`--sd-color-background`) so its text keeps its contrast over coloured regions. It holds one row per shown layer that has data: its `label` as a title (note size), then a 28 px swatch per class with its label, or a gradient between the two end values for a ramp, then the hatched "no data" swatch when some region, or some land under a raster, has no value; a points layer adds its size key, two circles with their labels, after its swatches. Rows stack away from the corner, in the order the layers are painted. A layer that appears brings its row; one that leaves takes it away.
@@ -201,10 +248,13 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. |
 | `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. |
 | `labels` changes | Labels that come fade in, labels that go fade out. |
-| `boundaries`, `id`, `name`, `projection`, `legend` change | Drawn at once. |
+| `frame` changes | A run through every frame in between, `pace` ms per frame moved, the panel's numbers counting. See [Time-lapse](#time-lapse). |
+| `frame` and other things change | The other changes first, together; then the run, at the end view. |
+| `numbers` changes | Rows of the panel that come fade in, rows that go fade out. |
+| `boundaries`, `id`, `name`, `projection`, `legend`, `pace` change | Drawn at once. |
 | The element becomes visible | The engine moves its box in (`map` does not own its entrance), already showing that step's layers. |
 
-All of it runs as one `ctx.animate.tween` bound to the step's signal, so an aborted step (you press next again) snaps to its end state. Every update ends by painting the target state from the props alone, so the markup and the pixels after a played step equal those after jumping to it, which is what `check --played` compares.
+All of it runs as one `ctx.animate.tween` bound to the step's signal (a run is a second one, after it), so an aborted step (you press next again) snaps to its end state. Every update ends by painting the target state from the props alone, so the markup and the pixels after a played step equal those after jumping to it, which is what `check --played` compares.
 
 ## Markup
 
@@ -224,12 +274,16 @@ div.sd-map-inset-stage                                   only while the inset is
 svg.sd-map-labels
   text.sd-map-label[data-region]                         one per entry of `labels` whose region's centre is in view
   g.sd-map-inset                                         with the inset: two leaders, rect.sd-map-inset-box, rect.sd-map-inset-frame
+div.sd-map-panel[data-at]                                with a time-lapse layer shown: top-left, or top-right when the inset is top-left
+  div.sd-map-panel-frame                                 the label of the frame on screen
+  div.sd-map-panel-number[data-key]                      one per entry of `numbers`
+    span.sd-map-panel-name + span.sd-map-panel-value     its label (when it has one) and its value
 div.sd-map-legend[data-at]                               the corner, when a shown layer has a legend
   div.sd-legend-row[data-layer]                          from ctx.chart.legendRow
     span.sd-legend-item > svg.sd-legend-circle + label   a size key's circles, after the swatches
 ```
 
-Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map, the view of the moment during a flight), `data-shown` (the layers painted), `data-highlight` (the highlighted regions and points), `data-frame` (empty: no time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer); the inset's canvases say the same, with the inset's own `data-view`. A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
+Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map, the view of the moment during a flight), `data-shown` (the layers painted), `data-highlight` (the highlighted regions and points), `data-frame` (the label of the frame the map's time-lapse is at, as the panel shows it; empty when no layer the step declares is a time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer); the inset's canvases say the same, with the inset's own `data-view`. A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
 
 ## Errors
 
@@ -255,6 +309,14 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `data/sites.csv: color 'kinds' is not a column (id, lon, lat, beds, kind) or a theme colour (background, surface, …)` | A points layer's `color` is neither a column of its CSV nor a theme colour role. |
 | `data/density.json: …` | The raster file or its image is not usable: not found, a sidecar without `bounds` or `value`, an image that is not an 8-bit greyscale PNG, over 2,000 × 2,000 pixels. The message starts with the file's path. |
 | `data/mask.json: color 'teal' is not a theme colour (background, surface, …)` | A mask's `color` names a role the theme has no `--sd-color-<role>` for. |
+| `frame '1999' not found (frames: 2010, 2011, 2012, 2013, 2014, …)` | `frame` names a label the time-lapse files do not have. The first five labels are listed. |
+| `time-lapse layers 'years' and 'rain' have different frame labels` | Two time-lapse layers the step declares have different label lists. |
+| `data/years/2011.png: 8×7 does not match the first frame (8×6)` | A frame's PNG is another size than the first frame's. |
+| `a run of 20.3 s is longer than 20 s; split it across steps` | A played step's first phase and run together last more than 20 s. |
+| ``\`numbers\` key 'pop' is in no time-lapse layer (keys: people)`` | A `numbers` key no time-lapse layer of the step has. |
+| ``\`numbers\` key 'people' is in time-lapse layers 'years' and 'rain'`` | A `numbers` key two time-lapse layers have. |
+| ``\`numbers\` key 'people' needs a \`format\` (a d3-format string such as ",.0f")`` | An entry of `numbers` without a `format`. |
+| ``\`pace\` must be 100 to 2000 ms a frame`` | `pace` is outside its range (`validate` reports it too). |
 | `3 categories but the palette has 2 colours` | A raster of more classes, or a points `color` column of more distinct values, than the categorical palette has colours. |
 | `column 'rat' not found in data/rates.csv (columns: code, rate)` | `key`, `value`, `lon`, `lat`, `id` or `size` names a column the CSV does not have. |
 | ``map needs `key` (a column name)`` | A layer has no `key` and the map has no `id` to default to. |
@@ -279,6 +341,10 @@ areas/map: data/rates.csv: key '07' matches no region
 **Codes with leading zeros.** A key column of numbers loses its zeros (`07` becomes `7`) unless `types` declares it a string.
 
 **Two shown layers of one kind.** The later one covers the earlier. Switch `shown` from one to the other to compare them.
+
+**A legend at the top.** The time-lapse panel sits at the top-left (the top-right when the inset is at the top-left). A legend in that corner covers it: keep the legend at the bottom.
+
+**A run longer than 20 s.** Split it across steps (`frame: "2005"`, then `frame: "2018"`), or lower `pace`.
 
 ## For agents
 

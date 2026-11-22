@@ -11,12 +11,13 @@
 //                                     context is only signed: the stage signs a scene first to leave a canvas showing it)
 //   legend(prepared, state)           the layer's legend row, { title, legend, noData }, or null for none
 // and, optionally, `maxRatio`, the canvas's backing-store ratio limit (a raster sets 1; the default is `canvasLayer`'s).
-// `state` is { view, flight, alpha, highlight, frame, frameMix, size, from, change }: the view { k, x, y } of the
+// `state` is { view, flight, alpha, highlight, size, from, change, frame, fromFrame }: the view { k, x, y } of the
 // moment; while the view flies, `flight` { from, to, t }, the views at its two ends and how far it has gone (else null:
 // a vector layer needs `view` only, a raster draws its pictures at `from` and `to`); the layer's opacity; `highlight`
-// { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the frame and its mix (for rasters);
-// the stage's [w, h]; and, while the layer's data or scale changes, `from` (what it showed before) and `change`, how
-// far the change has gone. A scene at the end of a motion uses the exact colours a jump writes.
+// { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the stage's [w, h]; while the layer's
+// data or scale changes, `from` (what it showed before) and `change`, how far the change has gone; and the frame pairs
+// of a time-lapse, `{ at, next, mix }`, now and in `from` (for rasters). A scene at the end of a motion uses the exact
+// colours a jump writes.
 import { loadTable } from "../../core/chart.js";
 import { colorScale } from "../../core/chart-scale.js";
 import { joinValues } from "../../core/map-rules.js";

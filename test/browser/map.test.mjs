@@ -1,4 +1,4 @@
-// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, points, labels, highlight, the legend and flights, on the map fixture deck
+// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, points, labels, highlight, the legend, flights, the inset and time-lapse runs, on the map fixture deck
 // (test/fixtures/decks/map) and its broken twin. Played equals jumped is checked on markup and canvas pixels; pixel
 // positions come from the same projection the component fits, computed here in Node. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map.test.mjs
@@ -10,7 +10,7 @@ import { withPage } from "../../cli/browser.js";
 import { d3 } from "../../engine/core/d3.js";
 import { applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
 import { pngPixels } from "../../cli/png.js";
-import { deckPages, goTo, canvasPixels, tokenRgb, paletteRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
+import { deckPages, goTo, settled, elementHtml, canvasPixels, tokenRgb, paletteRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const DECK = "test/fixtures/decks/map/";
@@ -1168,5 +1168,204 @@ test("inset: lookups for its views are ready after mount", async () => {
     for (const step of INSET_STEPS.slice(1)) await goTo(page, "inset", step);
     assert.equal(await lookupsOf(page), ready, "none was built while the steps played");
     assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// --- time-lapse runs --------------------------------------------------------------------------------------------
+
+/** The steps of the time-lapse slide up to the long run (12.6 s), which has its own test. */
+const LAPSE_STEPS = ["first", "last", "back", "north", "long"];
+/** The people of each frame of the 12-frame file, in list order, read in Node. */
+const YEARS = JSON.parse(readFileSync(`${root}${DECK}data/years.json`, "utf8")).frames.map(({ label, numbers }) => ({ label, people: numbers.people }));
+const people = (text) => Number(text.replace(/,/g, ""));
+/** A `sampleFrames` probe of the frame and view the land's canvas says it shows, and the panel's year and first number. */
+const lapseProbe = new Function("el", `
+  const base = el.querySelector('canvas[data-layer="main:base"]');
+  const panel = el.querySelector(".sd-map-panel");
+  return { frame: base.dataset.frame, view: base.dataset.view, label: panel?.querySelector(".sd-map-panel-frame")?.textContent ?? null,
+           value: panel?.querySelector(".sd-map-panel-value")?.textContent ?? null };`);
+/** The panel as the page shows it: its corner, its year and its numbers. */
+const panelOf = (page) =>
+  page.evaluate(() => {
+    const panel = document.querySelector('[data-el="map"] .sd-map-panel');
+    return panel && {
+      at: panel.dataset.at,
+      label: panel.querySelector(".sd-map-panel-frame").textContent,
+      numbers: [...panel.querySelectorAll(".sd-map-panel-number")].map((row) => ({ key: row.dataset.key, name: row.querySelector(".sd-map-panel-name").textContent, value: row.querySelector(".sd-map-panel-value").textContent })),
+    };
+  });
+const framesShown = (page) => page.evaluate(() => [...new Set([...document.querySelectorAll('[data-el="map"] canvas')].map((c) => c.dataset.frame))]);
+/** The element's markup and canvas pixels after loading the slide at `step` (no motion). */
+const jumpTo = async (ctx, page, step) => {
+  await ctx.open(pages.url("timelapse", `step=${step}`));
+  return { html: await elementHtml(page, "map"), pixels: await canvasPixels(page, "map") };
+};
+/** Labels in list order: each sample's place in the 12-frame list. */
+const yearIndex = (label) => YEARS.findIndex((f) => f.label === label);
+
+test("timelapse: played equals jumped, pixels too", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=first") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "timelapse", steps: LAPSE_STEPS, id: "map" });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "timelapse", steps: LAPSE_STEPS, id: "map" });
+    // at rest: every canvas says the frame, and the panel at the top-left shows its year and its people
+    await ctx.open(pages.url("timelapse", "step=back"));
+    assert.deepEqual(await framesShown(page), ["2015"]);
+    assert.deepEqual(await panelOf(page), { at: "top-left", label: "2015", numbers: [{ key: "people", name: "People", value: "56,993,430" }] });
+    await ctx.open(pages.url("timelapse", "step=first"));
+    assert.deepEqual(await framesShown(page), ["2010"], "without `frame`, the first frame");
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("timelapse: a run passes intermediate frames", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=first&motion=full") }, async (page, ctx) => {
+    const { frames, end } = await sampleFrames(page, "timelapse", "last", "map", lapseProbe);
+    const seen = [...new Set(frames.map((f) => f.frame))];
+    assert.ok(seen.length >= 3, `the canvases pass ${seen.length} frames (${seen.join(" ")})`);
+    assert.ok(seen.some((label) => label !== "2010" && label !== "2021"), "some of them between the two ends");
+    assert.ok(frames.every((f, i) => i === 0 || yearIndex(f.frame) >= yearIndex(frames[i - 1].frame)), "in list order");
+    assert.ok(frames.every((f) => f.label === f.frame), "the panel's year is the frame the canvases say, in every frame");
+    assert.equal(frames[0].frame, "2010");
+    assert.equal(end.frame, "2021");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: numbers count between frames", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=first&motion=full") }, async (page, ctx) => {
+    const { frames, end } = await sampleFrames(page, "timelapse", "last", "map", lapseProbe);
+    const values = frames.map((f) => people(f.value));
+    const exact = new Set(YEARS.map((f) => f.people));
+    const between = values.filter((v) => !exact.has(v) && YEARS.some((f, i) => i > 0 && v > YEARS[i - 1].people && v < f.people));
+    assert.ok(between.length >= 2, `${between.length} sampled values strictly between two frames' values (${frames.map((f) => f.value).join(" | ")})`);
+    assert.ok(values.every((v, i) => i === 0 || v >= values[i - 1]), "only rising, as the frames' values do");
+    assert.equal(people(end.value), YEARS.at(-1).people, "and the last frame's value at the end");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: frame earlier in the list runs backward at the new pace", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=last&motion=full") }, async (page, ctx) => {
+    const { frames, end, settledMs } = await sampleFrames(page, "timelapse", "back", "map", lapseProbe);
+    const seen = [...new Set(frames.map((f) => f.frame))];
+    assert.ok(seen.length >= 3, `the canvases pass ${seen.length} frames (${seen.join(" ")})`);
+    assert.ok(frames.every((f, i) => i === 0 || yearIndex(f.frame) <= yearIndex(frames[i - 1].frame)), `backward in list order (${seen.join(" ")})`);
+    assert.equal(frames[0].frame, "2021");
+    assert.equal(end.frame, "2015");
+    // 2021 back to 2015 is 6 moves at the step's pace of 200 ms
+    assert.ok(settledMs >= 6 * 200 * 0.9, `about ${6 * 200} ms (settled at ${settledMs.toFixed(0)} ms)`);
+    assert.ok(settledMs <= 6 * 200 + 3000, `within a generous bound (${settledMs.toFixed(0)} ms)`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: a flight then the run, in that order", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=back&motion=full") }, async (page, ctx) => {
+    const { frames, end } = await sampleFrames(page, "timelapse", "north", "map", lapseProbe);
+    const north = view(BASE, [REGIONS.get("N1")], SIZE);
+    const at = [north.k, north.x, north.y].map((v) => v.toFixed(3)).join(",");
+    assert.equal(end.view, at, "the map ends at North");
+    assert.equal(end.frame, "2020", "on the step's frame");
+    const arrived = frames.findIndex((f) => f.view === at);
+    const runs = frames.findIndex((f) => f.frame !== "2015");
+    assert.ok(arrived > 0 && runs > 0, `the flight (${arrived}) and the run (${runs}) both play`);
+    assert.ok(frames.slice(1, arrived).some((f) => f.view !== frames[0].view), "the map flies");
+    assert.ok(runs >= arrived, `no frame changes before the flight has landed (frame ${runs}, landed ${arrived})`);
+    assert.ok(frames.slice(arrived).every((f) => f.view === at), "and the run plays at the end view");
+    assert.ok(new Set(frames.slice(arrived).map((f) => f.frame)).size >= 3, "passing the frames in between");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: 18 frame moves at 700 ms settle past 10 s", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=long") }, async (page, ctx) => {
+    const jumped = await jumpTo(ctx, page, "longrun");
+    await ctx.open(pages.url("timelapse", "step=long&motion=full"));
+    assert.equal(await page.evaluate(() => window.STEPDECK.flags.animate), true, "the played run really animates");
+    const ms = await page.evaluate(async () => {
+      const t0 = performance.now();
+      await window.STEPDECK.goTo("timelapse", "longrun");
+      await window.STEPDECK.settled();
+      return performance.now() - t0;
+    });
+    // 2000 to 2018 is 18 moves at the default 700 ms: 12.6 s, past the 10 s an update has without `info.expect`
+    assert.ok(ms >= 12000, `about 12.6 s (${ms.toFixed(0)} ms)`);
+    assert.ok(ms <= 12600 + 7000, `within a generous bound (${ms.toFixed(0)} ms)`);
+    assert.deepEqual(await errorsOf(page), [], "the watchdog let the run finish");
+    assert.deepEqual(await framesShown(page), ["2018"]);
+    assert.equal(await elementHtml(page, "map"), jumped.html, "the run ends where a jump does");
+    assert.deepEqual(await canvasPixels(page, "map"), jumped.pixels, "pixels too");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: 29 frame moves are refused", async () => {
+  await withPage({ root, url: broken.url("long", "step=first&motion=full") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), []);
+    await goTo(page, "long", "last");
+    assert.deepEqual(await errorsOf(page), ["long/map: a run of 20.3 s is longer than 20 s; split it across steps"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("timelapse: leaving the slide mid-run stops it", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=long&motion=full") }, async (page, ctx) => {
+    const left = await page.evaluate(async () => {
+      const t0 = performance.now();
+      window.STEPDECK.goTo("timelapse", "longrun");
+      await new Promise((r) => setTimeout(r, 1000));
+      const frame = document.querySelector('[data-el="map"] canvas[data-layer="main:base"]').dataset.frame;
+      await window.STEPDECK.goTo("areas", "base");
+      await window.STEPDECK.settled();
+      return { frame, ms: performance.now() - t0 };
+    });
+    assert.ok(left.frame !== "2000" && left.frame !== "2018", `the run is under way a second in (${left.frame})`);
+    assert.ok(left.ms < 6000, `leaving resolves long before the 12.6 s run would end (${left.ms.toFixed(0)} ms)`);
+    assert.deepEqual(await errorsOf(page), []);
+    await goTo(page, "timelapse", "longrun");
+    assert.deepEqual(await framesShown(page), ["2018"], "coming back shows the step's frame");
+    assert.equal((await panelOf(page)).label, "2018");
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: click mid-run, the next step applies", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=first") }, async (page, ctx) => {
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "timelapse", from: "first", via: "last", to: "back", id: "map", keep: LEGEND_COLOURS });
+    assert.deepEqual(await framesShown(page), ["2015"]);
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("timelapse: hiding mid-run leaves it at its end", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=long") }, async (page, ctx) => {
+    const jumped = await jumpTo(ctx, page, "longrun");
+    await ctx.open(pages.url("timelapse", "step=long&motion=full"));
+    // No `return`: evaluate would otherwise wait for the whole run.
+    await page.evaluate(() => { window.STEPDECK.goTo("timelapse", "longrun"); });
+    await page.waitForTimeout(1000);
+    assert.notEqual(await elementHtml(page, "map"), jumped.html, "the run is under way when the page is hidden");
+    const arrived = await page.evaluate(async (jumped) => {
+      const map = () => document.querySelector('[data-el="map"]').outerHTML;
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+      const t0 = performance.now();
+      document.dispatchEvent(new Event("visibilitychange"));
+      while (map() !== jumped && performance.now() - t0 < 1000) await new Promise((r) => setTimeout(r, 10));
+      return map() === jumped ? performance.now() - t0 : null;
+    }, jumped.html);
+    assert.notEqual(arrived, null, "within a second of the event the map shows the run's end");
+    await settled(page);
+    assert.equal(await elementHtml(page, "map"), jumped.html, "and stays there");
+    assert.deepEqual(await canvasPixels(page, "map"), jumped.pixels, "pixels too");
+    assert.deepEqual(await errorsOf(page), [], "the element is not failed");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("timelapse: frames of another size error", async () => {
+  await withPage({ root, url: broken.url("mismatch", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["mismatch/map: data/mismatch/2001.png: 8×7 does not match the first frame (8×6)"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });

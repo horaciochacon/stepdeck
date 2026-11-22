@@ -8,7 +8,13 @@
 // A value or class raster hatches the land beneath it that it has no data for, and the land beyond its bounds, in its own
 // picture (`--sd-color-dim` over `--sd-color-surface`, as `areas` does for a region without a value), and the legend
 // adds a "no data" row exactly when there is hatch to explain. A mask has no no-data: the cells that are not the class
-// stay clear. A file with `frames` shows its first frame; the others are not decoded.
+// stay clear.
+//
+// A file with `frames` is a time-lapse: the prepared layer has `lapse`, the frames' labels and numbers and the raster
+// to decode them from (index.js decodes the frames a step and its run need, a few at a time). A scene shows the frame
+// pair of `state.frame`, `{ at, next, mix }` (indexes into the frames): the picture of frame `at`, and, while a run
+// crossfades, the picture of `next` over it at `mix`, both at the view of the moment; `state.fromFrame` is the pair the
+// old picture of a change of data shows. A raster without `frames` shows its one image whatever the pair.
 //
 // A raster is clipped to the land outline by default: a coarse cell whose centre is on land stops at the coastline instead
 // of sticking out over the sea, whatever it holds (data or hatch), for every look. `clip: false` draws every cell whole,
@@ -97,24 +103,35 @@ function scratchOf(canvas) {
   return scratch;
 }
 
-/**
- * The scene of a prepared layer at `view`, drawn at `alpha`: its picture at `view`, or, during `flight`, its pictures
- * at the flight's two ends (`flightDraws`).
- */
-const sceneOf = (prepared, view, alpha, flight) => ({
-  source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, clip: prepared.clip,
-  draws: flight ? flightDraws(flight, alpha) : [{ frame: 0, at: view, alpha }],
-});
+/** The frame pair of a moment that rests on frame `i`. */
+export const still = (i) => ({ at: i, next: i, mix: 0 });
+const FIRST = still(0);
+
+/** Whether a raster from `loadRaster` is a time-lapse: a file with `frames`, each labelled (one `src` has one frame, labelled ""). */
+export const isLapse = (raster) => raster.frames[0].label !== "";
 
 /**
- * The draws of a flight: the picture of the wider end (the lower scale, which covers more of the element at any view
- * between) under the other, at `alpha`, and the other over it at its share of the way, so the two blend as the flight
- * goes from the start's picture to the end's. Zooming in, the start's is under and the end's comes in at `t`; zooming
- * out, the end's is under and the start's goes at `1 - t`. Wherever the lower one reaches, the raster stays filled.
+ * The scene of a prepared layer at `view`, drawn at `alpha`: the picture of frame `pair.at` at `view`, or, during
+ * `flight`, its pictures at the flight's two ends (`flightDraws`); while a run crossfades (`pair.mix` above 0), the
+ * picture of `pair.next` over it at its share. A run never plays during a flight.
  */
-function flightDraws({ from, to, t }, alpha) {
-  if (to.k < from.k) return [{ frame: 0, at: to, alpha }, { frame: 0, at: from, alpha: alpha * (1 - t) }];
-  return [{ frame: 0, at: from, alpha }, { frame: 0, at: to, alpha: alpha * t }];
+const sceneOf = (prepared, view, alpha, flight, pair) => {
+  const { at, next, mix } = prepared.lapse && pair ? pair : FIRST;
+  const draws = flight ? flightDraws(flight, alpha, at) : [{ frame: at, at: view, alpha }];
+  if (mix > 0 && next !== at) draws.push({ frame: next, at: view, alpha: alpha * mix });
+  return { source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, clip: prepared.clip, draws };
+};
+
+/**
+ * The draws of a flight, of frame `frame`: the picture of the wider end (the lower scale, which covers more of the
+ * element at any view between) under the other, at `alpha`, and the other over it at its share of the way, so the two
+ * blend as the flight goes from the start's picture to the end's. Zooming in, the start's is under and the end's comes
+ * in at `t`; zooming out, the end's is under and the start's goes at `1 - t`. Wherever the lower one reaches, the raster
+ * stays filled.
+ */
+function flightDraws({ from, to, t }, alpha, frame) {
+  if (to.k < from.k) return [{ frame, at: to, alpha }, { frame, at: from, alpha: alpha * (1 - t) }];
+  return [{ frame, at: from, alpha }, { frame, at: to, alpha: alpha * t }];
 }
 
 /** A short name for a colour table: equal exactly when the tables are. */
@@ -129,9 +146,10 @@ export default {
   maxRatio: 1,
 
   /**
-   * Reads `layer.raster`, decodes its first frame and builds the layer's colour table, hatch and legend. Throws the
-   * raster loader's errors (each starts with the file's path), the scale's, and
-   * `data/mask.json: color 'teal' is not a theme colour (accent, alert, …)`.
+   * Reads `layer.raster`, decodes its first frame and builds the layer's colour table, hatch and legend, and for a
+   * time-lapse `lapse`: `{ labels, numbers, raster }`, the frames' labels and numbers in file order and the raster
+   * whose `grid(i)` decodes frame `i`. Throws the raster loader's errors (each starts with the file's path), the
+   * scale's, and `data/mask.json: color 'teal' is not a theme colour (accent, alert, …)`.
    */
   async prepare(layer, props, ctx, geo) {
     const raster = await loadRaster(layer.raster, ctx);
@@ -152,13 +170,14 @@ export default {
       landCells: hatch ? landCells(raster, geo.features) : null,
       lookupFor: (at, size) => geo.lookupFor(at, raster, size), // a table serves every raster with these bounds and this grid, in every frame; `size` is the canvas's (the inset's is not the element's)
     };
-    return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
+    const lapse = isLapse(raster) ? { labels: raster.frames.map((f) => f.label), numbers: raster.frames.map((f) => f.numbers), raster } : null;
+    return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo, lapse };
   },
 
-  scene(prepared, { view, flight, alpha, from, change }) {
+  scene(prepared, { view, flight, alpha, from, change, frame, fromFrame }) {
     // At the end of a change the scene is the plain one: what a jump paints.
-    if (!from || change >= 1) return sceneOf(prepared, view, alpha, flight);
-    return { ...sceneOf(prepared, view, alpha * change, flight), was: { scene: sceneOf(from, view, alpha * (1 - change), flight), res: from.res } };
+    if (!from || change >= 1) return sceneOf(prepared, view, alpha, flight, frame);
+    return { ...sceneOf(prepared, view, alpha * change, flight, frame), was: { scene: sceneOf(from, view, alpha * (1 - change), flight, fromFrame), res: from.res } };
   },
 
   paint(canvas, scene, prepared) {

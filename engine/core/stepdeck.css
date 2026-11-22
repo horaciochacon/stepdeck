@@ -325,6 +325,17 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-map-legend[data-at$="right"] { right: var(--sd-space); align-items: flex-end; }
 .sd-map-legend .sd-legend-title { flex-basis: 100%; font-size: var(--sd-font-size-note); }
 
+/* the corner panel of a map's time-lapse (components/map/panel.js): the frame's label in the statement size and, under
+   it, the numbers in the note size, each after its label in the muted colour, all in tabular figures so a run's digits
+   hold still; at the top-left (data-at), or the top-right when the inset is there, on a panel of the background colour
+   as the legend is. */
+.sd-map-panel { position: absolute; top: var(--sd-space); display: flex; flex-direction: column; gap: calc(var(--sd-grid) / 2); padding: var(--sd-grid) calc(var(--sd-grid) * 1.5); border-radius: calc(var(--sd-grid) / 2); background: var(--sd-color-background); color: var(--sd-color-ink); line-height: var(--sd-line-height-tight); font-variant-numeric: tabular-nums; }
+.sd-map-panel[data-at="top-left"] { left: var(--sd-space); align-items: flex-start; }
+.sd-map-panel[data-at="top-right"] { right: var(--sd-space); align-items: flex-end; }
+.sd-map-panel-frame { font-size: var(--sd-font-size-statement); }
+.sd-map-panel-number { display: flex; align-items: baseline; gap: var(--sd-grid); font-size: var(--sd-font-size-note); }
+.sd-map-panel-name { color: var(--sd-color-muted); }
+
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the
    component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */

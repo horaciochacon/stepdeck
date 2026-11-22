@@ -8,8 +8,9 @@
 //
 // `paint(state, layerStates, { moving })` draws one moment from plain data and writes on every canvas what it shows, as
 // `dump` and `check --played` read it: `data-view` (k,x,y with 3 decimals), `data-shown` (the layers painted, in paint
-// order), `data-highlight` (the highlighted regions), `data-frame` (empty without a time-lapse) and `data-sig`, the
-// signature of what was painted (empty for a cleared layer); `data-layer` is the canvas's name. Every scene's `source`
+// order), `data-highlight` (the highlighted regions), `data-frame` (the label of the frame the map's time-lapse is
+// at, empty when the step declares no time-lapse layer) and `data-sig`, the signature of what was painted (empty for a
+// cleared layer); `data-layer` is the canvas's name. Every scene's `source`
 // starts with `geo.key` (the boundaries, the projection and the size), so a signature changes when the geometry does.
 // Every vector is drawn through the view of the moment, so a flight redraws cached paths; a raster draws pictures made at
 // other views through it (raster.js). A paint at rest paints every canvas and makes the labels afresh, so the markup is
@@ -153,10 +154,12 @@ export function createStage(el, { name, size, geo, layers, scale = 1 }) {
     svg,
     /**
      * Paints one moment. `state` is { view, flight, highlight: { ids, dim(id), ring(id) }, labels: [{ id, opacity }],
-     * frame, frameMix, cover }, `flight` the flight under way ({ from, to, t, view }, or null; the views are the element's:
-     * the stage draws them through its `scale`), `cover` what hides part of the labels ({ rect, alpha }, or none);
-     * `layerStates[i]` is { prepared, alpha, from, change } for `layers[i]` (a layer at alpha 0 is cleared). `moving`: a
-     * frame of a motion, which leaves a canvas that shows its scene already.
+     * frame, cover }, `flight` the flight under way ({ from, to, t, view }, or null; the views are the element's:
+     * the stage draws them through its `scale`), `frame` the label of the time-lapse frame on screen (or null), `cover`
+     * what hides part of the labels ({ rect, alpha }, or none); `layerStates[i]` is { prepared, alpha, from, change,
+     * frame, fromFrame } for `layers[i]` (a layer at alpha 0 is cleared), its two frame pairs ({ at, next, mix }) what a
+     * time-lapse shows, now and, while its data changes, before. `moving`: a frame of a motion, which leaves a canvas
+     * that shows its scene already.
      */
     paint(state, layerStates, { moving = false } = {}) {
       const { view: shown, flight: flying = null, highlight } = state;
@@ -180,10 +183,10 @@ export function createStage(el, { name, size, geo, layers, scale = 1 }) {
       const lands = landScene(v);
       put(land, (canvas) => paintAreas(canvas, lands, geo.res));
       layers.forEach((slot, i) => {
-        const { prepared, alpha, from, change } = layerStates[i];
+        const { prepared, alpha, from, change, frame, fromFrame } = layerStates[i];
         const canvas = canvases[i];
         if (alpha > 0) {
-          const scene = slot.module.scene(prepared, { view: v, flight, alpha, highlight, frame: state.frame, frameMix: state.frameMix, size, from, change });
+          const scene = slot.module.scene(prepared, { view: v, flight, alpha, highlight, size, from, change, frame, fromFrame });
           put(canvas, (target) => slot.module.paint(target, scene, prepared));
         } else {
           if (!moving || canvas.getAttribute("data-sig") !== "") clear(canvas);
