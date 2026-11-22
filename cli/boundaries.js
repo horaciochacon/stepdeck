@@ -5,9 +5,10 @@
 //     (or the full one with `full`);
 //   - rounds the coordinates, drops the points and rings that rounding collapses, and keeps each feature's properties;
 //   - writes data/<iso3>-adm<n>.geojson and, next to it, <same name>.source.json with the licence and the source;
-//   - returns the counts, the licence, a suggested source line and a warning for each map limit the file is over.
+//   - returns the counts, the licence, a suggested source line, a warning for each map limit the file is over, and
+//     the files it replaced (an existing output is overwritten).
 // `fetch` is injected (default: the global one), so the tests never touch the network.
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { MAX_POINTS, MAX_REGIONS } from "#engine/core/map.js";
 
@@ -28,6 +29,20 @@ export function displayPath(path) {
   const rel = relative(process.cwd(), path);
   return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? path : rel;
 }
+
+/** Writes `text` to `path` through a temp file in the same folder, so a failure never leaves a truncated file. */
+async function writeWhole(path, text) {
+  const temp = `${path}.${process.pid}.tmp`;
+  try {
+    await writeFile(temp, text);
+    await rename(temp, path);
+  } catch (e) {
+    await rm(temp, { force: true });
+    throw e;
+  }
+}
+
+const exists = (path) => access(path).then(() => true, () => false);
 
 /** GETs `url` and returns { status, body }; a network failure becomes "could not reach geoBoundaries (<cause>)". */
 async function get(fetch, url) {
@@ -97,7 +112,7 @@ function pointsOf(feature) {
  * @param {boolean} [options.full]  the full-resolution geometry, not the simplified one
  * @param {number} [options.precision]  decimals kept in the coordinates, 0 to 10 (default 4, about 10 m)
  * @param {typeof globalThis.fetch} [options.fetch]  injected for tests
- * @returns {Promise<{ file: string, sourceFile: string, regions: number, points: number, license: string, sourceLine: string, warnings: string[] }>}
+ * @returns {Promise<{ file: string, sourceFile: string, regions: number, points: number, license: string, sourceLine: string, warnings: string[], replaced: string[] }>}
  * @throws `<level> is not an admin level (use ADM0 to ADM5)`, `geoBoundaries has no gbOpen ADM2 for XYZ`,
  *   `could not reach geoBoundaries (<cause>)`, `geoBoundaries answered something stepdeck cannot read: <what>`
  */
@@ -118,6 +133,7 @@ export async function boundaries({ iso3, level, deck = ".", out, full = false, p
   const field = full ? "gjDownloadURL" : "simplifiedGeometryGeoJSON";
   const url = info[field];
   if (typeof url !== "string" || url === "") throw unreadable(`no ${field}`);
+  if (!URL.canParse(url) || new URL(url).protocol !== "https:") throw unreadable(`${field} is not an https URL`);
   for (const name of ["boundarySource", "boundaryLicense"]) {
     if (typeof info[name] !== "string" || info[name] === "") throw unreadable(`no ${name}`);
   }
@@ -135,10 +151,14 @@ export async function boundaries({ iso3, level, deck = ".", out, full = false, p
 
   const file = out === undefined ? resolve(deck, "data", `${country.toLowerCase()}-adm${adm}.geojson`) : resolve(out);
   const sourceFile = `${file.replace(/\.geojson$/i, "")}.source.json`;
-  const source = { ...Object.fromEntries(SOURCE_FIELDS.map((name) => [name, info[name]])), url };
+  // A field the API omits stays in the source file, as null: the licence is never silently absent.
+  const source = { ...Object.fromEntries(SOURCE_FIELDS.map((name) => [name, info[name] ?? null])), url };
+  const replaced = [];
+  for (const path of [file, sourceFile]) if (await exists(path)) replaced.push(path);
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify({ ...geojson, features })}\n`);
-  await writeFile(sourceFile, `${JSON.stringify(source, null, 2)}\n`);
+  // The source file goes first: there is never a GeoJSON without its licence beside it.
+  await writeWhole(sourceFile, `${JSON.stringify(source, null, 2)}\n`);
+  await writeWhole(file, `${JSON.stringify({ ...geojson, features })}\n`);
 
   const shown = displayPath(file);
   const over = (n, limit, what) => `${shown}: ${count(n)} ${what} is over the map's limit of ${count(limit)}; simplify it, for example: mapshaper ${shown} -simplify 10% -o ${shown}`;
@@ -148,5 +168,5 @@ export async function boundaries({ iso3, level, deck = ".", out, full = false, p
   if (points > MAX_POINTS) warnings.push(over(points, MAX_POINTS, "points"));
 
   const license = info.boundaryLicense;
-  return { file, sourceFile, regions, points, license, sourceLine: `Boundaries: geoBoundaries, ${info.boundarySource} (${license}).`, warnings };
+  return { file, sourceFile, regions, points, license, sourceLine: `Boundaries: geoBoundaries, ${info.boundarySource} (${license}).`, warnings, replaced };
 }
