@@ -1,11 +1,12 @@
 // The gallery deck (site/gallery) shows every built-in layout and component, stays in step with them, and
 // validates: it is where every example.js runs as a slide (test/browser/gallery.test.mjs checks it in a browser).
 // After them come the motion slides, which show the motion vocabulary and the slide devices, the data-story slides,
-// which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid), and last the custom
-// component built only from what the engine hands every component (gallery.slope).
+// which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, flight
+// and inset, time-lapse, points), and last the custom component built only from what the engine hands every component
+// (gallery.slope).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ENGINE, REPO, listDirs, readBuiltins } from "../../cli/engine.js";
@@ -26,6 +27,10 @@ const STORY = {
   "story-strips": "chart-points",
   "story-waterfall": "chart-bar",
   "story-pyramid": "chart-bar",
+  "map-rasters": "map",
+  "map-flight-inset": "map",
+  "map-timelapse": "map",
+  "map-points": "map",
 };
 const CUSTOM = [{ slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" }];
 
@@ -87,6 +92,20 @@ test("every gallery slide file exists and its id equals its file name", async ()
 
 test("every entry's reference page exists", () => {
   for (const e of entries) assert.ok(existsSync(join(REPO, e.doc)), `${e.doc} exists`);
+});
+
+// The gallery is served as it is: a data file over 200 KB would slow the landing page and the deck for everyone.
+test("every gallery data file is under 200 KB", () => {
+  const files = [];
+  const visit = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) visit(join(dir, entry.name));
+      else files.push(join(dir, entry.name));
+    }
+  };
+  visit(join(gallery, "data"));
+  assert.ok(files.length > 30, `found ${files.length} data files`);
+  for (const file of files) assert.ok(statSync(file).size < 200 * 1024, `${file.slice(gallery.length + 1)} is under 200 KB`);
 });
 
 test("the gallery deck validates clean: every example.js, as a slide, with its data", async () => {

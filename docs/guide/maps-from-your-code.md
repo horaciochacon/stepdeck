@@ -61,9 +61,9 @@ A FeatureCollection of `Polygon` and `MultiPolygon` features, in longitude and l
 
 ```csv
 code,rate
-N1,10.4
-N2,5.6
-E1,2.4
+N1,14.4
+N2,7.8
+E1,2.6
 ```
 
 - **The key column** names each row's region (the layer's `key`, by default the map's `id` name). Keys are compared with the region ids as text, trimmed.

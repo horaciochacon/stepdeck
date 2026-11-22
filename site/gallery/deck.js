@@ -2,8 +2,9 @@
 // each slide re-exporting the engine's own example so the gallery cannot drift from it; then the motion slides,
 // written for the gallery, which show the named motions, a step's choreography and the slide devices (focus-dim,
 // the message line and badges, ghost placeholders); then the data-story slides, which play the chart moves
-// (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid); last the custom component
-// (components/gallery.slope/), a slope chart built only from what the engine hands every component, with no import.
+// (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, a flight and
+// an inset, a time-lapse, points); last the custom component (components/gallery.slope/), a slope chart built only from
+// what the engine hands every component, with no import.
 // All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
 const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"];
@@ -23,6 +24,10 @@ const STORY = [
   ["story-strips", "strips", "chart.points"],
   ["story-waterfall", "waterfall", "chart.bar"],
   ["story-pyramid", "back to back", "chart.bar"],
+  ["map-rasters", "map rasters", "map"],
+  ["map-flight-inset", "flight and inset", "map"],
+  ["map-timelapse", "time-lapse", "map"],
+  ["map-points", "sized points", "map"],
 ];
 // The deck's own components, each with the slide that shows it; their entries link the custom-components guide.
 const CUSTOM = [["custom-slope", "gallery.slope"]];

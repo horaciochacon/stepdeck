@@ -143,7 +143,8 @@ All notable changes to stepdeck are recorded here. The format follows
   a corner panel shows the frame's label and its `numbers` counting. A step that changes `frame` and other things
   plays the other changes first, then the run. A played step ends where a jump does, canvas pixels included, and
   `dump` reports each canvas layer's view, layers, frame and signature, which `check --played` compares. The
-  gallery has a `map` example slide.
+  gallery has a `map` example slide and four map stories, in the landing page's "Data stories": the three kinds of
+  raster, a flight and an inset, a time-lapse, and points sized and coloured by a column.
 - **The raster format and writer functions.** A raster is one JSON (`bounds`, what the grey levels mean in
   `value`, and a greyscale PNG in `src`, or `frames` for a time-lapse), defined so that R, Python and the browser
   agree on every value. `docs/guide/maps/stepdeck-map.R` and `docs/guide/maps/stepdeck_map.py` write it from a

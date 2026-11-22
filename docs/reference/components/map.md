@@ -8,13 +8,13 @@ Sources: [`components/map/schema.json`](../../../engine/components/map/schema.js
 
 ## Use it
 
-The gallery's example slide (`components/map/example.js`): the regions of a fictional country, then their rates in four classes, then the region with the highest rate (Ironridge) and the one with the lowest on the mainland (Eastport; only the island of Little Holm is lower) named and highlighted for one step. The map fills `main` of a `full-bleed` slide, with the source line under it.
+The gallery's example slide (`components/map/example.js`): the regions of a fictional country, then their rates in four classes, then the region with the highest rate (Southmouth) and the one with the lowest on the mainland (Eastport; only the island of Little Holm is lower) named and highlighted for one step. The map fills `main` of a `full-bleed` slide, with the source line under it.
 
 ```js
 export default {
   id: "map-example",
   layout: "full-bleed",
-  title: "Ironridge is highest, Eastport lowest on the mainland",
+  title: "Southmouth is highest, Eastport lowest on the mainland",
   elements: [
     { id: "map", region: "main", type: "map",
       props: { boundaries: "data/map/regions.geojson", id: "code", name: "name",
@@ -24,7 +24,7 @@ export default {
   steps: [
     { id: "regions" },
     { id: "rates", set: { map: { shown: ["rate"] } } },
-    { id: "ends", only: { map: { highlight: ["W4", "E1"], labels: ["W4", "E1"] } } },
+    { id: "ends", only: { map: { highlight: ["S1", "E1"], labels: ["S1", "E1"] } } },
   ],
 };
 ```

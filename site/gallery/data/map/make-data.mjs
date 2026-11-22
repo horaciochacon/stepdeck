@@ -2,7 +2,7 @@
 // run `node site/gallery/data/map/make-data.mjs` to rebuild every file it writes next to itself, or pass
 // `--out DIR` to write them under DIR/gallery instead (the tests compare the two).
 //
-// regions.geojson        16 regions and 2 islands, counter-clockwise; properties `code` and `name`
+// regions.geojson        16 regions and 2 islands (off the coast), counter-clockwise; properties `code` and `name`
 // rates.csv              code,rate   one rate per region, with one region left out
 // change.csv             code,change a change per region, from -8 to +8
 // density.json + .png    linear 0 to 800 people per km², 160×120, with a transparent patch on land (no data)
@@ -24,7 +24,7 @@ const write = (name, content) => {
   writeFileSync(join(out, name), content);
 };
 
-const { regions, land } = country({ seed: 18, cells: 80 });
+const { regions, land } = country({ seed: 18, cells: 80, islands: "near" });
 const bounds = extent(regions);
 const mainland = regions.features.filter((f) => f.properties.code.startsWith("I") === false);
 write("regions.geojson", geojsonText(regions));
