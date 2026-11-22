@@ -68,7 +68,7 @@ E1,2.6
 
 - **The key column** names each row's region (the layer's `key`, by default the map's `id` name). Keys are compared with the region ids as text, trimmed.
 - **A key that matches no region is an error**, and so is a region in two rows. A mismatch never shows up as a quietly missing value: the slide fails and names the key.
-- **A region with no row, or with an empty cell, has no value.** It is hatched and the legend adds "no data". Leave the cell empty; never write a 0 or a sentinel for "unknown".
+- **A region with no row, or with an empty cell, has no value.** It is hatched and the legend adds "no data". Leave the cell empty; never write a 0 or a sentinel for "unknown". In R, `write.csv(rates, "my-talk/data/rates.csv", row.names = FALSE, na = "")` writes `NA` as an empty cell; pandas' `to_csv(path, index=False)` writes `NaN` as one already.
 - **Codes with leading zeros.** The CSV loader reads a column of digits as numbers, so `07` becomes `7`. Declare the key column as text in the layer: `types: { code: "string" }`.
 - **Classes are the slide's.** Write the values; the layer's `classes`, `midpoint` or `domain` turn them into colours. If your analysis defines the breaks, copy them into `classes`.
 
@@ -202,7 +202,8 @@ regions <- st_read("admin1.gpkg") |>
   st_transform(4326) |>
   rmapshaper::ms_simplify(keep = 0.05, keep_shapes = TRUE)   # keep 5% of the points, never drop a region
 regions <- regions[, c("code", "name")]                       # the id your data uses, and the name
-st_write(regions, "my-talk/data/regions.geojson", layer_options = "COORDINATE_PRECISION=4", delete_dsn = TRUE)
+out <- "my-talk/data/regions.geojson"
+st_write(regions, out, layer_options = "COORDINATE_PRECISION=4", delete_dsn = file.exists(out))   # replaces an earlier file
 ```
 
 In Python, with `geopandas`:
