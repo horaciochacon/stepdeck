@@ -269,6 +269,7 @@ async update(props, info) {
 | `ctx.mount(type, el, props)` | `Promise<ChildHandle>` | Mounts a built-in or deck component inside yours. See below. |
 | `ctx.stepProps` | `ReadonlyArray<Props \| null> \| null` | This element's resolved props at every step of its slide. A frozen array, computed once before `mount`; `null` for a child mounted with `ctx.mount`. See [`ctx.stepProps`](#ctxstepprops). |
 | `ctx.chart` | `ChartKit` | The chart building blocks (layout maths, marks, joins, motion, canvas layer): one frozen object, the same for every component and child. See [`ctx.chart`](#ctxchart). |
+| `ctx.map` | `MapKit` | The geography building blocks (boundaries, projection, views, the raster lookup): one frozen object, the same for every component and child. See [`ctx.map`](#ctxmap). |
 
 ### `ctx.animate`
 
@@ -561,15 +562,47 @@ cells.attr("fill", (d) => scale.color(d.value) ?? missingColor); // null: no val
 el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: true, t: ctx.t }));
 ```
 
+### `ctx.map`
+
+`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels and draws nothing; the painters and the raster readers join it later.
+
+| Name | Signature | What it does |
+|---|---|---|
+| `boundaries` | `boundaries(geojson, { id, name, file }) → { features, byId, ids, names }` | Validates a parsed FeatureCollection of Polygons and MultiPolygons (what `ctx.data` returns for a `.geojson`) and indexes its regions. A region's id is `properties[id]` as a string, or the feature's own `id` when `id` is omitted; `names` maps each id to `properties[name]`, else the id. `file` only names the file in messages (default `"boundaries"`). Never changes `geojson`: see Winding. |
+| `projection` | `projection(spec, features, [w, h]) → projection` | The base projection of an element: `spec` is `"equal-earth"`, `"natural-earth"`, `"mercator"` or `"conic-equal-area"`, rotated to the centre longitude of `features` and fitted to them in `w` × `h` with a margin of 6% of the smaller side. The conic's parallels sit a sixth of the latitude span in from the south and north ends. Fix it for the element's life. |
+| `view` | `view(base, target, [w, h]) → { k, x, y }` | A zoom transform over the base's pixels. `target` is `null` (home, `{ k: 1, x: 0, y: 0 }`), an array of features, or `{ bounds: [west, south, east, north] }` in degrees (west greater than east crosses the antimeridian). The target is centred and fitted with the same margin. |
+| `applyView` | `applyView(v, [px, py]) → [k·px + x, k·py + y]` | A base-projected point seen through a view. |
+| `lookup` | `lookup(base, v, [w, h], bounds, [cols, rows], { step }) → Int32Array` | For each pixel of the canvas, row-major from the top left, the raster cell under it as `row * cols + col`, or -1 outside the raster or the projection. See Lining a raster up. |
+
+**Errors.** Each begins with `<file>: `. `boundaries` throws `not a FeatureCollection`, `feature 3 has no 'code'` (features count from 1), `region 'North' appears twice`, `only Polygon and MultiPolygon features are supported (found LineString)`, `6,000 regions is more than 5,000` and `300,000 points is more than 250,000` (every coordinate of every ring counts). `projection` throws `` unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area) `` and `projection needs at least one region`; `view` throws `view: no regions to fit`.
+
+**Winding.** GeoJSON written by `sf` or `geopandas` follows RFC 7946, with outer rings counter-clockwise; d3-geo expects the opposite and would read each region as everything but itself. `boundaries` reverses the rings of any polygon whose `d3.geoArea` is above 2π, on copies, so the file you got from `ctx.data` (which is shared and read-only) is untouched. Give `projection`, `view` and your paths the `features` it returns, never the raw file.
+
+**Views are affine.** `fitExtent` changes only scale and translation, so a view is a transform of base-projected pixels: `applyView(v, base(lonLat))` is where a point lands, and cached paths can be redrawn with `ctx2d.setTransform(k, 0, 0, k, x, y)` (divide line widths by `k`) instead of projecting again. A flight between two views is a blend of their three numbers.
+
+**Lining a raster up.** A raster in lon/lat lands on the boundaries in any projection through `lookup`: `bounds` are the outer edges of the edge cells, and rows run north to south, columns west to east, so the index is `row * cols + col` with row 0 the northern edge. The projection is inverted exactly at every `step` pixels (default 8) and longitude and latitude are interpolated between those nodes, so the cell is exact except within a fraction of a pixel of a cell edge. Where an invert fails, the cells around that node are -1. The table is for one `(view, size, bounds, grid)`; keep it until the view or the size changes.
+
+```js
+const { features, byId } = ctx.map.boundaries(await ctx.data("regions.geojson"), { id: "code", name: "name", file: "regions.geojson" });
+const base = ctx.map.projection("equal-earth", features, [ctx.size.w, ctx.size.h]); // once, at mount
+const home = ctx.map.view(base, null, [ctx.size.w, ctx.size.h]);
+const north = ctx.map.view(base, [byId.get("N1")], [ctx.size.w, ctx.size.h]);      // fitted to one region
+const box = ctx.map.view(base, { bounds: [-18, -30, -11, -24] }, [ctx.size.w, ctx.size.h]);
+const [x, y] = ctx.map.applyView(north, base([-14, -25]));                          // canvas pixels
+const cells = ctx.map.lookup(base, north, [ctx.size.w, ctx.size.h], [-19, -31, -10, -23], [40, 30]);
+const cell = cells[Math.floor(y) * ctx.size.w + Math.floor(x)];                       // row * 40 + col in the raster, or -1
+```
+
 ## Helpers inside the engine
 
-The built-ins import small helpers from three engine modules. They are internal: they may change without notice, and a deck component should not import them, because the engine's path differs between the repository and a deck's `stepdeck/` copy. Use `ctx` instead, and copy a one-liner if you need it.
+The built-ins import small helpers from a few engine modules. They are internal: they may change without notice, and a deck component should not import them, because the engine's path differs between the repository and a deck's `stepdeck/` copy. Use `ctx` instead, and copy a one-liner if you need it.
 
 | Module | What the built-ins use from it |
 |---|---|
 | `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
 | `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
 | `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
+| `core/map.js` | `boundaries`, `projection`, `view`, `applyView`, `lookup`, and `mapKit`, which is `ctx.map`. Use `ctx.map`, not an import. |
 | `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`, and `chartKit`, which is `ctx.chart` (built from `core/chart-layout.js`, `core/chart-marks.js` and `core/chart-motion.js`). Use `ctx.chart`, not an import. |
 
 ## `schema.json`
