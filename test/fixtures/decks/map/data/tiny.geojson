@@ -1,0 +1,3 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"code":"T1","name":"Speck"},"geometry":{"type":"Polygon","coordinates":[[[-14,-27],[-13.99,-27],[-13.99,-26.99],[-14,-26.99],[-14,-27]]]}}
+]}

@@ -1,0 +1,3 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"code":"Q1","name":"Square"},"geometry":{"type":"Polygon","coordinates":[[[-14,-28],[-14,-26],[-12,-26],[-12,-28],[-14,-28]]]}}
+]}
