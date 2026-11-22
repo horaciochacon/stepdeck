@@ -1,5 +1,5 @@
-// Pure building blocks for charts: scale extents, category order, forecast splits, label placement, draw order
-// and beeswarm offsets. A leaf module: no imports, no DOM, no randomness. Everything takes plain data and
+// Pure building blocks for charts: scale extents, category order, forecast splits, label placement, draw order,
+// beeswarm offsets and colour classes. A leaf module: no imports, no DOM, no randomness. Everything takes plain data and
 // returns plain data, so built-in charts, custom components and `validate` share the same maths.
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
@@ -325,4 +325,42 @@ export function swarm(xs, { r, maxDy }) {
     out[i] = slots[pick];
   }
   return out;
+}
+
+/**
+ * The class of `value` among `breaks` (ascending lower bounds): the number of breaks that are at most `value`, so
+ * `[5, 10, 20]` has classes 0 (below 5) to 3 (20 and above), and a value equal to a break starts the class above it.
+ * `null` for a missing value: `null`, undefined, `""`, text, or a number that is not finite.
+ * @param {unknown} value
+ * @param {number[]} breaks
+ * @returns {number | null}
+ */
+export function classIndex(value, breaks) {
+  if (value === null || value === "" || (typeof value !== "number" && typeof value !== "string")) return null;
+  const v = Number(value);
+  if (!Number.isFinite(v)) return null;
+  let lo = 0;
+  let hi = breaks.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (breaks[mid] <= v) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * One legend label per class of `breaks` (`breaks.length + 1`): `< b0`, `b0–b1` (an en dash), ..., `≥ bn`, each
+ * break written by `fmt`. No breaks: one empty label.
+ * @param {number[]} breaks
+ * @param {(value: number) => string} fmt
+ * @returns {string[]}
+ */
+export function classLabels(breaks, fmt) {
+  if (!breaks.length) return [""];
+  return [
+    `< ${fmt(breaks[0])}`,
+    ...breaks.slice(1).map((b, i) => `${fmt(breaks[i])}–${fmt(b)}`),
+    `≥ ${fmt(breaks.at(-1))}`,
+  ];
 }

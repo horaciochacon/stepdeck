@@ -116,7 +116,7 @@ export default {
 | `ctx.animate` | `fadeIn(el)`, `reveal(el)`, `drawPath(path)`, `tween(from, to, onValue)`, `stagger(items, fn)`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also when it is aborted. |
 | `ctx.capture` | True when rendering for screenshots, where nothing animates. |
 | `ctx.stepProps` | `ctx.stepProps[k]` is what `update` gets as `props` at step `k`: the element's props after the patches up to that step, bindings resolved. Frozen, computed before `mount`. An entry is `null` when that step fails (skip it); the array itself is `null` for a `ctx.mount` child (use `ctx.stepProps ?? [props]`). Use it to size an axis from every step. |
-| `ctx.chart` | The chart building blocks, frozen and the same for every component: `loadTable`, `tickFormat`, `extentOf`, `rank`, `splitAt`, `spread`, `fit`, `wrapLabel`, `drawOrder`, `swarm`, `frame`, `keyed`, `settle`, `dot`, `whisker`, `band`, `rule`, `axis`, `halo`, `canvasLayer`, `paintLines`, `morph`, `entrance`, `undraw`, `lerp`, `focusPaint`, `tweenColor`, `textColor`. These 28 names are the public set; use them instead of importing from `core/`. See below. |
+| `ctx.chart` | The chart building blocks, frozen and the same for every component: `loadTable`, `tickFormat`, `extentOf`, `rank`, `splitAt`, `spread`, `fit`, `wrapLabel`, `drawOrder`, `swarm`, `frame`, `keyed`, `settle`, `dot`, `whisker`, `band`, `rule`, `axis`, `halo`, `canvasLayer`, `paintLines`, `morph`, `entrance`, `undraw`, `lerp`, `signature`, `focusPaint`, `tweenColor`, `textColor`, `colorScale`, `legendRow`, `classIndex`, `classLabels`. These 33 names are the public set; use them instead of importing from `core/`. See below. |
 
 ### Charts from the engine's pieces
 
