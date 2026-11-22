@@ -11,7 +11,7 @@ export default {
   elements: [
     { id: "map", region: "main", type: "map",
       props: { boundaries: "data/map/regions.geojson", id: "code", name: "name", shown: ["change"], view: HOME, legend: "bottom-left",
-               layers: { change: { areas: "data/map/change.csv", value: "change", label: "Change in cases per 1,000", classes: [-4, 0, 4], midpoint: 0 } } } },
+               layers: { change: { areas: "data/map/change.csv", value: "change", label: "Change in cases per 1,000", classes: [-4, 0, 6], midpoint: 0 } } } },
     { id: "src", region: "main", type: "text", props: { role: "source", text: "Synthetic data." } },
   ],
   steps: [
