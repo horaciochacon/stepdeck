@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodePng } from "../../../../cli/png.js";
-import { centroid, country, csvText, extent, field, geojsonText, jsonText, landGrid, levelImage, rng, timelapse } from "./fictional.mjs";
+import { centroid, country, csvText, discPatch, extent, geojsonText, jsonText, rng, timelapse, valueFiles } from "./fictional.mjs";
 
 const out = process.argv.includes("--out") ? join(process.argv[process.argv.indexOf("--out") + 1], "gallery") : dirname(fileURLToPath(import.meta.url));
 const write = (name, content) => {
@@ -29,46 +29,22 @@ const bounds = extent(regions);
 const mainland = regions.features.filter((f) => f.properties.code.startsWith("I") === false);
 write("regions.geojson", geojsonText(regions));
 
-// --- values for the regions ------------------------------------------------------------------------------------
+// --- values and rasters ----------------------------------------------------------------------------------------
 
 const COLS = 160;
 const ROWS = 120;
-const surface = field({ seed: 21, bounds, cols: COLS, rows: ROWS, bumps: 9 });
-const at = (feature) => {
-  const [lon, lat] = centroid(feature);
-  const col = Math.min(COLS - 1, Math.floor(((lon - bounds[0]) / (bounds[2] - bounds[0])) * COLS));
-  const row = Math.min(ROWS - 1, Math.floor(((bounds[3] - lat) / (bounds[3] - bounds[1])) * ROWS));
-  return surface[row * COLS + col];
-};
-const values = regions.features.map((f) => ({ code: f.properties.code, level: at(f) }));
-const MISSING = 5; // the sixth region has no rate
-write("rates.csv", csvText(["code", "rate"], values.filter((_, i) => i !== MISSING).map((v) => ({ code: v.code, rate: (2 + 17 * v.level).toFixed(1) }))));
-const low = Math.min(...values.map((v) => v.level));
-const high = Math.max(...values.map((v) => v.level));
-write("change.csv", csvText(["code", "change"], values.map((v) => ({ code: v.code, change: (-8 + (16 * (v.level - low)) / (high - low)).toFixed(1) }))));
-
-// --- rasters ---------------------------------------------------------------------------------------------------
-
-const valid = landGrid({ land, bounds, cols: COLS, rows: ROWS });
-const level = (v) => Math.round(255 * v);
-
-// density: 0 to 800, with a patch of land that has no data (a transparent disc)
-const patch = centroid(mainland[9]);
-const patchCol = ((patch[0] - bounds[0]) / (bounds[2] - bounds[0])) * COLS;
-const patchRow = ((bounds[3] - patch[1]) / (bounds[3] - bounds[1])) * ROWS;
-const density = valid.map((v, i) => (v && Math.hypot((i % COLS) + 0.5 - patchCol, Math.floor(i / COLS) + 0.5 - patchRow) > 7 ? 1 : 0));
-write("density.png", encodePng(levelImage(COLS, ROWS, Array.from(surface, level), density)));
-write("density.json", jsonText({ bounds, value: { scale: "linear", min: 0, max: 800, unit: "people per km²" }, src: "density.png" }));
-
-// cover: three classes, by thresholds of a second surface
-const cover = field({ seed: 31, bounds, cols: COLS, rows: ROWS, bumps: 14 });
-write("cover.png", encodePng(levelImage(COLS, ROWS, Array.from(cover, (v) => (v < 0.45 ? 0 : v < 0.78 ? 1 : 2)), valid)));
-write("cover.json", jsonText({ bounds, value: { classes: ["Forest", "Cropland", "Urban"] }, src: "cover.png" }));
-
-// wells: a mask, where a third surface is high
-const wells = field({ seed: 41, bounds, cols: COLS, rows: ROWS, bumps: 8 });
-write("wells.png", encodePng(levelImage(COLS, ROWS, new Uint8Array(COLS * ROWS), valid.map((v, i) => (v && wells[i] > 0.72 ? 1 : 0)))));
-write("wells.json", jsonText({ bounds, value: { classes: ["Near a well"] }, src: "wells.png" }));
+const files = valueFiles({
+  regions,
+  land,
+  bounds,
+  cols: COLS,
+  rows: ROWS,
+  bumps: { density: 9, cover: 14, wells: 8 },
+  missing: [5], // the sixth region has no rate
+  wellsAbove: 0.72,
+  patch: discPatch({ bounds, cols: COLS, rows: ROWS, at: centroid(mainland[9]), radius: 7 }), // land with no data
+});
+for (const [name, content] of Object.entries(files)) write(name, content);
 
 // --- sites -----------------------------------------------------------------------------------------------------
 
