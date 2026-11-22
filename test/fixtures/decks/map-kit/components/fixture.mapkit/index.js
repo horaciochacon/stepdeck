@@ -40,9 +40,9 @@ export default {
       const scale = raster ? d3.scaleLinear().domain([raster.value.min, raster.value.max]).range([colors[0], colors[1]]) : null;
       const lutData = raster ? M.lut(raster, (value) => scale(value)) : null;
       const res = {
-        raster, lutData, land, cache: images,
+        raster, lutData, land, landCells: raster ? M.landCells(raster, features) : null, cache: images,
         lookupFor: (at) => {
-          const key = `${at.k}|${at.x}|${at.y}`;
+          const key = `${raster.path}|${at.k}|${at.x}|${at.y}`; // a table is for one raster's bounds and grid
           if (!lookups.has(key)) lookups.set(key, M.lookup(base, at, [w, h], raster.bounds, raster.size));
           return lookups.get(key);
         },

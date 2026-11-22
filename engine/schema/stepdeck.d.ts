@@ -579,14 +579,14 @@ export interface MapRasterDraw {
   alpha: number;
 }
 
-/** Everything `paintRaster` draws, as plain data: the painter hashes all of it. Views are in the raster canvas's own pixels. */
+/** Everything `paintRaster` draws, as plain data: the painter hashes all of it. Views are in CSS px, the size of the canvas layer's `style`. */
 export interface MapRasterScene {
   /** Names the raster file; hashed. */
   source: string;
   /** Names the colour table of `res.lutData`: any string that differs when the table does; hashed. */
   lut: string;
   view: MapView;
-  /** The hatch under the data, on the land, in resolved colours; `null` for none. */
+  /** The hatch where land has no data, in resolved colours (opaque); `null` for none. */
   hatch: { line: string; background: string } | null;
   draws: MapRasterDraw[];
 }
@@ -596,11 +596,13 @@ export interface MapRasterResources {
   raster: Pick<MapRaster, "decoded">;
   /** 1,024 RGBA bytes: the colour of each level (`lut`). */
   lutData: Uint8ClampedArray;
-  /** The `lookup` table for a view, for a canvas of the layer's own size. */
+  /** The `lookup` table for a view, for the layer's CSS size. */
   lookupFor(at: MapView): Int32Array;
-  /** The land, in base-projected px, for the hatch; `null` for none. */
+  /** The regions, in base-projected px: land outside the raster is hatched. `null` for none. */
   land: Path2D | null;
-  /** Pictures already built, keyed `source|frame|at|lut|size`; the caller owns it. */
+  /** The raster's land cells (`landCells`): a cell with no data on one is hatched. `null` for none. */
+  landCells: Uint8Array | null;
+  /** Pictures and land masks already built, keyed by source, frame, view, colour table, hatch and size; the caller owns it. */
   cache: Map<string, unknown>;
 }
 
@@ -645,11 +647,13 @@ export interface MapKit {
   loadRaster(path: string, ctx: { data: (path: string) => Promise<any>; assetUrl: (path: string) => string }): Promise<MapRaster>;
   /** The 256 colours of a raster's levels as RGBA bytes: `colorOf(value, level)` returns a CSS colour, or null for transparent. */
   lut(raster: Pick<MapRaster, "value">, colorOf: (value: number | string, level: number) => string | null | undefined): Uint8ClampedArray;
-  /** Whether some land has no data in any frame of `raster`, or lies outside its bounds. `features` are from `boundaries`. */
+  /** The cells of a raster (`cols * rows`, row-major from the north-west) whose centres are on land, as 1 or 0. `features` are from `boundaries`; cached per array. */
+  landCells(raster: Pick<MapRaster, "bounds" | "size">, features: MapFeature[]): Uint8Array;
+  /** Whether a land cell has no data in any frame of `raster`, or some land lies outside its bounds. `features` are from `boundaries`. */
   rasterGaps(raster: MapRaster, features: MapFeature[]): Promise<boolean>;
   /**
-   * Clears `canvas` (a layer made with `maxRatio: 1`), hatches the land, and draws each picture of `scene.draws` at its
-   * alpha. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded.
+   * Clears `canvas` (a layer made with `maxRatio: 1`) and draws each picture of `scene.draws` at its alpha; a picture
+   * hatches the land cells with no data and the land outside the raster. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded.
    */
   paintRaster(canvas: HTMLCanvasElement, scene: MapRasterScene, res: MapRasterResources): string;
   /**
