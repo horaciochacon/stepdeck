@@ -1,8 +1,9 @@
 // One view of a map element: its canvas layers, stacked in paint order, and an SVG over them for the labels. The order
 // is the land (`base`), each layer (by kind, then in the order the slide first declares it), then the borders
-// (`paintBorders`, which fills nothing), on top so they stay crisp over any layer. A canvas is named `<stage>:<part>`:
-// `main:base`, `main:areas:rate`, `main:raster:density`, `main:borders`. Every canvas exists from the start, so a step
-// never adds or moves one; a layer that is not shown is cleared. A kind whose painter is costly per pixel (a raster)
+// (`paintBorders`, which fills nothing), on top so they stay crisp over any layer, then the layers of a kind that sets
+// `above: "borders"` on its module (points), then the labels. A canvas is named `<stage>:<part>`: `main:base`,
+// `main:areas:rate`, `main:raster:density`, `main:borders`, `main:points:sites`. Every canvas exists from the start, so
+// a step never adds or moves one; a layer that is not shown is cleared. A kind whose painter is costly per pixel (a raster)
 // sets `maxRatio: 1` on its module, and its canvas is made with that backing-store ratio.
 //
 // `paint(state, layerStates)` draws one moment from plain data and writes on every canvas what it shows, as `dump` and
@@ -47,14 +48,20 @@ export function createStage(el, { name, size, geo, layers }) {
   const doc = el.ownerDocument;
   const make = (part, maxRatio) => canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: `${name}:${part}`, maxRatio });
   const land = make("base");
-  const canvases = layers.map((slot) => make(`${slot.kind}:${slot.id}`, slot.module.maxRatio)); // a kind that is costly per pixel (a raster) sets `maxRatio`
+  // `canvases[i]` is the canvas of `layers[i]`; a canvas is stacked in the order it is made
+  const canvases = [];
+  const makeLayers = (above) => layers.forEach((slot, i) => {
+    if ((slot.module.above === "borders") === above) canvases[i] = make(`${slot.kind}:${slot.id}`, slot.module.maxRatio); // a kind that is costly per pixel (a raster) sets `maxRatio`
+  });
+  makeLayers(false);
   const borders = make("borders");
+  makeLayers(true);
   const svg = doc.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "sd-map-labels");
   svg.setAttribute("width", String(w));
   svg.setAttribute("height", String(h));
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  borders.after(svg);
+  (canvases.filter((_, i) => layers[i].module.above === "borders").at(-1) ?? borders).after(svg); // over the last canvas
 
   const { colors } = geo;
   const mark = (canvas, sig, marks) => {

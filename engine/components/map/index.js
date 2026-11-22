@@ -1,9 +1,11 @@
-// Built-in `map`: the regions of a GeoJSON file and, over them, layers of data (a choropleth of `areas`, a `raster`),
-// highlighted regions, names on the map and a legend, all set per step by props. This file assembles: it reads the
-// props, loads the geography and the layers, works out each step's state and plays the change between two of them.
+// Built-in `map`: the regions of a GeoJSON file and, over them, layers of data (a choropleth of `areas`, a `raster`,
+// `points`), highlighted regions, names on the map and a legend, all set per step by props. This file assembles: it
+// reads the props, loads the geography and the layers, works out each step's state and plays the change between two of
+// them.
 // The pieces are elsewhere:
 //   ./areas.js    the `areas` layer kind (the interface every kind shares is described there)
 //   ./raster.js   the `raster` layer kind: value rasters, class rasters and masks
+//   ./points.js   the `points` layer kind: places from longitude and latitude columns, sized and coloured by a column
 //   ./stage.js    one view of the map: its canvases in paint order, the borders, the labels
 //   ./legend.js   the legend rows in a corner
 //   core/map.js, core/map-paint.js, core/chart-scale.js   the public pieces (`ctx.map`, `ctx.chart`) they are built on
@@ -16,8 +18,8 @@
 // element already on screen) it first plays the change in one tween bound to info.signal, so an abort snaps to the
 // end: a layer that is shown or hidden fades, and its legend row and the labels that come or go with it, over the
 // step's duration (`--sd-duration`, or the step's `transition`); a change of a layer's data or scale crossfades
-// its colours over the same time; `highlight` turns the other regions to `--sd-color-dim` and outlines its own in ink over
-// `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
+// its colours over the same time; `highlight` turns the other regions and points to `--sd-color-dim` and outlines its own
+// in ink over `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
 import { d3 } from "../../core/d3.js";
 import { boundaries, projection } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
@@ -26,9 +28,10 @@ import { createStage } from "./stage.js";
 import { createLegend } from "./legend.js";
 import areas from "./areas.js";
 import raster from "./raster.js";
+import points from "./points.js";
 
-/** The layer kinds, in paint order: areas under rasters, and the borders over both. */
-const KINDS = [areas, raster];
+/** The layer kinds, in paint order: areas under rasters, the borders over both, and points over the borders. */
+const KINDS = [areas, raster, points];
 /** The view that shows the whole map. */
 const HOME = Object.freeze({ k: 1, x: 0, y: 0 });
 /** How many region ids a "not found" message lists before it stops. */
@@ -148,18 +151,23 @@ export default {
       }
       const shown = p.shown ?? [];
       for (const id of shown) if (!Object.hasOwn(defs, id)) throw new Error(`layer '${id}' not found (layers: ${ids.join(", ") || "none"})`);
-      const regions = [...geo.ids].sort();
-      const hint = `${regions.slice(0, HINT).join(", ")}${regions.length > HINT ? ", …" : ""}`;
-      for (const id of [...(p.highlight ?? []), ...(p.labels ?? [])]) {
-        if (!geo.byId.has(id)) throw new Error(`region '${id}' not found (regions: ${hint})`);
-      }
-
       const layers = await Promise.all(stage.slots.map(async ({ id, module }) => {
         const def = defs[id];
         if (kindOf(def) !== module) return { prepared: null, alpha: 0 };
         const prepared = await memoAsync(geo.prepared, `${module.kind}:${JSON.stringify(def)}`, () => module.prepare(def, p, ctx, geo));
         return { prepared, alpha: shown.includes(id) ? 1 : 0 };
       }));
+
+      // `labels` name regions; `highlight` names regions, and the points of the layers this step declares
+      const idLists = stage.slots.flatMap(({ module }, i) => (layers[i].prepared && module.ids ? [module.ids(layers[i].prepared)] : []));
+      const named = new Set(idLists.flat());
+      const list = (all) => `${all.slice(0, HINT).join(", ")}${all.length > HINT ? ", …" : ""}`;
+      const hint = list([...geo.ids].sort());
+      for (const id of p.highlight ?? []) {
+        if (geo.byId.has(id) || named.has(id)) continue;
+        throw new Error(idLists.length > 0 ? `'${id}' not found (regions: ${hint}; points: ${list([...named].sort())})` : `region '${id}' not found (regions: ${hint})`);
+      }
+      for (const id of p.labels ?? []) if (!geo.byId.has(id)) throw new Error(`region '${id}' not found (regions: ${hint})`);
       return { stage, view: HOME, highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers };
     }
 

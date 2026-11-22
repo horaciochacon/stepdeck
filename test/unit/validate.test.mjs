@@ -435,12 +435,12 @@ test("a misspelt mode gets a did-you-mean", async () => {
   }
 });
 
-test("a map layer has exactly one kind: areas with value, or raster with color", async () => {
+test("a map layer has exactly one kind: areas with value, raster with color, or points with lon and lat", async () => {
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-layers-")));
   try {
     mkdirSync(join(tmp, "slides"));
     mkdirSync(join(tmp, "data"));
-    for (const file of ["regions.geojson", "rates.csv", "density.json", "density.png"]) cpSync(join(repo, "test/fixtures/decks/map/data", file), join(tmp, "data", file));
+    for (const file of ["regions.geojson", "rates.csv", "sites.csv", "density.json", "density.png"]) cpSync(join(repo, "test/fixtures/decks/map/data", file), join(tmp, "data", file));
     writeFileSync(join(tmp, "deck.js"), `export default { title: "Layers", lang: "en", theme: "academic-light", slides: ["s"] };\n`);
     const layers = {
       rates: { areas: "data/rates.csv", value: "rate" },
@@ -450,15 +450,20 @@ test("a map layer has exactly one kind: areas with value, or raster with color",
       "no-value": { areas: "data/rates.csv" },
       "raster-value": { raster: "data/density.json", value: "rate" },
       "areas-color": { areas: "data/rates.csv", value: "rate", color: "alert" },
+      sites: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "id", size: "beds", color: "kind", types: { id: "string" } },
+      "points-value": { points: "data/sites.csv", lon: "lon", lat: "lat", value: "beds" },
+      "points-areas": { points: "data/sites.csv", lon: "lon", lat: "lat", areas: "data/rates.csv" },
+      "points-no-lat": { points: "data/sites.csv", lon: "lon" },
+      "areas-lon": { areas: "data/rates.csv", value: "rate", lon: "lon" },
     };
     writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "full-bleed", title: "Layers", elements: [
       { id: "map", type: "map", props: { boundaries: "data/regions.geojson", layers: ${JSON.stringify(layers)} } },
       { id: "src", type: "text", props: { role: "source", text: "Synthetic data." } },
     ] };\n`);
     const problems = await validate(tmp);
-    assert.deepEqual(rules(problems), Array(5).fill("prop-invalid"), show(problems));
-    assert.deepEqual(problems.map((p) => p.measured.split(" = ")[0]).sort(), ["layers.areas-color", "layers.both", "layers.neither", "layers.no-value", "layers.raster-value"]);
-    for (const p of problems) assert.match(p.fix, /^make layers\.[a-z-]+ an object with 'areas' and 'value' \(without 'raster', 'color'\) or an object with 'raster' \(without 'areas', 'value', 'key', 'types'\)/);
+    assert.deepEqual(rules(problems), Array(9).fill("prop-invalid"), show(problems));
+    assert.deepEqual(problems.map((p) => p.measured.split(" = ")[0]).sort(), ["layers.areas-color", "layers.areas-lon", "layers.both", "layers.neither", "layers.no-value", "layers.points-areas", "layers.points-no-lat", "layers.points-value", "layers.raster-value"]);
+    for (const p of problems) assert.match(p.fix, /^make layers\.[a-z-]+ an object with 'areas' and 'value' \(without 'raster', 'points', 'lon', 'lat', 'id', 'size', 'color'\) or an object with 'raster' \(without 'areas', 'points', 'value', 'key', 'lon', 'lat', 'id', 'size', 'types'\) or an object with 'points', 'lon' and 'lat' \(without 'areas', 'raster', 'value', 'key'\)/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
