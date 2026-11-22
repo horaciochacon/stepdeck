@@ -146,7 +146,7 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 |---|---|---|
 | `step` | `string \| number` | The step id, or the step index when the step has no id. For logging only: never branch on it. |
 | `prevStep` | `string \| number \| null` | The previously applied step, the same way; `null` on the first update. |
-| `animate` | `boolean` | Play motion. True only when the shell asked for motion and the move is forward by exactly one step from the last applied step. |
+| `animate` | `boolean` | Play motion. True only when the shell asked for motion (never while the page is hidden) and the move is forward by exactly one step from the last applied step. |
 | `signal` | `AbortSignal` | Aborts when a newer `goTo` supersedes this step, when the slide is paused or destroyed, or when this element's watchdog fires. |
 | `transition` | `{ duration?, stagger? } \| null` | The step's `transition`, as written in the slide; `null` when the step has none. |
 | `prev` | `object \| null` | The previous resolved props; `null` on the first update. |
@@ -157,7 +157,9 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 
 `schema/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
 
-When does `animate` come true? The shell requests motion only when the page is not in capture mode (`?capture`), not a presenter preview frame (`?receiver`), and motion is on (no `prefers-reduced-motion`, or `?motion=full`). Both shells render slide changes with `animate: false`; only a step change within the current slide passes the shell's motion request. The controller then narrows it to a forward move of exactly one step. A jump, a backward move and the first render never animate. See [Animation and motion](../guide/animation-and-motion.md).
+When does `animate` come true? The shell requests motion only when the page is not in capture mode (`?capture`), not a presenter preview frame (`?receiver`), motion is on (no `prefers-reduced-motion`, or `?motion=full`), and the page is not hidden. Both shells render slide changes with `animate: false`; only a step change within the current slide passes the shell's motion request. The controller then narrows it to a forward move of exactly one step. A jump, a backward move and the first render never animate. See [Animation and motion](../guide/animation-and-motion.md).
+
+**Hidden pages.** A hidden page (`document.visibilityState` is `"hidden"`) never animates: browsers deliver no animation frames to it and throttle its timers, so motion there would stall until the watchdog failed the element. A `goTo` asked while the page is hidden passes `animate: false`. When the page becomes hidden in the middle of a motion, the engine aborts that update's `info.signal` and applies the same target again without motion. This is the abort your component already handles: every `ctx.animate` helper jumps to its end state and resolves, and a component's own motion must do the same on `info.signal`, then leave exactly the end state `update` writes for the target.
 
 A probe of the controller in Node, with an element `a` advanced by `advance`, an element `b` shown `from: 1` and an element `c` that never changes, gives:
 

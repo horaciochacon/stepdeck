@@ -16,7 +16,8 @@ All notable changes to stepdeck are recorded here. The format follows
   components that build themselves (below) still build, so give those elements `enter: "none"`, and entering
   elements still appear one stagger apart unless the theme also sets `--sd-stagger: 0ms`. Jumps, backward
   moves, slide changes, screenshots and reduced motion still render at once, and a played step still ends exactly
-  where a jump does.
+  where a jump does. A hidden page (a covered or minimized window) never animates either, and hiding the page
+  ends the motion in flight at its end state, so a long run cannot stall there until the watchdog fails it.
 - **The focus-dim look changed.** `highlight` in `chart.line` and `diagram` no longer fades the other marks by
   opacity: they turn a neutral grey (see Focus-dim below), as in `chart.bar`. `chart.bar`'s dimmed bars change too:
   their fill is the new `--sd-color-dim` instead of `--sd-color-rule`.

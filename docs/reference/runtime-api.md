@@ -212,7 +212,7 @@ Returns the state of the slide on screen, or `null` when there is none (before t
 | `step` | `string \| number \| undefined` | `?step=`, parsed with `parseStepRef` (digits become a number; an empty value becomes `0`) |
 | `capture` | `boolean` | `?capture` is present |
 | `motion` | `boolean` | `true` when `?motion=full`, or when the browser does not ask for reduced motion |
-| `animate` | `boolean` | `!capture && !receiver && motion`: whether forward-by-one moves animate on this page |
+| `animate` | `boolean` | `!capture && !receiver && motion`: whether forward-by-one moves animate on this page. A hidden page does not animate whatever this says, and hiding it ends the motion in flight |
 | `lang` | `string \| undefined` | `?lang=` (an empty value is ignored) |
 | `theme` | `string \| undefined` | `?theme=` (an empty value is ignored) |
 

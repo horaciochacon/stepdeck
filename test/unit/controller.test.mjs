@@ -1035,3 +1035,93 @@ test("stepProps: frozen, and equal across two mounts of the same slide", async (
   assert.deepEqual(one.ctx.stepProps, two.ctx.stepProps);
   assert.notEqual(one.ctx.stepProps, two.ctx.stepProps, "each mount computes its own");
 });
+
+// ---------- finish ----------
+
+test("finish: an in-flight animated goTo snaps to its target", async () => {
+  const log = [];
+  const slide = {
+    id: "fin",
+    elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 10 } } }],
+  };
+  const seen = [];
+  const tweening = recorder(log, {
+    onUpdate: (p, info) => animate.tween(0, p.v, (v) => seen.push(v), { duration: 5_000, signal: info.signal }),
+  });
+  const { c } = makeController(slide, { rec: tweening });
+  await c.goTo(0);
+  const move = c.goTo(1, { animate: true });
+  await new Promise((r) => setTimeout(r, 50));
+  const t0 = Date.now();
+  await c.finish();
+  await move;
+  assert.ok(Date.now() - t0 < 1_000, "settled long before the 5 s tween would have");
+  const last = log[0].updates.at(-1);
+  assert.equal(last.info.signal.aborted, true, "the update saw its signal abort");
+  assert.equal(seen.at(-1), 10, "the tween landed on its end value");
+  assert.equal(c.state.step, 1);
+  assert.deepEqual(c.errors, []);
+});
+
+test("finish: idle resolves at once", async () => {
+  const slide = { id: "idle", elements: [{ id: "a", type: "rec", props: {} }], steps: [{ id: "s0" }, { id: "s1" }] };
+  const { c } = makeController(slide, { rec: recorder([]) });
+  await c.finish(); // before any goTo
+  await c.goTo(1);
+  await c.finish(); // after the last one settled
+  assert.equal(c.state.step, 1);
+  assert.deepEqual(c.errors, []);
+});
+
+test("finish: a target still resolving is applied, not dropped", async () => {
+  const log = [];
+  const gate = deferred();
+  let gated = false;
+  Object.defineProperty(docs, "data/slow.json", { configurable: true, enumerable: true, get: () => (gated ? gate.promise : { n: 1 }) });
+  try {
+    const slide = {
+      id: "slow",
+      elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+      steps: [{ id: "s0" }, { id: "s1", set: { a: { v: "{{data/slow.json#/n}}" } } }],
+    };
+    const { c } = makeController(slide, { rec: recorder(log) });
+    await c.goTo(0);
+    gated = true;
+    const move = c.goTo(1, { animate: true });
+    await new Promise((r) => setTimeout(r, 20));
+    const done = c.finish();
+    gate.resolve({ n: 2 });
+    await Promise.all([move, done]);
+    assert.equal(c.state.step, 1, "the target was applied");
+    const last = log[0].updates.at(-1);
+    assert.equal(last.props.v, 2);
+    assert.equal(last.info.animate, false, "applied without motion");
+    assert.deepEqual(c.errors, []);
+  } finally {
+    delete docs["data/slow.json"];
+  }
+});
+
+test("finish: a newer queued target is made non-animated", async () => {
+  const log = [];
+  const slide = {
+    id: "q",
+    elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 1 } } }, { id: "s2", set: { a: { v: 2 } } }],
+  };
+  const hold = deferred();
+  const { c } = makeController(slide, {
+    rec: recorder(log, { onUpdate: (p, info) => (p.v === 1 ? new Promise((r) => info.signal.addEventListener("abort", r)) : hold.promise) }),
+  });
+  hold.resolve();
+  await c.goTo(0);
+  c.goTo(1, { animate: true });
+  await new Promise((r) => setTimeout(r, 20));
+  const queued = c.goTo(2, { animate: true });
+  await c.finish();
+  await queued;
+  assert.equal(c.state.step, 2);
+  assert.equal(log[0].updates.at(-1).info.animate, false);
+  assert.deepEqual(c.errors, []);
+});

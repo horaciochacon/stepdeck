@@ -9,7 +9,7 @@ export default {
   slides: [
     "names", "cards", "boxed", "swap", "exit", "ghost",
     "chart-third", "chart-none", "chart-rise",
-    "bar-third", "bar-none", "bar-rise", "bar-ease", "line-ease",
+    "bar-third", "bar-none", "bar-rise", "bar-ease", "line-ease", "slow",
     "number-third", "number-none", "number-rise",
     "list-enters", "chat-enters",
     "diagram-enters", "terminal-enters", "timeline-enters",
