@@ -2,7 +2,7 @@
 // whisker and value label, slides to its new place. Hidden bars keep their place in the sorted order. `mode: "waterfall"`
 // stacks the shown bars into running totals, with dotted connectors and an optional total bar, and morphs from and to
 // plain bars. `mode: "back-to-back"` sets two groups' bars left and right of a centre rule, a population pyramid. Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-bar-modes.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/chart-bar-modes.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";

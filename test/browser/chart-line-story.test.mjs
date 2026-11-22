@@ -1,5 +1,5 @@
 // chart.line points, forecast segment, time sweep and draw fan in Chrome. Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-line-story.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/chart-line-story.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";

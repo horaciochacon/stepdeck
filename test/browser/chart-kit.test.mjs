@@ -1,6 +1,6 @@
 // The shared chart building blocks (`ctx.chart`) in Chrome, through a deck component that uses nothing else.
 // Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-kit.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/chart-kit.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";

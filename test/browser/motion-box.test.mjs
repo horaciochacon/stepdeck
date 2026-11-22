@@ -1,5 +1,5 @@
 // Element box motion (the frame's enterBox/exitBox) and ghost placeholders, in Chrome. Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/motion-box.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/motion-box.test.mjs
 //
 // Most checks sample the page once per animation frame inside one page.evaluate, from the moment a step is asked
 // for until it settles, so they hold however late a timer fires.

@@ -103,7 +103,7 @@ Before you finish, run both test suites:
 
 ```sh
 npm test
-npm run test:browser    # needs Chrome and Playwright; runs one file at a time
+npm run test:browser    # needs Chrome and Playwright
 ```
 
 How the tests are organized, and how to run one file, is in [Testing](testing.md).

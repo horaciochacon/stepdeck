@@ -1,7 +1,7 @@
 // `chart.points` in Chrome: estimates with intervals by category, a reference line, `shown`, `highlight`, the
 // "no data" mark, the domain error, the owned entrance, pairs, and beeswarm strips with a summary tick, an overflow
 // box and a followed item. Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/chart-points.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/chart-points.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

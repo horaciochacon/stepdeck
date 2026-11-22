@@ -43,21 +43,23 @@ node --test test/unit/validate.test.mjs
 STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright npm run test:browser
 ```
 
-`npm run test:browser` runs `node --test --test-concurrency=1 'test/browser/**/*.test.mjs'`. Each test opens a page in Chrome through `withPage` in `cli/browser.js`, which starts a local static server on the repository root, launches the browser and blocks every request that is not same-origin.
+`npm run test:browser` runs `node --test --test-concurrency=6 'test/browser/**/*.test.mjs'`. Each test opens a page in Chrome through `withPage` in `cli/browser.js`, which starts a local static server on the repository root, launches the browser and blocks every request that is not same-origin.
 
-- **`--test-concurrency=1`** runs the files one at a time. Every `withPage` call starts its own server and browser, so in effect each test launches one Chrome, and running files in parallel would launch many at once. `check.test.mjs` also writes `examples/spike/shots/` (through `shoot`). Keep the flag when you run files by hand.
+- **`--test-concurrency=6`** runs six files at a time; the tests in one file run one after another. Six was the fastest on a 10-core laptop: about 5 minutes, against about 20 one file at a time and about 8 at Node's default (one file fewer than the CPU cores), where the Chromes compete for the CPU.
+- **Files share nothing.** Every `withPage` call starts its own server on a free port and its own Chrome, and a test that writes a deck writes it to a new temporary folder. The one write inside the repository is `check.test.mjs`, which shoots `examples/spike/shots/` (git-ignored, and read by no other file).
+- **Fewer at once** on a small or busy machine: the tests that time an animation against the clock assume Chrome gets its frames on time. Options after the file pattern are not read, so give the whole command, for example `node --test --test-concurrency=1 'test/browser/**/*.test.mjs'`.
 - **`STEPDECK_PLAYWRIGHT`** names a `playwright` package folder. Playwright is not a dependency of the repository. If the variable is unset, Node must be able to resolve `playwright` on its own; otherwise every browser test fails (it does not skip) with `Playwright not found. Install it (npm i -D playwright) or set STEPDECK_PLAYWRIGHT to a playwright package directory.`
 - **`STEPDECK_CHANNEL`** picks the browser channel. The default is `chrome`, the system Chrome.
 
-To run one file, keep the concurrency flag. Some file headers show this single-file command; others show `npm run test:browser`. The pattern is:
+To run one file, name it. Some file headers show this command; others show `npm run test:browser`:
 
 ```sh
-STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/list.test.mjs
+STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/list.test.mjs
 ```
 
-A single component file takes about half a minute; the whole suite takes several minutes.
+Most files take under a minute; the slowest, `chart-points.test.mjs`, takes a few.
 
-In CI (`.github/workflows/ci.yml`) the unit tests and `site.test.mjs` form a fast job of about half a minute; the GitHub Pages deploy waits only for it and for the site upload, which runs alongside: a push to `main` is live about a minute later. The full browser suite runs at the same time, split over six runners with `--test-shard=<i>/6` (each still one file at a time), and is the commit's status check. To see the site before pushing, run `npm run site`: it serves the repository under `/stepdeck/`, as Pages does, and prints the URL.
+In CI (`.github/workflows/ci.yml`) the unit tests and `site.test.mjs` form a fast job of about half a minute; the GitHub Pages deploy waits only for it and for the site upload, which runs alongside: a push to `main` is live about a minute later. The full browser suite runs at the same time, split over six runners with `--test-shard=<i>/6` (each runs its files one at a time), and is the commit's status check. To see the site before pushing, run `npm run site`: it serves the repository under `/stepdeck/`, as Pages does, and prints the URL.
 
 The browser suite covers what needs a real page: the bare and reveal shells, every component's rendering and motion, the layouts, `dump`, `check` (including `--played`), `shoot`, `new` on a fresh deck, the watchdog on a hanging component, and the two example decks. `kit.test.mjs` requires `examples/kit` (on the default theme, `modern`) to pass `validate`, `check` and `check --played` with no problems; `check.test.mjs` requires `examples/spike` to pass `check` and `check --played`, and `validate.test.mjs` (unit suite) requires it to validate clean. These two decks are the clean baselines: a change that adds a problem to either one fails the suite. The gallery deck (`site/gallery`, one slide per built-in layout and component, each the engine's own `example.js`) is the third: `gallery.test.mjs` in the unit suite keeps it in step with `components/index.json` and `layouts/` and requires it to validate clean, and `gallery.test.mjs` in the browser suite requires `check --played` to pass under both shipped themes.
 

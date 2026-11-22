@@ -1,5 +1,5 @@
 // The `text` crossfade and the box-only entrance, in Chrome. Run with:
-//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test --test-concurrency=1 test/browser/text-crossfade.test.mjs
+//   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/text-crossfade.test.mjs
 //
 // Each check samples the page once per animation frame inside one page.evaluate, from the moment a step is
 // asked for until it settles, so it holds however late a timer fires.
