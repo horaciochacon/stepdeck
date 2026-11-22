@@ -23,7 +23,7 @@
 // element, cleared on destroy and on a size change), because the table's identity is the element's.
 import { d3 } from "./d3.js";
 import { scratchCanvas } from "./canvas.js";
-import { MAX_RASTER_PIXELS, levelValue, pngProblems, rasterProblems } from "./map-rules.js";
+import { MAX_RASTER_PIXELS, lapsePixelProblems, levelValue, pngProblems, rasterProblems } from "./map-rules.js";
 import { paintAreas, paintBorders, paintRaster, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
 
 /** The most regions in one boundaries file. */
@@ -308,6 +308,9 @@ async function readRaster(path, ctx) {
 
   const firstGrid = await decodeImage(urls[0], frames[0].src, null);
   const size = [firstGrid.cols, firstGrid.rows];
+  // A time-lapse is decoded a few frames at a time: refuse one too big to show before any other frame is read.
+  const [tooBig] = lapse ? lapsePixelProblems(frames.length, size, path) : [];
+  if (tooBig) throw new Error(tooBig);
   const decode = (i) => decodeImage(urls[i], frames[i].src, size);
 
   // Decoded frames, least recently used first. An entry is its promise at once, and its grid when that settles.
@@ -369,7 +372,9 @@ const rasters = new WeakMap();
  *
  * Throws `loadRaster needs ctx.assetUrl` when `ctx` has none, and otherwise, with the file's path first: the problems `rasterProblems` finds in the JSON, `data/f/1.png: not found`,
  * `data/wide.json: '../x.png' is not a path inside the deck`, `data/f/9.png: 2400×1800 is more than 2,000×2,000
- * pixels`, and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
+ * pixels`, `data/big.json: 101 frames of 1000×1000 is 101 million pixels, more than 100 million; use fewer or smaller
+ * frames` (once the first frame gives the size, before another is decoded), and, from `grid(i)`, `data/f/2.png: 9×6
+ * does not match the first frame (8×6)`.
  * @param {string} path
  * @param {{ data: (path: string) => Promise<any>, assetUrl: (path: string) => string }} ctx
  * @returns {Promise<{ path: string, bounds: number[], value: any, frames: { label: string, numbers: Record<string, number>, src: string }[], size: [number, number], grid(i: number): Promise<{ cols: number, rows: number, levels: Uint8Array, data: Uint8Array }>, decoded(i: number): { cols: number, rows: number, levels: Uint8Array, data: Uint8Array } | undefined }>}

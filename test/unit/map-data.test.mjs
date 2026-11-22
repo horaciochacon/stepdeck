@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { d3 } from "#engine/core/d3.js";
-import { pngProblems, rasterProblems } from "#engine/core/map-rules.js";
+import { lapsePixelProblems, pngProblems, rasterProblems } from "#engine/core/map-rules.js";
 import { pngInfo, pngPixels } from "../../cli/png.js";
 import { centroid, landGrid, landOf, onLand } from "../../site/gallery/data/map/fictional.mjs";
 
@@ -253,6 +253,10 @@ test("every sidecar and every image follows the raster format (the broken folder
   for (const dir of DIRS) {
     for (const [file, sidecar] of sidecars(dir)) {
       assert.deepEqual(rasterProblems(sidecar, file), [], file);
+      if (sidecar.frames) {
+        const { width, height } = pngInfo(read(dir, sidecar.frames[0].src));
+        assert.deepEqual(lapsePixelProblems(sidecar.frames.length, [width, height], file), [], `${file} is within the time-lapse pixel budget`);
+      }
       for (const src of imagesOf(sidecar)) {
         seen += 1;
         const problems = pngProblems(pngInfo(read(dir, src)), src);

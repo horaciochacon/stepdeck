@@ -448,6 +448,40 @@ test("loadRaster: too many pixels errors, as an element error on a slide", async
   });
 });
 
+test("loadRaster: a time-lapse over 100 million pixels errors once its first frame gives the size", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page) => {
+    const got = await withKit(page, async (M, ctx) => {
+      // every frame names one 1000×1000 image: 100 frames are 100 million pixels, 101 are more
+      const canvas = new OffscreenCanvas(1000, 1000);
+      canvas.getContext("2d").fillRect(0, 0, 1000, 1000);
+      const url = URL.createObjectURL(await canvas.convertToBlob({ type: "image/png" }));
+      const json = (n) => ({ bounds: [-16, -28, -10, -26], value: { scale: "linear", min: 0, max: 1 }, frames: Array.from({ length: n }, (_, i) => ({ src: `f/${i}.png`, label: String(i) })) });
+      const fetch = window.fetch;
+      let fetched = 0;
+      window.fetch = (input, init) => {
+        if (String(input) === url) fetched += 1;
+        return fetch(input, init);
+      };
+      try {
+        const load = async (n) => {
+          fetched = 0;
+          const result = await M.loadRaster("data/big.json", { data: async () => json(n), assetUrl: () => url }).then((r) => r.size, (e) => e.message);
+          return { result, fetched };
+        };
+        return { within: await load(100), over: await load(101) };
+      } finally {
+        window.fetch = fetch;
+        URL.revokeObjectURL(url);
+      }
+    });
+    assert.deepEqual(got.within, { result: [1000, 1000], fetched: 1 });
+    assert.deepEqual(got.over, {
+      result: "data/big.json: 101 frames of 1000×1000 is 101 million pixels, more than 100 million; use fewer or smaller frames",
+      fetched: 1,
+    }, "refused after the first frame, before decoding another");
+  });
+});
+
 test("loadRaster: an image is read next to its JSON and must be a path inside the deck", async () => {
   await withPage({ root, url: pages.url("kit", "step=a") }, async (page) => {
     const got = await withKit(page, async (M, ctx) => {

@@ -120,7 +120,7 @@ A raster file with `frames` is a time-lapse, one PNG per frame:
 - **Every frame shares `bounds` and `value`**, so a colour means the same in every frame. Compute one range over all the frames, not one per frame.
 - **`label`** is required and unique. The slide's `frame` names a frame by it, and the map shows it large while the frames play.
 - **`numbers`** is optional: figures for the corner panel, such as a total, with the same keys in every frame. They count from one frame's value to the next as the frames crossfade.
-- **Up to 200 frames, all of one size.**
+- **Up to 200 frames, all of one size**, and at most 100 million pixels every frame together: 200 frames of 700 × 700, or 25 of 2,000 × 2,000.
 
 ## Writer functions
 
