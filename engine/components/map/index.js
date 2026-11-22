@@ -1,8 +1,9 @@
-// Built-in `map`: the regions of a GeoJSON file and, over them, layers of data (a choropleth of `areas` here),
+// Built-in `map`: the regions of a GeoJSON file and, over them, layers of data (a choropleth of `areas`, a `raster`),
 // highlighted regions, names on the map and a legend, all set per step by props. This file assembles: it reads the
 // props, loads the geography and the layers, works out each step's state and plays the change between two of them.
 // The pieces are elsewhere:
 //   ./areas.js    the `areas` layer kind (the interface every kind shares is described there)
+//   ./raster.js   the `raster` layer kind: value rasters, class rasters and masks
 //   ./stage.js    one view of the map: its canvases in paint order, the borders, the labels
 //   ./legend.js   the legend rows in a corner
 //   core/map.js, core/map-paint.js, core/chart-scale.js   the public pieces (`ctx.map`, `ctx.chart`) they are built on
@@ -14,8 +15,8 @@
 // An update writes the end state of its props whatever came before. With info.animate (a forward step by one, the
 // element already on screen) it first plays the change in one tween bound to info.signal, so an abort snaps to the
 // end: a layer that is shown or hidden fades, and its legend row and the labels that come or go with it, over the
-// step's duration (`--sd-duration`, or the step's `transition`); a change of a layer's data or scale crossfades its
-// colours over the same time; `highlight` turns the other regions to `--sd-color-dim` and outlines its own in ink over
+// step's duration (`--sd-duration`, or the step's `transition`); a change of an areas layer's data or scale crossfades
+// its colours over the same time (a raster layer shows its new picture at once); `highlight` turns the other regions to `--sd-color-dim` and outlines its own in ink over
 // `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
 import { d3 } from "../../core/d3.js";
 import { boundaries, projection } from "../../core/map.js";
@@ -24,9 +25,10 @@ import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, moti
 import { createStage } from "./stage.js";
 import { createLegend } from "./legend.js";
 import areas from "./areas.js";
+import raster from "./raster.js";
 
-/** The layer kinds, in paint order. */
-const KINDS = [areas];
+/** The layer kinds, in paint order: areas under rasters, and the borders over both. */
+const KINDS = [areas, raster];
 /** The view that shows the whole map. */
 const HOME = Object.freeze({ k: 1, x: 0, y: 0 });
 /** How many region ids a "not found" message lists before it stops. */

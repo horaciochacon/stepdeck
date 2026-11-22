@@ -1,0 +1,10 @@
+{
+  "bounds": [-19, -31, -10, -23],
+  "value": {
+    "scale": "log",
+    "min": 1,
+    "max": 1000,
+    "unit": "people per km²"
+  },
+  "src": "density.png"
+}

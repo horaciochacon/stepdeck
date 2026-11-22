@@ -1,0 +1,10 @@
+{
+  "bounds": [-19, -31, -14.5, -23],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 800,
+    "unit": "people per km²"
+  },
+  "src": "half.png"
+}

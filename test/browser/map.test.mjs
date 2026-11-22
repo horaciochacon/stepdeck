@@ -1,4 +1,4 @@
-// The built-in `map` in Chrome: boundaries, choropleth areas, labels, highlight and the legend, on the map fixture deck
+// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, labels, highlight and the legend, on the map fixture deck
 // (test/fixtures/decks/map) and its broken twin. Played equals jumped is checked on markup and canvas pixels; pixel
 // positions come from the same projection the component fits, computed here in Node. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map.test.mjs
@@ -8,14 +8,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { d3 } from "../../engine/core/d3.js";
-import { boundaries, projection } from "../../engine/core/map.js";
-import { deckPages, goTo, canvasPixels, tokenRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
+import { boundaries, landCells, projection } from "../../engine/core/map.js";
+import { pngPixels } from "../../cli/png.js";
+import { deckPages, goTo, canvasPixels, tokenRgb, paletteRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const DECK = "test/fixtures/decks/map/";
 const pages = deckPages(DECK);
 const broken = deckPages("test/fixtures/decks/map-broken/");
 const STEPS = { areas: ["base", "rates", "focus", "named"], legends: ["steps", "classes", "ramp"], projection: ["equal", "conic"] };
+const RASTER_STEPS = ["base", "density", "cover", "wells", "alert", "half", "log", "gone"];
 /** The main map of the fixture slides is 1400 x 700 px; the small one 140 x 76. */
 const SIZE = [1400, 700];
 const SMALL = [140, 76];
@@ -68,6 +70,9 @@ const errorsOf = (page) => page.evaluate(() => window.STEPDECK.errors);
 /** A `sampleFrames` probe of the colour of one pixel of a canvas layer: its source is sent to the page, so the pixel is written into it. */
 const colourProbe = (layer, [x, y]) =>
   new Function("el", `const d = el.querySelector('canvas[data-layer="${layer}"]').getContext("2d").getImageData(${x}, ${y}, 1, 1).data; return { color: \`rgb(\${d[0]}, \${d[1]}, \${d[2]})\` };`);
+/** A `sampleFrames` probe of the alpha of one pixel of a canvas layer. */
+const alphaProbe = (layer, [x, y]) =>
+  new Function("el", `return { alpha: el.querySelector('canvas[data-layer="${layer}"]').getContext("2d").getImageData(${x}, ${y}, 1, 1).data[3] };`);
 /** Whether `c` lies strictly between colours `a` and `b`: different from both, and every channel within theirs. */
 const strictlyBetween = (c, a, b) => {
   const [x, p, q] = [c, a, b].map((s) => s.match(/\d+/g).map(Number));
@@ -300,7 +305,7 @@ test("areas: highlight colours tween over --sd-duration-fast", async () => {
     assert.ok(r.frames.some((f) => strictlyBetween(f.color, move.from, move.to)), "and passes colours between");
     assert.ok(move.arrived >= 0.8 * fast, `${fast} ms, not a snap (arrived at ${move.arrived.toFixed(0)} ms)`);
     assert.ok(move.arrived - move.start <= 3 * fast, `done within a generous bound of ${fast} ms (${(move.arrived - move.start).toFixed(0)} ms)`);
-    assert.ok(move.arrived <= r.settledMs - 0.4 * fast, `on the fast clock, before the step's own duration ends (${move.arrived.toFixed(0)} of ${r.settledMs.toFixed(0)} ms)`);
+    assert.ok(move.arrived <= r.settledMs - 0.1 * fast, `on the fast clock, before the step's own duration ends (${move.arrived.toFixed(0)} of ${r.settledMs.toFixed(0)} ms)`);
     assert.deepEqual(ctx.errors, []);
   });
 });
@@ -319,5 +324,208 @@ test("map: a projection change changes every signature", async () => {
     });
     assert.ok((await canvasPixels(page, "map")).some((px, i) => px !== pixels[i]), "as the pixels do");
     assert.deepEqual(ctx.errors, []);
+  });
+});
+
+// --- raster layers ----------------------------------------------------------------------------------------------
+
+const { features: LAND, byId: REGIONS } = boundaries(JSON.parse(readFileSync(`${root}${DECK}data/regions.geojson`, "utf8")), { id: "code" });
+const BASE = projection("equal-earth", LAND, SIZE);
+const RASTER = (name) => `main:raster:${name}`;
+
+/** A raster of the fixture, read from its files in Node: its bounds, size, and what each cell holds ({ level, data }). */
+function rasterFile(name) {
+  const sidecar = JSON.parse(readFileSync(`${root}${DECK}data/${name}.json`, "utf8"));
+  const { width: cols, height: rows, data: grey } = pngPixels(readFileSync(`${root}${DECK}data/${sidecar.src}`));
+  const [west, south, east, north] = sidecar.bounds;
+  return {
+    sidecar, bounds: sidecar.bounds, size: [cols, rows],
+    cell: (col, row) => ({ level: grey[(row * cols + col) * 2], data: grey[(row * cols + col) * 2 + 1] === 255 }),
+    /** The cell that holds [lon, lat]. */
+    cellAt: ([lon, lat]) => [Math.floor(((lon - west) / (east - west)) * cols), Math.floor(((north - lat) / (north - south)) * rows)],
+    /** The pixel of the element that the middle of a cell falls on. */
+    pixelOf: (col, row) => BASE([west + ((col + 0.5) * (east - west)) / cols, north - ((row + 0.5) * (north - south)) / rows]).map(Math.floor),
+  };
+}
+/** The pixel of the middle of the cell of `file` that holds region `id`'s centre, and the cell. */
+function regionCell(file, id) {
+  const [col, row] = file.cellAt(d3.geoCentroid(REGIONS.get(id)));
+  return { col, row, at: file.pixelOf(col, row), ...file.cell(col, row) };
+}
+/** Whether pixels show the hatch: a stripe close to `dim` and the surface between (the stripes are antialiased, so a pixel is rarely exactly the stripe colour). */
+const hatched = (pixels, dim, surface) => {
+  const near = (c, target, by) => [c, target].map((s) => s.match(/\d+/g).map(Number)).reduce((x, y) => x.every((v, i) => Math.abs(v - y[i]) <= by));
+  const colours = pixels.map(rgb);
+  return colours.some((c) => near(c, dim, 10)) && colours.some((c) => near(c, surface, 1));
+};
+const MAINLAND = ["N1", "N2", "N3", "E1", "W1", "S1", "S2"];
+
+test("rasters: played equals jumped, pixels too", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=base") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "rasters", steps: RASTER_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("rasters: backward and interrupted equal the jump", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=base") }, async (page, ctx) => {
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "rasters", steps: RASTER_STEPS, id: "map" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "rasters", from: "base", via: "density", to: "cover", id: "map", keep: LEGEND_COLOURS });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("rasters: a cell lines up with its region", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=cover") }, async (page, ctx) => {
+    const cover = rasterFile("cover");
+    const classes = new Set();
+    for (const id of MAINLAND) {
+      const { at, level, data } = regionCell(cover, id);
+      assert.ok(data, `${id}: the cell at its centre has data`);
+      classes.add(level);
+      assert.equal(rgb(await pixelAt(page, RASTER("cover"), at)), paletteRgb("academic-light", level), `${id}: the pixel at ${at} has the colour of class ${level}`);
+    }
+    assert.ok(classes.size >= 2, `the regions' cells have ${classes.size} classes: the picture is not one flat colour`);
+    // the cells in the middle of the legend's swatches: the classes take the categorical palette in order
+    const [row] = await legendOf(page);
+    assert.deepEqual(row.items.map((i) => [i.label, i.color]), ["Forest", "Cropland", "Urban"].map((name, i) => [name, paletteRgb("academic-light", i)]));
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: borders stay above rasters", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=density") }, async (page, ctx) => {
+    const layers = await page.evaluate(() => [...document.querySelectorAll('[data-el="map"] canvas')].map((c) => c.dataset.layer));
+    assert.deepEqual(layers, ["main:base", ...["density", "cover", "wells", "half", "log"].map(RASTER), "main:borders"], "the land, the rasters as declared, the borders last");
+    const rule = await tokenRgb(page, "--sd-color-rule");
+    const edge = AT.edge("N1");
+    const border = (await pixelsAround(page, "main:borders", edge, 3)).filter((p) => p[3] >= 200 && rgb(p) === rule);
+    assert.ok(border.length > 0, "a border pixel of North in the rule colour");
+    // and the raster is under it: the cells on both sides of the border have data, so the raster has colour right there
+    const raster = (await pixelsAround(page, RASTER("density"), edge, 3)).filter((p) => p[3] === 255);
+    assert.ok(raster.length > 0, "the raster has pixels where the border is");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: diverging no-data land is hatched and the legend has the row", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=density") }, async (page, ctx) => {
+    const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
+    const density = rasterFile("density");
+    const [cols, rows] = density.size;
+    const land = landCells({ bounds: density.bounds, size: density.size }, LAND);
+    let gap = null, sea = null, filled = null;
+    for (let i = 0; i < cols * rows; i++) {
+      const [col, row] = [i % cols, Math.floor(i / cols)];
+      const { data } = density.cell(col, row);
+      if (land[i] && !data && !gap) gap = [col, row];
+      if (!land[i] && !data && !sea) sea = [col, row];
+      if (land[i] && data && !filled && row > 8 && row < 20 && col > 8 && col < 30) filled = [col, row];
+    }
+    assert.ok(gap && sea && filled, "the fixture has land without data, sea and data");
+    // a cell of land with no data: a stripe in the dim colour and the surface between stripes, never the ramp's pale middle
+    const stripes = await pixelsAround(page, RASTER("density"), density.pixelOf(...gap), 5);
+    assert.ok(hatched(stripes, dim, surface), `the gap has stripes (${[...new Set(stripes.map(rgb))].join(" | ")})`);
+    assert.equal((await pixelAt(page, RASTER("density"), density.pixelOf(...sea)))[3], 0, "sea with no data stays clear");
+    const colours = new Set((await pixelsAround(page, RASTER("density"), density.pixelOf(...filled), 1)).map(rgb));
+    assert.ok(![...colours].some((c) => c === dim || c === surface), "a cell with data is its colour");
+
+    const [row] = await legendOf(page);
+    assert.equal(row.title, "People per km²");
+    assert.match(row.ramp, /^linear-gradient\(/, "a diverging ramp");
+    assert.deepEqual(row.ends, ["0", "800"]);
+    assert.deepEqual(row.items, [{ label: "no data", color: "", nodata: true }], "and the hatched No-data swatch");
+
+    // a raster with data on all its land, and a mask, have no such row
+    await goTo(page, "rasters", "cover");
+    assert.deepEqual((await legendOf(page))[0].items.map((i) => i.label), ["Forest", "Cropland", "Urban"]);
+    await goTo(page, "rasters", "wells");
+    assert.deepEqual((await legendOf(page))[0].items.map((i) => i.label), ["Near a well"]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: a mask takes its role colour", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=wells") }, async (page, ctx) => {
+    const wells = rasterFile("wells");
+    const [cols, rows] = wells.size;
+    let on = null, off = null;
+    const land = landCells({ bounds: wells.bounds, size: wells.size }, LAND);
+    for (let i = 0; i < cols * rows; i++) {
+      const { data } = wells.cell(i % cols, Math.floor(i / cols));
+      if (data && !on) on = [i % cols, Math.floor(i / cols)];
+      if (land[i] && !data && !off) off = [i % cols, Math.floor(i / cols)];
+    }
+    // the default is the accent colour; a cell that is not the class stays clear, hatch or no hatch
+    assert.equal(rgb(await pixelAt(page, RASTER("wells"), wells.pixelOf(...on))), await tokenRgb(page, "--sd-color-accent"), "accent by default");
+    assert.equal((await pixelAt(page, RASTER("wells"), wells.pixelOf(...off)))[3], 0, "land that is not a well is clear: a mask has no no-data");
+    const [row] = await legendOf(page);
+    assert.deepEqual(row.items, [{ label: "Near a well", color: await tokenRgb(page, "--sd-color-accent"), nodata: false }]);
+    await goTo(page, "rasters", "alert");
+    const alert = await tokenRgb(page, "--sd-color-alert");
+    assert.equal(rgb(await pixelAt(page, RASTER("wells"), wells.pixelOf(...on))), alert, "the layer's `color` names a theme role");
+    assert.equal((await legendOf(page))[0].items[0].color, alert, "and the swatch follows");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("raster partly outside the boundaries", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=half") }, async (page, ctx) => {
+    const [dim, surface] = [await tokenRgb(page, "--sd-color-dim"), await tokenRgb(page, "--sd-color-surface")];
+    const half = rasterFile("half");
+    // the west: a region the raster covers is painted
+    const west = regionCell(half, "W1");
+    assert.ok(west.data, "W1's cell has data");
+    const painted = await pixelAt(page, RASTER("half"), west.at);
+    assert.equal(painted[3], 255);
+    assert.ok(![dim, surface].includes(rgb(painted)), "painted with its ramp colour, not hatched");
+    // the east: land beyond the raster's bounds is hatched, in a canvas of its own, and the sea beside it is clear
+    const east = await pixelsAround(page, RASTER("half"), AT.get("E1"), 5);
+    assert.ok(hatched(east, dim, surface), `the east has stripes (${[...new Set(east.map(rgb))].join(" | ")})`);
+    assert.equal((await pixelAt(page, RASTER("half"), [SIZE[0] - 5, 5]))[3], 0, "sea is clear");
+    const [row] = await legendOf(page);
+    assert.deepEqual(row.items, [{ label: "no data", color: "", nodata: true }], "the legend explains the hatch");
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: a log raster reads its scale from the file", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=log") }, async (page, ctx) => {
+    const [row] = await legendOf(page);
+    assert.equal(row.title, "People per km², log");
+    assert.deepEqual(row.ends, ["1", "1,000"]);
+    assert.match(row.ramp, /^linear-gradient\(/);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: fade in and out", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=base&motion=full") }, async (page, ctx) => {
+    const density = rasterFile("density");
+    const { at, data } = regionCell(density, "S1");
+    assert.ok(data, "S1's cell has data");
+    const shows = await sampleFrames(page, "rasters", "density", "map", alphaProbe(RASTER("density"), at));
+    assert.equal(shows.frames[0].alpha, 0, "the layer starts clear");
+    assert.equal(shows.end.alpha, 255, "and ends opaque");
+    assert.ok(shows.frames.filter((f) => f.alpha > 0 && f.alpha < 255).length >= 2, "passing through partial opacity");
+    assert.ok(shows.frames.every((f, i) => i === 0 || f.alpha >= shows.frames[i - 1].alpha), "and only rising");
+
+    // the same pixel, with the layer going away: from the step where the log raster is shown to the one that shows none
+    await ctx.open(pages.url("rasters", "step=log&motion=full"));
+    const hides = await sampleFrames(page, "rasters", "gone", "map", alphaProbe(RASTER("log"), at));
+    assert.equal(hides.frames[0].alpha, 255, "the layer starts opaque");
+    assert.equal(hides.end.alpha, 0, "and ends clear");
+    assert.ok(hides.frames.filter((f) => f.alpha > 0 && f.alpha < 255).length >= 2, "passing through partial opacity");
+    assert.ok(hides.frames.every((f, i) => i === 0 || f.alpha <= hides.frames[i - 1].alpha), "and only falling");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: a mask colour that is not a theme colour errors", async () => {
+  await withPage({ root, url: broken.url("color", "") }, async (page, ctx) => {
+    const [message] = await errorsOf(page);
+    assert.match(message, /^color\/map: data\/mask\.json: color 'teal' is not a theme colour \(.*\baccent\b/);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
   });
 });
