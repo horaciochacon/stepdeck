@@ -76,7 +76,7 @@ The pattern:
 - **CSV for tables a chart reads**, one row per point, with a header row.
 - **JSON for single figures you bind**, with short, stable keys. A binding cannot declare CSV column types, so JSON is the safer source for bound numbers.
 - **Deterministic output.** The same input gives the same files, so a rerun changes nothing unless the data changed.
-- **A source line.** A slide with a `chart.*` or `big-number` element needs an element with `role: "source"`, or `validate` reports `figure-source`.
+- **A source line.** A slide with a `chart.*`, `map` or `big-number` element needs an element with `role: "source"`, or `validate` reports `figure-source`.
 
 ## How CSV columns get their types
 

@@ -538,10 +538,29 @@ export interface MapAreaScene {
   items: MapAreaItem[];
 }
 
-/** What `paintAreas` draws with: both in base-projected px. */
+/** What `paintAreas` and `paintBorders` draw with: both in base-projected px. */
 export interface MapAreaResources {
   path(id: string): Path2D;
   centroid(id: string): [number, number];
+}
+
+/** One outline of a `paintBorders` scene: a region's path, or (with `dot`) the ring of the dot `paintAreas` draws for it. */
+export interface MapBorderItem {
+  id: string;
+  stroke: string;
+  /** The stroke's width in screen px, whatever the view's scale. */
+  width: number;
+  /** 0..1 */
+  alpha: number;
+  dot: boolean;
+}
+
+/** Everything `paintBorders` draws, as plain data: the painter hashes all of it. Nothing is filled. */
+export interface MapBorderScene {
+  /** Names the geometry (a file path, say); `res` resolves it, and it is hashed in place of the paths. */
+  source: string;
+  view: MapView;
+  items: MapBorderItem[];
 }
 
 /** One decoded frame of a raster: `levels` and `data` hold `cols * rows` bytes, row-major from the north-west pixel. */
@@ -661,6 +680,8 @@ export interface MapKit {
    * view (line widths are divided by the view's scale). Returns the scene's signature, 8 hex digits.
    */
   paintAreas(canvas: HTMLCanvasElement, scene: MapAreaScene, res: MapAreaResources): string;
+  /** Clears the canvas and strokes region outlines and dot rings, filling nothing; returns the scene's signature. */
+  paintBorders(canvas: HTMLCanvasElement, scene: MapBorderScene, res: MapAreaResources): string;
   /** Clears `canvas` and paints circles at screen size, placed through the view. Returns the scene's signature. */
   paintPoints(canvas: HTMLCanvasElement, scene: MapPointScene): string;
   /**

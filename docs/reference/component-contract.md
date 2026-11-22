@@ -564,7 +564,7 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 
 ### `ctx.map`
 
-`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; `loadRaster` reads a raster file; the painters draw regions, a raster and points on a canvas layer and the inset frame and the scale bar on an SVG.
+`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; `loadRaster` reads a raster file; the painters draw regions, their borders, a raster and points on a canvas layer and the inset frame and the scale bar on an SVG.
 
 | Name | Signature | What it does |
 |---|---|---|
@@ -579,6 +579,7 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 | `rasterGaps` | `rasterGaps(raster, features) → Promise<boolean>` | Whether a land cell has no data in some frame, or some land lies outside the raster's bounds. See Rasters. |
 | `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer and draws pictures of a raster, each built for one view and drawn at another, hatching land without data. Returns the scene's signature. See Rasters. |
 | `paintAreas` | `paintAreas(canvas, scene, res) → string` | Clears a canvas layer and paints regions, hatched when the fill is `null`, or as dots. Returns the scene's signature. See Painting. |
+| `paintBorders` | `paintBorders(canvas, scene, res) → string` | Clears a canvas layer and strokes region outlines and dot rings, filling nothing, so the layer goes over others. Returns the scene's signature. See Painting. |
 | `paintPoints` | `paintPoints(canvas, scene) → string` | Clears a canvas layer and paints circles at screen size. Returns the scene's signature. |
 | `insetFrame` | `insetFrame(svg, { box, frame }) → SVGGElement` | One `g.sd-map-inset` on an SVG: two dashed leaders, the box and the frame, all `[x0, y0, x1, y1]` in the element's px. Idempotent. |
 | `scaleBar` | `scaleBar(svg, { base, view, at, maxWidth, format }) → SVGGElement` | One `g.sd-map-scale`: a bar of a round length in km starting at `at`, and its label. Idempotent. |
@@ -663,6 +664,19 @@ areas.setAttribute("data-sig", ctx.map.paintAreas(areas, {
 ```
 
 - **`paintAreas`.** `res.path(id)` is a `Path2D` and `res.centroid(id)` an `[x, y]`, in base-projected px; the scene holds colours as CSS strings, resolved by you from `ctx.tokens` and `ctx.palette`, and the painter reads no token. The items are drawn in order under `setTransform(r·k, 0, 0, r·k, r·x, r·y)`, where `r` is the canvas's backing-store ratio and `{ k, x, y }` the view, so `width` is in screen px (the painter divides it by `k`). A `null` fill is the hatch: lines at 45°, 6 px apart and 1.5 px wide, in `hatch.line` over `hatch.background`, pinned to the canvas so it keeps its size and place when the view changes. A `dot` item is not its path: it is a circle of radius 5 px at the centroid, seen through the view but at screen size, with a `width` outline in `stroke`.
+- **`paintBorders`.** `scene` is `{ source, view, items: [{ id, stroke, width, alpha, dot }] }` and `res` the one `paintAreas` takes. Nothing is filled, so a borders layer can sit over the areas and over a raster, where `paintAreas` (which always fills) cannot. Each item is stroked in order in `stroke` at its `alpha`: a region's path through the view, `width` px wide on screen at any zoom (the painter divides it by `k`), or, for a `dot` item, the ring of the dot `paintAreas` draws for that region (radius 5 px at `res.centroid(id)`, at screen size). The built-in `map` draws its borders in `--sd-color-rule` and the outline of a highlighted region in ink this way.
+
+```js
+const borders = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "borders" });   // made after the areas: on top
+borders.setAttribute("data-sig", ctx.map.paintBorders(borders, {
+  source: "regions.geojson", view,
+  items: [
+    { id: "N1", stroke: tokens["--sd-color-rule"], width: 1, alpha: 1, dot: false },
+    { id: "I2", stroke: tokens["--sd-color-ink"], width: 1.5, alpha: 1, dot: true },   // a dot's ring, over paintAreas's dot
+  ],
+}, res));                                                                             // the same res as paintAreas
+```
+
 - **`paintPoints`.** `scene` is `{ view, alpha, items: [{ id, x, y, r, fill, stroke }] }`: `x` and `y` are base-projected px (placed through the view), `r` a radius in screen px, and `stroke` a 1.5 px outline or `null`.
 - **`insetFrame`.** One `g.sd-map-inset` holding the leaders (`line.sd-map-inset-leader`, dashed `6 4`), then `rect.sd-map-inset-box` and `rect.sd-map-inset-frame`. When the frame is beside the box, the leaders join the box's two corners facing it to the frame's two corners on its facing side (top to top, bottom to bottom); above or below, left to left and right to right; across a diagonal, the two corners off the diagonal to the same corners of the frame. A frame that overlaps the box has none. A repeat call rewrites the group in place.
 - **`scaleBar`.** `at` is the bar's start and the place where the scale is measured: the length is the largest 1, 2 or 5 × 10ⁿ km that fits in `maxWidth` px, where one px along the row is `d3.geoDistance` between the two points the view maps to it, on a sphere of 6,371 km. `format` is a number formatter (`ctx.format(",.0f")`) and the label is `` `${format(n)} km` ``. The group holds `line.sd-map-scale-bar`, `path.sd-map-scale-caps` and the `text`, and is empty where the projection cannot be inverted. The frame, the bar and the label are ink, the leaders muted, set in the theme's CSS from its tokens.
@@ -676,7 +690,7 @@ The built-ins import small helpers from a few engine modules. They are internal:
 | `core/kit.js` | `canAnimate(info)` (`info.animate === true && !info.signal?.aborted`), `motion(info, ctx, opts)` (`ctx.motion.timing(info, opts)`; without a `ctx`, `{ signal, duration: info.transition?.duration }`), `motionMs(info, ctx, factor)` (the transition's duration, else `factor` × `--sd-duration` (400 ms when the token is missing)), `focusPaint(ctx, color, dimmed)` (the theme's `--sd-color-dim`, else `--sd-color-rule`, for a mark out of focus), `tweenColor(ctx, from, to, set, opts)` (an RGB colour tween through `ctx.animate.tween`), `measureWidth`/`measureHeight`, `svgEl`, `el`, `sizeSvg`, `escapeHtml`, `inkMix`. |
 | `core/animate.js` | The `ctx.animate` helpers, plus `clearInlineStyle(...nodes)` (removes every inline style and the `style` attribute), `rise` (a legacy helper: fade in while rising by `--sd-space`; the built-ins use `ctx.motion.in(node, "rise")`), `typeCount` and `typingMs` (28 ms per character, at most 1400 ms). |
 | `core/motion.js` | `makeMotion(tokens)`, which is `ctx.motion`; the frame and the controller use its motions and `timing` for element boxes. |
-| `core/map.js`, `core/map-paint.js` | `boundaries`, `projection`, `view`, `applyView`, `lookup`, `loadRaster`, `lut`, `landCells`, `rasterGaps`, the painters (`paintAreas`, `paintRaster`, `paintPoints`, `insetFrame`, `scaleBar`) and `mapKit`, which is `ctx.map`. Use `ctx.map`, not an import. |
+| `core/map.js`, `core/map-paint.js` | `boundaries`, `projection`, `view`, `applyView`, `lookup`, `loadRaster`, `lut`, `landCells`, `rasterGaps`, the painters (`paintAreas`, `paintBorders`, `paintRaster`, `paintPoints`, `insetFrame`, `scaleBar`) and `mapKit`, which is `ctx.map`. Use `ctx.map`, not an import. |
 | `core/chart.js` | `loadTable` (loads a CSV and checks the named columns), `tickFormat`, `opacityAttr`, and `chartKit`, which is `ctx.chart` (built from `core/chart-layout.js`, `core/chart-marks.js` and `core/chart-motion.js`). Use `ctx.chart`, not an import. |
 
 ## `schema.json`

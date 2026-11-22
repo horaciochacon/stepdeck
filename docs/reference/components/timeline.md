@@ -188,7 +188,7 @@ bad/one · prop-invalid · progress = 2 vs must be <= 1 · change progress so it
 
 It does not catch an unknown `current`, duplicate ids or `at` values that do not increase: those pass `validate` and fail only in the browser. Run `dump` or `check` after `validate`. See the [CLI reference](../cli.md) and [Checking a deck](../../guide/checking-a-deck.md).
 
-A timeline is not a figure: unlike `chart.*` and `big-number`, it does not need a source line for `figure-source`.
+A timeline is not a figure: unlike `chart.*`, `map` and `big-number`, it does not need a source line for `figure-source`.
 
 ## For agents
 

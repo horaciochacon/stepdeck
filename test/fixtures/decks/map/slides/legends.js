@@ -1,5 +1,6 @@
 // Two layers, one shown at a time, with the legend at the top right: classes at 2.5 and 5 (a Spanish load reads
-// them with decimal commas), then a continuous diverging ramp about 0, which has no classes.
+// them with decimal commas), then the same layer with other classes (its colours crossfade), then a continuous
+// diverging ramp about 0, which has no classes.
 export default {
   id: "legends",
   layout: "full-bleed",
@@ -15,6 +16,7 @@ export default {
   ],
   steps: [
     { id: "steps" },
+    { id: "classes", set: { map: { layers: { low: { classes: [5, 10, 20] } } } } },
     { id: "ramp", set: { map: { shown: ["change"] } } },
   ],
 };

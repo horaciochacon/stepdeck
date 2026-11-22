@@ -6,13 +6,13 @@ Sources: [`components/map/schema.json`](../../../engine/components/map/schema.js
 
 ## Use it
 
-The gallery's example slide (`components/map/example.js`): the regions of a fictional country, then their rates in four classes, then the highest and the lowest region named and highlighted for one step. The map fills `main` of a `full-bleed` slide, with the source line under it.
+The gallery's example slide (`components/map/example.js`): the regions of a fictional country, then their rates in four classes, then the region with the highest rate (Ironridge) and the one with the lowest on the mainland (Eastport; only the island of Little Holm is lower) named and highlighted for one step. The map fills `main` of a `full-bleed` slide, with the source line under it.
 
 ```js
 export default {
   id: "map-example",
   layout: "full-bleed",
-  title: "Ironridge has the highest rate, Eastport the lowest",
+  title: "Ironridge is highest, Eastport lowest on the mainland",
   elements: [
     { id: "map", region: "main", type: "map",
       props: { boundaries: "data/map/regions.geojson", id: "code", name: "name",
@@ -88,7 +88,7 @@ A region whose box is under 6 px across in both directions is drawn as a **dot**
 
 ## Legend
 
-The legend sits in the corner `legend` names, 16 px in from the edges, and holds one row per shown layer that has data: its `label` as a title (note size), then a 28 px swatch per class with its label, or a gradient between the two end values for a ramp, then the hatched "no data" swatch when some region has no value. Rows stack away from the corner, in the order the layers are painted. A layer that appears brings its row; one that leaves takes it away.
+The legend sits in the corner `legend` names, 16 px in from the edges, on a panel of the background colour (`--sd-color-background`) so its text keeps its contrast over coloured regions. It holds one row per shown layer that has data: its `label` as a title (note size), then a 28 px swatch per class with its label, or a gradient between the two end values for a ramp, then the hatched "no data" swatch when some region has no value. Rows stack away from the corner, in the order the layers are painted. A layer that appears brings its row; one that leaves takes it away.
 
 ## Motion
 
@@ -112,14 +112,14 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="map"]`) the map rende
 ```text
 canvas.sd-canvas-layer[data-layer="main:base"]          the land
 canvas.sd-canvas-layer[data-layer="main:areas:<id>"]    one per layer any step declares, cleared while not shown
-canvas.sd-canvas-layer[data-layer="main:borders"]       the borders and the highlight outlines
+canvas.sd-canvas-layer[data-layer="main:borders"]       the borders and the highlight outlines (ctx.map.paintBorders)
 svg.sd-map-labels
   text.sd-map-label[data-region]                         one per entry of `labels`
 div.sd-map-legend[data-at]                               the corner, when a shown layer has a legend
   div.sd-legend-row[data-layer]                          from ctx.chart.legendRow
 ```
 
-Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map), `data-shown` (the layers painted), `data-highlight` (the highlighted regions), `data-frame` (empty: no time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer). The element fills the room its region leaves, like a chart.
+Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map), `data-shown` (the layers painted), `data-highlight` (the highlighted regions), `data-frame` (empty: no time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer). A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
 
 ## Errors
 

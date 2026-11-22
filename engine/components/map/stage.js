@@ -1,32 +1,30 @@
 // One view of a map element: its canvas layers, stacked in paint order, and an SVG over them for the labels. The order
-// is the land (`base`), each layer (by kind, then in the order the slide first declares it), then the borders, on top
-// so they stay crisp over any layer. A canvas is named `<stage>:<part>`: `main:base`, `main:areas:rate`,
-// `main:borders`. Every canvas exists from the start, so a step never adds or moves one; a layer that is not shown is
-// cleared.
+// is the land (`base`), each layer (by kind, then in the order the slide first declares it), then the borders
+// (`paintBorders`, which fills nothing), on top so they stay crisp over any layer. A canvas is named `<stage>:<part>`:
+// `main:base`, `main:areas:rate`, `main:borders`. Every canvas exists from the start, so a step never adds or moves
+// one; a layer that is not shown is cleared.
 //
 // `paint(state, layerStates)` draws one moment from plain data and writes on every canvas what it shows, as `dump` and
 // `check --played` read it: `data-view` (k,x,y with 3 decimals), `data-shown` (the layers painted, in paint order),
 // `data-highlight` (the highlighted regions), `data-frame` (empty without a time-lapse) and `data-sig`, the signature
-// of what was painted (empty for a cleared layer); `data-layer` is the canvas's name. The labels are made afresh at
-// every paint, so the markup is the same however a step was reached.
-import { canvasLayer, signature } from "../../core/canvas.js";
+// of what was painted (empty for a cleared layer); `data-layer` is the canvas's name. Every scene's `source` starts
+// with `geo.key` (the boundaries, the projection and the size), so a signature changes when the geometry does. The
+// labels are made afresh at every paint, so the markup is the same however a step was reached.
+import { canvasLayer } from "../../core/canvas.js";
 import { applyView } from "../../core/map.js";
-import { paintAreas } from "../../core/map-paint.js";
+import { DOT_OUTLINE, paintAreas, paintBorders } from "../../core/map-paint.js";
 import { SVG_NS } from "../../core/kit.js";
 
 /** The line between two regions, in px. */
 const BORDER = 1;
-/** The ink outline of a highlighted region, in px. */
+/** The ink outline of a highlighted region, in px (a highlighted dot's ring is its own outline, in ink). */
 const RING = 3;
-/** A dot as `paintAreas` draws it: its radius and outline, in px; a highlighted dot's outline turns ink. */
-const DOT_RADIUS = 5;
-const DOT_OUTLINE = 1.5;
 
 const fixed = (v) => v.toFixed(3);
 const viewText = (v) => `${fixed(v.k)},${fixed(v.x)},${fixed(v.y)}`;
 const tenth = (v) => Math.round(v * 10) / 10;
 
-/** Clears a canvas whatever its transform. */
+/** Clears a layer that is not shown, whatever its transform. */
 function clear(canvas) {
   const g = canvas.getContext("2d");
   if (!g) return;
@@ -34,40 +32,6 @@ function clear(canvas) {
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, canvas.width, canvas.height);
   g.restore();
-}
-
-/**
- * Strokes the borders: each item is a region's outline (its path, through the view, `width` px wide on screen) or,
- * for a region drawn as a dot, the dot's outline; at its `alpha`, in `stroke`. Returns the signature of the scene.
- */
-function paintBorders(canvas, { source, view: v, items }, res) {
-  const sig = signature();
-  sig.text(`${source}|${viewText(v)}\n`);
-  for (const it of items) sig.text(`${it.id}|${it.stroke}|${it.width}|${Math.round(it.alpha * 1000) / 1000}|${it.dot ? 1 : 0}\n`);
-  const g = canvas.getContext("2d");
-  if (!g) return sig.hex();
-  clear(canvas);
-  const ratio = canvas.width / (parseFloat(canvas.style.width) || canvas.width);
-  g.lineJoin = "round";
-  for (const it of items) {
-    g.globalAlpha = it.alpha;
-    g.strokeStyle = it.stroke;
-    if (it.dot) {
-      const [cx, cy] = res.centroid(it.id);
-      g.setTransform(ratio, 0, 0, ratio, 0, 0);
-      g.lineWidth = it.width;
-      g.beginPath();
-      g.arc(v.k * cx + v.x, v.k * cy + v.y, DOT_RADIUS, 0, 2 * Math.PI);
-      g.stroke();
-    } else {
-      g.setTransform(ratio * v.k, 0, 0, ratio * v.k, ratio * v.x, ratio * v.y);
-      g.lineWidth = it.width / v.k;
-      g.stroke(res.path(it.id));
-    }
-  }
-  g.setTransform(ratio, 0, 0, ratio, 0, 0);
-  g.globalAlpha = 1;
-  return sig.hex();
 }
 
 /**
@@ -99,7 +63,7 @@ export function createStage(el, { name, size, geo, layers }) {
 
   /** The land: every region in the surface colour, a region too small to see as a dot ringed in the background. */
   const landScene = (v) => ({
-    source: geo.file, view: v, alpha: 1, hatch: { line: colors.dim, background: colors.surface },
+    source: geo.key, view: v, alpha: 1, hatch: { line: colors.dim, background: colors.surface },
     items: geo.ids.map((id) => {
       const dot = geo.isDot(id, v.k);
       return { id, fill: colors.surface, stroke: colors.background, width: dot ? DOT_OUTLINE : 0, dot };
@@ -108,7 +72,7 @@ export function createStage(el, { name, size, geo, layers }) {
 
   /** The borders in the rule colour, then the ink outline of each highlighted region (a dot's ring), at how far it is highlighted. */
   const bordersScene = (v, highlight) => ({
-    source: geo.file, view: v,
+    source: geo.key, view: v,
     items: [
       ...geo.ids.filter((id) => !geo.isDot(id, v.k)).map((id) => ({ id, stroke: colors.rule, width: BORDER, alpha: 1, dot: false })),
       ...geo.ids.filter((id) => highlight.ring(id) > 0).map((id) => {

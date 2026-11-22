@@ -307,11 +307,12 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-map-scale text { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); font-variant-numeric: tabular-nums; stroke: var(--sd-color-background); stroke-width: 4; stroke-linejoin: round; paint-order: stroke; }
 
 /* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
-   background colour; the legend in the corner `legend` names (data-at), its rows stacked away from that corner, their
-   titles in the note size and their swatches 28 px (the label size). */
+   background colour; the legend in the corner `legend` names (data-at), on a panel of the background colour so its text
+   keeps its contrast over coloured regions, its rows stacked away from that corner, their titles in the note size and
+   their swatches 28 px (the label size). */
 .sd-map-labels { display: block; overflow: visible; }
 .sd-map-label { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); stroke: var(--sd-color-background); stroke-width: 8; stroke-linejoin: round; paint-order: stroke; }
-.sd-map-legend { position: absolute; display: flex; flex-direction: column; gap: var(--sd-grid); }
+.sd-map-legend { position: absolute; display: flex; flex-direction: column; gap: var(--sd-grid); padding: var(--sd-grid) calc(var(--sd-grid) * 1.5); border-radius: calc(var(--sd-grid) / 2); background: var(--sd-color-background); }
 .sd-map-legend[data-at^="top"] { top: var(--sd-space); }
 .sd-map-legend[data-at^="bottom"] { bottom: var(--sd-space); flex-direction: column-reverse; }
 .sd-map-legend[data-at$="left"] { left: var(--sd-space); align-items: flex-start; }

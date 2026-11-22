@@ -185,7 +185,7 @@ The palette rules run only on the palettes the deck draws with. For each kind (c
 
 | Rule | Severity | Measures | Limit | Typical fix |
 | --- | --- | --- | --- | --- |
-| `figure-source` | error | A slide holds a figure and no element has `role: "source"` in its initial props. A figure is a type matching `chart.*` or `map.*`, the type `map`, or `big-number`. No `map` component exists yet; the name is reserved. Reported on the first figure element. | `an element with role: "source"`. | Add a source line. The fix suggests `region: "footer"` when the layout has a footer, else `"main"`. |
+| `figure-source` | error | A slide holds a figure and no element has `role: "source"` in its initial props. A figure is a type matching `chart.*` or `map.*`, the type `map`, or `big-number`. Reported on the first figure element. | `an element with role: "source"`. | Add a source line. The fix suggests `region: "footer"` when the layout has a footer, else `"main"`. |
 
 The warnings are `noop-step`, `title-accent`, `accent-empty`, `chart-prop-unused` (per-step rules above) and `kicker-no-region` (slide rules above); everything else in `validate` is an error.
 
@@ -272,9 +272,7 @@ No rule catches these. Look at the shots (`shoot`) or the measurements (`dump`).
 
 ## Differences from the skill's checks.md
 
-[skill/references/checks.md](../../skill/references/checks.md) is the agent's summary of these rules. It differs from the code in two places:
-- it does not list `diagram-id` and `diagram-overlap`;
-- its `figure-source` row counts only `chart.*` and `big-number` as figures; the code also counts `map` and `map.*`;
+[skill/references/checks.md](../../skill/references/checks.md) is the agent's summary of these rules. It differs from the code in one place: it does not list `diagram-id` and `diagram-overlap`.
 
 ## Rule fixtures
 

@@ -165,7 +165,7 @@ Any string prop, at any depth (inside arrays and objects too), can bind to a dat
 **No figure is ever typed by hand.**
 - Every number on a slide comes from a data file, either through a binding or as a chart column.
 - Generate the data with a script in the deck, such as `data/make-data.mjs`, and check the script in.
-- A `chart.*` or `big-number` slide without a `role: "source"` element fails validate (`figure-source`).
+- A `chart.*`, `map` or `big-number` slide without a `role: "source"` element fails validate (`figure-source`).
 
 ## Files, paths and URLs
 

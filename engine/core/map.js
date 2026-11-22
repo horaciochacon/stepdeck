@@ -13,7 +13,8 @@
 //   lut(raster, colorOf)                      the 256 colours of a raster's levels, as 1,024 RGBA bytes
 //   landCells(raster, features)               the raster cells whose centres are on land
 //   rasterGaps(raster, features)              whether some land has no data in the raster (in any frame) or lies outside it
-//   paintAreas, paintRaster, paintPoints, insetFrame, scaleBar   the painters and the map furniture (core/map-paint.js)
+//   paintAreas, paintBorders, paintRaster, paintPoints, insetFrame, scaleBar
+//                                             the painters and the map furniture (core/map-paint.js)
 //
 // A view is a 2D transform of the base's pixels (d3's fitExtent changes only scale and translate), so a flight between
 // two views is affine: a component redraws cached paths with one `setTransform` instead of re-projecting.
@@ -23,7 +24,7 @@
 import { d3 } from "./d3.js";
 import { scratchCanvas } from "./canvas.js";
 import { MAX_RASTER_PIXELS, levelValue, pngProblems, rasterProblems } from "./map-rules.js";
-import { paintAreas, paintRaster, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
+import { paintAreas, paintBorders, paintRaster, paintPoints, insetFrame, scaleBar } from "./map-paint.js";
 
 /** The most regions in one boundaries file. */
 export const MAX_REGIONS = 5000;
@@ -503,5 +504,5 @@ export async function rasterGaps(raster, features) {
  * Its public names are the contract (docs/reference/component-contract.md).
  */
 export const mapKit = Object.freeze({
-  boundaries, projection, view, applyView, lookup, loadRaster, lut, landCells, rasterGaps, paintAreas, paintRaster, paintPoints, insetFrame, scaleBar,
+  boundaries, projection, view, applyView, lookup, loadRaster, lut, landCells, rasterGaps, paintAreas, paintBorders, paintRaster, paintPoints, insetFrame, scaleBar,
 });

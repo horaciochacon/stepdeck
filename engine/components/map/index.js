@@ -19,6 +19,7 @@
 // `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
 import { d3 } from "../../core/d3.js";
 import { boundaries, projection } from "../../core/map.js";
+import { DOT_SIZE } from "../../core/map-paint.js";
 import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs } from "../../core/kit.js";
 import { createStage } from "./stage.js";
 import { createLegend } from "./legend.js";
@@ -26,8 +27,6 @@ import areas from "./areas.js";
 
 /** The layer kinds, in paint order. */
 const KINDS = [areas];
-/** A region whose projected box is under this many px across, in both directions, at the view is drawn as a dot. */
-const DOT_SIZE = 6;
 /** The view that shows the whole map. */
 const HOME = Object.freeze({ k: 1, x: 0, y: 0 });
 /** How many region ids a "not found" message lists before it stops. */
@@ -39,13 +38,16 @@ const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]
 
 /**
  * The geography of an element: the regions of `props.boundaries` fitted in `size`, each with its path and its anchor
- * (the centroid of its largest polygon: where its dot and its label sit) in base-projected px, and the theme's colours.
+ * (the centroid of its largest polygon: where its dot and its label sit) in base-projected px, the theme's colours,
+ * and `key`, which names the geometry (file, projection, size) in every scene's `source`, so signatures see it. A
+ * region is a dot when its projected box is under `DOT_SIZE` across in both directions at the view.
  */
 async function buildGeo(props, ctx, size) {
   const file = props.boundaries;
   if (typeof file !== "string" || file === "") throw new Error("map needs a `boundaries` path");
   const { features, byId, ids, names } = boundaries(await ctx.data(file), { id: props.id, name: props.name, file });
-  const base = projection(props.projection ?? "equal-earth", features, size);
+  const kind = props.projection ?? "equal-earth";
+  const base = projection(kind, features, size);
   const path = d3.geoPath(base);
   const paths = new Map(), anchors = new Map(), spans = new Map();
   for (const [id, feature] of byId) {
@@ -60,6 +62,7 @@ async function buildGeo(props, ctx, size) {
   const rule = token("--sd-color-rule");
   return {
     file, base, size, features, byId, ids, names,
+    key: `${file}|${kind}|${size[0]}×${size[1]}`, // the geometry, first in every scene's source
     colors: { surface: token("--sd-color-surface"), rule, ink: token("--sd-color-ink"), background: token("--sd-color-background"), dim: token("--sd-color-dim") || rule },
     anchor: (id) => anchors.get(id),
     isDot: (id, k) => spans.get(id).every((span) => span * k < DOT_SIZE),
@@ -68,7 +71,7 @@ async function buildGeo(props, ctx, size) {
   };
 }
 
-/** The layer slots of a list of props: `{ kind, id, module }` for every layer any of them declares, by kind, then in order of first appearance. */
+/** The layer slots of a list of props: `{ kind, id, module }` for every layer any of them declares, by kind, then by first appearance. */
 function slotsOf(propsList) {
   const found = new Map();
   for (const props of propsList) {

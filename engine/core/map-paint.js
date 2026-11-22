@@ -1,6 +1,6 @@
-// The painters of a map: the layers on a canvas (regions, a raster, points) and the furniture on an SVG (an inset frame
-// with its leader lines, a scale bar). They are `ctx.map.paintAreas`, `paintRaster`, `paintPoints`, `insetFrame` and
-// `scaleBar` (core/map.js re-exports them in `mapKit`).
+// The painters of a map: the layers on a canvas (regions, their borders, a raster, points) and the furniture on an SVG
+// (an inset frame with its leader lines, a scale bar). They are `ctx.map.paintAreas`, `paintBorders`, `paintRaster`,
+// `paintPoints`, `insetFrame` and `scaleBar` (core/map.js re-exports them in `mapKit`).
 //
 // A painter is pure: plain data in, the layer cleared and painted again, a signature out. The canvas painters hash their
 // whole scene with `signature()` (core/canvas.js) and return the 8 hex digits, so `check --played` can compare state
@@ -9,6 +9,7 @@
 //
 //   paintAreas(canvas, scene, res)     regions filled and stroked in one transform, hatched when the fill is null, dots for
 //                                      the regions too small to see
+//   paintBorders(canvas, scene, res)   region outlines and dot rings only, nothing filled: a layer that goes over others
 //   paintRaster(canvas, scene, res)    pictures of a raster built for one view and drawn at another, hatched where land has no data
 //   paintPoints(canvas, scene)         circles at screen size, positioned through the view
 //   insetFrame(svg, { box, frame })    the box on the main map, the inset's frame, and two dashed leaders between them
@@ -24,8 +25,14 @@ import { niceLength } from "./map-rules.js";
 /** The hatch of a region with no data: lines at 45 degrees, `HATCH_PERIOD` apart across, `HATCH_WIDTH` wide (the CSS twin is `.sd-legend-nodata`). */
 const HATCH_PERIOD = 6;
 const HATCH_WIDTH = 1.5;
-/** A dot's radius, in screen px: a region that is under 6 px at the current view is drawn as one. */
-const DOT_RADIUS = 5;
+/**
+ * Dots, in screen px: a region whose projected box is under `DOT_SIZE` across in both directions at the current view is
+ * drawn as a disc of radius `DOT_RADIUS` at its centroid, ringed `DOT_OUTLINE` wide (the built-in `map` decides which
+ * regions are dots with `DOT_SIZE`; a painter draws an item as a dot when the scene says so).
+ */
+export const DOT_SIZE = 6;
+export const DOT_RADIUS = 5;
+export const DOT_OUTLINE = 1.5;
 /** The outline of a point, in screen px. */
 const POINT_OUTLINE = 1.5;
 /** The mean radius of the Earth, in km. */
@@ -49,6 +56,18 @@ function clear(g, canvas) {
 
 /** A number as a view or a position is hashed: three decimals. */
 const fixed = (v) => v.toFixed(3);
+
+/** Draws in base-projected px seen through the view `v`, on a canvas of backing-store `ratio`. */
+const throughView = (g, ratio, v) => g.setTransform(ratio * v.k, 0, 0, ratio * v.k, ratio * v.x, ratio * v.y);
+
+/** Begins the path of a dot: a circle of `DOT_RADIUS` at screen size, at the base-projected `centre` seen through the view. False when the centre is not a point. */
+function dotPath(g, ratio, v, [cx, cy]) {
+  if (!Number.isFinite(cx + cy)) return false;
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  g.beginPath();
+  g.arc(v.k * cx + v.x, v.k * cy + v.y, DOT_RADIUS, 0, 2 * Math.PI);
+  return true;
+}
 
 /**
  * The hatch as a canvas pattern for a context drawn at `ratio`: a square tile of one period along the axes (the stripes
@@ -113,11 +132,7 @@ export function paintAreas(canvas, scene, res) {
   g.imageSmoothingEnabled = false;
   for (const item of items) {
     if (item.dot) {
-      const [cx, cy] = res.centroid(item.id);
-      if (!Number.isFinite(cx + cy)) continue;
-      g.setTransform(ratio, 0, 0, ratio, 0, 0);
-      g.beginPath();
-      g.arc(v.k * cx + v.x, v.k * cy + v.y, DOT_RADIUS, 0, 2 * Math.PI);
+      if (!dotPath(g, ratio, v, res.centroid(item.id))) continue;
       g.fillStyle = item.fill === null ? hatchAt(1, 0, 0) : item.fill;
       g.fill();
       if (item.width > 0) {
@@ -127,7 +142,7 @@ export function paintAreas(canvas, scene, res) {
       }
       continue;
     }
-    g.setTransform(ratio * v.k, 0, 0, ratio * v.k, ratio * v.x, ratio * v.y);
+    throughView(g, ratio, v);
     const path = res.path(item.id);
     g.fillStyle = item.fill === null ? hatchAt(v.k, v.x, v.y) : item.fill;
     g.fill(path);
@@ -136,6 +151,46 @@ export function paintAreas(canvas, scene, res) {
       g.lineWidth = item.width / v.k;
       g.stroke(path);
     }
+  }
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  g.globalAlpha = 1;
+  return sig.hex();
+}
+
+/**
+ * Strokes region outlines, and fills nothing, so the layer can go over others (borders over a raster, an ink outline over
+ * a highlighted region): clears `canvas`, then draws `scene.items` in order, each in `stroke` at its `alpha`. An item is a
+ * region's path (`res.path(id)`, base-projected px) through the view, `width` px wide on screen whatever the view's
+ * scale; or, for a `dot` item, the ring of the dot `paintAreas` draws for it (radius 5 px at `res.centroid(id)`, at
+ * screen size), `width` px wide. `res` is the one `paintAreas` takes, and is not hashed. Without a 2D context (a canvas
+ * that cannot paint), only the signature is computed.
+ * @param {HTMLCanvasElement} canvas  a layer from `canvasLayer`
+ * @param {{ source: string, view: { k: number, x: number, y: number }, items: { id: string, stroke: string, width: number, alpha: number, dot: boolean }[] }} scene
+ * @param {{ path(id: string): Path2D, centroid(id: string): [number, number] }} res
+ * @returns {string}  the signature of the scene: 8 hex digits
+ */
+export function paintBorders(canvas, scene, res) {
+  const { source, view: v, items } = scene;
+  const sig = signature();
+  sig.text(`${source}|${fixed(v.k)}|${fixed(v.x)}|${fixed(v.y)}\n`);
+  for (const item of items) sig.text(`${item.id}|${item.stroke}|${item.width}|${Math.round(item.alpha * 1000) / 1000}|${item.dot ? 1 : 0}\n`);
+  const g = canvas.getContext("2d");
+  if (!g) return sig.hex();
+
+  clear(g, canvas);
+  const ratio = ratioOf(canvas);
+  for (const item of items) {
+    g.globalAlpha = item.alpha;
+    g.strokeStyle = item.stroke;
+    if (item.dot) {
+      if (!dotPath(g, ratio, v, res.centroid(item.id))) continue;
+      g.lineWidth = item.width;
+      g.stroke();
+      continue;
+    }
+    throughView(g, ratio, v);
+    g.lineWidth = item.width / v.k;
+    g.stroke(res.path(item.id));
   }
   g.setTransform(ratio, 0, 0, ratio, 0, 0);
   g.globalAlpha = 1;
