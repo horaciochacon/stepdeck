@@ -1,7 +1,8 @@
 // gallery.swipe in Chrome: the gallery's second custom component (site/gallery/components/gallery.swipe/), a before/after
-// swipe of a map raster built only from what the engine hands every component (ctx.map, ctx.chart, ctx.motion), with no
-// import. It must move and end like a built-in: played equals jumped (markup and pixels), the divider passes through
-// the positions between its two ends, and `check` and `check --played` find nothing on its slide under both themes.
+// swipe of a map raster built only from what the engine hands every component (ctx.map, ctx.chart, ctx.data, ctx.palette,
+// ctx.tokens), with no import. It must move and end like a built-in: played equals jumped (markup and pixels), the
+// divider passes through the positions between its two ends, and `check` and `check --played` find nothing on its slide
+// under both themes.
 // Run with: STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/custom-swipe.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";

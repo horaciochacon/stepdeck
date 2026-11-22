@@ -6,7 +6,8 @@
 // step ends where a jump does, and each canvas carries what it shows in data-* (frame, at, sig) for `check --played`.
 // The stage is built at an update, not at mount: ctx.size is measured before the slide's other elements have settled the
 // box, so every update reads the element's size (ctx.size only while the element has no layout, as when it is collapsed)
-// and builds the stage again when it differs: a swipe that starts hidden is drawn at the size it has when it appears.
+// and builds the stage again when it differs: a swipe that starts hidden is drawn at the size it has when it appears, and
+// the update that builds a new stage draws its end at once, with no morph from the old one.
 const SVG = "http://www.w3.org/2000/svg";
 
 export default {
@@ -58,7 +59,7 @@ export default {
     return {
       async update(next, info = {}) {
         const [w, h] = [el.offsetWidth || ctx.size.w, el.offsetHeight || ctx.size.h];
-        if (stage && (stage.w !== w || stage.h !== h)) dispose(); // the box changed: a new stage for the new size
+        if (stage && (stage.w !== w || stage.h !== h)) { dispose(); last = null; } // the box changed: a new stage for the new size, no morph
         if (!w || !h) return; // no box to draw in yet (hidden since mount): the update that shows it draws everything
         stage ??= build(w, h);
         const { base, home, land, before, after, lines, labels, legend } = stage;

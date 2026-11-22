@@ -595,9 +595,9 @@ export default {
       stage = null;
     }
 
-    /** Paints the regions with their fills (a Map; no entry is the hatch) and their borders, through `view`. */
-    function paint(fills, view) {
-      const { areas, borders, res } = stage;
+    /** Paints the regions of stage `s` with their fills (a Map; no entry is the hatch) and their borders, through `view`. */
+    function paint(s, fills, view) {
+      const { areas, borders, res } = s;
       const hatch = { line: token("--sd-color-dim"), background: token("--sd-color-surface") };
       const stroke = token("--sd-color-background");
       areas.setAttribute("data-sig", M.paintAreas(areas, { source: props.boundaries, view, alpha: 1, hatch,
@@ -614,6 +614,7 @@ export default {
         if (stage && (stage.w !== w || stage.h !== h)) { dispose(); last = null; } // a new size: a new stage, no flight
         if (!w || !h) return; // no box to draw in yet: the update that shows the element draws everything
         stage ??= build(w, h);
+        const s = stage; // this update's stage, taken before any await: once the element is destroyed, `stage` is null
         // The join: every row names a region, as text. A key that matches none is an error, never a missing value.
         const rows = await C.loadTable(next, ctx, "my.regions", [["id", next.id], ["value", next.value]]);
         const scale = C.colorScale({ classes: next.classes }, palettes, { format: ctx.format(",") });
@@ -624,16 +625,16 @@ export default {
           const color = scale.color(row[next.value]);
           if (color) fills.set(key, color);
         }
-        stage.legend.replaceChildren(C.legendRow(doc, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
+        s.legend.replaceChildren(C.legendRow(doc, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
 
         if (next.focus && !byId.has(next.focus)) throw new Error(`region '${next.focus}' not found`);
-        const view = M.view(stage.base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
+        const view = M.view(s.base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
         const moves = last && (last.k !== view.k || last.x !== view.x || last.y !== view.y);
         if (info.animate && moves && !info.entered && !info.signal?.aborted) {
           const from = last;
-          await C.morph(info, ctx, (t) => paint(fills, { k: C.lerp(from.k, view.k, t), x: C.lerp(from.x, view.x, t), y: C.lerp(from.y, view.y, t) }));
+          await C.morph(info, ctx, (t) => paint(s, fills, { k: C.lerp(from.k, view.k, t), x: C.lerp(from.x, view.x, t), y: C.lerp(from.y, view.y, t) }));
         }
-        paint(fills, view); // the end state, however the step ended
+        paint(s, fills, view); // the end state, however the step ended
         last = view;
       },
       destroy: dispose,
@@ -655,7 +656,7 @@ The pieces, in the order `mount` and `update` take them:
 | Motion | `C.morph`, `C.lerp` | A played change of `focus` blends the three numbers from the last view to the new one over twice `--sd-duration`, or the step's `transition`, and paints every frame through the view of the moment. A straight blend is enough here; the built-in follows `d3.interpolateZoom`, which zooms out and in again on a long flight. |
 | Paint | `M.paintAreas`, `M.paintBorders` | Clear the canvas, paint the scene, return a signature of it. A region with no fill is hatched. The signatures go on the canvases as `data-sig`, so `dump` shows what was painted. |
 
-`update` ends by painting the end state from its props, whether the step played, jumped or was aborted, so a played step ends where a jump does, pixels included. The boundaries are read once, at mount, so a step cannot change them here (the built-in can). The size is read at every update, not taken from `ctx.size`: that is measured at mount, before the slide's other elements have settled the box, and an element that is hidden with `collapse: true` has no box until it appears.
+`update` ends by painting the end state from its props, whether the step played, jumped or was aborted, so a played step ends where a jump does, pixels included. It takes the stage into `s` before its first `await`: the element can be destroyed while it waits (the slide is left mid-flight), and `destroy` sets `stage` to null, so code after an `await` that read `stage` would throw; `s` is the stage the update started with, and painting it once it is detached does no harm. The boundaries are read once, at mount, so a step cannot change them here (the built-in can). The size is read at every update, not taken from `ctx.size`: that is measured at mount, before the slide's other elements have settled the box, and an element that is hidden with `collapse: true` has no box until it appears.
 
 The example slide flies from the whole map to one region, then to another. The source line is in `footer`, so the map is alone in `main` and fills it.
 

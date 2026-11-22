@@ -27,7 +27,7 @@ after(() => rmSync(tmp, { recursive: true, force: true }));
 
 const ROWS = 20;
 const COLS = 30;
-const BOUNDS = [-19, -31, -10, -23]; // the gallery's fictional country
+const BOUNDS = [-19, -31, -10, -23]; // the box of the map fixtures' rasters (test/fixtures/decks/map)
 const cells = (fn) => Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => fn(r, c)));
 const gap = (r, c) => r >= 4 && r <= 6 && c >= 10 && c <= 14; // a block of no data
 const GRID = cells((r, c) => (gap(r, c) ? null : c * 10 + r)); // 0 at the north-west corner, 309 at the south-east
