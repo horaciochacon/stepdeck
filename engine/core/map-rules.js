@@ -6,6 +6,10 @@
 //   levelValue(level, value)               the data value of a raster level 0..255 (linear, log) or its class name
 //   frameRun(labels, from, to)             the frame indexes a run shows, `from` to `to` inclusive, in list order or reversed
 //   runMs(labels, from, to, pace)          the run's length: frames moved x pace
+//   firstPhase(prev, next)                 how many step durations a map step's motion takes before a run: 0, 1 or 2
+//   stepRun({ prevLabels, nextLabels, nextShowsLapse, prevProps, nextProps })
+//                                          whether a map step plays a run, and its frames and first phase: the one rule
+//                                          the element plays by and `validate` budgets by
 //   joinValues(rows, key, value, ids)      rows joined to region ids as text; { values, unknown, duplicates }
 //   niceLength(max)                        the largest 1, 2 or 5 x 10^n that is at most `max` (a scale bar)
 //
@@ -93,6 +97,53 @@ export function frameRun(labels, from, to) {
  */
 export function runMs(labels, from, to, pace) {
   return (frameRun(labels, from, to).length - 1) * pace;
+}
+
+/** Props whose change redraws a map at once (a new geometry): nothing moves on such a step, no run plays. */
+const GEOMETRY = ["boundaries", "id", "name", "projection"];
+const changed = (a, b) => !sameValue(a ?? null, b ?? null);
+const asSet = (list) => [...new Set(Array.isArray(list) ? list.map(String) : [])].sort();
+
+/**
+ * How long the motion of a map step lasts before its run, as a multiple of the step's duration, from the props of the
+ * step before (`prev`) and of the step (`next`), as the map plays them: 2 when the map flies (`view` changes) or the
+ * inset does (`inset.view` changes, the inset being on at both steps); 1 when anything else the map animates changes
+ * (the layers in `shown`, `highlight`, `labels`, `numbers`, an inset coming or going, the definition of a layer shown at
+ * `prev`); 0 otherwise (`frame`, `pace`, `legend`, a hidden layer's definition, the inset's `at` or `scale` are drawn
+ * at once, or by the run).
+ * @param {Record<string, unknown>} prev
+ * @param {Record<string, unknown>} next
+ * @returns {0 | 1 | 2}
+ */
+export function firstPhase(prev, next) {
+  if (changed(prev.view, next.view)) return 2;
+  const [a, b] = [isObject(prev.inset) ? prev.inset : null, isObject(next.inset) ? next.inset : null];
+  if (a && b && changed(a.view, b.view)) return 2;
+  if (!a !== !b) return 1;
+  if (["highlight", "labels", "numbers"].some((key) => changed(prev[key], next[key]))) return 1;
+  const shown = asSet(prev.shown);
+  if (changed(shown, asSet(next.shown))) return 1;
+  const layersOf = (props) => (isObject(props.layers) ? props.layers : {});
+  return shown.some((id) => changed(layersOf(prev)[id], layersOf(next)[id])) ? 1 : 0;
+}
+
+/**
+ * Whether a step of a map from props `prevProps` to `nextProps` plays a run, as the map element does: when both steps
+ * have a time-lapse (`prevLabels`, `nextLabels`: the frame labels of the first time-lapse layer each declares, or
+ * null), with the same labels, the step shows a time-lapse layer (`nextShowsLapse`), its `frame` names another frame
+ * (an unset `frame` is the first) and its geometry stays (`boundaries`, `id`, `name`, `projection`). Otherwise null:
+ * a frame that changes with nothing to run through is drawn at once, or crossfades with its layer.
+ * @param {{ prevLabels: string[] | null, nextLabels: string[] | null, nextShowsLapse: boolean, prevProps: Record<string, unknown>, nextProps: Record<string, unknown> }} step
+ * @returns {{ run: number[], moves: number, factor: 0 | 1 | 2 } | null} the frame indexes it shows (`frameRun`), the
+ *   frames it moves, and its first phase (`firstPhase`)
+ * @throws {Error} `frame '<x>' not found (frames: ...)` for a `frame` the labels lack
+ */
+export function stepRun({ prevLabels, nextLabels, nextShowsLapse, prevProps, nextProps }) {
+  if (!prevLabels || !nextLabels || !nextShowsLapse || prevLabels.join("\n") !== nextLabels.join("\n")) return null;
+  if (GEOMETRY.some((key) => changed(prevProps[key], nextProps[key]))) return null;
+  const run = frameRun(nextLabels, prevProps.frame ?? nextLabels[0], nextProps.frame ?? nextLabels[0]);
+  if (run.length < 2) return null;
+  return { run, moves: run.length - 1, factor: firstPhase(prevProps, nextProps) };
 }
 
 /**
@@ -354,9 +405,9 @@ export function mapProblems(props, files) {
 }
 
 /**
- * What `validate` reports about one step that changes a map's `frame` (a run, in two phases). The first phase
- * lasts twice the duration when `view` or `inset.view` changes, once when anything else changes, and not at all
- * when nothing does; then the run lasts frames moved x `pace`. The runs of the first time-lapse layer count.
+ * What `validate` reports about one step that plays a map's run (`stepRun`, the rule the element plays by), in two
+ * phases: the first lasts `firstPhase` times the duration (or the step's transition), then the run lasts frames moved x
+ * `pace`. The labels of the first time-lapse layer each step declares count.
  * @param {Record<string, unknown>} prev the element's props at the earlier step
  * @param {Record<string, unknown>} next the element's props at this step
  * @param {Record<string, { json: unknown, pngs: Record<string, object> }>} files the raster files, by `raster` path
@@ -366,22 +417,24 @@ export function mapProblems(props, files) {
  */
 export function mapRunProblems(prev, next, files, timing, maxRun) {
   if (!isObject(prev) || !isObject(next)) return [];
-  const [layer] = lapseLayers(next, files);
-  if (!layer) return [];
-  const from = prev.frame ?? layer.labels[0];
-  const to = next.frame ?? layer.labels[0];
-  if (String(from) === String(to)) return [];
-  let moves;
+  const [before] = lapseLayers(prev, files);
+  const lapse = lapseLayers(next, files);
+  const shown = Array.isArray(next.shown) ? next.shown : [];
+  let step;
   try {
-    moves = frameRun(layer.labels, from, to).length - 1;
+    step = stepRun({
+      prevLabels: before?.labels ?? null,
+      nextLabels: lapse[0]?.labels ?? null,
+      nextShowsLapse: lapse.some(({ id }) => shown.includes(id)),
+      prevProps: prev,
+      nextProps: next,
+    });
   } catch {
     return []; // an unknown label is for `mapProblems` to report
   }
+  if (!step) return [];
 
-  const moved = (a, b) => !sameValue(a ?? null, b ?? null);
-  const flies = moved(prev.view, next.view) || moved(prev.inset?.view, next.inset?.view);
-  const others = [...new Set([...Object.keys(prev), ...Object.keys(next)])].some((k) => k !== "frame" && moved(prev[k], next[k]));
-  const factor = flies ? 2 : others ? 1 : 0;
+  const { moves, factor } = step;
   const phase = factor === 0 ? 0 : (timing.transition ?? factor * timing.duration);
   const pace = next.pace ?? DEFAULT_PACE;
   const total = phase + moves * pace;

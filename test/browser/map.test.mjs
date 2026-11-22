@@ -1393,9 +1393,44 @@ test("timelapse: the inset shows the frame of the moment, and the panel keeps ou
   });
 });
 
-test("timelapse: a numbers key in two time-lapse layers errors", async () => {
+test("timelapse: numbers keys, formats and paces the map cannot use error", async () => {
   await withPage({ root, url: broken.url("numbers", "") }, async (page, ctx) => {
     assert.deepEqual(await errorsOf(page), ["numbers/map: `numbers` key 'people' is in time-lapse layers 'north' and 'south'"]);
+    await ctx.open(broken.url("numbers-none", ""));
+    assert.deepEqual(await errorsOf(page), ["numbers-none/map: `numbers` key 'births' is in no time-lapse layer (keys: people)"]);
+    await ctx.open(broken.url("numbers-format", ""));
+    assert.deepEqual(await errorsOf(page), ['numbers-format/map: `numbers` key \'people\' needs a `format` (a d3-format string such as ",.0f")']);
+    await ctx.open(broken.url("pace", ""));
+    assert.deepEqual(await errorsOf(page), ["pace/map: `pace` must be 100 to 2000 ms a frame"]);
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("timelapse: frames slow to arrive hold the run, never fail it", async () => {
+  await withPage({ root, url: pages.url("timelapse", "step=last") }, async (page, ctx) => {
+    const jumped = await jumpTo(ctx, page, "last");
+    await ctx.open(pages.url("timelapse", "step=first&motion=full"));
+    // Every frame image is 600 ms late from here on, longer than the four frames (400 ms) a run of 100 ms a frame decodes ahead.
+    const DELAY = 600;
+    let delayed = 0;
+    await page.route("**/data/years/*.png", async (route) => {
+      delayed += 1;
+      await new Promise((r) => setTimeout(r, DELAY));
+      await route.continue();
+    });
+    const { frames, end, settledMs } = await sampleFrames(page, "timelapse", "last", "map", lapseProbe);
+    assert.ok(delayed >= 11, `the run's frames came late (${delayed} images delayed)`);
+    assert.ok(frames.every((f, i) => i === 0 || yearIndex(f.frame) >= yearIndex(frames[i - 1].frame)), "the run still goes in list order");
+    // a frame whose next has not arrived stays on screen: some frame after the first is shown well past its 100 ms
+    const spans = new Map();
+    for (const f of frames.filter((f) => f.frame !== "2010")) spans.set(f.frame, [spans.get(f.frame)?.[0] ?? f.ms, f.ms]);
+    const held = Math.max(...[...spans.values()].map(([a, b]) => b - a));
+    assert.ok(held >= 250, `the run held a frame while the next was on its way (${held.toFixed(0)} ms)`);
+    assert.equal(end.frame, "2021");
+    assert.ok(settledMs >= DELAY + 11 * 100 * 0.9, `the run waits for its first frames, then plays (${settledMs.toFixed(0)} ms)`);
+    assert.deepEqual(await errorsOf(page), [], "nothing failed");
+    assert.equal(await elementHtml(page, "map"), jumped.html, "and it ends where a jump does");
+    assert.deepEqual(await canvasPixels(page, "map"), jumped.pixels, "pixels too");
+    assert.deepEqual(ctx.errors, []);
   });
 });

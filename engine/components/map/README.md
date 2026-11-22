@@ -111,9 +111,12 @@ Behaviour:
   in the same way, over twice the step's duration, the box following. A change of `frame` is a **run**: every
   frame from the old one to the new, in the file's order (backward when the new one comes first), each crossfading into
   the next, `pace` ms per frame moved, with the panel's numbers counting linearly from one frame's value to the next and
-  its label showing the frame the crossfade heads to once it is half way. A step that changes `frame` and other things
+  its label showing the frame the crossfade heads to once it is half way. A step runs only when it shows a time-lapse
+  layer, both steps have the same frame labels and the geometry stays; otherwise the new frame is drawn at once (or
+  crossfades with its layer). A step that changes `frame` and other things
   plays them in two phases: everything else first, together, at the old frame (a flight lands), then the run at the end
-  view. The engine allows a run more than its usual 10 s (`info.expect`), up to 20 s for both phases together: a longer
+  view; the first phase lasts twice the step's duration for a flight, once for any other change the map animates, and
+  not at all otherwise (`core/map-rules.js` `firstPhase`, which `validate` budgets by too). The engine allows a run more than its usual 10 s (`info.expect`), up to 20 s for both phases together: a longer
   one is an element error (`a run of 20.3 s is longer than 20 s; split it across steps`). A click during a run, a hidden
   page or leaving the slide ends it at once on the step's frame. Jumps,
   backward steps and reduced motion show the end state at once. The map does not own its
