@@ -14,9 +14,10 @@
 // so its canvas is made with `maxRatio: 1`; the lookup tables (`geo.lookupFor`) and the pictures and land masks
 // (`geo.pictures`, a `PictureCache`) are the element's (index.js). A picture is made for one view and drawn at another
 // through the affine map between them, so a flight (`state.flight`) draws two pictures only, the one at its start view
-// and the one at its end view, the end's over the start's at the flight's progress, both placed at the view of the
-// moment: the picture stays filled while it moves and is sharp when it arrives, and no picture or lookup table is made
-// for a view in between. While a layer's file, scale or colour changes (`state.from`, `state.change`), the old picture
+// and the one at its end view, both placed at the view of the moment, the wider one (the lower scale) underneath at full
+// weight and the other blending over it (`flightDraws`): the raster stays filled as the map zooms in or out, and is
+// sharp when it arrives; no picture or lookup table is made for a view in between. A long flight whose path zooms out
+// past both ends can leave a thin margin unfilled at its widest moment, where neither picture reaches. While a layer's file, scale or colour changes (`state.from`, `state.change`), the old picture
 // is painted on a scratch canvas at 1 - change and the new one on the layer's canvas at change, and the old is added over
 // the new with `lighter`: exact where both are opaque (the two shares sum to one), fading where one is clear. At the end
 // of a change or a flight the scene is the plain paint of the new picture, whatever way it was reached.
@@ -93,12 +94,23 @@ function scratchOf(canvas) {
 
 /**
  * The scene of a prepared layer at `view`, drawn at `alpha`: its picture at `view`, or, during `flight`, its pictures
- * at the flight's two ends, the end's over the start's at the flight's progress.
+ * at the flight's two ends (`flightDraws`).
  */
 const sceneOf = (prepared, view, alpha, flight) => ({
   source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch,
-  draws: flight ? [{ frame: 0, at: flight.from, alpha }, { frame: 0, at: flight.to, alpha: alpha * flight.t }] : [{ frame: 0, at: view, alpha }],
+  draws: flight ? flightDraws(flight, alpha) : [{ frame: 0, at: view, alpha }],
 });
+
+/**
+ * The draws of a flight: the picture of the wider end (the lower scale, which covers more of the element at any view
+ * between) under the other, at `alpha`, and the other over it at its share of the way, so the two blend as the flight
+ * goes from the start's picture to the end's. Zooming in, the start's is under and the end's comes in at `t`; zooming
+ * out, the end's is under and the start's goes at `1 - t`. Wherever the lower one reaches, the raster stays filled.
+ */
+function flightDraws({ from, to, t }, alpha) {
+  if (to.k < from.k) return [{ frame: 0, at: to, alpha }, { frame: 0, at: from, alpha: alpha * (1 - t) }];
+  return [{ frame: 0, at: from, alpha }, { frame: 0, at: to, alpha: alpha * t }];
+}
 
 /** A short name for a colour table: equal exactly when the tables are. */
 function tableName(table) {

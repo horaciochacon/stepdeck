@@ -82,7 +82,9 @@ Behaviour:
   `--sd-duration-fast`; a change of `view` flies the map there over twice the step's duration (or the step's
   `transition`), along d3's zoom path (out and in again as far as the distance asks): the land, borders, areas, points
   and names are redrawn at every frame, and a raster crossfades from its picture at the start view to its picture at
-  the end view, both moving with the map, so it stays filled during the flight and is sharp when it lands. Jumps,
+  the end view, both moving with the map, the wider one underneath, so it stays filled as the map zooms in or out
+  and is sharp when it lands (a long flight that zooms out past both ends can leave a thin margin unfilled at its
+  widest moment). Jumps,
   backward steps and reduced motion show the end state at once. The map does not own its
   entrance: the engine moves its box in.
 - **State on the canvases.** Each canvas layer (`data-layer` `main:base`, `main:areas:<id>`, `main:raster:<id>`, `main:borders`, `main:points:<id>`) carries
