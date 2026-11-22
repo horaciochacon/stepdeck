@@ -850,6 +850,46 @@ test("flight: zooming out keeps the raster filled", async () => {
   });
 });
 
+/**
+ * The map fixture deck in the reveal shell, which pauses a slide it leaves (the bare shell destroys it). The page is
+ * served by a route, so the deck folder holds no page of its own; its import map points at the repository's engine.
+ */
+const REVEAL_PAGE = `${DECK}reveal.html`;
+const revealPage = (page) =>
+  page.route(`**/${REVEAL_PAGE}`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><link rel="icon" href="data:,">
+<script type="importmap">{ "imports": { "stepdeck/": "../../../../engine/" } }</script></head>
+<body><script type="module">import { boot } from "stepdeck/core/stepdeck.js"; boot({ shell: "reveal" });</script></body></html>` }));
+
+test("map: leaving the slide frees its caches, and coming back draws the same", async () => {
+  await withPage({ root }, async (page, ctx) => {
+    await revealPage(page);
+    await ctx.open(`${REVEAL_PAGE}#/flight/north`);
+    // reveal keeps the slides around this one mounted: read the flight slide's own map
+    const map = '[data-sd-slide="flight"] [data-el="map"]';
+    const read = () => page.evaluate((map) => {
+      const el = document.querySelector(map);
+      return { html: el.outerHTML, pixels: [...el.querySelectorAll("canvas")].map((c) => c.toDataURL()), lookups: el.sdMapLookups() };
+    }, map);
+    const go = async (slide, step) => {
+      await page.evaluate(([slide, step]) => window.STEPDECK.goTo(slide, step), [slide, step]);
+      await settled(page);
+    };
+    const north = await read();
+    assert.ok(north.lookups > 0, "the raster's lookup tables are built");
+    await go("flight", "home");
+    await go("areas", "base");
+    assert.equal((await read()).lookups, 0, "leaving the slide (pause) clears them");
+    await go("flight", "north");
+    const back = await read();
+    assert.ok(back.lookups > 0, "coming back builds what the step needs");
+    assert.equal(back.html, north.html, "the markup is the same");
+    assert.deepEqual(back.pixels, north.pixels, "so are the pixels");
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("flight: played equals jumped, pixels too", async () => {
   await withPage({ root, url: pages.url("flight", "step=home") }, async (page, ctx) => {
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "flight", steps: FLIGHT_STEPS, id: "map" });
