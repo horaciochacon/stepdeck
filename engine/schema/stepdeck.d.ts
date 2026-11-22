@@ -671,8 +671,12 @@ export interface MapKit {
   lut(raster: Pick<MapRaster, "value">, colorOf: (value: number | string, level: number) => string | null | undefined): Uint8ClampedArray;
   /** The cells of a raster (`cols * rows`, row-major from the north-west) whose centres are on land, as 1 or 0. `features` are from `boundaries`; cached per array. */
   landCells(raster: Pick<MapRaster, "bounds" | "size">, features: MapFeature[]): Uint8Array;
-  /** Whether a land cell has no data in any frame of `raster`, or some land lies outside its bounds. `features` are from `boundaries`. */
-  rasterGaps(raster: MapRaster, features: MapFeature[]): Promise<boolean>;
+  /**
+   * Whether a land cell has no data in one of `frames` of `raster` (frame indexes; every frame by default), or some land
+   * lies outside its bounds. `features` are from `boundaries`. Throws `data/a.json: there is no frame 9` for an index
+   * outside the frames.
+   */
+  rasterGaps(raster: MapRaster, features: MapFeature[], options?: { frames?: number[] }): Promise<boolean>;
   /**
    * Clears `canvas` (a layer made with `maxRatio: 1`) and draws each picture of `scene.draws` at its alpha; a picture
    * hatches the land cells with no data and the land outside the raster, and with `scene.clip` stops at the coastline. Returns the scene's signature. Throws `paintRaster: frame 3 is not decoded` for a frame `res.raster` has not decoded, and `paintRaster: clip needs res.land` for a clipped scene without land.

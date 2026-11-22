@@ -774,6 +774,29 @@ test("rasterGaps: true with the patch, false without, true for land beyond the b
   });
 });
 
+test("rasterGaps: `frames` names the frames to look at; every frame by default", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+      const raster = await M.loadRaster("data/patched.json", ctx);
+      const gaps = (options) => M.rasterGaps(raster, features, options).then((found) => found, (e) => e.message);
+      return {
+        first: await gaps({ frames: [0] }), second: await gaps({ frames: [1] }), both: await gaps({ frames: [0, 1] }), every: await gaps(),
+        none: await gaps({ frames: [] }), missing: await gaps({ frames: [2] }),
+        half: await M.rasterGaps(await M.loadRaster("data/half.json", ctx), features, { frames: [] }),
+      };
+    });
+    assert.equal(got.first, false, "the first frame has data on every land cell");
+    assert.equal(got.second, true, "the second has a hole");
+    assert.equal(got.both, true);
+    assert.equal(got.every, true, "without `frames`, every frame");
+    assert.equal(got.none, false, "no frame, no gap in a frame");
+    assert.equal(got.missing, "data/patched.json: there is no frame 2");
+    assert.equal(got.half, true, "land outside the bounds is a gap whatever the frames");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("the painters keep played equal to jumped, forward and backward", async () => {
   for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone", "covered", "hole", "half", "coast", "clip"]]]) {
     await withPage({ root, url: pages.url(slide, "step=a") }, async (page, ctx) => {

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.mapchild",
+  "description": "Test fixture: the built-in map mounted with ctx.mount inside this element, with the props of `map` and the frame of `frame`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["map"],
+  "properties": {
+    "map": { "type": "object", "description": "The props of the map it mounts (without `frame`).", "examples": [{ "boundaries": "data/regions.geojson", "id": "code" }], "x-transition": "snap" },
+    "frame": { "type": "string", "description": "The map's `frame`: a time-lapse frame label.", "examples": ["whole"], "x-transition": "tween" }
+  }
+}

@@ -12,7 +12,7 @@
 //   loadRaster(path, ctx)                     a raster file's grids, decoded exactly: { bounds, value, frames, size, grid, decoded }
 //   lut(raster, colorOf)                      the 256 colours of a raster's levels, as 1,024 RGBA bytes
 //   landCells(raster, features)               the raster cells whose centres are on land
-//   rasterGaps(raster, features)              whether some land has no data in the raster (in any frame) or lies outside it
+//   rasterGaps(raster, features, { frames })  whether some land has no data in the raster (in those frames) or lies outside it
 //   paintAreas, paintBorders, paintRaster, paintPoints, insetFrame, scaleBar
 //                                             the painters and the map furniture (core/map-paint.js)
 //
@@ -471,19 +471,26 @@ export function landCells({ bounds, size }, features) {
 }
 
 /**
- * Whether some land has no data in `raster`: true when a land cell (see `landCells`) has no data in any frame, or when
- * any of the land lies outside the raster's bounds. These are the places a painter hatches, so a legend shows its "No
- * data" row exactly when there is hatch to explain. A coastal cell whose centre is in the sea is not a gap. Frames are
- * decoded one at a time, apart from the raster's cache, and the search stops at the first gap; it costs a pass over
- * every frame, so a caller keeps the answer for the raster.
- * @param {{ bounds: number[], size: [number, number], frames: any[] }} raster a raster from `loadRaster`
+ * Whether some land has no data in `raster`: true when a land cell (see `landCells`) has no data in one of `frames`
+ * (frame indexes; every frame by default), or when any of the land lies outside the raster's bounds. These are the
+ * places a painter hatches, so a legend shows its "No data" row exactly when there is hatch to explain. A coastal cell
+ * whose centre is in the sea is not a gap. Frames are decoded one at a time, apart from the raster's cache, and the
+ * search stops at the first gap; it costs a pass over each frame it looks at, so a caller keeps the answer. A map
+ * that shows a few frames of a long time-lapse names them, rather than decoding them all.
+ * @param {{ path: string, bounds: number[], size: [number, number], frames: any[] }} raster a raster from `loadRaster`
  * @param {{ geometry: { type: string, coordinates: number[][][] | number[][][][] } }[]} features from `boundaries`
+ * @param {{ frames?: number[] }} [options]
  * @returns {Promise<boolean>}
+ * @throws {Error} `data/a.json: there is no frame 9` for an index outside the frames
  */
-export async function rasterGaps(raster, features) {
-  if (features.length === 0) return false;
+export async function rasterGaps(raster, features, { frames } = {}) {
   const decode = decoders.get(raster);
   if (!decode) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
+  const indexes = frames ?? raster.frames.map((_, i) => i);
+  for (const i of indexes) {
+    if (!Number.isInteger(i) || i < 0 || i >= raster.frames.length) throw new Error(`${raster.path}: there is no frame ${i}`);
+  }
+  if (features.length === 0) return false;
   const [west, south, east, north] = raster.bounds;
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const rings of polygonsOf(features)) {
@@ -497,7 +504,7 @@ export async function rasterGaps(raster, features) {
   if (x0 < west - BOUNDS_SLACK || x1 > east + BOUNDS_SLACK || y0 < south - BOUNDS_SLACK || y1 > north + BOUNDS_SLACK) return true;
 
   const land = landCells(raster, features);
-  for (let i = 0; i < raster.frames.length; i++) {
+  for (const i of indexes) {
     const { data } = await decode(i);
     for (let p = 0; p < data.length; p++) if (land[p] && !data[p]) return true;
   }

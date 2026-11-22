@@ -7,8 +7,9 @@
 //   a mask           one class, in the layer's `color`, a theme colour role (default `accent`)
 // A value or class raster hatches the land beneath it that it has no data for, and the land beyond its bounds, in its own
 // picture (`--sd-color-dim` over `--sd-color-surface`, as `areas` does for a region without a value), and the legend
-// adds a "no data" row exactly when there is hatch to explain. A mask has no no-data: the cells that are not the class
-// stay clear.
+// adds a "no data" row exactly when there is hatch to explain: for a time-lapse, in the frames the slide's steps show
+// (a `ctx.mount` child, with no steps, in the frame of each step). A mask has no no-data: the cells that are not the
+// class stay clear.
 //
 // A file with `frames` is a time-lapse (./lapse.js): the prepared layer has `lapse`, the frames' labels and numbers and
 // the raster to decode them from (index.js decodes the frames a step and its run need, a few at a time). A scene shows the frame
@@ -76,13 +77,38 @@ function landOf(geo) {
   return lands.get(geo);
 }
 
-/** Whether land has no data in `raster`: asked once per raster and set of features, whatever layers show it. */
+/**
+ * Whether land has no data in one of `frames` (indexes) of `raster`: each frame is asked once per raster and set of
+ * features, whatever layers show it.
+ */
 const gaps = new WeakMap();
-function gapsOf(raster, features) {
+function gapsIn(raster, features, frames) {
+  if (frames.length === 0) return rasterGaps(raster, features, { frames }); // the land outside the bounds only
   if (!gaps.has(features)) gaps.set(features, new Map());
-  const byPath = gaps.get(features);
-  if (!byPath.has(raster.path)) byPath.set(raster.path, rasterGaps(raster, features));
-  return byPath.get(raster.path);
+  const known = gaps.get(features);
+  const inFrame = (i) => {
+    const key = `${raster.path}|${i}`;
+    if (!known.has(key)) known.set(key, rasterGaps(raster, features, { frames: [i] }));
+    return known.get(key);
+  };
+  return Promise.all(frames.map(inFrame)).then((found) => found.some(Boolean));
+}
+
+/**
+ * The frames of time-lapse `raster` that the slide shows: for every step that shows a layer of this file (`stepProps`,
+ * and `props`, the props the layer is prepared for), the index of its `frame` (the first frame when unset), in order.
+ * A label the frames lack is passed over: that step's own update reports it.
+ */
+function framesShown(raster, props, stepProps) {
+  const labels = raster.frames.map((frame) => frame.label);
+  const found = new Set();
+  for (const p of [...stepProps, props]) {
+    const shown = Array.isArray(p?.shown) ? p.shown : [];
+    if (!Object.entries(p?.layers ?? {}).some(([id, def]) => def?.raster === raster.path && shown.includes(id))) continue;
+    const i = p.frame === undefined || p.frame === null ? 0 : labels.indexOf(String(p.frame));
+    if (i >= 0) found.add(i);
+  }
+  return [...found].sort((a, b) => a - b);
 }
 
 /** The colour of the mask's theme role (`accent`, `alert`, …); throws for a name the theme has no colour for. */
@@ -146,6 +172,11 @@ export default {
    * time-lapse `lapse`: `{ labels, numbers, raster }`, the frames' labels and numbers in file order and the raster
    * whose `grid(i)` decodes frame `i`. Throws the raster loader's errors (each starts with the file's path), the
    * scale's, and `data/mask.json: color 'teal' is not a theme colour (accent, alert, …)`.
+   *
+   * `noData` says whether the legend has its "no data" row: whether some land lacks data in the image, or, for a
+   * time-lapse, in one of the frames the slide's steps show (`framesShown`, from `ctx.stepProps`), never all its
+   * frames. A `ctx.mount` child has no steps: its `noData` is null and `noDataAt(i)` answers for frame `i`, which
+   * index.js asks for the frame each step state shows.
    */
   async prepare(layer, props, ctx, geo) {
     const raster = await loadRaster(layer.raster, ctx);
@@ -167,7 +198,10 @@ export default {
       lookupFor: (at, size) => geo.lookupFor(at, raster, size), // a table serves every raster with these bounds and this grid, in every frame; `size` is the canvas's (the inset's is not the element's)
     };
     const lapse = isLapse(raster) ? { labels: raster.frames.map((f) => f.label), numbers: raster.frames.map((f) => f.numbers), raster } : null;
-    return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo, lapse };
+    const frames = !lapse ? [0] : ctx.stepProps ? framesShown(raster, props, ctx.stepProps) : null;
+    const noData = !hatch ? false : frames ? await gapsIn(raster, geo.features, frames) : null;
+    const noDataAt = noData === null ? (i) => gapsIn(raster, geo.features, [i]) : null;
+    return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData, noDataAt, hatch, lutName: tableName(lutData), res, geo, lapse };
   },
 
   scene(prepared, { view, flight, alpha, from, change, frame, fromFrame }) {
@@ -193,7 +227,7 @@ export default {
     return hash.hex();
   },
 
-  legend(prepared) {
-    return { title: prepared.title, legend: prepared.legend, noData: prepared.noData };
+  legend(prepared, layer) {
+    return { title: prepared.title, legend: prepared.legend, noData: layer?.noData ?? prepared.noData };
   },
 };

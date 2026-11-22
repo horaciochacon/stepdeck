@@ -9,6 +9,8 @@
 //   log.json                                            density.png read on a log scale, 1 to 1,000
 //   years.json + years/                                 12 frames, 2010 to 2021, 16×12 px, each with `numbers: { people }`
 //   years19.json + years19/                             19 frames, 8×6 px: 18 moves, 12.6 s at the default pace
+//   gaps.json + gaps/                                   2 frames, 16×12 px, one level: `whole` has data on every land
+//                                                       cell, `holed` lacks it on a block of land in the middle
 //   square-cw.geojson, square-ccw.geojson               one square region, both windings
 //   antimeridian.geojson                                one region on both sides of 180°, split at the meridian
 //   tiny.geojson                                        one region about 0.01° across
@@ -112,6 +114,21 @@ const years = (from, count, cols, rows, folder, writer, file) => {
 years(2010, 12, 16, 12, "years", write, "years.json");
 years(2000, 19, 8, 6, "years19", write, "years19.json");
 years(1990, 30, 8, 6, "years30", writeBroken, "years30.json");
+
+// gaps: two frames at one level, data on every land cell in `whole` and a block of land cells without it in `holed`
+{
+  const [cols, rows] = [16, 12];
+  const valid = landGrid({ land, bounds, cols, rows });
+  const holed = valid.map((v, i) => (v && i % cols >= 6 && i % cols < 10 && Math.floor(i / cols) >= 4 && Math.floor(i / cols) < 8 ? 0 : v));
+  const level = new Uint8Array(cols * rows).fill(160);
+  write("gaps/whole.png", encodePng(levelImage(cols, rows, level, valid)));
+  write("gaps/holed.png", encodePng(levelImage(cols, rows, level, holed)));
+  write("gaps.json", jsonText({
+    bounds,
+    value: { scale: "linear", min: 0, max: 800, unit: "people per km²" },
+    frames: [{ src: "gaps/whole.png", label: "whole" }, { src: "gaps/holed.png", label: "holed" }],
+  }));
+}
 
 // --- broken rasters --------------------------------------------------------------------------------------------
 
