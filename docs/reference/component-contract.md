@@ -154,6 +154,8 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 | `entered` | `boolean` | The element just became visible. On the first update: it is visible. |
 | `entrance` | `{ motion, duration } \| null` | Set only for a component whose `schema.json` declares `"x-enter": "own"`, in the update where its element becomes visible on an animating step (after its stagger hold); `null` in every other update. `motion` is `"draw"` (play your build from empty to these props; the box stays still) or `"none"` (render at once: the box moves instead, or nothing does). `duration` is the element's own `enter.duration` in ms (0 on a step whose duration is 0), or `undefined`: then time the build with `ctx.motion.timing(info)`. See [Owning the entrance](#owning-the-entrance). |
 
+| `expect` | `(ms: number) => void` | Declares a long run for this update: the watchdog now waits `ms` plus `SETTLE_TIMEOUT_MS` from the call. See [Long runs: `info.expect`](#long-runs-infoexpect). |
+
 `schema/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
 
 When does `animate` come true? The shell requests motion only when the page is not in capture mode (`?capture`), not a presenter preview frame (`?receiver`), and motion is on (no `prefers-reduced-motion`, or `?motion=full`). Both shells render slide changes with `animate: false`; only a step change within the current slide passes the shell's motion request. The controller then narrows it to a forward move of exactly one step. A jump, a backward move and the first render never animate. See [Animation and motion](../guide/animation-and-motion.md).
@@ -213,12 +215,12 @@ Each rule exists so that a step reached by playing looks exactly like the same s
 | Write a start state synchronously. | A build's start state (and any item hidden until its turn) is written before the first `await` in `update`, so the end state never paints first. |
 | Use `el.ownerDocument`, not the global `document`. | The renderer takes a `document` argument, and tests and the CLI run components in other documents. Every built-in creates nodes through `el.ownerDocument`. |
 | No network. | Read deck files through `ctx.data` and `ctx.assetUrl`. Presentation makes no remote requests: the CLI's browser blocks every request to another origin and `check` reports it as `network-error`; `validate` reports remote URLs in props and styles as `remote-url`. |
-| Settle. | `mount` and `update` must settle within 10 s (see below). |
+| Settle. | `mount` and `update` must settle within 10 s, or within what `info.expect` declared (see below). |
 | Use theme values. | Colors from `var(--sd-color-*)` and `ctx.palette()`, sizes from `--sd-font-size-*` and `--sd-space`, never literals. `check` measures your text like any other: size, contrast, overlap and staying inside the region. |
 
 ## Errors and the watchdog
 
-Every `mount` and `update` call runs under a watchdog of `SETTLE_TIMEOUT_MS` = 10 000 ms (`core/controller.js`; configurable through the controller's `settleTimeout`).
+Every `mount` and `update` call runs under a watchdog of `SETTLE_TIMEOUT_MS` = 10 000 ms (`core/controller.js`; configurable through the controller's `settleTimeout`). An `update` that declares a long run with [`info.expect`](#long-runs-infoexpect) gets more time, up to `MAX_RUN_MS` = 20 000 ms per call (`core/constants.js`; the controller's `maxRun`).
 
 - **A call that does not settle in time** fails its element with `did not settle within 10s` and aborts that element's signal only. The rest of the slide goes on.
 - **A mount that settles after its watchdog fired** is destroyed at once, with any children it mounted.
@@ -226,6 +228,25 @@ Every `mount` and `update` call runs under a watchdog of `SETTLE_TIMEOUT_MS` = 1
 - **A thrown error or rejected promise** in `mount` or `update` fails the element. So do an unknown or colliding component name and a binding error.
 
 A failed element is recorded once, as `<slide>/<element>: <message>`, in the controller's `errors` (and so in `STEPDECK.errors`). Its box shows the message and stays visible. It gets no further `update` calls. `check` reports it as `render-error`; `dump` lists it under `errors`.
+
+### Long runs: `info.expect`
+
+A time-lapse can run longer than 10 s on purpose. Call `info.expect(ms)` in `update`, before the long `await`, to say how long the run will take:
+
+```js
+async update(props, info) {
+  info.expect(15_000); // this update plays a 15 s time-lapse
+  await playTimeLapse(props, info.signal);
+}
+```
+
+- **The deadline becomes `max(deadline, now + ms + SETTLE_TIMEOUT_MS)`.** It only extends: a call that would end the deadline sooner changes nothing, and several calls keep the latest end.
+- **Each call is capped at `MAX_RUN_MS`** (20 000 ms). A longer `ms` throws `a run of 25.0 s is longer than 20 s; split it across steps`: split the run across steps.
+- **A bad `ms` throws a `TypeError`** (`info.expect(ms) needs a number of milliseconds ≥ 0`) when it is not a finite number ≥ 0.
+- **Both throws fail the element** like any other error thrown from `update`.
+- **Only `update` has it.** A `mount` always has 10 s.
+- **A `ctx.mount` child can call it too.** Its `info` carries the parent's `expect`, so the child extends the parent element's deadline.
+- **Still abort-aware.** The element's `signal` aborts as before when a newer `goTo` supersedes the step, so a long run must still end at once on abort.
 
 ## `ctx`
 
@@ -300,7 +321,7 @@ Semantics:
 
 - **The engine never updates children.** Your `update` calls `handle.update`, including on its own first update. The handle never skips a call; skipping no-ops is your decision. A built-in that renders nothing until its first update (such as `image`) stays empty until you call it.
 - **Children belong to the parent element.** They are paused with it and destroyed after it, newest first. This also happens when the parent's own `mount` throws, and when the slide is destroyed while the parent or child is still mounting: the child is destroyed together with the parent once the parent's mount settles, or at once if it arrives after that.
-- **No separate watchdog.** A child's `mount` and `update` run inside the parent's call, under the parent's watchdog.
+- **No separate watchdog.** A child's `mount` and `update` run inside the parent's call, under the parent's watchdog; a child's `info.expect` extends it.
 - **Errors propagate.** An unknown type rejects with the registry's message. A child that throws in `mount` or `update` rejects the promise you await, so it fails the parent element unless you catch it.
 - `handle.update` after `destroy` throws `ctx.mount('<type>'): update called on a destroyed child`. A child destroyed while its props were resolving throws `ctx.mount('<type>'): child destroyed while its props resolved`.
 - There is no nesting depth limit.

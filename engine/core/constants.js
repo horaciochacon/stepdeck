@@ -6,6 +6,8 @@ export const CANVAS = { w: 1920, h: 1080 };
 export const DEFAULT_THEME = "modern";
 /** A theme name: a folder of the engine's themes/, lowercase letters, digits and hyphens (never a path). */
 export const THEME_NAME = /^[a-z0-9][a-z0-9-]*$/;
+/** The longest run one update may declare with `info.expect` (ms): a time-lapse, not a hang. */
+export const MAX_RUN_MS = 20_000;
 /** The layout a slide uses when it names none. */
 export const DEFAULT_LAYOUT = "full-bleed";
 
