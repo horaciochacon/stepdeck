@@ -3,11 +3,13 @@
 //
 // The pieces, all deterministic for a given seed:
 //   rng(seed)                       mulberry32: a function that returns the next number in [0, 1)
-//   country({ seed, cells })        { regions, land }: a seeded Voronoi over BOX (open ocean); the cells whose site falls
+//   country({ seed, cells, islands })
+//                                   { regions, land }: a seeded Voronoi over BOX (open ocean); the cells whose site falls
 //                                   inside a seeded blob are the regions, so the coast is their outer edges, and two tiny
-//                                   triangle islands sit offshore. `regions` is a FeatureCollection with `code` and `name`
-//                                   properties, counter-clockwise (RFC 7946, as `sf` writes it); `land` is one MultiPolygon
-//                                   feature made of the same polygons (not dissolved)
+//                                   triangle islands sit offshore (in the far corners of BOX, or with `islands: "near"`
+//                                   close to the coast, so the country fills a slide). `regions` is a FeatureCollection with
+//                                   `code` and `name` properties, counter-clockwise (RFC 7946, as `sf` writes it); `land` is
+//                                   one MultiPolygon feature made of the same polygons (not dissolved)
 //   field({ seed, bounds, cols, rows, bumps })
 //                                   a smooth surface of seeded bumps, 0 to 1, as a Float64Array
 //   timelapse({ ... })              rising fields as raster frames, with a people count each
@@ -91,10 +93,12 @@ export function centroid(feature) {
  * The country: a Voronoi of `cells` sites over BOX, relaxed twice so the cells are even. The cells whose site is inside
  * a blob (a circle-ish shape with a few seeded harmonics) are the regions. Region polygons are counter-clockwise,
  * rounded to four decimals, and carry `code` (a compass side and a number: "N1", "E2") and `name`.
- * @param {{ seed: number, cells: number }} options `cells` is the number of Voronoi cells in the whole box, sea included
+ * @param {{ seed: number, cells: number, islands?: "far" | "near" }} options `cells` is the number of Voronoi cells in the
+ *   whole box, sea included; `islands` is where the two islands go: "far" (the default) in two far corners of the box,
+ *   "near" just off the mainland's northwest and southeast corners, a little over half a degree from the nearest region
  * @returns {{ regions: object, land: object }}
  */
-export function country({ seed, cells }) {
+export function country({ seed, cells, islands = "far" }) {
   const rand = rng(seed);
   const [west, south, east, north] = BOX;
   let sites = Array.from({ length: cells }, () => [west + rand() * (east - west), south + rand() * (north - south)]);
@@ -136,8 +140,8 @@ export function country({ seed, cells }) {
     return polygonFeature(`${cell.side}${n}`, NAMES[cell.side][n - 1], [cell.ring]);
   });
 
-  // two tiny triangles, each in a far corner of the box (the blob stays well clear of them)
-  const corners = [[west + 1.6, north - 2.2], [east - 2.4, south + 1.7]];
+  // two tiny triangles: each in a far corner of the box (the blob stays well clear of them), or close to the coast
+  const corners = islands === "near" ? nearSpots(features) : [[west + 1.6, north - 2.2], [east - 2.4, south + 1.7]];
   corners.forEach(([x, y], i) => {
     const r = 0.22 + 0.1 * rand();
     const turn = rand() * 2 * Math.PI;
@@ -147,6 +151,32 @@ export function country({ seed, cells }) {
 
   const regions = { type: "FeatureCollection", features };
   return { regions, land: landOf(regions) };
+}
+
+/** How far apart two boxes [west, south, east, north] are: the larger of the gaps along each axis (negative if they overlap). */
+const boxGap = (a, b) => Math.max(b[0] - a[2], a[0] - b[2], b[1] - a[3], a[1] - b[3]);
+
+const boxOf = (feature) => {
+  const points = feature.geometry.coordinates.flat();
+  return [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))];
+};
+
+/**
+ * Where the islands go when they sit near the coast: the mainland box's northwest and southeast corners, each moved
+ * a tenth of the box in, then pushed straight out until an island of the largest size (a radius of 0.32°) would be at
+ * least 0.6° from every region's box.
+ */
+function nearSpots(features) {
+  const boxes = features.map(boxOf);
+  const [west, south, east, north] = [Math.min(...boxes.map((b) => b[0])), Math.min(...boxes.map((b) => b[1])), Math.max(...boxes.map((b) => b[2])), Math.max(...boxes.map((b) => b[3]))];
+  const reach = 0.32;
+  const free = ([x, y]) => boxes.every((b) => boxGap([x - reach, y - reach, x + reach, y + reach], b) >= 0.6);
+  return [[-1, 1], [1, -1]].map(([sx, sy]) => {
+    const [cx, cy] = [sx < 0 ? west : east, sy > 0 ? north : south];
+    let spot = [cx - sx * 0.1 * (east - west), cy - sy * 0.1 * (north - south)];
+    for (let k = 0; !free(spot) && k < 200; k++) spot = [spot[0] + sx * 0.05, spot[1] + sy * 0.05];
+    return spot;
+  });
 }
 
 function polygonFeature(code, name, rings) {

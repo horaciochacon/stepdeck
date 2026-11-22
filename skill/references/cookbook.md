@@ -654,23 +654,23 @@ The files, all written by the project's code into `data/`:
 
 ```csv
 code,rate
-N1,10.4
-N2,5.6
-E1,2.4
-W1,13.3
-E2,6.2
-E3,10.7
-E4,2.6
-E5,4.9
-W2,15.6
-S1,16.1
-E6,8.8
-W3,14.2
-W4,18.5
-S2,17.6
-S3,11.2
-I1,8.9
-I2,2.0
+N1,14.4
+N2,7.8
+E1,2.6
+W1,14.2
+E2,9.3
+E3,12.6
+E4,3.1
+E5,7.7
+W2,14.2
+S1,18.5
+E6,15.5
+W3,6.7
+W4,11.9
+S2,12.9
+S3,9.0
+I1,8.2
+I2,2.1
 ```
 
 In the project's Python code, once the yearly surfaces are computed (`surface[year]`: rows north to south, `None` where there is no data; `total[year]`: the people in that year):
@@ -701,7 +701,7 @@ export default {
   ],
   steps: [
     { id: "rates" },
-    { id: "zoom", set: { map: { view: "W4", labels: ["W4"] } } },
+    { id: "zoom", set: { map: { view: "S1", labels: ["S1"] } } },
     { id: "years", set: { map: { shown: ["years"], frame: "2021" } } },
   ],
 };

@@ -1,5 +1,5 @@
 {
-  "bounds": [-19, -31, -10, -23],
+  "bounds": [-17.5, -30, -10, -23],
   "value": {
     "scale": "linear",
     "min": 0,
@@ -11,84 +11,84 @@
       "src": "years/2010.png",
       "label": "2010",
       "numbers": {
-        "people": 71599478
+        "people": 65252208
       }
     },
     {
       "src": "years/2011.png",
       "label": "2011",
       "numbers": {
-        "people": 73588533
+        "people": 67919188
       }
     },
     {
       "src": "years/2012.png",
       "label": "2012",
       "numbers": {
-        "people": 75568433
+        "people": 70578730
       }
     },
     {
       "src": "years/2013.png",
       "label": "2013",
       "numbers": {
-        "people": 77561352
+        "people": 73248028
       }
     },
     {
       "src": "years/2014.png",
       "label": "2014",
       "numbers": {
-        "people": 79552453
+        "people": 75919795
       }
     },
     {
       "src": "years/2015.png",
       "label": "2015",
       "numbers": {
-        "people": 81532441
+        "people": 78575575
       }
     },
     {
       "src": "years/2016.png",
       "label": "2016",
       "numbers": {
-        "people": 83525790
+        "people": 81239514
       }
     },
     {
       "src": "years/2017.png",
       "label": "2017",
       "numbers": {
-        "people": 85505801
+        "people": 83911049
       }
     },
     {
       "src": "years/2018.png",
       "label": "2018",
       "numbers": {
-        "people": 87491350
+        "people": 86572772
       }
     },
     {
       "src": "years/2019.png",
       "label": "2019",
       "numbers": {
-        "people": 89474952
+        "people": 89240033
       }
     },
     {
       "src": "years/2020.png",
       "label": "2020",
       "numbers": {
-        "people": 91470265
+        "people": 91905130
       }
     },
     {
       "src": "years/2021.png",
       "label": "2021",
       "numbers": {
-        "people": 93444358
+        "people": 94564254
       }
     }
   ]

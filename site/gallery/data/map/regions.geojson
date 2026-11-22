@@ -15,6 +15,6 @@
 {"type":"Feature","properties":{"code":"W4","name":"Ironridge"},"geometry":{"type":"Polygon","coordinates":[[[-14.6136,-28.0128],[-14.7817,-27.5596],[-15.7706,-27.5975],[-15.8918,-28.7087],[-14.9953,-28.7702],[-14.6136,-28.0128]]]}},
 {"type":"Feature","properties":{"code":"S2","name":"Marshby"},"geometry":{"type":"Polygon","coordinates":[[[-14.6136,-28.0128],[-14.9953,-28.7702],[-14.7982,-29.1409],[-13.8225,-29.3145],[-13.6279,-28.3882],[-14.6136,-28.0128]]]}},
 {"type":"Feature","properties":{"code":"S3","name":"Lowmarsh"},"geometry":{"type":"Polygon","coordinates":[[[-13.8225,-29.3145],[-13.8086,-29.3407],[-12.5096,-29.6163],[-12.476,-28.5637],[-13.4054,-28.2454],[-13.6279,-28.3882],[-13.8225,-29.3145]]]}},
-{"type":"Feature","properties":{"code":"I1","name":"Outer Skerry"},"geometry":{"type":"Polygon","coordinates":[[[-18.7032,-24.2044],[-18.2446,-24.4604],[-18.2522,-23.9352],[-18.7032,-24.2044]]]}},
-{"type":"Feature","properties":{"code":"I2","name":"Little Holm"},"geometry":{"type":"Polygon","coordinates":[[[-10.1476,-30.2482],[-10.571,-30.1073],[-10.4813,-30.5445],[-10.1476,-30.2482]]]}}
+{"type":"Feature","properties":{"code":"I1","name":"Outer Skerry"},"geometry":{"type":"Polygon","coordinates":[[[-16.979,-23.7637],[-16.5203,-24.0197],[-16.5279,-23.4945],[-16.979,-23.7637]]]}},
+{"type":"Feature","properties":{"code":"I2","name":"Little Holm"},"geometry":{"type":"Polygon","coordinates":[[[-10.4815,-28.9526],[-10.9049,-28.8117],[-10.8152,-29.2489],[-10.4815,-28.9526]]]}}
 ]}
