@@ -221,7 +221,7 @@ Each rule exists so that a step reached by playing looks exactly like the same s
 
 ## Errors and the watchdog
 
-Every `mount` and `update` call runs under a watchdog of `SETTLE_TIMEOUT_MS` = 10 000 ms (`core/controller.js`; configurable through the controller's `settleTimeout`). An `update` that declares a long run with [`info.expect`](#long-runs-infoexpect) gets more time, up to `MAX_RUN_MS` = 20 000 ms per call (`core/constants.js`; the controller's `maxRun`).
+Every `mount` and `update` call runs under a watchdog of `SETTLE_TIMEOUT_MS` = 10 000 ms (`core/controller.js`; configurable through the controller's `settleTimeout`). An `update` that declares a long run with [`info.expect`](#long-runs-infoexpect) gets more time: a run of up to `MAX_RUN_MS` = 20 000 ms (`core/constants.js`; the controller's `maxRun`), and never a deadline more than `MAX_RUN_MS` + 2 × `SETTLE_TIMEOUT_MS` (40 s) after the update started.
 
 - **A call that does not settle in time** fails its element with `did not settle within 10s` and aborts that element's signal only. The rest of the slide goes on.
 - **A mount that settles after its watchdog fired** is destroyed at once, with any children it mounted.
@@ -243,8 +243,9 @@ async update(props, info) {
 
 - **The deadline becomes `max(deadline, now + ms + SETTLE_TIMEOUT_MS)`.** It only extends: a call that would end the deadline sooner changes nothing, and several calls keep the latest end.
 - **Each call is capped at `MAX_RUN_MS`** (20 000 ms). A longer `ms` throws `a run of 25.0 s is longer than 20 s; split it across steps`: split the run across steps.
+- **So is the whole update.** No call may set a deadline more than `MAX_RUN_MS` + 2 × `SETTLE_TIMEOUT_MS` (20 + 2 × 10 = 40 s) after the update started, so calling `expect` again after each `await` cannot keep an update alive for ever. Such a call throws `the runs declared in one update add up to more than 20 s; split them across steps`. The bound is on the deadline, not on a sum of what was declared: a child that declares the run its parent declared counts once, and an update that spends up to 10 s loading before it declares a 20 s run still gets the whole run.
 - **A bad `ms` throws a `TypeError`** (`info.expect(ms) needs a number of milliseconds ≥ 0`) when it is not a finite number ≥ 0.
-- **Both throws fail the element** like any other error thrown from `update`.
+- **Every throw fails the element** like any other error thrown from `update`.
 - **Only `update` has it.** A `mount` always has 10 s.
 - **A `ctx.mount` child can call it too.** Its `info` carries the parent's `expect`, so the child extends the parent element's deadline.
 - **Still abort-aware.** The element's `signal` aborts as before when a newer `goTo` supersedes the step, so a long run must still end at once on abort.

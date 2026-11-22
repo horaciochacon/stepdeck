@@ -107,9 +107,11 @@
 //             settles after its watchdog fired is destroyed at once; a late update is ignored.
 //             An update may declare a long run with info.expect(ms): the deadline becomes
 //             max(deadline, now + ms + settleTimeout), so it only extends. ms must be a finite number >= 0
-//             (TypeError otherwise) and at most `maxRun` (Error otherwise); both throw inside the update, so
-//             they end as that element's error. Mount has no expect. A ctx.mount child gets the parent's
-//             expect through the spread info, so it extends the parent element's deadline.
+//             (TypeError otherwise) and at most `maxRun` (Error otherwise), and no deadline may pass
+//             maxRun + 2 × settleTimeout from the start of the update (Error otherwise: repeated calls cannot
+//             extend it for ever); all throw inside the update, so they end as that element's error. Mount
+//             has no expect. A ctx.mount child gets the parent's expect through the spread info, so it extends
+//             the parent element's deadline, on the parent's clock.
 import { initialElements, stateAt, stepCount, stepIndex } from "./fold.js";
 import { resolveElementProps } from "./bindings.js";
 import { animate as animateHelpers, wait } from "./animate.js";
@@ -141,12 +143,16 @@ const durationText = (ms) => (ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000}s` : 
  * One call's watchdog. `race(promise)` rejects with "did not settle within <ms>" (after calling onTimeout)
  * when the deadline passes first; the timer is always cleared. `expect(runMs)` is the update's declared long run
  * (`info.expect`): the deadline becomes max(deadline, now + runMs + ms), so it only ever extends. A `runMs`
- * that is not a finite number >= 0 throws a TypeError; one above `maxRun` throws an Error. Both throw from
- * inside the component's update, so they end as that element's error. Once the call has settled or timed out,
- * `expect` still validates but changes nothing.
+ * that is not a finite number >= 0 throws a TypeError; one above `maxRun` throws an Error, and so does a call
+ * whose deadline would pass `maxRun + 2 × ms` from the start of the call: the runs one update declares, together
+ * with the time before and after them, stay within that, however many calls declare them. The bound is on the
+ * deadline, not on a sum of the declared runs, so a `ctx.mount` child that declares the run its parent declared
+ * (both on the parent's clock) counts once. All three throw from inside the component's update, so they end as
+ * that element's error. Once the call has settled or timed out, `expect` still validates but changes nothing.
  */
 function deadline(ms, onTimeout, maxRun) {
   let timer;
+  let start = 0;
   let end = 0;
   let over = false;
   let fail;
@@ -164,7 +170,8 @@ function deadline(ms, onTimeout, maxRun) {
   return {
     race(promise) {
       const timeout = new Promise((_, reject) => (fail = reject));
-      end = Date.now() + ms;
+      start = Date.now();
+      end = start + ms;
       arm();
       return Promise.race([promise, timeout]).finally(() => {
         over = true;
@@ -177,7 +184,11 @@ function deadline(ms, onTimeout, maxRun) {
       }
       if (runMs > maxRun) throw new Error(`a run of ${(runMs / 1000).toFixed(1)} s is longer than ${maxRun / 1000} s; split it across steps`);
       const next = Date.now() + runMs + ms;
-      if (over || next <= end) return;
+      if (over) return;
+      if (next > start + maxRun + 2 * ms) {
+        throw new Error(`the runs declared in one update add up to more than ${maxRun / 1000} s; split them across steps`);
+      }
+      if (next <= end) return;
       end = next;
       arm();
     },

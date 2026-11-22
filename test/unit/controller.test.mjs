@@ -879,6 +879,50 @@ test("expect: extends, never shortens", { timeout: 5000 }, async () => {
   assert.deepEqual(errors, []);
 });
 
+test("expect: an extension is bounded: past it the update still fails", { timeout: 5000 }, async () => {
+  const errors = await runWithExpect(async (info) => {
+    info.expect(50);
+    await sleep(300);
+  });
+  assert.deepEqual(errors, ["x/a: did not settle within 60ms"]);
+});
+
+test("expect: calls that add up past the ceiling throw, however each is within it", { timeout: 5000 }, async () => {
+  // settle 60 ms, maxRun 200 ms: no deadline may pass 200 + 2 × 60 = 320 ms from the start of the update
+  let thrown = null;
+  const errors = await runWithExpect(async (info) => {
+    info.expect(200); // ends at 260 ms
+    await sleep(100);
+    try {
+      info.expect(200); // would end at 360 ms or later
+    } catch (e) {
+      thrown = e;
+      throw e;
+    }
+  });
+  assert.ok(thrown instanceof Error && !(thrown instanceof TypeError), "an Error");
+  assert.equal(thrown.message, "the runs declared in one update add up to more than 0.2 s; split them across steps");
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0].includes("add up to more than 0.2 s"), errors[0]);
+});
+
+test("expect: a parent and its child declaring the same run count once", { timeout: 5000 }, async () => {
+  const kid = { mount: () => ({ update: async (p, info) => { if (p.go) { info.expect(150); await sleep(150); } } }) };
+  const slide = { id: "k", elements: [{ id: "par", type: "parent", props: { n: 0 } }], steps: [{ id: "a" }, { id: "b", set: { par: { n: 1 } } }] };
+  const out = {};
+  const parent = parentMounting({ go: false }, out, {
+    onUpdate: (handle, p, info) => {
+      if (p.n === 1) info.expect(150); // the parent declares the run it hands its child
+      return handle.update({ go: p.n === 1 }, info);
+    },
+  });
+  const { c } = makeController(slide, { kid, parent }, { settleTimeout: 60, maxRun: 200 });
+  await c.goTo(0);
+  await c.goTo(1);
+  await c.settled();
+  assert.deepEqual(c.errors, []);
+});
+
 test("expect: above the ceiling is an element error", { timeout: 5000 }, async () => {
   const errors = await runWithExpect((info) => info.expect(500));
   assert.equal(errors.length, 1);

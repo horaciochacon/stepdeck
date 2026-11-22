@@ -247,9 +247,10 @@ export interface UpdateInfo<P extends Props = Props> {
   entrance: Entrance | null;
   /**
    * Declare a long run (a time-lapse): the watchdog waits `ms` plus its usual 10 s from now instead of 10 s from
-   * the start of this update. It only extends: a shorter declaration than the time left changes nothing, and each
-   * call is capped at 20 s (throws above that: split the run across steps). Throws a TypeError when `ms` is not
-   * a finite number >= 0. Call it before the long await.
+   * the start of this update. It only extends: a shorter declaration than the time left changes nothing. Each
+   * call is capped at 20 s, and no call may set a deadline more than 40 s (20 s plus twice 10 s) after the update
+   * started, so repeated calls cannot extend it for ever; both throw (split the run across steps). Throws a
+   * TypeError when `ms` is not a finite number >= 0. Call it before the long await.
    */
   expect(ms: number): void;
 }
