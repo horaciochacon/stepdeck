@@ -1,6 +1,6 @@
 # Writing a custom component
 
-This page walks you through writing a deck component: a component that lives in your deck's `components/` folder and that slides use like a built-in. It is for people who write decks by hand and for contributors who need something the 12 built-in components do not show.
+This page walks you through writing a deck component: a component that lives in your deck's `components/` folder and that slides use like a built-in. It is for people who write decks by hand and for contributors who need something the 13 built-in components do not show.
 
 You will scaffold a component with `new-component`, describe its props in `schema.json`, write `mount` and `update` so that a played step ends exactly where a jumped step does, declare it in `deck.js`, and check it with the CLI. The worked example is a counter that counts up to a new value when a step plays.
 

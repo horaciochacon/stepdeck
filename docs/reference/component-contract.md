@@ -25,7 +25,7 @@ components/<name>/
 
 Because only the browser runs `index.js`, the behaviour of `mount` and `update` is checked by `dump`, `check` and `check --played`, never by `validate`.
 
-Built-ins live in the engine's `components/` and are listed in `components/index.json`: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`. Deck components live in the deck's `components/` and must be listed in `deck.js`:
+Built-ins live in the engine's `components/` and are listed in `components/index.json`: `text`, `chart.line`, `chart.bar`, `chart.points`, `terminal`, `markdown`, `big-number`, `list`, `diagram`, `chat`, `timeline`, `image`, `map`. Deck components live in the deck's `components/` and must be listed in `deck.js`:
 
 ```js
 // deck.js (examples/spike)
@@ -711,6 +711,6 @@ The starter's schema:
 - [Writing a custom component](../guide/custom-components.md): the tutorial.
 - [Animation and motion](../guide/animation-and-motion.md): when steps animate.
 - [Deck and slide spec](deck-and-slide.md): elements, steps, `advance` and `transition`.
-- [Built-in components](components/index.md): what the 12 built-ins render.
+- [Built-in components](components/index.md): what the 13 built-ins render.
 - [skill/references/custom-components.md](../../skill/references/custom-components.md): the agent version.
 - `schema/stepdeck.d.ts`: `ComponentModule`, `ComponentInstance`, `UpdateInfo`, `ComponentContext`, `ChildHandle`.

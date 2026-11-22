@@ -39,7 +39,7 @@ Node code outside the engine (`cli/`, `test/`) imports engine modules through th
 | Folder | What it owns | Copied into decks by `new` |
 | --- | --- | --- |
 | `engine/core/` | The runtime: the fold engine (`fold.js`), the per-slide controller (`controller.js`), the layout renderer (`layout.js`), `boot()` and `window.STEPDECK` (`stepdeck.js`), the shells (`shells/bare.js`, `shells/reveal.js` with `shells/reveal.css`, plus `core/render.html` for the bare shell), the data loader, bindings, formats, i18n, the component registry and shared component helpers (`animate.js`, `kit.js`, `chart.js`, `color.js`, `inline.js`, `d3.js`), constants and `stepdeck.css`. | yes |
-| `engine/components/` | The 12 built-in components, one folder each with `schema.json`, `index.js`, `README.md` and `example.js`. `components/index.json` lists them and sets their order. | yes |
+| `engine/components/` | The 13 built-in components, one folder each with `schema.json`, `index.js`, `README.md` and `example.js`. `components/index.json` lists them and sets their order. | yes |
 | `engine/layouts/` | The 5 built-in layouts, one folder each with `layout.css`, `schema.json`, `README.md` and `example.js`. | yes |
 | `engine/themes/` | The built-in themes: `modern` (the default) and `academic-light`. Each has `tokens.css`, an optional `theme.css`, `palettes.json`, `README.md` and vendored fonts with their licences. | yes |
 | `engine/schema/` | JSON schemas for the deck (`deck.schema.json`), slides (`slide.schema.json`) and layout descriptors (`layout.schema.json`), and `stepdeck.d.ts`: the deck spec and the component contract as TypeScript types. | yes |

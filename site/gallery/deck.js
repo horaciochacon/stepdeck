@@ -6,7 +6,7 @@
 // (components/gallery.slope/), a slope chart built only from what the engine hands every component, with no import.
 // All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
-const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image"];
+const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"];
 const MOTION = [
   ["motion-names", "named motions"],
   ["motion-choreography", "choreography"],

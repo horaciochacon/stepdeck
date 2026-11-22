@@ -1,6 +1,6 @@
 # Components
 
-This page lists the 12 built-in components and the rules they all share. Use it to pick a component, see which props you must set and which props animate, and learn how to read the per-component pages. It is for people who write slides by hand and for agents that build decks.
+This page lists the 13 built-in components and the rules they all share. Use it to pick a component, see which props you must set and which props animate, and learn how to read the per-component pages. It is for people who write slides by hand and for agents that build decks.
 
 Agents look components up in the catalog, as described in [skill/references/components.md](../../../skill/references/components.md). The catalog and these pages are built from the same files.
 
@@ -22,6 +22,7 @@ The order is the order of `components/index.json`. **Required** lists the props 
 | `chat` | An exchange shown as bubbles, or a single prompt or quote shown as a card. | `messages` | `shown`, `typing` | own: the messages rise in turn | [chat](chat.md) |
 | `timeline` | A track between stops that fills as `progress` grows. Each stop lights up as the fill passes it. | `stops`, `progress` | `progress`, `current` | own: the track fills | [timeline](timeline.md) |
 | `image` | A local image with required alt text, an optional caption and a fit mode. | `src`, `alt` | `src`, `caption` | box | [image](image.md) |
+| `map` | Regions from a GeoJSON file with layers of data over them: a choropleth from a CSV in the theme's palettes, with a hatch for a region without a value, highlighted regions, names on the map and a legend. | `boundaries` | `layers`, `shown`, `highlight`, `labels` | box | [map](map.md) |
 
 `typing` (on `terminal` and `chat`) is a boolean that turns on a typing animation. It is listed as animated because its transition is `draw`, not because toggling it moves anything.
 
@@ -74,7 +75,7 @@ When a component cannot render, for example because a column is missing from the
 
 ## Figures need a source line
 
-`chart.line`, `chart.bar`, `chart.points` and `big-number` are figures. A slide that has a figure must also have an element whose props include `role: "source"`, which is usually a `text` element in the `footer` region. Without one, `validate` reports `figure-source` on the first figure:
+`chart.line`, `chart.bar`, `chart.points`, `map` and `big-number` are figures. A slide that has a figure must also have an element whose props include `role: "source"`, which is usually a `text` element in the `footer` region. Without one, `validate` reports `figure-source` on the first figure:
 
 ```text
 chart/chart · figure-source · chart (chart.line), latest (big-number) without a source vs an element with role: "source" · add { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }
