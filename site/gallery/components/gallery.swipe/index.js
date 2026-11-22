@@ -23,7 +23,7 @@ export default {
 
     /** The stage for a box of `w` × `h`: the base projection and one view (a swipe never zooms), a Path2D per region. */
     function build(w, h) {
-      const base = M.projection("equal-earth", features, [w, h]);
+      const base = M.projection("conic-equal-area", features, [w, h]);
       const path = d3.geoPath(base);
       const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
       const land = new Path2D(); // every region together: land the raster has no data for is hatched

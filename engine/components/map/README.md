@@ -16,7 +16,7 @@ analysis code to a map slide".
 | `boundaries` | string | (required) | snap | GeoJSON path relative to the deck root: a FeatureCollection of Polygon and MultiPolygon features, the regions. |
 | `id` | string | the feature's `id` | snap | Feature property that identifies a region, as text. `highlight`, `labels` and a layer's `key` column use it. |
 | `name` | string | the id | snap | Feature property that labels show. |
-| `projection` | `"equal-earth"` \| `"natural-earth"` \| `"mercator"` \| `"conic-equal-area"` | `"equal-earth"` | snap | Centred on the regions and fitted to the element with a margin of 6% of its smaller side. |
+| `projection` | `"equal-earth"` \| `"natural-earth"` \| `"mercator"` \| `"conic-equal-area"` | `"conic-equal-area"` | snap | Centred on the regions and fitted to the element with a margin of 6% of its smaller side. The default keeps a country's areas and nearly its shape; a world or continent map names `"equal-earth"`. |
 | `layers` | `{ id: layer }` | none | fade | The layers of data, keyed by id. See Layers. |
 | `shown` | string[] | none | fade | The layers on screen, by id. A layer that appears fades in with its legend row; one that leaves fades out. |
 | `highlight` | string[] | none | fade | Regions and points (by id) outlined in ink; every other region of an areas layer and every other point turns `--sd-color-dim`. |

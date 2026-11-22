@@ -55,7 +55,7 @@
 // run past MAX_RUN_MS is that element's error); the rest are decoded as it plays, never all at once. Jumped, backward
 // or aborted (a click, a hidden page, leaving the slide), the step's frame and its numbers are drawn at once.
 import { d3 } from "../../core/d3.js";
-import { boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
+import { DEFAULT_PROJECTION, boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
 import { firstPhase } from "../../core/map-rules.js";
 import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs } from "../../core/kit.js";
@@ -97,7 +97,7 @@ async function buildGeo(props, ctx, size, caches) {
   const file = props.boundaries;
   if (typeof file !== "string" || file === "") throw new Error("map needs a `boundaries` path");
   const { features, byId, ids, names } = boundaries(await ctx.data(file), { id: props.id, name: props.name, file });
-  const kind = props.projection ?? "equal-earth";
+  const kind = props.projection ?? DEFAULT_PROJECTION;
   const base = projection(kind, features, size);
   const path = d3.geoPath(base);
   const paths = new Map(), anchors = new Map(), spans = new Map();

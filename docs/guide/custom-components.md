@@ -577,7 +577,7 @@ export default {
 
     /** The stage for a box of `w` × `h`: the base projection, one Path2D per region, the canvases and the legend. */
     function build(w, h) {
-      const base = M.projection("equal-earth", features, [w, h]);
+      const base = M.projection("conic-equal-area", features, [w, h]);
       const path = d3.geoPath(base);
       const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
       const res = { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) };
