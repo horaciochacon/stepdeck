@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "gallery.swipe",
-  "description": "A before/after swipe of a map raster: two frames of one raster file over the same regions, divided by a line you move. Built only from what the engine hands every component (ctx.map, ctx.chart, ctx.motion and the rest), with no import. The second frame is clipped from the divider to the right edge by a CSS clip-path; a played change of `at` moves the divider, and the borders of the regions are drawn over both. Colours come from the theme's sequential palette over the raster's value range; `before` and `after` change at once.",
+  "description": "A before/after swipe of a map raster: two frames of one raster file over the same regions, divided by a line you move. Built only from what the engine hands every component (ctx.map, ctx.chart, ctx.data and the rest; the divider moves with ctx.chart.morph), with no import. The second frame is clipped from the divider to the right edge by a CSS clip-path; a played change of `at` moves the divider, and the borders of the regions are drawn over both. Colours come from the theme's sequential palette over the raster's value range; `before` and `after` change at once.",
   "type": "object",
   "additionalProperties": false,
   "required": ["boundaries", "raster", "before", "after"],
@@ -9,7 +9,7 @@
     "boundaries": {
       "type": "string",
       "minLength": 1,
-      "description": "Path to a GeoJSON FeatureCollection of Polygons and MultiPolygons, relative to the deck root. Each feature's `code` property identifies its region. Read once, at mount.",
+      "description": "Path to a GeoJSON FeatureCollection of Polygons and MultiPolygons, relative to the deck root. Each feature's `code` property identifies its region. Read once, at mount: set it on the element, not in a step (a step that sets it is ignored).",
       "examples": ["data/map/regions.geojson"],
       "x-transition": "snap"
     },

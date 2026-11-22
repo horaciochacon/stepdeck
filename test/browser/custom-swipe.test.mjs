@@ -6,9 +6,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { withPage } from "../../cli/browser.js";
+import { deckTarget, withPage } from "../../cli/browser.js";
 import { check } from "../../cli/check.js";
+import { copyEngine } from "../../cli/engine.js";
 import {
   deckPages, goTo, canvasPixels, sampleFrames,
   expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump,
@@ -107,6 +110,49 @@ test("swipe: a step that does not animate writes the end at once", async () => {
     assert.equal(r.end.at, 0);
     await errorsClean(page, ctx);
   });
+});
+
+// A swipe that starts collapsed (`display: none`, no layout) is drawn at the size it has when it appears, not at the zero
+// box of its first update: a temporary deck with a copied engine, the component and its data, and a slide where the swipe
+// comes in on `show` with `collapse: true`. The step before it is a jump away, and a played arrival ends where a jump does.
+test("swipe: a swipe that starts collapsed is drawn at its size when it appears", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-swipe-")));
+  try {
+    const dir = join(tmp, "deck");
+    copyEngine(join(dir, "stepdeck"));
+    cpSync(join(root, "site/gallery/components/gallery.swipe"), join(dir, "components/gallery.swipe"), { recursive: true });
+    cpSync(join(root, "site/gallery/data/map"), join(dir, "data/map"), { recursive: true });
+    mkdirSync(join(dir, "slides"));
+    const slide = {
+      id: "late", layout: "figure-notes", title: "A swipe that appears",
+      elements: [
+        { id: "swipe", region: "main", type: "gallery.swipe", from: "show", collapse: true,
+          props: { boundaries: "data/map/regions.geojson", raster: "data/map/years.json", before: "2010", after: "2021", at: 0.5 } },
+        { id: "note", region: "notes", type: "text", props: { role: "note", text: "The swipe is not there on the first step." } },
+        { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+      ],
+      steps: [{ id: "start" }, { id: "show" }],
+    };
+    writeFileSync(join(dir, "slides/late.js"), `export default ${JSON.stringify(slide)};\n`);
+    writeFileSync(join(dir, "deck.js"), `export default ${JSON.stringify({ title: "swipe", lang: "en", theme: "modern", components: ["gallery.swipe"], slides: ["late"] })};\n`);
+    const target = deckTarget(dir);
+    const pages = { url: (slide, query = "") => `${target.url({ slide })}${query ? `&${query}` : ""}` };
+    await withPage({ root: target.root }, async (page, ctx) => {
+      await expectJumpEqualsPlayed(ctx, page, { pages, slide: "late", steps: ["start", "show"], id: "swipe" });
+      await ctx.open(pages.url("late", "step=show"));
+      const size = await page.evaluate(() => {
+        const el = document.querySelector('[data-el="swipe"]');
+        const canvas = el.querySelector('canvas[data-layer="after"]');
+        return { w: el.offsetWidth, h: el.offsetHeight, canvas: [canvas.width, canvas.height], svg: Number(el.querySelector("svg").getAttribute("height")) };
+      });
+      assert.ok(size.w > 100 && size.h > 100, `the swipe has a box (${size.w} x ${size.h})`);
+      assert.deepEqual(size.canvas, [size.w, size.h], "the canvases are the size of the box it has now");
+      assert.equal(size.svg, size.h, "so is the divider's SVG");
+      await errorsClean(page, ctx);
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 for (const theme of ["modern", "academic-light"]) {

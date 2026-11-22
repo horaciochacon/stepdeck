@@ -4,8 +4,9 @@
 // ctx.data, ctx.palette, ctx.tokens): it imports nothing. The pictures never move, so a played change of `at` is one
 // ctx.chart.morph of the clip and the line. Every update ends by writing the whole state from its props, so a played
 // step ends where a jump does, and each canvas carries what it shows in data-* (frame, at, sig) for `check --played`.
-// The stage is built at the first update, not at mount: ctx.size is measured before the slide's other elements have
-// settled the box, so the size is read from the element then, when every element has mounted.
+// The stage is built at an update, not at mount: ctx.size is measured before the slide's other elements have settled the
+// box, so every update reads the element's size (ctx.size only while the element has no layout, as when it is collapsed)
+// and builds the stage again when it differs: a swipe that starts hidden is drawn at the size it has when it appears.
 const SVG = "http://www.w3.org/2000/svg";
 
 export default {
@@ -16,12 +17,11 @@ export default {
     // The regions are fixed for the element's life (a feature's `code` is its id).
     const { features, ids, byId } = M.boundaries(await ctx.data(props.boundaries), { id: "code", file: props.boundaries });
     const palettes = { sequential: ctx.palette("sequential"), diverging: ctx.palette("diverging"), categorical: ctx.palette("categorical") };
-    let stage = null; // built at the first update: canvases, the divider and its labels, the legend, the geometry at the box's size
+    let stage = null; // canvases, the divider and its labels, the legend, the geometry: for one box size, built at an update
     let last = null; // the divider position the swipe ended at: where a played step starts
 
-    /** The stage for the box as it is now: the base projection and one view (a swipe never zooms), a Path2D per region. */
-    function build() {
-      const [w, h] = [el.offsetWidth, el.offsetHeight];
+    /** The stage for a box of `w` × `h`: the base projection and one view (a swipe never zooms), a Path2D per region. */
+    function build(w, h) {
       const base = M.projection("equal-earth", features, [w, h]);
       const path = d3.geoPath(base);
       const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
@@ -49,10 +49,19 @@ export default {
       return { w, h, base, home, land, paths, before, after, borders, svg, lines, labels, legend, lookups: new Map(), pictures: new Map() };
     }
 
+    /** Removes the stage's nodes. */
+    function dispose() {
+      if (stage) for (const node of [stage.before, stage.after, stage.borders, stage.svg.node(), stage.legend]) node.remove();
+      stage = null;
+    }
+
     return {
       async update(next, info = {}) {
-        stage ??= build();
-        const { w, h, base, home, land, before, after, lines, labels, legend } = stage;
+        const [w, h] = [el.offsetWidth || ctx.size.w, el.offsetHeight || ctx.size.h];
+        if (stage && (stage.w !== w || stage.h !== h)) dispose(); // the box changed: a new stage for the new size
+        if (!w || !h) return; // no box to draw in yet (hidden since mount): the update that shows it draws everything
+        stage ??= build(w, h);
+        const { base, home, land, before, after, lines, labels, legend } = stage;
         const raster = await M.loadRaster(next.raster, ctx);
         const shown = [next.before, next.after].map((label) => {
           const frame = raster.frames.findIndex((f) => f.label === String(label));
@@ -90,9 +99,7 @@ export default {
         place(at); // the end state, however the step ended
         last = at;
       },
-      destroy() {
-        if (stage) for (const node of [stage.before, stage.after, stage.borders, stage.svg.node(), stage.legend]) node.remove();
-      },
+      destroy: dispose,
     };
   },
 };
