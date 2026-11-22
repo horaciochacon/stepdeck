@@ -761,6 +761,42 @@ test("flight: passes intermediate scales", async () => {
   });
 });
 
+/** Pixels of the element near its edges and corners and in between, where a flight that zooms out shows what its start did not. */
+const EDGE_PIXELS = [40, 360, 700, 1040, 1360].flatMap((x) => [40, 175, 350, 525, 660].map((y) => [x, y]));
+
+test("flight: zooming out keeps the raster filled", async () => {
+  await withPage({ root, url: pages.url("flight", "step=box&motion=full") }, async (page, ctx) => {
+    const probe = new Function("el", `
+      const [k, x, y] = el.querySelector('canvas[data-layer="main:base"]').dataset.view.split(",").map(Number);
+      const g = el.querySelector('canvas[data-layer="main:raster:density"]').getContext("2d");
+      return { k, x, y, alphas: ${JSON.stringify(EDGE_PIXELS)}.map(([px, py]) => g.getImageData(px, py, 1, 1).data[3]) };`);
+    const { frames } = await sampleFrames(page, "flight", "back", "map", probe);
+    const box = view(BASE, { bounds: [-15, -28, -12, -25] }, SIZE);
+    const flying = frames.filter((f) => f.k < box.k - 1e-3 && f.k > 1 + 1e-3);
+    // At rest at home the raster's canvas is the end's picture: whether it is opaque around the point that a pixel of
+    // each frame shows (the pixel seen back through that frame's view), 5 × 5 px of it, all inside the element.
+    const endHasData = await page.evaluate(([views, pixels, [w, h]]) => {
+      const alpha = document.querySelector('[data-el="map"] canvas[data-layer="main:raster:density"]').getContext("2d").getImageData(0, 0, w, h).data;
+      const opaque = (px, py) => px >= 0 && py >= 0 && px < w && py < h && alpha[(py * w + px) * 4 + 3] === 255;
+      return views.map(({ k, x, y }) => pixels.map(([sx, sy]) => {
+        const [cx, cy] = [Math.round((sx - x) / k), Math.round((sy - y) / k)];
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (!opaque(cx + dx, cy + dy)) return false;
+        return true;
+      }));
+    }, [flying.map(({ k, x, y }) => ({ k, x, y })), EDGE_PIXELS, SIZE]);
+    const checked = flying.flatMap((f, i) => EDGE_PIXELS.map(([sx, sy], j) => {
+      // where the start's picture reaches in this frame: the element seen at the box view, placed at this frame's view
+      const scale = f.k / box.k, left = f.x - scale * box.x, top = f.y - scale * box.y;
+      const beyond = sx < left || sx > left + scale * SIZE[0] || sy < top || sy > top + scale * SIZE[1];
+      return { at: [sx, sy], k: f.k, alpha: f.alphas[j], data: endHasData[i][j], beyond };
+    })).filter((c) => c.data);
+    assert.ok(checked.filter((c) => c.beyond).length >= 3, `some samples lie where the start's picture does not reach (${checked.filter((c) => c.beyond).length})`);
+    const thin = checked.filter((c) => c.alpha !== 255);
+    assert.deepEqual(thin, [], "where the end's picture has data the raster is opaque in every frame of the flight");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("flight: played equals jumped, pixels too", async () => {
   await withPage({ root, url: pages.url("flight", "step=home") }, async (page, ctx) => {
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "flight", steps: FLIGHT_STEPS, id: "map" });
