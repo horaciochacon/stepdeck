@@ -6,12 +6,15 @@
 // a step never adds or moves one; a layer that is not shown is cleared. A kind whose painter is costly per pixel (a raster)
 // sets `maxRatio: 1` on its module, and its canvas is made with that backing-store ratio.
 //
-// `paint(state, layerStates)` draws one moment from plain data and writes on every canvas what it shows, as `dump` and
-// `check --played` read it: `data-view` (k,x,y with 3 decimals), `data-shown` (the layers painted, in paint order),
-// `data-highlight` (the highlighted regions), `data-frame` (empty without a time-lapse) and `data-sig`, the signature
-// of what was painted (empty for a cleared layer); `data-layer` is the canvas's name. Every scene's `source` starts
-// with `geo.key` (the boundaries, the projection and the size), so a signature changes when the geometry does. The
-// labels are made afresh at every paint, so the markup is the same however a step was reached.
+// `paint(state, layerStates, { moving })` draws one moment from plain data and writes on every canvas what it shows, as
+// `dump` and `check --played` read it: `data-view` (k,x,y with 3 decimals), `data-shown` (the layers painted, in paint
+// order), `data-highlight` (the highlighted regions), `data-frame` (empty without a time-lapse) and `data-sig`, the
+// signature of what was painted (empty for a cleared layer); `data-layer` is the canvas's name. Every scene's `source`
+// starts with `geo.key` (the boundaries, the projection and the size), so a signature changes when the geometry does.
+// Every vector is drawn through the view of the moment, so a flight redraws cached paths; a raster draws pictures made at
+// other views through it (raster.js). A paint at rest paints every canvas and makes the labels afresh, so the markup is
+// the same however a step was reached. A frame of a motion (`moving`) leaves a canvas whose scene has the signature it
+// shows already, and moves the labels in place when they name the same regions as before.
 import { canvasLayer } from "../../core/canvas.js";
 import { applyView } from "../../core/map.js";
 import { DOT_OUTLINE, paintAreas, paintBorders } from "../../core/map-paint.js";
@@ -21,6 +24,9 @@ import { SVG_NS } from "../../core/kit.js";
 const BORDER = 1;
 /** The ink outline of a highlighted region, in px (a highlighted dot's ring is its own outline, in ink). */
 const RING = 3;
+
+/** A canvas that cannot paint: a painter given it only signs its scene (each returns the signature when there is no 2D context). */
+const SIGN_ONLY = { getContext: () => null };
 
 const fixed = (v) => v.toFixed(3);
 const viewText = (v) => `${fixed(v.k)},${fixed(v.x)},${fixed(v.y)}`;
@@ -90,50 +96,75 @@ export function createStage(el, { name, size, geo, layers }) {
     ],
   });
 
-  function placeLabels(labels, v) {
-    svg.replaceChildren(...labels.map(({ id, opacity }) => {
-      const [x, y] = applyView(v, geo.anchor(id));
-      const text = doc.createElementNS(SVG_NS, "text");
-      text.setAttribute("class", "sd-map-label");
-      text.setAttribute("data-region", id);
-      text.setAttribute("x", String(tenth(x)));
-      text.setAttribute("y", String(tenth(y)));
-      text.setAttribute("dy", "0.35em");
-      text.setAttribute("text-anchor", "middle");
-      if (opacity < 1) text.setAttribute("opacity", String(opacity));
-      text.textContent = geo.names.get(id);
-      return text;
-    }));
+  /** The label of region `id`, placed by `placeLabels`. */
+  function newLabel(id) {
+    const text = doc.createElementNS(SVG_NS, "text");
+    for (const [name, value] of [["class", "sd-map-label"], ["data-region", id], ["x", "0"], ["y", "0"], ["dy", "0.35em"], ["text-anchor", "middle"]]) text.setAttribute(name, value);
+    text.textContent = geo.names.get(id);
+    return text;
+  }
+
+  /**
+   * The labels at their regions' anchors seen through `v`, those whose anchor is inside the stage (a view that zooms in
+   * leaves the others out, as it does their regions): made afresh, or, while moving and naming the same regions, moved.
+   */
+  function placeLabels(labels, v, moving) {
+    const placed = labels
+      .map(({ id, opacity }) => ({ id, opacity, at: applyView(v, geo.anchor(id)) }))
+      .filter(({ at: [x, y] }) => x >= 0 && x <= w && y >= 0 && y <= h);
+    const here = [...svg.children];
+    const keep = moving && here.length === placed.length && placed.every(({ id }, i) => here[i].getAttribute("data-region") === id);
+    const texts = keep ? here : placed.map(({ id }) => newLabel(id));
+    placed.forEach(({ opacity, at: [x, y] }, i) => {
+      texts[i].setAttribute("x", String(tenth(x)));
+      texts[i].setAttribute("y", String(tenth(y)));
+      if (opacity < 1) texts[i].setAttribute("opacity", String(opacity));
+      else texts[i].removeAttribute("opacity");
+    });
+    if (!keep) svg.replaceChildren(...texts);
   }
 
   return {
     svg,
     /**
-     * Paints one moment. `state` is { view, highlight: { ids, dim(id), ring(id) }, labels: [{ id, opacity }], frame,
-     * frameMix }; `layerStates[i]` is { prepared, alpha, from, change } for `layers[i]` (a layer at alpha 0 is cleared).
+     * Paints one moment. `state` is { view, flight, highlight: { ids, dim(id), ring(id) }, labels: [{ id, opacity }],
+     * frame, frameMix }, `flight` the flight under way ({ from, to, t }, or null); `layerStates[i]` is { prepared,
+     * alpha, from, change } for `layers[i]` (a layer at alpha 0 is cleared). `moving`: a frame of a motion, which
+     * leaves a canvas that shows its scene already.
      */
-    paint(state, layerStates) {
-      const { view: v, highlight } = state;
+    paint(state, layerStates, { moving = false } = {}) {
+      const { view: v, flight = null, highlight } = state;
       const marks = {
         view: viewText(v),
         shown: layers.filter((_, i) => layerStates[i].alpha > 0).map((slot) => slot.id).join(","),
         highlight: highlight.ids.join(","),
         frame: state.frame ?? "",
       };
-      mark(land, paintAreas(land, landScene(v), geo.res), marks);
+      /**
+       * Paints `canvas` with `painter` (the canvas -> its signature) and marks it; while moving, unless it shows that
+       * already. Every scene holds its view, so a canvas at another view (each frame of a flight) is not even signed first.
+       */
+      const put = (canvas, painter) => {
+        const shows = canvas.getAttribute("data-sig");
+        const same = moving && canvas.getAttribute("data-view") === marks.view && painter(SIGN_ONLY) === shows;
+        mark(canvas, same ? shows : painter(canvas), marks);
+      };
+      const lands = landScene(v);
+      put(land, (canvas) => paintAreas(canvas, lands, geo.res));
       layers.forEach((slot, i) => {
         const { prepared, alpha, from, change } = layerStates[i];
         const canvas = canvases[i];
         if (alpha > 0) {
-          const scene = slot.module.scene(prepared, { view: v, alpha, highlight, frame: state.frame, frameMix: state.frameMix, size, from, change });
-          mark(canvas, slot.module.paint(canvas, scene, prepared), marks);
+          const scene = slot.module.scene(prepared, { view: v, flight, alpha, highlight, frame: state.frame, frameMix: state.frameMix, size, from, change });
+          put(canvas, (target) => slot.module.paint(target, scene, prepared));
         } else {
-          clear(canvas);
+          if (!moving || canvas.getAttribute("data-sig") !== "") clear(canvas);
           mark(canvas, "", marks);
         }
       });
-      mark(borders, paintBorders(borders, bordersScene(v, highlight), geo.res), marks);
-      placeLabels(state.labels, v);
+      const lines = bordersScene(v, highlight);
+      put(borders, (canvas) => paintBorders(canvas, lines, geo.res));
+      placeLabels(state.labels, v, moving);
     },
     destroy() {
       for (const canvas of [land, ...canvases, borders]) canvas.remove();

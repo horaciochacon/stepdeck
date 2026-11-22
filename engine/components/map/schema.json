@@ -79,6 +79,17 @@
       "examples": [["N1", "W1"]],
       "x-transition": "fade"
     },
+    "view": {
+      "anyOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        { "type": "object", "additionalProperties": false, "required": ["bounds"], "properties": { "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 } } },
+        { "type": "null" }
+      ],
+      "description": "Where the map looks: a region id or a list of them, fitted with the same margin as the whole map; `{ \"bounds\": [west, south, east, north] }` in degrees; or null (the default) for the whole map. A view names regions only: an id that is not a region, a point's included, is an element error. A change on a forward step flies the map there over twice the step's duration, zooming out and in again as far as the distance asks: vectors are redrawn as it moves and a raster crossfades from its picture at the start to its picture at the end.",
+      "examples": ["N1", ["W1", "S2"], { "bounds": [-15, -28, -12, -25] }, null],
+      "x-transition": "tween"
+    },
     "labels": {
       "type": "array",
       "items": { "type": "string" },

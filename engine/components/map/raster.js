@@ -11,32 +11,56 @@
 // stay clear. A file with `frames` shows its first frame; the others are not decoded.
 //
 // The interface is that of every layer kind (see ./areas.js). A raster is painted in CSS px with the view's lookup table,
-// so its canvas is made with `maxRatio: 1`; the pictures, lookup tables and land mask of a geography are cached for it.
-// While a layer's file, scale or colour changes (`state.from`, `state.change`), the old picture is painted on a scratch
-// canvas at 1 - change and the new one on the layer's canvas at change, and the old is added over the new with
-// `lighter`: exact where both are opaque (the two shares sum to one), fading where one is clear. At the end of the
-// change the scene is the plain paint of the new picture, whatever way it was reached.
+// so its canvas is made with `maxRatio: 1`; the lookup tables (`geo.lookupFor`) and the pictures and land masks
+// (`geo.pictures`, a `PictureCache`) are the element's (index.js). A picture is made for one view and drawn at another
+// through the affine map between them, so a flight (`state.flight`) draws two pictures only, the one at its start view
+// and the one at its end view, the end's over the start's at the flight's progress, both placed at the view of the
+// moment: the picture stays filled while it moves and is sharp when it arrives, and no picture or lookup table is made
+// for a view in between. While a layer's file, scale or colour changes (`state.from`, `state.change`), the old picture
+// is painted on a scratch canvas at 1 - change and the new one on the layer's canvas at change, and the old is added over
+// the new with `lighter`: exact where both are opaque (the two shares sum to one), fading where one is clear. At the end
+// of a change or a flight the scene is the plain paint of the new picture, whatever way it was reached.
 import { signature } from "../../core/canvas.js";
 import { colorScale } from "../../core/chart-scale.js";
-import { landCells, loadRaster, lookup, lut, rasterGaps } from "../../core/map.js";
+import { landCells, loadRaster, lut, rasterGaps } from "../../core/map.js";
 import { paintRaster } from "../../core/map-paint.js";
 import { DEFAULT_ROLE, roleColor, roleNames } from "./colors.js";
 
-/** What each geography keeps for its rasters: the lookup tables, the pictures `paintRaster` builds, and the land as one path. */
-const perGeo = new WeakMap();
-function cachesOf(geo) {
-  if (!perGeo.has(geo)) perGeo.set(geo, { lookups: new Map(), pictures: new Map(), land: null });
-  return perGeo.get(geo);
+/**
+ * The pictures and land masks `paintRaster` keeps for an element (its `res.cache`): a Map of at most `limit` entries,
+ * the least recently read or written going first when one more comes.
+ */
+export class PictureCache extends Map {
+  constructor(limit) {
+    super();
+    this.limit = limit;
+  }
+
+  get(key) {
+    if (!super.has(key)) return undefined;
+    const value = super.get(key);
+    super.delete(key);
+    super.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    super.delete(key);
+    super.set(key, value);
+    while (this.size > this.limit) super.delete(this.keys().next().value);
+    return this;
+  }
 }
 
-/** Every region of `geo` as one Path2D, in base-projected px. */
+/** Every region of a geography as one Path2D, in base-projected px, made once per geography. */
+const lands = new WeakMap();
 function landOf(geo) {
-  const caches = cachesOf(geo);
-  if (!caches.land) {
-    caches.land = new Path2D();
-    for (const id of geo.ids) caches.land.addPath(geo.res.path(id));
+  if (!lands.has(geo)) {
+    const land = new Path2D();
+    for (const id of geo.ids) land.addPath(geo.res.path(id));
+    lands.set(geo, land);
   }
-  return caches.land;
+  return lands.get(geo);
 }
 
 /** Whether land has no data in `raster`: asked once per raster and set of features, whatever layers show it. */
@@ -67,8 +91,14 @@ function scratchOf(canvas) {
   return scratch;
 }
 
-/** The plain scene of a prepared layer at `view`, drawn at `alpha`. */
-const sceneOf = (prepared, view, alpha) => ({ source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, draws: [{ frame: 0, at: view, alpha }] });
+/**
+ * The scene of a prepared layer at `view`, drawn at `alpha`: its picture at `view`, or, during `flight`, its pictures
+ * at the flight's two ends, the end's over the start's at the flight's progress.
+ */
+const sceneOf = (prepared, view, alpha, flight) => ({
+  source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch,
+  draws: flight ? [{ frame: 0, at: flight.from, alpha }, { frame: 0, at: flight.to, alpha: alpha * flight.t }] : [{ frame: 0, at: view, alpha }],
+});
 
 /** A short name for a colour table: equal exactly when the tables are. */
 function tableName(table) {
@@ -98,36 +128,29 @@ export default {
     const scale = colorScale(spec, palettes, { format: ctx.format(",") });
     const lutData = lut(raster, (v) => scale.color(v));
 
-    const [w, h] = geo.size.map(Math.round);
-    const { lookups, pictures } = cachesOf(geo);
     const hatch = mask ? null : { line: geo.colors.dim, background: geo.colors.surface };
     const res = {
-      raster, lutData, cache: pictures,
+      raster, lutData, cache: geo.pictures,
       land: hatch ? landOf(geo) : null,
       landCells: hatch ? landCells(raster, geo.features) : null,
-      // a table serves every raster with these bounds and this grid, in every frame
-      lookupFor: (at) => {
-        const key = `${raster.bounds}|${raster.size}|${at.k}|${at.x}|${at.y}`;
-        if (!lookups.has(key)) lookups.set(key, lookup(geo.base, at, [w, h], raster.bounds, raster.size));
-        return lookups.get(key);
-      },
+      lookupFor: (at) => geo.lookupFor(at, raster), // a table serves every raster with these bounds and this grid, in every frame
     };
     return { source: `${geo.key}|${raster.path}`, title: layer.label, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
   },
 
-  scene(prepared, { view, alpha, from, change }) {
+  scene(prepared, { view, flight, alpha, from, change }) {
     // At the end of a change the scene is the plain one: what a jump paints.
-    if (!from || change >= 1) return sceneOf(prepared, view, alpha);
-    return { ...sceneOf(prepared, view, alpha * change), was: { scene: sceneOf(from, view, alpha * (1 - change)), res: from.res } };
+    if (!from || change >= 1) return sceneOf(prepared, view, alpha, flight);
+    return { ...sceneOf(prepared, view, alpha * change, flight), was: { scene: sceneOf(from, view, alpha * (1 - change), flight), res: from.res } };
   },
 
   paint(canvas, scene, prepared) {
     const sig = paintRaster(canvas, scene, prepared.res);
     if (!scene.was) return sig;
-    const scratch = scratchOf(canvas);
+    const g = canvas.getContext("2d");
+    const scratch = g ? scratchOf(canvas) : canvas; // a canvas that cannot paint only signs, the old picture too
     const hash = signature();
     hash.text(`${sig}|${paintRaster(scratch, scene.was.scene, scene.was.res)}`);
-    const g = canvas.getContext("2d");
     if (g) {
       g.save();
       g.setTransform(1, 0, 0, 1, 0, 0);

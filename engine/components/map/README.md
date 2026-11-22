@@ -5,7 +5,7 @@ joined to the regions by key and coloured in the theme's palettes, stepped (`cla
 continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a
 mask. A layer with `points` puts a circle at the longitude and latitude of each row of a CSV, sized by a column (area
 true to the value, with a two-circle size key in the legend) and coloured by a column or a theme role. Built for step-by-step stories: steps bring layers in and out (each adds its legend row), highlight
-regions and name them on the map, and a region (or land under a raster) without a value is hatched, never a colour of the scale. Colours come
+regions and name them on the map, fly the map to a region or a box and back, and a region (or land under a raster) without a value is hatched, never a colour of the scale. Colours come
 from the theme, so the same deck reads correctly in every theme.
 
 | Prop | Type | Default | Transition | Meaning |
@@ -17,6 +17,7 @@ from the theme, so the same deck reads correctly in every theme.
 | `layers` | `{ id: layer }` | none | fade | The layers of data, keyed by id. See Layers. |
 | `shown` | string[] | none | fade | The layers on screen, by id. A layer that appears fades in with its legend row; one that leaves fades out. |
 | `highlight` | string[] | none | fade | Regions and points (by id) outlined in ink; every other region of an areas layer and every other point turns `--sd-color-dim`. |
+| `view` | region id \| string[] \| `{ bounds }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of them, or to `{ bounds: [west, south, east, north] }` in degrees; `null` is the whole map. A change flies the map there. |
 | `labels` | string[] | none | fade | Regions named on the map, at the centroid of their largest polygon, on a halo. |
 | `legend` | corner \| `false` | `"bottom-left"` | snap | Where the legend sits (`"bottom-left"`, `"bottom-right"`, `"top-left"`, `"top-right"`), or no legend. |
 
@@ -64,6 +65,10 @@ Behaviour:
   regions of a shown areas layer turn `--sd-color-dim`, never faded. A hatched region stays hatched. `highlight` also
   names points, by their `id`: a highlighted point keeps its colour and gets an ink ring, and every other point of a
   shown points layer turns `--sd-color-dim` while anything is highlighted.
+- **Views.** `view` fits its regions (or its box) to the element, centred, with the same 6% margin as the whole map.
+  A view names regions only: a point's id is an error. Lines
+  keep their width on screen, points and dots their size; a region too small to see at home becomes an area again
+  when the view zooms in enough. A name (`labels`) is drawn only while its region's centre is inside the element.
 - **Legend.** On a panel of the background colour, one row per shown layer: its `label`, then its classes (a swatch
   each, 28 px) or a ramp between its two end values, then the "no data" swatch when a region has no value. Rows stack
   away from the legend's corner. Numbers are written in the deck language (`2,5` in Spanish).
@@ -74,13 +79,17 @@ Behaviour:
   duration (`--sd-duration`, or the step's `transition`), with its legend row; labels that come or go fade with it; a
   change to a shown layer's data or scale (a raster's file, scale or `color` too) crossfades its colours (a point that stays moves, resizes and changes colour from one to the other; a new point grows,
   one that has gone shrinks); `highlight` tweens the colours over
-  `--sd-duration-fast`. Jumps, backward steps and reduced motion show the end state at once. The map does not own its
+  `--sd-duration-fast`; a change of `view` flies the map there over twice the step's duration (or the step's
+  `transition`), along d3's zoom path (out and in again as far as the distance asks): the land, borders, areas, points
+  and names are redrawn at every frame, and a raster crossfades from its picture at the start view to its picture at
+  the end view, both moving with the map, so it stays filled during the flight and is sharp when it lands. Jumps,
+  backward steps and reduced motion show the end state at once. The map does not own its
   entrance: the engine moves its box in.
 - **State on the canvases.** Each canvas layer (`data-layer` `main:base`, `main:areas:<id>`, `main:raster:<id>`, `main:borders`, `main:points:<id>`) carries
-  `data-view`, `data-shown`, `data-highlight`, `data-frame` and `data-sig` (the signature of what it painted), which
+  `data-view` (the view of the moment as `k,x,y`, during a flight too), `data-shown`, `data-highlight`, `data-frame` and `data-sig` (the signature of what it painted), which
   `dump` and `check --played` compare.
-- **Errors** (on the slide): `region 'X' not found (regions: …)` for `highlight` and `labels`, and, when a layer has
-  points, `'X' not found (regions: …; points: …)` for `highlight`; `layer 'x' not found (layers: …)` for `shown`;
+- **Errors** (on the slide): `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
+  points, `'X' not found (regions: …; points: …)` for `highlight`; ``'S4' is a point: `view` names regions only (regions: …)``; `layer 'x' not found (layers: …)` for `shown`;
   `<csv>: row 4 has no lon` (also `lat`, and `size` for a size that is not a number; rows count from 1, not counting the
   header), `<csv>: color 'kinds' is not a column (…) or a theme colour (…)`; `<csv>: key 'X' matches no region`; `<csv>: key 'X' appears twice`;
   `column 'c' not found in <csv> (columns: …)`; and the boundaries' own (`<file>: only Polygon and MultiPolygon
@@ -91,6 +100,7 @@ Behaviour:
   props: { boundaries: "data/regions.geojson", id: "code", name: "name",
            layers: { rate: { areas: "data/rates.csv", value: "rate", label: "Cases per 1,000", classes: [5, 10, 15] } } } }
 // steps: { set: { map: { shown: ["rate"] } } }, then { only: { map: { highlight: ["W4"], labels: ["W4"] } } }
+// a flight there and home again: { set: { map: { view: "W4" } } }, then { set: { map: { view: null } } }
 // points instead: layers: { sites: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "id", size: "beds", color: "kind", label: "Beds" } }
 ```
 
