@@ -122,6 +122,7 @@ function describe(schema) {
   if (!isObject(schema)) return "a value";
   if (schema.enum) return `one of ${schema.enum.map((v) => JSON.stringify(v)).join(", ")}`;
   if (schema.const !== undefined) return JSON.stringify(schema.const);
+  if (Array.isArray(schema.required) && schema.required.length && !schema.type) return `an object with ${schema.required.map((k) => `'${k}'`).join(" and ")}`;
   if (schema.type === "string" && schema.pattern) return `a string matching ${schema.pattern}`;
   if (schema.type === "array" && schema.minItems && schema.minItems === schema.maxItems) return `an array of ${schema.minItems} items`;
   if (schema.type) return article([].concat(schema.type).join(" or "));

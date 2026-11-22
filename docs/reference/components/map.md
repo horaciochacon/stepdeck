@@ -1,8 +1,8 @@
 # map
 
-`map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. Steps bring layers in and out (each adds its legend row), highlight regions and put their names on the map. A region without a value is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
+`map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a mask. Steps bring layers in and out (each adds its legend row), highlight regions and put their names on the map. A region, or land a raster has no data for, is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -49,7 +49,7 @@ The transition column is the schema's `x-transition` annotation. It feeds the ca
 
 ## Layers
 
-A layer is an object with one kind key. The `areas` kind is a choropleth:
+A layer is an object with exactly one kind key: `areas` or `raster`. The `areas` kind is a choropleth:
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -64,7 +64,26 @@ A layer is an object with one kind key. The `areas` kind is a choropleth:
 
 **The join.** Each row's `key` is compared with the region ids as text, trimmed. A row whose key matches no region, and a region with two rows, are element errors that name the key: a mismatch never shows up as a quietly missing value. A key column the loader reads as numbers turns `07` into `7`, which does not match a region `07`; declare such a column as `"string"` in `types`. A region with no row, or with an empty cell, has no value.
 
-**Paint order.** The land comes first, then the shown layers in the order `layers` declares them, then the borders, then the labels. Two shown areas layers overlap: the later one covers the earlier, so show one at a time.
+**Paint order.** The land comes first, then the shown `areas` layers, then the shown `raster` layers, each kind in the order `layers` declares them, then the borders (so they stay crisp over a raster), then the labels. Two shown layers of one kind overlap: the later one covers the earlier, so show one at a time.
+
+### Raster layers
+
+A `raster` layer names a raster file: a JSON that gives the `bounds` (west, south, east, north, the outer edges of the edge cells), what the grey levels mean in `value`, and the greyscale PNG in `src` (a path relative to the JSON). The picture is drawn from the file's pixels, each canvas pixel taking the colour of the cell under it, so the cells stay square and sharp.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `raster` | string | (required) | Path to the raster JSON, relative to the deck root. |
+| `label` | string | none | The title of the layer's legend row. |
+| `classes`, `midpoint`, `domain` | as for `areas` | none | The scale of a value raster (see [Colour scales](#colour-scales)). Without `domain` the ramp spans the file's `min` to `max` (made symmetric about `midpoint`). A raster of classes ignores them. |
+| `color` | a theme colour role | `"accent"` | The colour of a mask. `accent`, `alert`, `ink`, `muted`, … any `--sd-color-<role>` the theme defines. |
+
+What the file's `value` makes of the layer:
+
+- **A value raster** (`{ scale: "linear" | "log", min, max }`): level *g* (0 to 255) is the value *min + g/255 × (max − min)* (for `log`, *min × (max/min)^(g/255)*), coloured by the scale: a continuous ramp over the file's range, stepped `classes`, or a diverging palette around `midpoint`.
+- **A raster of classes** (`{ classes: ["Forest", "Cropland", "Urban"] }`): level *g* is class *g*, one colour each from the categorical palette in order, and one legend swatch per class.
+- **A mask** (one class): the pixels that have data are painted in `color`; the others stay clear. One swatch in the legend.
+
+Only the first frame of a file with `frames` is shown. Rasters are not dimmed by `highlight`. A raster is a picture of the whole map's size, so it is drawn at one pixel per CSS pixel on any screen.
 
 ## Colour scales
 
@@ -78,6 +97,8 @@ The colours come from the theme's palettes (`ctx.palette`), the same scales a ch
 
 A region without a value is **hatched**: lines at 45°, 6 px apart and 1.5 px wide, in `--sd-color-dim` over `--sd-color-surface`. The layer's legend row then ends with a hatched swatch labelled "no data" (`sin datos` in Spanish), the CSS class `.sd-legend-nodata`. The hatch is never a colour of the scale.
 
+A value raster or a raster of classes hatches **land it has no data for**, inside its own canvas: a land cell (one whose centre is on land) with no data, and land beyond the raster's bounds. Its data pixels cover the hatch, so it shows exactly where the land is missing, and the sea stays clear. The legend row gets the "no data" swatch when some land is missing. A mask has no "no data": the cells that are not the class are simply clear, and its row never has the swatch.
+
 A region whose box is under 6 px across in both directions is drawn as a **dot**: a disc of radius 5 px at the centroid of its largest polygon, in the region's colour (the land colour on the bare map, the hatch for no data), ringed with 1.5 px of the background colour. An island of a few pixels stays visible this way.
 
 ## Highlight and labels
@@ -88,7 +109,7 @@ A region whose box is under 6 px across in both directions is drawn as a **dot**
 
 ## Legend
 
-The legend sits in the corner `legend` names, 16 px in from the edges, on a panel of the background colour (`--sd-color-background`) so its text keeps its contrast over coloured regions. It holds one row per shown layer that has data: its `label` as a title (note size), then a 28 px swatch per class with its label, or a gradient between the two end values for a ramp, then the hatched "no data" swatch when some region has no value. Rows stack away from the corner, in the order the layers are painted. A layer that appears brings its row; one that leaves takes it away.
+The legend sits in the corner `legend` names, 16 px in from the edges, on a panel of the background colour (`--sd-color-background`) so its text keeps its contrast over coloured regions. It holds one row per shown layer that has data: its `label` as a title (note size), then a 28 px swatch per class with its label, or a gradient between the two end values for a ramp, then the hatched "no data" swatch when some region, or some land under a raster, has no value. Rows stack away from the corner, in the order the layers are painted. A layer that appears brings its row; one that leaves takes it away.
 
 ## Motion
 
@@ -97,7 +118,8 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | Change | What you see |
 | --- | --- |
 | A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. |
-| A shown layer's data or scale changes | Its colours crossfade from the old to the new over the same time. |
+| A shown areas layer's data or scale changes | Its colours crossfade from the old to the new over the same time. |
+| A shown raster layer's file or scale changes | The new picture is shown at once. |
 | `highlight` set, changed or cleared | The regions' colours and the ink outlines tween over `--sd-duration-fast`. |
 | `labels` changes | Labels that come fade in, labels that go fade out. |
 | `boundaries`, `id`, `name`, `projection`, `legend` change | Drawn at once. |
@@ -112,6 +134,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="map"]`) the map rende
 ```text
 canvas.sd-canvas-layer[data-layer="main:base"]          the land
 canvas.sd-canvas-layer[data-layer="main:areas:<id>"]    one per layer any step declares, cleared while not shown
+canvas.sd-canvas-layer[data-layer="main:raster:<id>"]   one per raster layer any step declares, after the areas
 canvas.sd-canvas-layer[data-layer="main:borders"]       the borders and the highlight outlines (ctx.map.paintBorders)
 svg.sd-map-labels
   text.sd-map-label[data-region]                         one per entry of `labels`
@@ -136,7 +159,10 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `<file>: 6,000 regions is more than 5,000`, `<file>: 300,000 points is more than 250,000` | The boundaries are larger than a map draws; simplify them first. |
 | `region 'Nowhere' not found (regions: E1, I1, I2, N1, N2, …)` | `highlight` or `labels` names a region the boundaries do not have. The first five ids are listed, sorted. |
 | `layer 'pop' not found (layers: rate)` | `shown` names a layer that `layers` does not have. |
-| ``layer 'pop' needs `areas` `` | A layer without a kind key. |
+| ``layer 'pop' needs `areas` or `raster` `` | A layer without a kind key. |
+| `data/density.json: …` | The raster file or its image is not usable: not found, a sidecar without `bounds` or `value`, an image that is not an 8-bit greyscale PNG, over 2,000 × 2,000 pixels. The message starts with the file's path. |
+| `data/mask.json: color 'teal' is not a theme colour (background, surface, …)` | A mask's `color` names a role the theme has no `--sd-color-<role>` for. |
+| `3 categories but the palette has 2 colours` | A raster of more classes than the categorical palette has colours. |
 | `column 'rat' not found in data/rates.csv (columns: code, rate)` | `key` or `value` names a column the CSV does not have. |
 | ``map needs `key` (a column name)`` | A layer has no `key` and the map has no `id` to default to. |
 | `data/rates.csv: key '07' matches no region` | A row's key is not a region id. |
@@ -159,7 +185,7 @@ areas/map: data/rates.csv: key '07' matches no region
 
 **Codes with leading zeros.** A key column of numbers loses its zeros (`07` becomes `7`) unless `types` declares it a string.
 
-**Two shown areas layers.** The later one covers the earlier. Switch `shown` from one to the other to compare them.
+**Two shown layers of one kind.** The later one covers the earlier. Switch `shown` from one to the other to compare them.
 
 ## For agents
 

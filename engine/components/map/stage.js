@@ -1,8 +1,9 @@
 // One view of a map element: its canvas layers, stacked in paint order, and an SVG over them for the labels. The order
 // is the land (`base`), each layer (by kind, then in the order the slide first declares it), then the borders
 // (`paintBorders`, which fills nothing), on top so they stay crisp over any layer. A canvas is named `<stage>:<part>`:
-// `main:base`, `main:areas:rate`, `main:borders`. Every canvas exists from the start, so a step never adds or moves
-// one; a layer that is not shown is cleared.
+// `main:base`, `main:areas:rate`, `main:raster:density`, `main:borders`. Every canvas exists from the start, so a step
+// never adds or moves one; a layer that is not shown is cleared. A kind whose painter is costly per pixel (a raster)
+// sets `maxRatio: 1` on its module, and its canvas is made with that backing-store ratio.
 //
 // `paint(state, layerStates)` draws one moment from plain data and writes on every canvas what it shows, as `dump` and
 // `check --played` read it: `data-view` (k,x,y with 3 decimals), `data-shown` (the layers painted, in paint order),
@@ -44,9 +45,9 @@ function clear(canvas) {
 export function createStage(el, { name, size, geo, layers }) {
   const [w, h] = size;
   const doc = el.ownerDocument;
-  const make = (part) => canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: `${name}:${part}` });
+  const make = (part, maxRatio) => canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: `${name}:${part}`, maxRatio });
   const land = make("base");
-  const canvases = layers.map((slot) => make(`${slot.kind}:${slot.id}`));
+  const canvases = layers.map((slot) => make(`${slot.kind}:${slot.id}`, slot.module.maxRatio)); // a kind that is costly per pixel (a raster) sets `maxRatio`
   const borders = make("borders");
   const svg = doc.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "sd-map-labels");

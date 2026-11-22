@@ -435,6 +435,33 @@ test("a misspelt mode gets a did-you-mean", async () => {
   }
 });
 
+test("a map layer has exactly one of areas (with value) and raster", async () => {
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-layers-")));
+  try {
+    mkdirSync(join(tmp, "slides"));
+    mkdirSync(join(tmp, "data"));
+    for (const file of ["regions.geojson", "rates.csv", "density.json", "density.png"]) cpSync(join(repo, "test/fixtures/decks/map/data", file), join(tmp, "data", file));
+    writeFileSync(join(tmp, "deck.js"), `export default { title: "Layers", lang: "en", theme: "academic-light", slides: ["s"] };\n`);
+    const layers = {
+      rates: { areas: "data/rates.csv", value: "rate" },
+      density: { raster: "data/density.json", midpoint: 400, color: "alert" },
+      neither: { label: "No kind" },
+      both: { areas: "data/rates.csv", value: "rate", raster: "data/density.json" },
+      "no-value": { areas: "data/rates.csv" },
+    };
+    writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "full-bleed", title: "Layers", elements: [
+      { id: "map", type: "map", props: { boundaries: "data/regions.geojson", layers: ${JSON.stringify(layers)} } },
+      { id: "src", type: "text", props: { role: "source", text: "Synthetic data." } },
+    ] };\n`);
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["prop-invalid", "prop-invalid", "prop-invalid"], show(problems));
+    assert.deepEqual(problems.map((p) => p.measured.split(" = ")[0]).sort(), ["layers.both", "layers.neither", "layers.no-value"]);
+    assert.match(problems[0].fix, /make layers\.[a-z-]+ an object with 'areas' and 'value' or an object with 'raster'/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 // Kicker and accent phrase.
 test("title-accent: an unmatched * in a title is a warning", async () => {
   const problems = await validate(fixture("title-accent"));

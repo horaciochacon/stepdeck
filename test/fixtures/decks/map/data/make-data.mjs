@@ -5,6 +5,8 @@
 // Clean files, in this folder (the `map` deck validates clean with them):
 //   regions.geojson, rates.csv, change.csv, sites.csv   a country of 7 regions and 2 islands, and values for them
 //   density, cover, wells                               small rasters (.json + .png), as in the gallery
+//   half.json + half.png                                20×30 px over the west half of the land: the east half is outside its bounds
+//   log.json                                            density.png read on a log scale, 1 to 1,000
 //   years.json + years/                                 12 frames, 2010 to 2021, 16×12 px, each with `numbers: { people }`
 //   years19.json + years19/                             19 frames, 8×6 px: 18 moves, 12.6 s at the default pace
 //   square-cw.geojson, square-ccw.geojson               one square region, both windings
@@ -17,6 +19,7 @@
 //   years30.json + years30/                             30 frames, 8×6 px: 29 moves, 20.3 s, longer than a run may be
 //   wide.json + wide.png                                2001×2000 px at one level: over the pixel limit
 //   mismatch.json + mismatch/                           two frames; the second is a different size
+//   mask.json + mask.png                                a one-class mask, for a layer that names a colour that is not a theme colour
 //
 // Rasters follow the raster format: rows run north to south, columns west to east (see fictional.mjs).
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -24,7 +27,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { encodePng } from "../../../../../cli/png.js";
 import {
-  centroid, country, csvText, extent, geojsonText, jsonText, timelapse, valueFiles,
+  centroid, country, csvText, extent, field, geojsonText, jsonText, landGrid, levelImage, timelapse, valueFiles,
 } from "../../../../../site/gallery/data/map/fictional.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +70,18 @@ writeBroken("rates.csv", files["rates.csv"]);
 const rateLines = files["rates.csv"].trimEnd().split("\n");
 writeBroken("twice.csv", `${[...rateLines, rateLines[1]].join("\n")}\n`);
 
+// half: the cells of density's west half, on a surface of their own; the land east of -14.5° is outside its bounds
+{
+  const west = [bounds[0], bounds[1], -14.5, bounds[3]];
+  const [cols, rows] = [COLS / 2, ROWS];
+  const surface = field({ seed: 21, bounds: west, cols, rows, bumps: 6 });
+  const valid = landGrid({ land, bounds: west, cols, rows });
+  write("half.png", encodePng(levelImage(cols, rows, Array.from(surface, (v) => Math.round(255 * v)), valid)));
+  write("half.json", jsonText({ bounds: west, value: { scale: "linear", min: 0, max: 800, unit: "people per km²" }, src: "half.png" }));
+}
+// the density image on a log scale
+write("log.json", jsonText({ bounds, value: { scale: "log", min: 1, max: 1000, unit: "people per km²" }, src: "density.png" }));
+
 write("sites.csv", csvText(["id", "lon", "lat", "beds", "kind"], mainland.map((f, i) => {
   const [lon, lat] = centroid(f);
   return { id: `S${i + 1}`, lon: lon.toFixed(3), lat: lat.toFixed(3), beds: 10 * (i + 1), kind: ["clinic", "hospital"][i % 2] };
@@ -108,6 +123,10 @@ writeBroken("mismatch.json", jsonText({
   value: { scale: "linear", min: 0, max: 100 },
   frames: [{ src: "mismatch/2000.png", label: "2000" }, { src: "mismatch/2001.png", label: "2001" }],
 }));
+
+// a mask of one pixel
+writeBroken("mask.png", encodePng({ width: 2, height: 1, channels: 2, data: Uint8Array.of(0, 255, 0, 0) }));
+writeBroken("mask.json", jsonText({ bounds, value: { classes: ["Marked"] }, src: "mask.png" }));
 
 // --- odd geography ---------------------------------------------------------------------------------------------
 

@@ -4,5 +4,5 @@ export default {
   title: "Map errors fixture",
   lang: "en",
   theme: "academic-light",
-  slides: ["region", "labels", "layer", "unknown-key", "twice", "column"],
+  slides: ["region", "labels", "layer", "unknown-key", "twice", "column", "color"],
 };

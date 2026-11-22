@@ -9,6 +9,7 @@
 //   scene(prepared, state)            what the layer shows at one moment, as plain data (the painter's scene)
 //   paint(canvas, scene, prepared)    paints the scene on the layer's canvas; returns its signature
 //   legend(prepared, state)           the layer's legend row, { title, legend, noData }, or null for none
+// and, optionally, `maxRatio`, the canvas's backing-store ratio limit (a raster sets 1; the default is `canvasLayer`'s).
 // `state` is { view, alpha, highlight, frame, frameMix, size, from, change }: the view { k, x, y }; the layer's
 // opacity; `highlight` { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the frame and
 // its mix (for rasters); the stage's [w, h]; and, while the layer's data or scale changes, `from` (what it showed

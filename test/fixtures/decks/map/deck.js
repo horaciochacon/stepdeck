@@ -4,5 +4,5 @@ export default {
   title: "Map fixture",
   lang: "en",
   theme: "academic-light",
-  slides: ["areas", "legends", "small", "square", "projection"],
+  slides: ["areas", "legends", "rasters", "small", "square", "projection"],
 };
