@@ -564,7 +564,13 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 
 ### `ctx.map`
 
-`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; `loadRaster` reads a raster file; the painters draw regions, their borders, a raster and points on a canvas layer and the inset frame and the scale bar on an SVG.
+`ctx.map` is the geography the built-in `map` is made of, for a component that draws its own map. Like `ctx.chart` it is one frozen object, the same for every component and child, and a component that reads only `ctx` needs no `import`. It works on lon/lat GeoJSON and canvas pixels. `boundaries`, `projection`, `view`, `applyView` and `lookup` only compute; `loadRaster` reads a raster file; the painters draw regions, their borders, a raster and points on a canvas layer, and the inset frame and the scale bar on an SVG. A map's colours and legend rows come from `ctx.chart` (`colorScale`, `legendRow`; see [Colour](#colour)), and its canvases from `ctx.chart.canvasLayer`.
+
+**Public and internal.** The 15 names below are the contract: a change to one is a changelog entry. The rest of `core/map.js`, `core/map-paint.js` and `core/map-rules.js`, and the built-in's folder `components/map/`, is internal. Use `ctx.map`, not an import.
+
+The names are in four groups. Each group has its signatures and one short example. The examples are fragments: they assume the element `el`, its size `w` × `h` (`ctx.size`), `tokens` (`ctx.tokens`, each value trimmed) and the values of the groups before them. `test/fixtures/decks/map-kit/components/fixture.mapkit/index.js` is a working component that calls every group, and [Build a map from the engine's pieces](../guide/custom-components.md#build-a-map-from-the-engines-pieces) walks a small one through them.
+
+#### Geography
 
 | Name | Signature | What it does |
 |---|---|---|
@@ -572,116 +578,145 @@ el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: t
 | `projection` | `projection(spec, features, [w, h]) → projection` | The base projection of an element: `spec` is `"equal-earth"`, `"natural-earth"`, `"mercator"` or `"conic-equal-area"`, rotated to the centre longitude of `features` and fitted to them in `w` × `h` with a margin of 6% of the smaller side. The conic's parallels sit a sixth of the latitude span in from the south and north ends. Fix it for the element's life. |
 | `view` | `view(base, target, [w, h]) → { k, x, y }` | A zoom transform over the base's pixels. `target` is `null` (home, `{ k: 1, x: 0, y: 0 }`), an array of features, or `{ bounds: [west, south, east, north] }` in degrees (west greater than east crosses the antimeridian). The target is centred and fitted with the same margin. |
 | `applyView` | `applyView(v, [px, py]) → [k·px + x, k·py + y]` | A base-projected point seen through a view. |
-| `lookup` | `lookup(base, v, [w, h], bounds, [cols, rows], { step }) → Int32Array` | For each pixel of the canvas, row-major from the top left, the raster cell under it as `row * cols + col`, or -1 outside the raster or the projection. See Lining a raster up. |
-| `loadRaster` | `loadRaster(path, ctx) → Promise<Raster>` | Reads a raster file (the JSON of the raster format) and decodes its first image: `{ path, bounds, value, frames, size, grid(i), decoded(i) }`. See Rasters. |
-| `lut` | `lut(raster, colorOf) → Uint8ClampedArray` | The colour of each of a raster's 256 levels, as 1,024 RGBA bytes. See Rasters. |
-| `landCells` | `landCells(raster, features) → Uint8Array` | The raster cells whose centres are on land, 1 or 0 each. See Rasters. |
-| `rasterGaps` | `rasterGaps(raster, features) → Promise<boolean>` | Whether a land cell has no data in some frame, or some land lies outside the raster's bounds. See Rasters. |
-| `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer and draws pictures of a raster, each built for one view and drawn at another, hatching land without data and, with `clip`, stopping at the coastline. Returns the scene's signature. See Rasters. |
-| `paintAreas` | `paintAreas(canvas, scene, res) → string` | Clears a canvas layer and paints regions, hatched when the fill is `null`, or as dots. Returns the scene's signature. See Painting. |
-| `paintBorders` | `paintBorders(canvas, scene, res) → string` | Clears a canvas layer and strokes region outlines and dot rings, filling nothing, so the layer goes over others. Returns the scene's signature. See Painting. |
-| `paintPoints` | `paintPoints(canvas, scene) → string` | Clears a canvas layer and paints circles at screen size. Returns the scene's signature. |
-| `insetFrame` | `insetFrame(svg, { box, frame }) → SVGGElement` | One `g.sd-map-inset` on an SVG: two dashed leaders, the box and the frame, all `[x0, y0, x1, y1]` in the element's px. Idempotent. |
-| `scaleBar` | `scaleBar(svg, { base, view, at, maxWidth, format }) → SVGGElement` | One `g.sd-map-scale`: a bar of a round length in km starting at `at`, and its label. Idempotent. |
 
 **Errors.** Each begins with `<file>: `. `boundaries` throws `not a FeatureCollection`, `feature 3 has no 'code'` (features count from 1), `region 'North' appears twice`, `only Polygon and MultiPolygon features are supported (found LineString)`, `6,000 regions is more than 5,000` and `300,000 points is more than 250,000` (every coordinate of every ring counts). `projection` throws `` unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area) `` and `projection needs at least one region`; `view` throws `view: no regions to fit`.
-
-**Raster errors.** `loadRaster needs ctx.assetUrl` when the `ctx` has none. Otherwise `loadRaster` throws, each starting with the file's path: what the raster format finds wrong in the JSON (`` data/a.json: needs `src` or `frames` ``), `data/f/1.png: not found`, `data/a.json: '../x.png' is not a path inside the deck`, `data/f/1.png: 2400×1800 is more than 2,000×2,000 pixels` (an area limit: 2,001 × 2,000 is over, 2,400 × 1,500 is not) and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
 
 **Winding.** GeoJSON written by `sf` or `geopandas` follows RFC 7946, with outer rings counter-clockwise; d3-geo expects the opposite and would read each region as everything but itself. `boundaries` reverses the rings of any polygon whose `d3.geoArea` is above 2π, on copies, so the file you got from `ctx.data` (which is shared and read-only) is untouched. Give `projection`, `view` and your paths the `features` it returns, never the raw file.
 
 **Views are affine.** `fitExtent` changes only scale and translation, so a view is a transform of base-projected pixels: `applyView(v, base(lonLat))` is where a point lands, and cached paths can be redrawn with `ctx2d.setTransform(k, 0, 0, k, x, y)` (divide line widths by `k`) instead of projecting again. A flight between two views is a blend of their three numbers.
 
-**Lining a raster up.** A raster in lon/lat lands on the boundaries in any projection through `lookup`: `bounds` are the outer edges of the edge cells, and rows run north to south, columns west to east, so the index is `row * cols + col` with row 0 the northern edge. The projection is inverted exactly at every `step` pixels (default 8) and longitude and latitude are interpolated between those nodes, so the cell is exact except within a fraction of a pixel of a cell edge. Where an invert fails, the cells around that node are -1. The table is for one `(view, size, bounds, grid)`; keep it until the view or the size changes.
-
 ```js
-const { features, byId } = ctx.map.boundaries(await ctx.data("regions.geojson"), { id: "code", name: "name", file: "regions.geojson" });
-const base = ctx.map.projection("equal-earth", features, [ctx.size.w, ctx.size.h]); // once, at mount
-const home = ctx.map.view(base, null, [ctx.size.w, ctx.size.h]);
-const north = ctx.map.view(base, [byId.get("N1")], [ctx.size.w, ctx.size.h]);      // fitted to one region
-const box = ctx.map.view(base, { bounds: [-18, -30, -11, -24] }, [ctx.size.w, ctx.size.h]);
-const [x, y] = ctx.map.applyView(north, base([-14, -25]));                          // canvas pixels
-const cells = ctx.map.lookup(base, north, [ctx.size.w, ctx.size.h], [-19, -31, -10, -23], [40, 30]);
-const cell = cells[Math.floor(y) * ctx.size.w + Math.floor(x)];                       // row * 40 + col in the raster, or -1
+const { features, byId } = ctx.map.boundaries(await ctx.data("data/regions.geojson"), { id: "code", name: "name", file: "data/regions.geojson" });
+const base = ctx.map.projection("equal-earth", features, [w, h]);            // once, at mount
+const home = ctx.map.view(base, null, [w, h]);                              // { k: 1, x: 0, y: 0 }
+const west = ctx.map.view(base, [byId.get("W4")], [w, h]);                  // fitted to one region
+const box = ctx.map.view(base, { bounds: [-18, -30, -11, -24] }, [w, h]);   // fitted to a box in degrees
+const [x, y] = ctx.map.applyView(west, base([-14, -25]));                   // where a lon/lat lands, in canvas px
+const mid = { k: ctx.chart.lerp(home.k, west.k, 0.5), x: ctx.chart.lerp(home.x, west.x, 0.5), y: ctx.chart.lerp(home.y, west.y, 0.5) }; // half way along a straight flight
 ```
 
-**Rasters.** A raster file is one JSON and its 8-bit greyscale PNGs (with or without alpha; alpha is 0 or 255, and 0 means no data): `bounds` `[west, south, east, north]` in degrees, the outer edges of the edge cells; `value`, `{ scale: "linear" | "log", min, max }` or `{ classes: [...] }`, which says what a grey level 0 to 255 means (`levelValue` in `core/map-rules.js`); and a `src`, or `frames` of `{ src, label, numbers? }` for a time-lapse. `loadRaster` reads it through `ctx.data` and fetches each image with `ctx.assetUrl`, so the paths are the deck's: an image's `src` is read relative to the JSON's folder (`data/a/b.json` with `f/1.png` names `data/a/f/1.png`) and must be a path inside the deck (no `..`, no absolute path, no scheme). The raster is cached per `ctx.data` and path, so every element that names the file shares one, and a failed load is retried on the next call.
+#### Rasters
 
-```js
-const raster = await ctx.map.loadRaster("data/density.json", ctx);   // { bounds, value, frames, size: [cols, rows], grid, decoded }
-const { levels, data } = await raster.grid(0);                       // Uint8Array(cols * rows) each, from the north-west pixel
-const palette = d3.scaleSequential([0, 800], d3.interpolateBlues);
-const lutData = ctx.map.lut(raster, (value) => palette(value));    // 1,024 RGBA bytes: the colour of each level
-const land = ctx.map.landCells(raster, features);                    // 1 where a cell's centre is on land
-const gaps = await ctx.map.rasterGaps(raster, features);            // true: some land has no data, so show a "No data" row
-```
+| Name | Signature | What it does |
+|---|---|---|
+| `loadRaster` | `loadRaster(path, ctx) → Promise<Raster>` | Reads a raster file (the JSON of the raster format) and decodes its first image: `{ path, bounds, value, frames, size, grid(i), decoded(i) }`. |
+| `lut` | `lut(raster, colorOf) → Uint8ClampedArray` | The colour of each of a raster's 256 levels, as 1,024 RGBA bytes. |
+| `landCells` | `landCells(raster, features) → Uint8Array` | The raster cells whose centres are on land, 1 or 0 each. |
+| `rasterGaps` | `rasterGaps(raster, features) → Promise<boolean>` | Whether a land cell has no data in some frame, or some land lies outside the raster's bounds. |
+| `lookup` | `lookup(base, v, [w, h], bounds, [cols, rows], { step }) → Int32Array` | For each pixel of the canvas, row-major from the top left, the raster cell under it as `row * cols + col`, or -1 outside the raster or the projection. |
+| `paintRaster` | `paintRaster(canvas, scene, res) → string` | Clears a canvas layer and draws pictures of a raster, each built for one view and drawn at another, hatching land without data and, with `clip`, stopping at the coastline. Returns the scene's signature. |
 
-- **Decoding is exact.** Each image is decoded without colour conversion or premultiplied alpha. `levels[i]` is the pixel's grey (0 to 255, as stored) and `data[i]` is 1 where its alpha is at least 128, else 0. The level under a pixel with no data is 0. `raster.frames` has one entry per image (`{ label, numbers, src }`, `src` the image's deck path; a single `src` gives one frame, labelled `""`) and `raster.size` is the first image's `[cols, rows]`.
-- **Frames on demand.** `grid(i)` decodes frame `i` and resolves to its grid; the first frame is decoded by `loadRaster`, since it gives the size. A raster keeps at most 12 decoded frames, the least recently used going first (`grid(i)` and `decoded(i)` both use a frame). `decoded(i)` returns the grid if it is decoded now and `undefined` otherwise, without decoding: it is how a painter, which cannot wait, reads a frame the component has already awaited.
+**The raster file.** A raster file is one JSON and its 8-bit greyscale PNGs (with or without alpha; alpha is 0 or 255, and 0 means no data): `bounds` `[west, south, east, north]` in degrees, the outer edges of the edge cells; `value`, `{ scale: "linear" | "log", min, max }` or `{ classes: [...] }`, which says what a grey level 0 to 255 means (`levelValue` in `core/map-rules.js`); and a `src`, or `frames` of `{ src, label, numbers? }` for a time-lapse. The format, and writer functions for R and Python, are in [From your analysis code to a map slide](../guide/maps-from-your-code.md#rasters-a-json-file-and-a-greyscale-png). `loadRaster` reads the JSON through `ctx.data` and fetches each image with `ctx.assetUrl`, so the paths are the deck's: an image's `src` is read relative to the JSON's folder (`data/a/b.json` with `f/1.png` names `data/a/f/1.png`) and must be a path inside the deck (no `..`, no absolute path, no scheme). The raster is cached per `ctx.data` and path, so every element that names the file shares one, and a failed load is retried on the next call.
+
+**Raster errors.** `loadRaster needs ctx.assetUrl` when the `ctx` has none. Otherwise `loadRaster` throws, each starting with the file's path: what the raster format finds wrong in the JSON (`` data/a.json: needs `src` or `frames` ``), `data/f/1.png: not found`, `data/a.json: '../x.png' is not a path inside the deck`, `data/f/1.png: 2400×1800 is more than 2,000×2,000 pixels` (an area limit: 2,001 × 2,000 is over, 2,400 × 1,500 is not) and, from `grid(i)`, `data/f/2.png: 9×6 does not match the first frame (8×6)`.
+
+- **Decoding is exact.** Each image is decoded without colour conversion or premultiplied alpha. `grid(i)` resolves to `{ levels, data }`, two `Uint8Array(cols * rows)` from the north-west pixel: `levels[i]` is the pixel's grey (0 to 255, as stored) and `data[i]` is 1 where its alpha is at least 128, else 0. The level under a pixel with no data is 0. `raster.frames` has one entry per image (`{ label, numbers, src }`, `src` the image's deck path; a single `src` gives one frame, labelled `""`) and `raster.size` is the first image's `[cols, rows]`.
+- **Frames on demand.** `grid(i)` decodes frame `i`; the first frame is decoded by `loadRaster`, since it gives the size. A raster keeps at most 12 decoded frames, the least recently used going first (`grid(i)` and `decoded(i)` both use a frame). `decoded(i)` returns the grid if it is decoded now and `undefined` otherwise, without decoding: it is how a painter, which cannot wait, reads a frame the component has already awaited.
 - **`lut`.** `colorOf(value, level)` is called for each level with `levelValue`'s value (a number, or a class name) and returns a CSS colour, or `null` for a level with no colour. A level past the end of a class list is never asked about and is transparent, as is one that gets `null`.
 - **Land cells.** A land cell is a raster cell whose centre is on land: the one definition of land for a raster, used by the painter and by `rasterGaps`. `landCells(raster, features)` reads `features` (from `boundaries`) as plain lon/lat, a polygon at a time with the even-odd rule, and caches the grid per `features` array and raster geometry, so keep passing the array `boundaries` returned. A raster made by marking the cells whose centres are on land has data on every land cell; a cell centred in the sea has none, and is not land even where it covers some.
 - **`rasterGaps`.** True when a land cell has no data in any frame, or when any land lies outside the raster's bounds: exactly the places `paintRaster` hatches, so a "No data" row is shown when there is hatch to explain. A coastal cell centred in the sea is not a gap. It decodes every frame once, apart from the raster's own cache, so keep the answer.
+- **Lining a raster up.** A raster in lon/lat lands on the boundaries in any projection through `lookup`: `bounds` are the outer edges of the edge cells, and rows run north to south, columns west to east, so the index is `row * cols + col` with row 0 the northern edge. The projection is inverted exactly at every `step` pixels (default 8) and longitude and latitude are interpolated between those nodes, so the cell is exact except within a fraction of a pixel of a cell edge. Where an invert fails, the cells around that node are -1. The table is for one `(view, size, bounds, grid)`; keep it until the view or the size changes.
 
-**Painting a raster.** Make the layer with `ctx.chart.canvasLayer(el, { ..., name: "raster", maxRatio: 1 })`: a raster is painted per pixel, so its backing store is at most its CSS size (smaller when the page is zoomed out, where `devicePixelRatio` is below 1). Everything `paintRaster` takes (the views, the lookup tables, the pictures) is in CSS px, the layer's `pw` by `ph`; the painter scales by the backing-store ratio when it draws, as `paintAreas` does.
+**Painting a raster.** Make the layer with `ctx.chart.canvasLayer(el, { ..., name: "raster", maxRatio: 1 })`: a raster is painted per pixel, so its backing store is at most its CSS size (smaller when the page is zoomed out, where `devicePixelRatio` is below 1). Everything `paintRaster` takes (the views, the lookup tables, the pictures) is in CSS px, the layer's `pw` by `ph`; the painter scales by the backing-store ratio when it draws, as `paintAreas` does. `scene` is `{ source, lut, view, hatch, clip, draws: [{ frame, at, alpha }] }`; `res` is `{ raster, lutData, lookupFor(at, [w, h]), land, landCells, cache }`.
 
-```js
-const canvas = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "raster", maxRatio: 1 });
-await Promise.all(draws.map((d) => raster.grid(d.frame)));           // the painter reads decoded frames only
-canvas.setAttribute("data-sig", ctx.map.paintRaster(canvas, {
-  source: "data/density.json", lut: "blues",                          // both are hashed: `lut` is any name for the colour table
-  view,                                                               // the view the canvas shows now
-  hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },   // or null
-  clip: true,                                                         // clear past the coastline (needs `land`); false, the default, draws every cell whole
-  draws: [{ frame: 0, at: view, alpha: 1 }],                          // in order, each at its alpha
-}, {
-  raster, lutData,
-  lookupFor: (at, [w, h]) => lookups.get(at) ?? lookups.set(at, ctx.map.lookup(base, at, [w, h], raster.bounds, raster.size)).get(at), // [w, h]: the canvas's CSS px
-  land,                                                               // a Path2D of the regions in base-projected px; null for none, unless `clip`
-  landCells: ctx.map.landCells(raster, features),                     // or null
-  cache: new Map(),                                                   // yours: pictures are kept in it
-}));
-```
-
-- **A draw is a picture.** Each `draws` entry is a frame as seen through the view `at`: every CSS pixel takes the colour of the raster cell `lookupFor(at, size)` gives it (`size` is the canvas's own CSS size, so a layer smaller than the element has its own tables) (`lutData` colours its level). The picture is drawn under the transform that carries `at` to `view`, so `at` can differ from `view` and a flight or a crossfade moves pictures instead of repainting them. Pictures are drawn in order, each at its `alpha`.
-- **The hatch is part of the picture.** Where a pixel has no data it shows the hatch if it is on land and stays clear otherwise. On land means: inside the raster, the pixel's cell is a land cell (`res.landCells`); outside the raster (`lookup` gives -1), the regions `res.land` cover the whole pixel. So no-data land is hatched, land the raster does not reach is hatched, and the sea, and the coast under a sea-centred cell, stay clear. The stripes are at 45°, 6 px apart and 1.5 px wide, `hatch.line` over `hatch.background`, measured in CSS px from the canvas's origin, so they look the same at every ratio. `hatch: null` draws none; a `null` `land` or `landCells` leaves that part unhatched. Use the hatch for value rasters; a mask has no "no data".
+- **A draw is a picture.** Each `draws` entry is a frame as seen through the view `at`: every CSS pixel takes the colour of the raster cell `lookupFor(at, size)` gives it (`size` is the canvas's own CSS size, so a layer smaller than the element has its own tables), coloured by `lutData`. The picture is drawn under the transform that carries `at` to `view`, so `at` can differ from `view` and a flight or a crossfade moves pictures instead of painting them again. Pictures are drawn in order, each at its `alpha`.
+- **The hatch is part of the picture.** Where a pixel has no data it shows the hatch if it is on land and stays clear otherwise. On land means: inside the raster, the pixel's cell is a land cell (`res.landCells`); outside the raster (`lookup` gives -1), the regions `res.land` (a `Path2D` in base-projected px) cover the whole pixel. So no-data land is hatched, land the raster does not reach is hatched, and the sea, and the coast under a sea-centred cell, stay clear. The stripes are at 45°, 6 px apart and 1.5 px wide, `hatch.line` over `hatch.background`, measured in CSS px from the canvas's origin, so they look the same at every ratio. `hatch: null` draws none; a `null` `land` or `landCells` leaves that part unhatched. Use the hatch for value rasters; a mask has no "no data".
 - **`clip`.** With `clip: true`, a pixel inside the raster that is not on land is clear whatever its cell holds, hatch included, so a coarse cell centred on land stops at the coastline instead of sticking out over the sea. "On land" is the same test as for the hatch outside the raster: the regions `res.land` cover the whole pixel (so the fringe of a coastal pixel the regions only partly cover is clear). `res.land` is then required: without it the painter throws `paintRaster: clip needs res.land`. With `clip: false` (the default when the scene leaves it out) every cell is drawn whole.
 - **The cache.** `res.cache` holds the pictures (and the land masks they were made from), keyed by source, frame, `at` (rounded to three decimals), colour table, hatch colours, `clip` and size: the same draw is built once, and a clipped and a whole picture of one raster never share an entry. You own it: empty it when the colour table, the land or a raster file behind a `source` changes. The painter never hashes `res`.
 - **Undecoded frames.** A draw whose picture is not cached needs `res.raster.decoded(frame)`; without it the painter throws `paintRaster: frame 3 is not decoded`. Await `raster.grid(frame)` first.
 - **The signature** hashes `source`, `lut`, the view, the hatch colours (or none), `clip` and every draw's frame, `at` and alpha, never `res`.
 
-**Painting.** A painter is pure: it takes plain data, clears its canvas, paints, and returns a signature, 8 hex digits that hash the whole scene (a dump can stand in for the pixels). Make the canvas with `ctx.chart.canvasLayer` (one named layer per painter, so regions and points stack in creation order), and paint again after any change of size.
-
 ```js
-const areas = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "areas" });
-areas.setAttribute("data-sig", ctx.map.paintAreas(areas, {
-  source: "regions.geojson",                 // names the geometry in the signature; the paths are not hashed
-  view: { k: 1, x: 0, y: 0 }, alpha: 1,
-  hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },
-  items: [
-    { id: "N1", fill: colors[0], stroke: tokens["--sd-color-background"], width: 1, dot: false },
-    { id: "N2", fill: null, stroke: tokens["--sd-color-background"], width: 1, dot: false },       // no data: hatched
-    { id: "I2", fill: colors[1], stroke: tokens["--sd-color-background"], width: 1.5, dot: true },  // too small to see: a dot
-  ],
-}, { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) }));  // both in base-projected px
+const raster = await ctx.map.loadRaster("data/density.json", ctx);    // { bounds, value, frames, size: [cols, rows], grid, decoded }
+const palettes = { sequential: ctx.palette("sequential"), diverging: ctx.palette("diverging"), categorical: ctx.palette("categorical") };
+const scale = ctx.chart.colorScale({ domain: [raster.value.min, raster.value.max] }, palettes);
+const lutData = ctx.map.lut(raster, (value) => scale.color(value));   // 1,024 RGBA bytes: the colour of each level
+const land = new Path2D();                                            // the regions in base-projected px
+for (const f of features) land.addPath(new Path2D(ctx.d3.geoPath(base)(f)));
+const gaps = await ctx.map.rasterGaps(raster, features);              // true: some land has no data, so the legend says "no data"
+const lookups = new Map();                                            // yours: one table per view (and size)
+
+const canvas = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "raster", maxRatio: 1 });
+await raster.grid(0);                                                  // the painter reads decoded frames only
+canvas.setAttribute("data-sig", ctx.map.paintRaster(canvas, {
+  source: "data/density.json", lut: "density",                        // both are hashed: `lut` is any name for the colour table
+  view: home,                                                          // the view the canvas shows now
+  hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },   // or null
+  clip: true,                                                          // clear past the coastline (needs `land`)
+  draws: [{ frame: 0, at: home, alpha: 1 }],                           // in order, each at its alpha
+}, {
+  raster, lutData, land,
+  lookupFor: (at, size) => lookups.get(at) ?? lookups.set(at, ctx.map.lookup(base, at, size, raster.bounds, raster.size)).get(at),
+  landCells: ctx.map.landCells(raster, features),                      // or null
+  cache: new Map(),                                                    // yours: pictures are kept in it
+}));
 ```
 
-- **`paintAreas`.** `res.path(id)` is a `Path2D` and `res.centroid(id)` an `[x, y]`, in base-projected px; the scene holds colours as CSS strings, resolved by you from `ctx.tokens` and `ctx.palette`, and the painter reads no token. The items are drawn in order under `setTransform(r·k, 0, 0, r·k, r·x, r·y)`, where `r` is the canvas's backing-store ratio and `{ k, x, y }` the view, so `width` is in screen px (the painter divides it by `k`). A `null` fill is the hatch: lines at 45°, 6 px apart and 1.5 px wide, in `hatch.line` over `hatch.background`, pinned to the canvas so it keeps its size and place when the view changes. A `dot` item is not its path: it is a circle of radius 5 px at the centroid, seen through the view but at screen size, with a `width` outline in `stroke`.
+#### Regions and points
+
+| Name | Signature | What it does |
+|---|---|---|
+| `paintAreas` | `paintAreas(canvas, scene, res) → string` | Clears a canvas layer and paints regions, hatched when the fill is `null`, or as dots. Returns the scene's signature. |
+| `paintBorders` | `paintBorders(canvas, scene, res) → string` | Clears a canvas layer and strokes region outlines and dot rings, filling nothing, so the layer goes over others. Returns the scene's signature. |
+| `paintPoints` | `paintPoints(canvas, scene) → string` | Clears a canvas layer and paints circles at screen size. Returns the scene's signature. |
+
+A painter is pure: it takes plain data, clears its canvas, paints, and returns a signature, 8 hex digits that hash the whole scene (a dump can stand in for the pixels). Make the canvas with `ctx.chart.canvasLayer` (one named layer per painter, so regions, borders and points stack in creation order), and paint again after any change of size.
+
+- **`paintAreas`.** `scene` is `{ source, view, alpha, hatch, items: [{ id, fill, stroke, width, dot }] }`. `res.path(id)` is a `Path2D` and `res.centroid(id)` an `[x, y]`, in base-projected px; the scene holds colours as CSS strings, resolved by you from `ctx.tokens` and `ctx.palette`, and the painter reads no token. `source` names the geometry in the signature; the paths are not hashed. The items are drawn in order under `setTransform(r·k, 0, 0, r·k, r·x, r·y)`, where `r` is the canvas's backing-store ratio and `{ k, x, y }` the view, so `width` is in screen px (the painter divides it by `k`). A `null` fill is the hatch: lines at 45°, 6 px apart and 1.5 px wide, in `hatch.line` over `hatch.background`, pinned to the canvas so it keeps its size and place when the view changes. A `dot` item is not its path: it is a circle of radius 5 px at the centroid, seen through the view but at screen size, with a `width` outline in `stroke`.
 - **`paintBorders`.** `scene` is `{ source, view, items: [{ id, stroke, width, alpha, dot }] }` and `res` the one `paintAreas` takes. Nothing is filled, so a borders layer can sit over the areas and over a raster, where `paintAreas` (which always fills) cannot. Each item is stroked in order in `stroke` at its `alpha`: a region's path through the view, `width` px wide on screen at any zoom (the painter divides it by `k`), or, for a `dot` item, the ring of the dot `paintAreas` draws for that region (radius 5 px at `res.centroid(id)`, at screen size). The built-in `map` draws its borders in `--sd-color-rule` and the outline of a highlighted region in ink this way.
+- **`paintPoints`.** `scene` is `{ view, alpha, items: [{ id, x, y, r, fill, stroke }] }`: `x` and `y` are base-projected px (placed through the view), `r` a radius in screen px, and `stroke` a 1.5 px outline or `null`.
 
 ```js
+const path = ctx.d3.geoPath(base);
+const paths = new Map(features.map((f) => [f.properties.code, new Path2D(path(f))]));
+const res = { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) };   // both in base-projected px
+const rates = ctx.chart.colorScale({ classes: [5, 10, 15] }, palettes);   // a stepped scale for the regions' values
+const view = home;
+
+const areas = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "areas" });
+areas.setAttribute("data-sig", ctx.map.paintAreas(areas, {
+  source: "data/regions.geojson", view, alpha: 1,
+  hatch: { line: tokens["--sd-color-dim"], background: tokens["--sd-color-surface"] },
+  items: [
+    { id: "N1", fill: rates.color(10.4), stroke: tokens["--sd-color-background"], width: 1, dot: false },
+    { id: "N2", fill: null, stroke: tokens["--sd-color-background"], width: 1, dot: false },       // no data: hatched
+    { id: "I2", fill: rates.color(1.2), stroke: tokens["--sd-color-background"], width: 1.5, dot: true },  // too small to see: a dot
+  ],
+}, res));
+
 const borders = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "borders" });   // made after the areas: on top
 borders.setAttribute("data-sig", ctx.map.paintBorders(borders, {
-  source: "regions.geojson", view,
+  source: "data/regions.geojson", view,
   items: [
     { id: "N1", stroke: tokens["--sd-color-rule"], width: 1, alpha: 1, dot: false },
     { id: "I2", stroke: tokens["--sd-color-ink"], width: 1.5, alpha: 1, dot: true },   // a dot's ring, over paintAreas's dot
   ],
 }, res));                                                                             // the same res as paintAreas
+
+const points = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "points" });     // over the borders
+const [px, py] = base([-14.09, -24.48]);                                              // a site's lon/lat, base-projected
+points.setAttribute("data-sig", ctx.map.paintPoints(points, {
+  view, alpha: 1, items: [{ id: "S01", x: px, y: py, r: 6, fill: ctx.palette("categorical").colors[0], stroke: tokens["--sd-color-background"] }],
+}));
 ```
 
-- **`paintPoints`.** `scene` is `{ view, alpha, items: [{ id, x, y, r, fill, stroke }] }`: `x` and `y` are base-projected px (placed through the view), `r` a radius in screen px, and `stroke` a 1.5 px outline or `null`.
-- **`insetFrame`.** One `g.sd-map-inset` holding the leaders (`line.sd-map-inset-leader`, dashed `6 4`), then `rect.sd-map-inset-box` and `rect.sd-map-inset-frame`. When the frame is beside the box, the leaders join the box's two corners facing it to the frame's two corners on its facing side (top to top, bottom to bottom); above or below, left to left and right to right; across a diagonal, the two corners off the diagonal to the same corners of the frame. A frame that overlaps the box has none: its two lines stay, with `display="none"` and no coordinates. A repeat call rewrites the group in place.
+#### Inset and scale bar
+
+| Name | Signature | What it does |
+|---|---|---|
+| `insetFrame` | `insetFrame(svg, { box, frame }) → SVGGElement` | One `g.sd-map-inset` on an SVG: two dashed leaders, the box and the frame, all `[x0, y0, x1, y1]` in the element's px. Idempotent. |
+| `scaleBar` | `scaleBar(svg, { base, view, at, maxWidth, format }) → SVGGElement` | One `g.sd-map-scale`: a bar of a round length in km starting at `at`, and its label. Idempotent. |
+
+- **`insetFrame`.** One `g.sd-map-inset` holding the leaders (`line.sd-map-inset-leader`, dashed `6 4`), then `rect.sd-map-inset-box` and `rect.sd-map-inset-frame`. When the frame is beside the box, the leaders join the box's two corners facing it to the frame's two corners on its facing side (top to top, bottom to bottom); above or below, left to left and right to right; across a diagonal, the two corners off the diagonal to the same corners of the frame. A frame that overlaps the box has none: its two lines stay, with `display="none"` and no coordinates. A repeat call rewrites the group in place. What the frame shows is yours to draw: the built-in draws a second set of canvases there, through the inset's view.
 - **`scaleBar`.** `at` is the bar's start and the place where the scale is measured: the length is the largest 1, 2 or 5 × 10ⁿ km that fits in `maxWidth` px, where one px along the row is `d3.geoDistance` between the two points the view maps to it, on a sphere of 6,371 km. `format` is a number formatter (`ctx.format(",.0f")`) and the label is `` `${format(n)} km` ``. The group holds `line.sd-map-scale-bar`, `path.sd-map-scale-caps` and the `text`, and is empty where the projection cannot be inverted. The frame, the bar and the label are ink, the leaders muted, set in the theme's CSS from its tokens.
+
+```js
+const svg = ctx.d3.select(el).append("svg").attr("width", w).attr("height", h).node();   // appended after the canvases: on top
+// The box is the part of the map a zoomed view shows: the element's corners, taken back through `west` and seen through `home`.
+const corner = ([cx, cy]) => ctx.map.applyView(home, [(cx - west.x) / west.k, (cy - west.y) / west.k]);
+ctx.map.insetFrame(svg, { box: [...corner([0, 0]), ...corner([w, h])], frame: [w * 0.62, h * 0.03, w * 0.97, h * 0.38] });
+ctx.map.scaleBar(svg, { base, view: home, at: [24, h - 24], maxWidth: w * 0.2, format: ctx.format(",.0f") });
+```
 
 ## Helpers inside the engine
 

@@ -133,6 +133,7 @@ Every command except `help` accepts `--json` and then writes JSON to stdout.
 | `catalog` | Entries array, or one detail with a name (see above). |
 | `serve` | `{ url, root, port }`, then the server keeps running until SIGINT or SIGTERM. |
 | `new`, `new-component` | What was created, including the next commands or the line to add to `deck.js`. |
+| `boundaries` | `{ file, sourceFile, regions, points, license, sourceLine, warnings, replaced }`: the GeoJSON and source file written into the deck (absolute paths), their size, the licence and a source line for the slide. |
 
 A problem has the same shape in `validate` and `check`, except that only `validate` adds `severity`:
 
@@ -165,7 +166,7 @@ chart/chart/base · missing-column · x = 'yeer' vs columns of data/series.csv: 
 | `1` | Problems. `validate`: at least one error. `check`: any problem. `dump`: any step with a non-empty `errors`. |
 | `2` | Usage error, or a run that could not complete: no `deck.js`, an unknown `--slide` or `--step`, Playwright missing, a deck with no engine copy, animation off during `check --played`. |
 
-`shoot`, `catalog`, `new`, `new-component` and `serve` exit 0 when they finish.
+`shoot`, `catalog`, `new`, `new-component` and `serve` exit 0 when they finish. `boundaries` exits 0 when it wrote its files, warnings or not, and 2 when it could not (an unknown country or level, no network, an answer it cannot read).
 
 ### Caveats for parsers
 
@@ -186,6 +187,7 @@ The skill is written to be short: it covers what an agent needs to build a slide
 | [`reference/rules.md`](../reference/rules.md) | The full list of `validate`, `check` and `catalog` rules, including rules the skill's `checks.md` does not list. |
 | [`reference/runtime-api.md`](../reference/runtime-api.md) | `boot()`, `window.STEPDECK`, the query flags and the shells. Of the query flags, the skill mentions only `?motion=full`. |
 | [`reference/cli.md`](../reference/cli.md) | Every command, option, output shape and exit code. |
+| [`guide/maps-from-your-code.md`](maps-from-your-code.md) | For a map slide: what the project's own R or Python code makes and what stepdeck does with it, the exact file shapes, the writer functions to copy into that code, and which side fixes which error. The skill states the rule; this page has the details. |
 | [`troubleshooting.md`](../troubleshooting.md) | The error catalogue: common error messages and what to do about each. |
 
 Point an agent at one of these pages when a run fails in a way the skill's `checks.md` does not explain, or when you need behaviour the catalog does not state. These pages describe the engine; they are not engine source, so reading them does not break the skill's rule.
@@ -200,7 +202,6 @@ Known drift at the time of writing:
 
 | Where | What the doc says | What the code does |
 |---|---|---|
-| `skill/SKILL.md` frontmatter | Lists line chart, big number, terminal session, text and markdown. | `components/index.json` has 13 built-ins, adding `chart.bar`, `chart.points`, `list`, `diagram`, `chat`, `timeline`, `image` and `map`. |
 | `skill/references/checks.md`, `unknown-layout` | Use `title`, `figure-notes` or `full-bleed`. | `statement` and `halves` exist too. The problem's `limit` lists every known layout (`figure-notes`, `full-bleed`, `halves`, `statement`, `title`), and its `fix` suggests the closest one or lists them all. |
 | `skill/references/checks.md` | Has no `diagram-id` or `diagram-overlap` rows. | `validate` reports both for `diagram` elements. |
 | `skill/SKILL.md`, `checks.md` | Never mention `--size`; shots go to `shots/960/` by default. | `shoot` takes `--size` 1920, 1280 or 960 (default 960); `check` and `dump` take `--size` as the viewport width (default 1920). |

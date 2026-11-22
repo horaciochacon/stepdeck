@@ -16,8 +16,11 @@ All notable changes to stepdeck are recorded here. The format follows
   components that build themselves (below) still build, so give those elements `enter: "none"`, and entering
   elements still appear one stagger apart unless the theme also sets `--sd-stagger: 0ms`. Jumps, backward
   moves, slide changes, screenshots and reduced motion still render at once, and a played step still ends exactly
-  where a jump does. A hidden page (a covered or minimized window) never animates either, and hiding the page
-  ends the motion in flight at its end state, so a long run cannot stall there until the watchdog fails it.
+  where a jump does.
+- **A hidden page never animates.** A step taken while the page is hidden (a covered or minimized window) renders
+  its end state at once, as reduced motion does, and hiding the page ends the motion in flight at its end state, as
+  a click that supersedes a step does. A hidden window delivers no animation frames, so before, a motion there
+  waited until the element's watchdog failed it.
 - **The focus-dim look changed.** `highlight` in `chart.line` and `diagram` no longer fades the other marks by
   opacity: they turn a neutral grey (see Focus-dim below), as in `chart.bar`. `chart.bar`'s dimmed bars change too:
   their fill is the new `--sd-color-dim` instead of `--sd-color-rule`.
@@ -53,6 +56,9 @@ All notable changes to stepdeck are recorded here. The format follows
 - `.nojekyll` is gone: Pages deploys from an Actions artifact, which never runs Jekyll.
 - CI uploads the site while the fast gate runs, and splits the browser suite over six runners.
 - `npm run test:browser` runs six test files at a time, so the full suite takes about 5 minutes instead of 20.
+- **Canvas pieces live in `core/canvas.js`.** `canvasLayer` and the signature hasher moved there from
+  `core/chart-marks.js`, so maps and charts share them. `ctx.chart` offers them as before (`canvasLayer`, and
+  `signature`, below); chart markup and pixels are unchanged.
 
 ### Added
 
@@ -118,6 +124,54 @@ All notable changes to stepdeck are recorded here. The format follows
   waterfall, and reports `chart-orient` for a back-to-back chart with `orient: "vertical"`. `dump` reports a
   chart's canvas layer, and `check --played` compares it. The engine strings gain `forecast`, `total` and
   `noData`.
+- **`map`, a thirteenth built-in.** The regions of a GeoJSON file, with layers of data over them, told step by
+  step. Files written by `sf` and `geopandas` draw as they are (the winding is fixed); four projections are fitted
+  to the regions. Each layer is one of three kinds:
+  - **`areas`**: a choropleth joined from a CSV by region id, as text, in stepped `classes`, a diverging scale
+    about a `midpoint` or a continuous ramp from the theme's palettes. A key that matches no region, or a region
+    in two rows, is an error on the slide, never a quietly missing value. A region without a value is hatched,
+    and its legend row adds "no data"; a region too small to see is drawn as a dot.
+  - **`raster`**: a picture over the land from a raster file (below), as a value ramp, classes or a one-class
+    mask. Its cells line up with the boundaries in any projection, it hatches the land it has no data for, and
+    it is clipped to the land outline unless `clip: false`.
+  - **`points`**: circles at longitudes and latitudes from a CSV, sized true to a column, with a two-circle size
+    key in the legend, and coloured by a column or a theme role.
+
+  Steps bring layers in and out (`shown`, each with its legend row), `highlight` regions and points, name regions
+  (`labels`), fly the map to a region or a box (`view`), add a zoom `inset` with its box, leader lines and scale
+  bar, and play a time-lapse raster through its frames (`frame`, `pace`): each frame crossfades into the next and
+  a corner panel shows the frame's label and its `numbers` counting. A step that changes `frame` and other things
+  plays the other changes first, then the run. A played step ends where a jump does, canvas pixels included, and
+  `dump` reports each canvas layer's view, layers, frame and signature, which `check --played` compares. The
+  gallery has a `map` example slide.
+- **The raster format and writer functions.** A raster is one JSON (`bounds`, what the grey levels mean in
+  `value`, and a greyscale PNG in `src`, or `frames` for a time-lapse), defined so that R, Python and the browser
+  agree on every value. `docs/guide/maps/stepdeck-map.R` and `docs/guide/maps/stepdeck_map.py` write it from a
+  matrix or a grid (the Python one with the standard library only), for authors to copy into their analysis
+  code, with wrappers for `terra` and rasterio. A new guide, "From your analysis code to a map slide", draws the
+  line between a project's own code, which makes a map's files, and stepdeck, which draws and checks them.
+- **`stepdeck boundaries`.** For a project with no boundaries of its own, `boundaries <ISO3> <ADM0-ADM5>` fetches
+  one country's open admin boundaries from geoBoundaries into the deck's `data/`, simplified and rounded, with a
+  `.source.json` beside it that keeps the source and licence, and prints a source line for the slide. It is the
+  only command that uses the network, and only when you run it.
+- **Five map rules in `validate`.** `map-layer` (`shown` names a layer that does not exist), `map-frame` (a
+  `frame` the time-lapse does not have, layers whose frame labels differ, a `numbers` key in two layers),
+  `map-raster` (a raster file or PNG outside the format), `map-run` (a run longer than 20 s) and the warning
+  `map-prop-unused` (`frame` or `pace` with no time-lapse, a `numbers` key no frame has). `missing-column` also
+  checks the columns a map layer names, and a map counts as a figure for `figure-source`.
+- **For component authors:** `ctx.map`, the geography the built-in `map` is made of, 15 building blocks in four
+  groups: boundaries, the projection and views; raster loading, colour tables, land cells, the pixel-to-cell lookup
+  and the raster painter; painters for regions, borders and points; the inset frame and the scale bar. The
+  contract has an example per group, and the custom-components guide a new section, "Build a map from the engine's
+  pieces".
+- **Colour scales and legend rows on `ctx.chart`.** `colorScale` (stepped classes, a continuous or log ramp, a
+  diverging scale about a midpoint, or categories, from the theme's palettes), `legendRow`, `classIndex` and
+  `classLabels`, for any component that colours by value. With `signature` (below), `ctx.chart` has 33 names.
+- **`signature` and named canvas layers.** `ctx.chart.signature()` hashes what a component painted, piece by
+  piece, into 8 hex digits for a `data-*` attribute. `canvasLayer` takes a `name`, so an element can stack several
+  canvases in the order it makes them, and a `maxRatio` (pass 1 for a raster painted pixel by pixel).
+- **`info.expect(ms)`.** An update that plays a long run says how long it will be, and its watchdog follows, up to
+  20 s (`MAX_RUN_MS`). Asking for more fails the element with a message that says to split the run across steps.
 
 ## [0.1.0] · 2026-11-19 · first public release
 

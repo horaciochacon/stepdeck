@@ -322,6 +322,7 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 | Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. |
 | Keep a scale the same on every step | `ctx.stepProps[k]` is what `update` gets as `props` at step `k` (`null` when that step fails, and `null` altogether for a `ctx.mount` child). Size an axis from all of them. |
 | Draw a chart from ready-made pieces | `ctx.chart`: table loading, scale extents, the plot frame, keyed joins, dots, whiskers, rules, halos, a canvas layer, morph and entrance helpers, colour helpers. See [Build a chart from the engine's pieces](#build-a-chart-from-the-engines-pieces). |
+| Draw a map | `ctx.map`: boundaries, the projection, views, the raster lookup and the painters, with `ctx.chart`'s colour scales and legend rows. See [Build a map from the engine's pieces](#build-a-map-from-the-engines-pieces). |
 
 ## Build a chart from the engine's pieces
 
@@ -494,6 +495,174 @@ Check the figures,12,2
 `ctx.chart` has more for other charts: an interval whisker, a forecast band, labels kept apart, a canvas layer for many thin lines, a fixed draw order, and a colour that stays readable as text. Each group has its own example in the contract. A chart that builds its own entrance reads `C.entrance(info, ctx)` and draws its lines with `C.undraw` and `ctx.animate.drawPath`.
 
 The gallery's slope chart, [`gallery.slope`](../../site/gallery/components/gallery.slope/index.js), goes further with the same pieces in about 100 lines and no `import`: labels ranked with `C.rank` and kept apart with `C.spread` that slide to their new rank on a played step, `highlight` with `C.focusPaint` and `C.tweenColor`, and lines that draw in as its own entrance. It passes `check --played` like a built-in; its slide is `custom-slope` in the [gallery](../../site/gallery/), and the files are listed under [A complete example in the repository](#a-complete-example-in-the-repository).
+
+## Build a map from the engine's pieces
+
+The built-in [`map`](../reference/components/map.md) covers choropleths, rasters, points, flights, an inset and time-lapses. A map story it does not tell is a deck component built on the same pieces: `ctx.map` for the geography (boundaries, the projection, views, the painters) and `ctx.chart` for the colour scale, the legend row, the canvas layers and the motion. The files are the same as the built-in's, made by your project's code: see [From your analysis code to a map slide](maps-from-your-code.md). Every piece is listed in the [component contract](../reference/component-contract.md#ctxmap).
+
+This section builds `my.regions`: regions coloured by a CSV column in stepped classes, a legend row, and a `focus` prop that flies the map to a region on a played step. Scaffold it (`new-component my.regions`), then replace `schema.json`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "my.regions",
+  "description": "Regions of a GeoJSON file coloured by a CSV column in stepped classes, with a legend row. A played change of `focus` flies the map to a region.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["boundaries", "id", "data", "value", "classes"],
+  "properties": {
+    "boundaries": {
+      "type": "string",
+      "description": "Path to a GeoJSON FeatureCollection of the regions, relative to the deck root. Read once, at mount.",
+      "examples": ["data/regions.geojson"],
+      "x-transition": "snap"
+    },
+    "id": {
+      "type": "string",
+      "description": "The feature property that identifies a region, and the CSV column that names each row's region. Read once, at mount.",
+      "examples": ["code"],
+      "x-transition": "snap"
+    },
+    "data": {
+      "type": "string",
+      "description": "Path to a CSV file with one row per region, relative to the deck root.",
+      "examples": ["data/rates.csv"],
+      "x-transition": "snap"
+    },
+    "value": {
+      "type": "string",
+      "description": "The column whose values colour the regions. A region without a value is hatched.",
+      "examples": ["rate"],
+      "x-transition": "snap"
+    },
+    "classes": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 1,
+      "description": "Class breaks, in increasing order.",
+      "examples": [[5, 10, 15]],
+      "x-transition": "snap"
+    },
+    "label": {
+      "type": "string",
+      "description": "The title of the legend row.",
+      "examples": ["Cases per 1,000"],
+      "x-transition": "snap"
+    },
+    "focus": {
+      "type": "string",
+      "description": "A region to fly to; without it the map shows every region. A played change flies there.",
+      "examples": ["W4"],
+      "x-transition": "tween"
+    }
+  }
+}
+```
+
+And `components/my.regions/index.js`:
+
+```js
+// my.regions: regions coloured by a CSV column in stepped classes, with a legend row, and a `focus` that flies the
+// map to a region. Built only on `ctx.map` and `ctx.chart`. Every update paints the end state from its props.
+export default {
+  async mount(el, props, ctx) {
+    const { map: M, chart: C, d3 } = ctx;
+    const { w, h } = ctx.size;
+    const token = (name) => ctx.tokens[name].trim();
+    // The geometry is fixed for the element's life: the regions, the base projection, one Path2D per region.
+    const { features, byId, ids } = M.boundaries(await ctx.data(props.boundaries), { id: props.id, file: props.boundaries });
+    const base = M.projection("equal-earth", features, [w, h]);
+    const path = d3.geoPath(base);
+    const paths = new Map(ids.map((id) => [id, new Path2D(path(byId.get(id)))]));
+    const res = { path: (id) => paths.get(id), centroid: (id) => path.centroid(byId.get(id)) };
+    const areas = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "areas" });
+    const borders = C.canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: "borders" }); // made second: on top
+    const legend = el.appendChild(el.ownerDocument.createElement("div"));
+    legend.className = "sd-map-legend"; // the core's legend panel, on the background colour
+    legend.dataset.at = "bottom-left";
+    const palettes = { sequential: ctx.palette("sequential"), diverging: ctx.palette("diverging"), categorical: ctx.palette("categorical") };
+    let last = null; // the view the map ended at: where a played step flies from
+
+    /** Paints the regions with their fills (a Map; no entry is the hatch) and their borders, through `view`. */
+    function paint(fills, view) {
+      const hatch = { line: token("--sd-color-dim"), background: token("--sd-color-surface") };
+      const stroke = token("--sd-color-background");
+      areas.setAttribute("data-sig", M.paintAreas(areas, { source: props.boundaries, view, alpha: 1, hatch,
+        items: ids.map((id) => ({ id, fill: fills.get(id) ?? null, stroke, width: 1, dot: false })) }, res));
+      borders.setAttribute("data-sig", M.paintBorders(borders, { source: props.boundaries, view,
+        items: ids.map((id) => ({ id, stroke: token("--sd-color-rule"), width: 1, alpha: 1, dot: false })) }, res));
+    }
+
+    return {
+      async update(next, info = {}) {
+        // The join: every row names a region, as text. A key that matches none is an error, never a missing value.
+        const rows = await C.loadTable(next, ctx, "my.regions", [["id", next.id], ["value", next.value]]);
+        const scale = C.colorScale({ classes: next.classes }, palettes, { format: ctx.format(",") });
+        const fills = new Map();
+        for (const row of rows) {
+          const key = String(row[next.id]).trim();
+          if (!byId.has(key)) throw new Error(`${next.data}: key '${key}' matches no region`);
+          const color = scale.color(row[next.value]);
+          if (color) fills.set(key, color);
+        }
+        legend.replaceChildren(C.legendRow(el.ownerDocument, scale.legend, { title: next.label, noData: ids.some((id) => !fills.has(id)), t: ctx.t }));
+
+        const view = M.view(base, next.focus ? [byId.get(next.focus)] : null, [w, h]);
+        const moves = last && (last.k !== view.k || last.x !== view.x || last.y !== view.y);
+        if (info.animate && moves && !info.entered && !info.signal?.aborted) {
+          const from = last;
+          await C.morph(info, ctx, (t) => paint(fills, { k: C.lerp(from.k, view.k, t), x: C.lerp(from.x, view.x, t), y: C.lerp(from.y, view.y, t) }));
+        }
+        paint(fills, view); // the end state, however the step ended
+        last = view;
+      },
+      destroy() {
+        for (const node of [areas, borders, legend]) node.remove();
+      },
+    };
+  },
+};
+```
+
+The pieces, in the order `mount` and `update` take them:
+
+| Step | Piece | Why |
+|---|---|---|
+| Regions | `M.boundaries` | Checks the GeoJSON (Polygons and MultiPolygons, an id on every feature, no id twice, within the limits) and fixes the winding, so a file from `sf` or `geopandas` draws right. It returns new features, `byId` and the `ids`; never draw the raw file. |
+| Projection | `M.projection`, `d3.geoPath` | The base projection, fitted to the regions in the element's size once, at mount. A `Path2D` per region, in base-projected pixels, is drawn again at every view without projecting again. |
+| Canvases | `C.canvasLayer` | One named layer per painter, stacked in the order they are made: the borders over the areas. |
+| Join | `C.loadTable`, then your own check | `loadTable` checks that the columns exist. The join is yours: a key that names no region throws, so a mismatch in the data is an error on the slide, never a region quietly left blank. |
+| Colours | `C.colorScale`, `C.legendRow` | Stepped classes from the theme's sequential palette, and the legend row with a "no data" swatch when a region has no value. `.sd-map-legend` is the core's legend panel, on the background colour. |
+| View | `M.view` | The transform that fits the `focus` region, or the whole map. A view is three numbers, `k`, `x` and `y`. |
+| Motion | `C.morph`, `C.lerp` | A played change of `focus` blends the three numbers from the last view to the new one over twice `--sd-duration`, or the step's `transition`, and paints every frame through the view of the moment. A straight blend is enough here; the built-in follows `d3.interpolateZoom`, which zooms out and in again on a long flight. |
+| Paint | `M.paintAreas`, `M.paintBorders` | Clear the canvas, paint the scene, return a signature of it. A region with no fill is hatched. The signatures go on the canvases as `data-sig`, so `dump` shows what was painted. |
+
+`update` ends by painting the end state from its props, whether the step played, jumped or was aborted, so a played step ends where a jump does, pixels included. The boundaries are read once, at mount, so a step cannot change them here (the built-in can).
+
+The example slide flies from the whole map to one region, then to another. The source line is in `footer`, so the map is alone in `main` and fills it.
+
+```js
+export default {
+  id: "my-regions-example",
+  layout: "figure-notes",
+  title: "Rates by region",
+  elements: [
+    { id: "regions", region: "main", type: "my.regions",
+      props: { boundaries: "data/regions.geojson", id: "code", data: "data/rates.csv", value: "rate",
+               classes: [5, 10, 15], label: "Cases per 1,000" } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Synthetic data." } },
+  ],
+  steps: [
+    { id: "all" },
+    { id: "west", set: { regions: { focus: "W4" } } },
+    { id: "east", set: { regions: { focus: "E1" } } },
+  ],
+};
+```
+
+Its data files are the gallery's: copy [`site/gallery/data/map/regions.geojson`](../../site/gallery/data/map/regions.geojson) and [`rates.csv`](../../site/gallery/data/map/rates.csv) into the deck's `data/`. `validate`, `check` and `check --played` pass on it in both built-in themes.
+
+For a raster, the same order holds with the Rasters group of the contract: `M.loadRaster` reads the file, `M.lut` turns a colour scale into a colour per grey level, and `M.paintRaster` draws it through a lookup table per view (`M.lookup`), hatching land without data. The inset's box, leader lines and scale bar are `M.insetFrame` and `M.scaleBar` on an SVG over the canvases.
 
 ## Verify it
 

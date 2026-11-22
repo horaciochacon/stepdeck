@@ -43,6 +43,7 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | [The step model](guide/step-model.md) | Steps as patches, `set`/`replace`/`show`/`hide`/`only`, and the `from`, `at` and `advance` shortcuts. |
 | [Animation and motion](guide/animation-and-motion.md) | The named motions elements enter and leave with, how one step's entrances follow each other, the theme's motion tokens, focus-dim, the message line, badges and ghost placeholders; when motion plays, why a jump and a played step end in the same state, and reduced motion. |
 | [Data and bindings](guide/data-and-bindings.md) | Data files in `data/`, bindings with a JSON pointer and an optional format, CSV column types. |
+| [From your analysis code to a map slide](guide/maps-from-your-code.md) | Where a map's files come from: what your R or Python code makes and what stepdeck does with it, the exact file shapes, writer functions to copy into your code, writing boundaries, `stepdeck boundaries`, the slide and the checks. |
 | [Layouts and themes](guide/layouts-and-themes.md) | Choosing a layout, placing elements in regions, region variables, theme tokens and palettes. |
 | [Presenting](guide/presenting.md) | Serving a deck, keys, the presenter view, URL hashes and query flags. |
 | [Checking a deck](guide/checking-a-deck.md) | Running the checks, reading problem lines and fixing common problems. |
@@ -78,7 +79,7 @@ One page per built-in component, in the order of `components/index.json`:
 | [chat](reference/components/chat.md) | A conversation shown as bubbles or a card. |
 | [timeline](reference/components/timeline.md) | Stops along a line with a progress fill. |
 | [image](reference/components/image.md) | An image file from the deck, with alt text and an optional caption. |
-| [map](reference/components/map.md) | Regions from a GeoJSON file coloured by a value from a CSV, with highlights, names on the map and a legend. |
+| [map](reference/components/map.md) | Regions from a GeoJSON file with layers of data over them (a choropleth from a CSV, rasters, points), highlights, names, a legend, flights, a zoom inset and time-lapses. Its files come from your own code: see [From your analysis code to a map slide](guide/maps-from-your-code.md). |
 
 ## Concepts
 
