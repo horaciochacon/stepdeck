@@ -308,6 +308,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-map-scale-bar, .sd-map-scale-caps { stroke: var(--sd-color-ink); stroke-width: calc(var(--sd-rule-width) * 1.5); }
 .sd-map-scale text { fill: var(--sd-color-ink); font-family: var(--sd-font-body); font-size: var(--sd-font-size-note); font-variant-numeric: tabular-nums; stroke: var(--sd-color-background); stroke-width: 4; stroke-linejoin: round; paint-order: stroke; }
 
+/* the inset of a map (components/map/inset.js): a stage over the map's canvases and under its SVG, on the background colour
+   so its sea hides the map beneath. Its place and size are inline, in px; its opacity is only there while it fades. */
+.sd-map-inset-stage { position: absolute; overflow: hidden; background: var(--sd-color-background); pointer-events: none; }
+
 /* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
    background colour; the legend in the corner `legend` names (data-at), on a panel of the background colour so its text
    keeps its contrast over coloured regions, its rows stacked away from that corner, their titles in the note size and

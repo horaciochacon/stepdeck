@@ -18,6 +18,7 @@ from the theme, so the same deck reads correctly in every theme.
 | `shown` | string[] | none | fade | The layers on screen, by id. A layer that appears fades in with its legend row; one that leaves fades out. |
 | `highlight` | string[] | none | fade | Regions and points (by id) outlined in ink; every other region of an areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of them, or to `{ bounds: [west, south, east, north] }` in degrees; `null` is the whole map. A change flies the map there. |
+| `inset` | `{ view, at, scale }` \| `null` | none | fade | A second, zoomed view of the same shown layers in a corner of the element, with a box on the map, two dashed leaders and a scale bar. `view` is as the map's own (a change flies the inset alone); `at` is `"top-right"` (default), `"top-left"`, `"bottom-right"` or `"bottom-left"`; `scale` (default `true`) shows the scale bar. |
 | `labels` | string[] | none | fade | Regions named on the map, at the centroid of their largest polygon, on a halo. |
 | `legend` | corner \| `false` | `"bottom-left"` | snap | Where the legend sits (`"bottom-left"`, `"bottom-right"`, `"top-left"`, `"top-right"`), or no legend. |
 
@@ -72,6 +73,14 @@ Behaviour:
   A view names regions only: a point's id is an error. Lines
   keep their width on screen, points and dots their size; a region too small to see at home becomes an area again
   when the view zooms in enough. A name (`labels`) is drawn only while its region's centre is inside the element.
+- **Inset.** The inset shows what the map would at `inset.view` (fitted as `view` is, to the element), smaller: 36% of
+  the element's width, with the element's aspect, in the corner `at`, 3% of the element's width in from each of the two
+  edges, on the background colour so it hides the map beneath. It has the same layers, colours, highlight and names as
+  the map; a name under the inset is left off the map. A box on the map marks the part the inset shows (seen through the map's
+  own view, so it follows a flight of either), the inset has an ink border, and two dashed lines (`6 4`) join the box's
+  two corners nearest the inset to the matching corners of its border, never crossing either; while the inset covers the
+  box there are none. The scale bar sits at the inset's bottom-left: the longest 1, 2 or 5 × 10ⁿ km that fits in 40% of its width, measured
+  where the bar starts, labelled `200 km` (`1,000 km` in English, `1.000 km` in Spanish).
 - **Legend.** On a panel of the background colour, one row per shown layer: its `label`, then its classes (a swatch
   each, 28 px) or a ramp between its two end values, then the "no data" swatch when a region has no value. Rows stack
   away from the legend's corner. Numbers are written in the deck language (`2,5` in Spanish).
@@ -87,13 +96,15 @@ Behaviour:
   and names are redrawn at every frame, and a raster crossfades from its picture at the start view to its picture at
   the end view, both moving with the map, the wider one underneath, so it stays filled as the map zooms in or out
   and is sharp when it lands (a long flight that zooms out past both ends can leave a thin margin unfilled at its
-  widest moment). Jumps,
+  widest moment); an inset that comes or goes fades, with its box and leaders, and a change of `inset.view` flies the inset alone
+  in the same way, over twice the step's duration, the box following. Jumps,
   backward steps and reduced motion show the end state at once. The map does not own its
   entrance: the engine moves its box in.
 - **State on the canvases.** Each canvas layer (`data-layer` `main:base`, `main:areas:<id>`, `main:raster:<id>`, `main:borders`, `main:points:<id>`) carries
   `data-view` (the view of the moment as `k,x,y`, during a flight too), `data-shown`, `data-highlight`, `data-frame` and `data-sig` (the signature of what it painted), which
-  `dump` and `check --played` compare.
-- **Errors** (on the slide): `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
+  `dump` and `check --played` compare. An inset has the same canvases, named `inset:base`, `inset:areas:<id>`, `inset:raster:<id>`, `inset:borders` and `inset:points:<id>`, in a
+  `div.sd-map-inset-stage`, each with the inset's own `data-view`; they exist only while the inset is on (or fading).
+- **Errors** (on the slide): an inset's `view` raises the errors the map's does, and ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"``; `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
   points, `'X' not found (regions: …; points: …)` for `highlight`; ``'S4' is a point: `view` names regions only (regions: …)``; `layer 'x' not found (layers: …)` for `shown`;
   `<csv>: row 4 has no lon` (also `lat`, and `size` for a size that is not a number; rows count from 1, not counting the
   header), `<csv>: color 'kinds' is not a column (…) or a theme colour (…)`; `<csv>: key 'X' matches no region`; `<csv>: key 'X' appears twice`;

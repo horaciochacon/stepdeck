@@ -617,8 +617,8 @@ export interface MapRasterResources {
   raster: Pick<MapRaster, "decoded">;
   /** 1,024 RGBA bytes: the colour of each level (`lut`). */
   lutData: Uint8ClampedArray;
-  /** The `lookup` table for a view, for the layer's CSS size. */
-  lookupFor(at: MapView): Int32Array;
+  /** The `lookup` table for a view, for a CSS size (the canvas's own, `[width, height]` in whole px, so a layer smaller than the element has its own tables). */
+  lookupFor(at: MapView, size: [number, number]): Int32Array;
   /** The regions, in base-projected px: land outside the raster is hatched, and `scene.clip` clips to it (then required: without it `paintRaster` throws `paintRaster: clip needs res.land`). `null` for none. */
   land: Path2D | null;
   /** The raster's land cells (`landCells`): a cell with no data on one is hatched. `null` for none. */

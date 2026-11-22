@@ -2,7 +2,7 @@
 
 `map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a mask. A layer with `points` puts a circle at the longitude and latitude of each row of a CSV, sized by a column and coloured by a column or a theme role. Steps bring layers in and out (each adds its legend row), highlight regions, put their names on the map and fly the map to a region or a box and back. A region, or land a raster has no data for, is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/points.js`](../../../engine/components/map/points.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/points.js`](../../../engine/components/map/points.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/inset.js`](../../../engine/components/map/inset.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -43,6 +43,7 @@ export default {
 | `shown` | string[] | none | fade | The layers on screen, by id. Without it the map shows the regions alone. |
 | `highlight` | string[] | none | fade | Regions and points to emphasize, by id. They get an ink outline; every other region of a shown areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds: [west, south, east, north] }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of regions, or to a box in degrees; `null` is the whole map. See [Views and flights](#views-and-flights). |
+| `inset` | `{ view, at, scale }` \| `null` | none | fade | A zoomed second view of the same layers in a corner. See [Inset](#inset). |
 | `labels` | string[] | none | fade | Regions to name, by id: each region's `name` at the centroid of its largest polygon, on a halo. |
 | `legend` | `"bottom-left"` \| `"bottom-right"` \| `"top-left"` \| `"top-right"` \| `false` | `"bottom-left"` | snap | The corner the legend sits in, or no legend. |
 
@@ -151,7 +152,37 @@ A view names regions only. A point's id, or an id that is not a region, is an el
 
 On a forward step a change of `view` is a **flight**: the map moves along d3's zoom path (`d3.interpolateZoom`), which zooms out and in again as far as the distance asks, over twice the step's duration. The land, the borders, the areas, the points and the names are redrawn at every frame through the view of the moment. A raster crossfades between two pictures, the one made at the start view and the one made at the end view, both moving with the map. The wider of the two is drawn underneath at full strength and the other blends over it, so the raster stays filled as the map zooms in or out, and is sharp, one cell per pixel, when it lands. A long flight whose path zooms out past both ends can leave a thin unfilled margin at its widest moment, where neither picture reaches. A raster's hatch moves with its picture during the flight.
 
-Each view needs, for each raster, a table from the element's pixels to the raster's cells. The map builds the tables of every view its slide names when it mounts (for up to 2 s; any left over are built when first needed), so no flight waits for one. No table or picture is ever made for a view in between.
+Each view needs, for each raster, a table from the element's pixels to the raster's cells. The map builds the tables of every view its slide names, its insets' included, when it mounts (for up to 2 s; any left over are built when first needed), so no flight waits for one. No table or picture is ever made for a view in between.
+
+## Inset
+
+`inset` adds a second, zoomed view of the same shown layers in a corner of the element, so a story can keep the whole map in sight while it looks closely at a place.
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `view` | as the map's `view` | (required) | Where the inset looks: a region id or a list of them, `{ bounds }`, or `null` for the whole map. |
+| `at` | `"top-right"` \| `"top-left"` \| `"bottom-right"` \| `"bottom-left"` | `"top-right"` | The corner of the element the inset sits in. |
+| `scale` | boolean | `true` | Whether the inset has a scale bar. |
+
+```js
+steps: [
+  { id: "country" },
+  { id: "west", set: { map: { inset: { view: "W4" } } } },                       // an inset on one region
+  { id: "coast", set: { map: { inset: { view: ["W4", "S1"] } } } },              // the inset flies there; the map stays
+  { id: "low", set: { map: { inset: { view: ["W4", "S1"], at: "bottom-right", scale: false } } } },
+  { id: "gone", set: { map: { inset: null } } },
+]
+```
+
+**What it shows.** The inset is a second stage inside the element, not another component: it draws the same prepared layers, colours, highlight and names as the map (the `shown` layers, the `highlight` and the `labels`), through its own view. It shows what the whole map would at that view, fitted as `view` is, only smaller: 36% of the element's width, with the element's aspect, in the corner `at`, 3% of the element's width in from each of the two edges. It sits on `--sd-color-background`, so it hides the map beneath it, and has an ink border. A region's name under the inset is left off the map.
+
+**Box and leaders.** A box on the map marks the part the inset shows, seen through the map's own view. Two dashed lines (`6 4`, in `--sd-color-muted`) join the two corners of the box nearest the inset to the matching corners of its border, and cross neither; while the inset covers the box (they overlap) there are none. When the map flies, the box moves with it, and when the inset flies, the box does.
+
+**Scale bar.** At the inset's bottom-left, 16 px in from its edges: a bar of the longest round length (1, 2 or 5 × 10ⁿ km) that fits in 40% of the inset's width, with its label (`200 km`, `1,000 km`) above it, in the deck language. The length is measured on the sphere at the bar's start, as the great-circle distance of one pixel, so it follows the view. `scale: false` leaves it out.
+
+**Motion.** An inset that comes or goes fades over the step's duration (its box and leaders with it). A change of `inset.view` between two steps that both have an inset flies the inset alone, over twice the step's duration, along the same zoom path as the map's flights; the map does not move. Jumped, backward or aborted, the end state is drawn at once. Changing `at` or `scale` is drawn at once.
+
+The lookup tables the rasters need for the inset's views, at the inset's size, are built at mount with the map's own (see [Views and flights](#views-and-flights)).
 
 ## Legend
 
@@ -167,6 +198,8 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. |
 | A shown layer's data or scale changes (a raster's file, scale, `color` or `clip` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. |
 | `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`. |
+| `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. |
+| `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. |
 | `labels` changes | Labels that come fade in, labels that go fade out. |
 | `boundaries`, `id`, `name`, `projection`, `legend` change | Drawn at once. |
 | The element becomes visible | The engine moves its box in (`map` does not own its entrance), already showing that step's layers. |
@@ -183,14 +216,20 @@ canvas.sd-canvas-layer[data-layer="main:areas:<id>"]    one per layer any step d
 canvas.sd-canvas-layer[data-layer="main:raster:<id>"]   one per raster layer any step declares, after the areas
 canvas.sd-canvas-layer[data-layer="main:borders"]       the borders and the highlight outlines (ctx.map.paintBorders)
 canvas.sd-canvas-layer[data-layer="main:points:<id>"]   one per points layer any step declares, over the borders (ctx.map.paintPoints)
+div.sd-map-inset-stage                                   only while the inset is on (or fading): left, top, width, height in px
+  canvas.sd-canvas-layer[data-layer="inset:<part>"]      the canvases above, named inset:base, inset:areas:<id>, inset:raster:<id>, inset:borders, inset:points:<id>
+  svg.sd-map-labels                                      the names in the inset
+    text.sd-map-label[data-region]
+    g.sd-map-scale                                       the scale bar (line, path.sd-map-scale-caps, its label), with `scale`
 svg.sd-map-labels
   text.sd-map-label[data-region]                         one per entry of `labels` whose region's centre is in view
+  g.sd-map-inset                                         with the inset: two leaders, rect.sd-map-inset-box, rect.sd-map-inset-frame
 div.sd-map-legend[data-at]                               the corner, when a shown layer has a legend
   div.sd-legend-row[data-layer]                          from ctx.chart.legendRow
     span.sd-legend-item > svg.sd-legend-circle + label   a size key's circles, after the swatches
 ```
 
-Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map, the view of the moment during a flight), `data-shown` (the layers painted), `data-highlight` (the highlighted regions and points), `data-frame` (empty: no time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer). A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
+Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map, the view of the moment during a flight), `data-shown` (the layers painted), `data-highlight` (the highlighted regions and points), `data-frame` (empty: no time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer); the inset's canvases say the same, with the inset's own `data-view`. A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
 
 ## Errors
 
@@ -209,6 +248,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``'S4' is a point: `view` names regions only (regions: E1, I1, I2, N1, N2, …)`` | `view` names a point of a layer the step declares. |
 | `` `view` must be a region id, a list of them, `{ bounds: [west, south, east, north] }` or null `` | `view` is neither (`validate` reports it too). |
 | `'Nowhere' not found (regions: E1, I1, I2, N1, N2, …; points: S1, S2, S3, S4, S5, …)` | `highlight` names an id that is neither a region nor a point of a layer the step declares. Written when a layer has points; `labels` keeps the message above. |
+| ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"`` | `inset.at` is none of the four corners. `inset.view` raises the errors `view` does. |
 | `layer 'pop' not found (layers: rate)` | `shown` names a layer that `layers` does not have. |
 | ``layer 'pop' needs `areas`, `raster` or `points` `` | A layer without a kind key. |
 | `data/sites.csv: row 4 has no lon` | A row's longitude is empty or not a number; also `lat`, and `size` for a size that is not a number (`has a negative size` for a negative one). Rows count from 1, not counting the header. |

@@ -15,6 +15,12 @@
 // other views through it (raster.js). A paint at rest paints every canvas and makes the labels afresh, so the markup is
 // the same however a step was reached. A frame of a motion (`moving`) leaves a canvas whose scene has the signature it
 // shows already, and moves the labels in place when they name the same regions as before.
+//
+// A stage may be smaller than the element (the inset, ./inset.js): its `size` is its own and its `scale` the ratio of that
+// to the element's. Views are always the element's (fitted to the geography's size); each scene is drawn through the view
+// scaled by `scale`, so the stage shows what the element would show at that view, only smaller, while its canvases say the
+// view itself (`data-view`). The labels are the SVG's `text` children; whatever else is drawn on the SVG (the inset's
+// frame, a scale bar) is left alone.
 import { canvasLayer } from "../../core/canvas.js";
 import { applyView } from "../../core/map.js";
 import { DOT_OUTLINE, paintAreas, paintBorders } from "../../core/map-paint.js";
@@ -31,6 +37,13 @@ const SIGN_ONLY = { getContext: () => null };
 const fixed = (v) => v.toFixed(3);
 const viewText = (v) => `${fixed(v.k)},${fixed(v.x)},${fixed(v.y)}`;
 const tenth = (v) => Math.round(v * 10) / 10;
+/**
+ * A view of the element as a stage `s` times its size draws it: the same part of the map, `s` times smaller.
+ * @param {{ k: number, x: number, y: number }} v
+ * @param {number} s
+ * @returns {{ k: number, x: number, y: number }}
+ */
+export const through = (v, s) => (s === 1 ? v : { k: v.k * s, x: v.x * s, y: v.y * s });
 
 /** Clears a layer that is not shown, whatever its transform. */
 function clear(canvas) {
@@ -45,11 +58,12 @@ function clear(canvas) {
 /**
  * The canvases and labels of one view of a map, inside `el`.
  * @param {HTMLElement} el
- * @param {{ name: string, size: [number, number], geo: object, layers: { kind: string, id: string, module: object }[] }} options
- *   `geo` is the element's geography (index.js), `layers` the layer slots in paint order
+ * @param {{ name: string, size: [number, number], geo: object, layers: { kind: string, id: string, module: object }[], scale?: number }} options
+ *   `geo` is the element's geography (index.js), `layers` the layer slots in paint order, `scale` how much smaller than the
+ *   element the stage is (default 1)
  * @returns {{ paint(state: object, layerStates: object[]): void, svg: SVGSVGElement, destroy(): void }}
  */
-export function createStage(el, { name, size, geo, layers }) {
+export function createStage(el, { name, size, geo, layers, scale = 1 }) {
   const [w, h] = size;
   const doc = el.ownerDocument;
   const make = (part, maxRatio) => canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: `${name}:${part}`, maxRatio });
@@ -107,12 +121,20 @@ export function createStage(el, { name, size, geo, layers }) {
   /**
    * The labels at their regions' anchors seen through `v`, those whose anchor is inside the stage (a view that zooms in
    * leaves the others out, as it does their regions): made afresh, or, while moving and naming the same regions, moved.
+   * A label whose anchor is inside `cover` (a rectangle in the stage's px, `[x0, y0, x1, y1]`, with how far it covers:
+   * the inset on the map) fades out as the cover comes in, and is left out under all of it.
    */
-  function placeLabels(labels, v, moving) {
+  function placeLabels(labels, v, moving, cover) {
     const placed = labels
       .map(({ id, opacity }) => ({ id, opacity, at: applyView(v, geo.anchor(id)) }))
-      .filter(({ at: [x, y] }) => x >= 0 && x <= w && y >= 0 && y <= h);
-    const here = [...svg.children];
+      .filter(({ at: [x, y] }) => x >= 0 && x <= w && y >= 0 && y <= h)
+      .map((label) => {
+        const [x, y] = label.at;
+        const under = cover && x >= cover.rect[0] && x <= cover.rect[2] && y >= cover.rect[1] && y <= cover.rect[3];
+        return under ? { ...label, opacity: label.opacity * (1 - cover.alpha) } : label;
+      })
+      .filter(({ opacity }) => opacity > 0);
+    const here = [...svg.children].filter((node) => node.localName === "text");
     const keep = moving && here.length === placed.length && placed.every(({ id }, i) => here[i].getAttribute("data-region") === id);
     const texts = keep ? here : placed.map(({ id }) => newLabel(id));
     placed.forEach(({ opacity, at: [x, y] }, i) => {
@@ -121,21 +143,27 @@ export function createStage(el, { name, size, geo, layers }) {
       if (opacity < 1) texts[i].setAttribute("opacity", String(opacity));
       else texts[i].removeAttribute("opacity");
     });
-    if (!keep) svg.replaceChildren(...texts);
+    if (!keep) {
+      for (const node of here) node.remove();
+      svg.prepend(...texts);
+    }
   }
 
   return {
     svg,
     /**
      * Paints one moment. `state` is { view, flight, highlight: { ids, dim(id), ring(id) }, labels: [{ id, opacity }],
-     * frame, frameMix }, `flight` the flight under way ({ from, to, t }, or null); `layerStates[i]` is { prepared,
-     * alpha, from, change } for `layers[i]` (a layer at alpha 0 is cleared). `moving`: a frame of a motion, which
-     * leaves a canvas that shows its scene already.
+     * frame, frameMix, cover }, `flight` the flight under way ({ from, to, t, view }, or null; the views are the element's:
+     * the stage draws them through its `scale`), `cover` what hides part of the labels ({ rect, alpha }, or none);
+     * `layerStates[i]` is { prepared, alpha, from, change } for `layers[i]` (a layer at alpha 0 is cleared). `moving`: a
+     * frame of a motion, which leaves a canvas that shows its scene already.
      */
     paint(state, layerStates, { moving = false } = {}) {
-      const { view: v, flight = null, highlight } = state;
+      const { view: shown, flight: flying = null, highlight } = state;
+      const v = through(shown, scale);
+      const flight = flying && { ...flying, from: through(flying.from, scale), to: through(flying.to, scale), view: through(flying.view, scale) };
       const marks = {
-        view: viewText(v),
+        view: viewText(shown),
         shown: layers.filter((_, i) => layerStates[i].alpha > 0).map((slot) => slot.id).join(","),
         highlight: highlight.ids.join(","),
         frame: state.frame ?? "",
@@ -164,7 +192,7 @@ export function createStage(el, { name, size, geo, layers }) {
       });
       const lines = bordersScene(v, highlight);
       put(borders, (canvas) => paintBorders(canvas, lines, geo.res));
-      placeLabels(state.labels, v, moving);
+      placeLabels(state.labels, v, moving, state.cover);
     },
     destroy() {
       for (const canvas of [land, ...canvases, borders]) canvas.remove();
