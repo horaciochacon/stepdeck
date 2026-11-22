@@ -1,15 +1,18 @@
 // Helpers the built-in charts (chart.line, chart.bar, chart.points) share, and `chartKit`: the same building blocks, frozen,
 // which every component receives as `ctx.chart`. The pure layout maths is in ./chart-layout.js, the DOM marks,
-// frame, joins and canvas layer in ./chart-marks.js, the motion in ./chart-motion.js.
+// frame, joins and canvas painting in ./chart-marks.js, the motion in ./chart-motion.js, the canvas layers and the
+// signature hasher in ./canvas.js.
 import { d3 } from "./d3.js";
 import { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp } from "./chart-layout.js";
 import { frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines } from "./chart-marks.js";
+import { signature } from "./canvas.js";
 import { morph, entrance, undraw } from "./chart-motion.js";
 import { focusPaint, tweenColor } from "./kit.js";
 import { textColor } from "./color.js";
 
 export { extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp } from "./chart-layout.js";
 export { frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines } from "./chart-marks.js";
+export { signature } from "./canvas.js";
 export { morph, entrance, undraw } from "./chart-motion.js";
 
 /**
@@ -48,6 +51,6 @@ export const opacityAttr = (d) => (d.opacity === 1 ? null : d.opacity);
 export const chartKit = Object.freeze({
   loadTable, tickFormat,
   extentOf, rank, splitAt, spread, fit, wrapLabel, drawOrder, swarm, lerp,
-  frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines, morph, entrance, undraw,
+  frame, keyed, settle, dot, whisker, band, rule, axis, halo, canvasLayer, paintLines, signature, morph, entrance, undraw,
   focusPaint, tweenColor, textColor,
 });

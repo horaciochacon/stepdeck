@@ -343,7 +343,7 @@ const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 
 `ctx.chart` is the set of building blocks the built-in charts are made of, for a component that draws its own chart. A component that reads only `ctx.chart` needs no `import`, so it keeps working wherever the engine's files live. The object is frozen and is the same one for every component and child. The marks take d3 selections and write attributes; their colours and sizes are yours, from theme tokens and `ctx.palette()`, and the theme styles what it decides (the background outline of a dot, the ink of a whisker, the halos) through generic classes. Where an option says "value or accessor", a function is called per node as `(d, i, nodes)`.
 
-**Public and internal.** The 28 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
+**Public and internal.** The 29 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
 
 The names are in eleven groups. Each group has its signatures and one short example. The examples are fragments: they assume a selection per kind of mark (`circles`, `whiskers`, `rules`, `labels`, `shade`, and the axis group `axisG`) and the rows, scales (`x`, `y`) and frame (`f`) of the groups before them. The Joins group shows a whole `update`, and `test/fixtures/decks/chart-kit/components/fixture.marks/index.js` is a working component that calls the Data, Frame, Joins, Motion, Marks and Canvas groups.
 
@@ -511,15 +511,21 @@ const dy = ctx.chart.swarm(values.map(x), { r: f.font * 0.3, maxDy: f.ph / 4 });
 
 | Name | Signature | What it does |
 |---|---|---|
-| `canvasLayer` | `canvasLayer(el, { left, top, pw, ph }) → canvas` | One `canvas.sd-canvas-layer` per `el`, its first child, at `left`/`top` and `pw` × `ph` in CSS pixels, with a backing store of that size × min(3, `devicePixelRatio`) and a scaled context: you draw in plot pixels. The SVG you append after it paints above it. Idempotent. |
+| `canvasLayer` | `canvasLayer(el, { left, top, pw, ph, name?, maxRatio? }) → canvas` | A `canvas.sd-canvas-layer` of `el`, at `left`/`top` and `pw` × `ph` in CSS pixels, with a backing store of that size × min(`maxRatio` (default 3), `devicePixelRatio`) and a scaled context: you draw in plot pixels. Without `name` it is the one unnamed layer and ignores the named ones. With `name` it is `canvas[data-layer=name]`, one per name. A new layer goes right after the element's last canvas layer (first child when there is none), so the order of creation is the order of stacking, and the SVG you append paints above all of them. Idempotent. Pass `maxRatio: 1` for a raster you fill pixel by pixel; keep 3 for lines. |
 | `paintLines` | `paintLines(canvas, lines, { width, alpha }) → signature` | Clears the canvas and strokes each `{ points, color, alpha?, width? }`. A point with a `null` or non-finite coordinate breaks the line there (a missing value is a gap, never a line to zero); a stretch of fewer than 2 points draws nothing. The signature (hex) is the same for the same picture, so a component can write it to a `data-*` attribute of the canvas. |
+| `signature` | `signature() → { text(s), tenth(v), char(code), hex() }` | A 32-bit FNV-1a hasher you feed piece by piece: `text` a string, `char` one UTF-16 unit, `tenth` a number rounded to 0.1 (as `${Math.round(v * 10) / 10}`). `hex()` is the hash so far, 8 hex digits. The same feeds in the same order give the same hash, so a component can sign what it painted on a layer of its own. |
 
-Many thin lines are cheaper on a canvas than in the DOM. The layer sits under your SVG; you draw in plot pixels. A `null` or non-finite point breaks the line.
+Many thin lines are cheaper on a canvas than in the DOM. The layers sit under your SVG, in the order you create them; you draw in plot pixels. A `null` or non-finite point breaks the line.
 
 ```js
 const canvas = ctx.chart.canvasLayer(el, { left: f.margin.left, top: f.margin.top, pw: f.pw, ph: f.ph });
 const signature = ctx.chart.paintLines(canvas, draws.map((d) => ({ points: d.map((p) => [x(p.x), y(p.y)]), color, alpha: 0.2 })), { width: 2 });
 canvas.setAttribute("data-signature", signature); // `dump` and `check --played` compare it
+
+const layer = ctx.chart.canvasLayer(el, { left: 0, top: 0, pw: f.pw, ph: f.ph, name: "shade", maxRatio: 1 }); // a second layer, above the first
+const sig = ctx.chart.signature();
+sig.text("shade|"); sig.tenth(f.pw); sig.char(10);
+layer.setAttribute("data-signature", sig.hex());
 ```
 
 #### Colour

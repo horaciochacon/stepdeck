@@ -1,6 +1,7 @@
 // The DOM half of the chart building blocks: the plot frame, keyed joins, the end-state cleanup, the
-// marks (dots, whiskers, rules, halos, interval bands) and the canvas layer. chart.line and chart.bar
-// are built on it, and so can a custom component be: it reaches them as `ctx.chart` (core/chart.js).
+// marks (dots, whiskers, rules, halos, interval bands) and `paintLines` on a canvas layer (`canvasLayer`, from
+// core/canvas.js, is re-exported here). chart.line and chart.bar are built on it, and so can a custom component
+// be: it reaches them as `ctx.chart` (core/chart.js).
 //
 // Everything takes d3 selections (or plain values) and writes attributes only; colours and sizes come
 // from the caller, which takes them from theme tokens and `ctx.palette()`. The generic mark classes
@@ -8,6 +9,9 @@
 // theme tokens in core/stepdeck.css. Nothing here reads `window` or `document` at load time.
 import { d3 } from "./d3.js";
 import { num, measureWidth, measureHeight } from "./kit.js";
+import { canvasLayer, signature } from "./canvas.js";
+
+export { canvasLayer };
 
 /** A value, or an accessor `(d, i, nodes) => value` called with `this` set to the node, as d3 does. */
 const read = (value, node, d, i, nodes) => (typeof value === "function" ? value.call(node, d, i, nodes) : value);
@@ -235,68 +239,6 @@ export function halo(selection, { under = false } = {}) {
   return d3.selectAll(copies);
 }
 
-const CANVAS_MAX_RATIO = 3;
-
-/**
- * The canvas layer of an element: one `canvas.sd-canvas-layer` per `el`, inserted as its first child on the
- * first call, placed absolutely at `left`/`top` (the plot's origin, in the element's pixels) with a CSS size
- * of `pw` x `ph`. Its backing store is that size times min(3, devicePixelRatio), and its 2D context is
- * scaled to match, so callers draw in plot pixels. Idempotent: the same call changes nothing; a call that
- * changes the size clears the canvas, so paint again after it (`paintLines`). The SVG sibling painted over it
- * needs no z-index: `.sd-canvas-layer ~ svg` is positioned (core/stepdeck.css).
- * @param {HTMLElement} el
- * @param {{ left: number, top: number, pw: number, ph: number }} plot
- * @returns {HTMLCanvasElement}
- */
-export function canvasLayer(el, { left, top, pw, ph }) {
-  let canvas = [...el.children].find((c) => c.localName === "canvas" && c.classList.contains("sd-canvas-layer"));
-  if (!canvas) {
-    canvas = el.ownerDocument.createElement("canvas");
-    canvas.setAttribute("class", "sd-canvas-layer");
-    el.insertBefore(canvas, el.firstChild);
-  }
-  const ratio = Math.min(CANVAS_MAX_RATIO, el.ownerDocument.defaultView?.devicePixelRatio || 1);
-  const [bw, bh] = [Math.round(pw * ratio), Math.round(ph * ratio)];
-  if (canvas.width !== bw) canvas.width = bw;
-  if (canvas.height !== bh) canvas.height = bh;
-  canvas.style.left = `${left}px`;
-  canvas.style.top = `${top}px`;
-  canvas.style.width = `${pw}px`;
-  canvas.style.height = `${ph}px`;
-  canvas.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
-  return canvas;
-}
-
-// 32-bit FNV-1a over UTF-16 code units, fed piece by piece so the signature text is never built: `feed` hashes a
-// string's code units into `h`, `feedTenth` the characters of `${Math.round(v * 10) / 10}`. `hex` gives 8 hex digits.
-const FNV_OFFSET = 0x811c9dc5;
-const FNV_PRIME = 0x01000193;
-const feed = (h, text) => {
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), FNV_PRIME);
-  return h;
-};
-const DIGITS = new Uint8Array(16);
-function feedTenth(h, v) {
-  const k = Math.round(v * 10);
-  // A tenth is written as its integer digits, then "." and one digit unless it is zero; "-" first when negative
-  // (-0 is written "0", as String does). Beyond 1e15 tenths, String's own spelling.
-  if (!(Math.abs(k) < 1e15)) return feed(h, String(k / 10));
-  if (k < 0) h = Math.imul(h ^ 45, FNV_PRIME); // "-"
-  const n = Math.abs(k);
-  const tenth = n % 10;
-  let whole = (n - tenth) / 10;
-  let count = 0;
-  do {
-    const d = whole % 10;
-    DIGITS[count++] = d;
-    whole = (whole - d) / 10;
-  } while (whole > 0);
-  while (count > 0) h = Math.imul(h ^ (48 + DIGITS[--count]), FNV_PRIME);
-  if (tenth) h = Math.imul(Math.imul(h ^ 46, FNV_PRIME) ^ (48 + tenth), FNV_PRIME); // "." and the digit
-  return h;
-}
-const hex = (h) => (h >>> 0).toString(16).padStart(8, "0");
-
 /** The runs of consecutive points whose coordinates are both finite numbers: a point that is not breaks the line. */
 function runsOf(points) {
   const runs = [];
@@ -338,21 +280,23 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
   }
   // The signature hashes, line by line, `${color}|${width}|${alpha}|` and the stretches (each point `${x},${y}`, points
   // joined by ";", stretches by "/"), then "\n", without building that text.
-  let h = FNV_OFFSET;
+  const sig = signature();
   for (const line of lines) {
     const runs = runsOf(line.points);
     if (!runs.length) continue;
     const w = Math.round((line.width ?? width) * 10) / 10;
     const a = Math.round((line.alpha ?? alpha) * 1000) / 1000;
-    h = feed(h, `${line.color}|${w}|${a}|`);
+    sig.text(`${line.color}|${w}|${a}|`);
     runs.forEach((run, r) => {
-      if (r) h = Math.imul(h ^ 47, FNV_PRIME); // "/"
+      if (r) sig.char(47); // "/"
       run.forEach(([x, y], i) => {
-        if (i) h = Math.imul(h ^ 59, FNV_PRIME); // ";"
-        h = feedTenth(Math.imul(feedTenth(h, x) ^ 44, FNV_PRIME), y); // x "," y
+        if (i) sig.char(59); // ";"
+        sig.tenth(x);
+        sig.char(44); // ","
+        sig.tenth(y);
       });
     });
-    h = Math.imul(h ^ 10, FNV_PRIME); // "\n"
+    sig.char(10); // "\n"
     if (!g) continue;
     g.beginPath();
     for (const run of runs) run.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
@@ -362,5 +306,5 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
     g.stroke();
   }
   if (g) g.globalAlpha = 1;
-  return hex(h);
+  return sig.hex();
 }
