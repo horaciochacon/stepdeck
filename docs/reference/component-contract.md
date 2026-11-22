@@ -153,7 +153,6 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 | `changed` | `string[]` | Top-level keys whose values differ from `prev`, added and removed keys included. All keys on the first update; `[]` when only visibility changed. |
 | `entered` | `boolean` | The element just became visible. On the first update: it is visible. |
 | `entrance` | `{ motion, duration } \| null` | Set only for a component whose `schema.json` declares `"x-enter": "own"`, in the update where its element becomes visible on an animating step (after its stagger hold); `null` in every other update. `motion` is `"draw"` (play your build from empty to these props; the box stays still) or `"none"` (render at once: the box moves instead, or nothing does). `duration` is the element's own `enter.duration` in ms (0 on a step whose duration is 0), or `undefined`: then time the build with `ctx.motion.timing(info)`. See [Owning the entrance](#owning-the-entrance). |
-
 | `expect` | `(ms: number) => void` | Declares a long run for this update: the watchdog now waits `ms` plus `SETTLE_TIMEOUT_MS` from the call. See [Long runs: `info.expect`](#long-runs-infoexpect). |
 
 `schema/stepdeck.d.ts` declares `transition?: Transition`; at runtime the field is always present and is `null` when the step has none.
