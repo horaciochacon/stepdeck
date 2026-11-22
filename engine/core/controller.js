@@ -6,6 +6,7 @@
 //   registry    { get(type) -> Promise<ComponentModule> }   (core/registry.js)
 //   mountPoint  (elementId) -> el                            the element's box, laid out by the shell
 //   settleTimeout  ms, default SETTLE_TIMEOUT_MS (10 s): the watchdog on every mount and update call
+//   maxRun         ms, default MAX_RUN_MS (20 s): the longest run one update may declare with info.expect
 //   ctxBase:
 //     setVisible(id, visible, collapse)   required; the shell applies visibility to the element's box
 //     enterBox(id, name, { duration, ease, signal }) -> Promise
@@ -41,7 +42,7 @@
 //   measured from `el`; its own ctx.mount for deeper nesting). The handle is
 //     { instance, update(props, info), pause(), destroy() }
 //   update resolves bindings, then calls instance.update(props, info') where info' is the parent's
-//   `info` (animate, signal, entered, entrance, step, transition: the parent supplies them; pass the parent's
+//   `info` (animate, signal, entered, entrance, step, transition, expect: the parent supplies them; pass the parent's
 //   signal so an abort propagates) with `prev` and `changed` replaced by the child's own last props and
 //   changed keys. The handle never skips an update: skipping no-ops is the parent's call. A child that gets
 //   entered: true with no entrance renders at once (the parent's box carries the entrance); a parent that
@@ -98,6 +99,11 @@
 //             "<slide>/<element>: did not settle within 10s", aborts that element's signal and lets the
 //             slide go on (a component that never settles must not freeze the talk). A mount that
 //             settles after its watchdog fired is destroyed at once; a late update is ignored.
+//             An update may declare a long run with info.expect(ms): the deadline becomes
+//             max(deadline, now + ms + settleTimeout), so it only extends. ms must be a finite number >= 0
+//             (TypeError otherwise) and at most `maxRun` (Error otherwise); both throw inside the update, so
+//             they end as that element's error. Mount has no expect. A ctx.mount child gets the parent's
+//             expect through the spread info, so it extends the parent element's deadline.
 import { initialElements, stateAt, stepCount, stepIndex } from "./fold.js";
 import { resolveElementProps } from "./bindings.js";
 import { animate as animateHelpers, wait } from "./animate.js";
@@ -105,6 +111,7 @@ import { MOTION_NAMES, makeMotion, timing } from "./motion.js";
 import { DEFAULT_ENTER, motionParts, resolveEntrance, resolveExit, slotDelays } from "./choreography.js";
 import { d3 as defaultD3 } from "./d3.js";
 import { chartKit } from "./chart.js";
+import { MAX_RUN_MS } from "./constants.js";
 
 /** Default watchdog per mount/update call (ms): well above the longest built-in motion. */
 export const SETTLE_TIMEOUT_MS = 10_000;
@@ -124,21 +131,50 @@ export function deepEqual(a, b) {
 const durationText = (ms) => (ms >= 1000 && ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`);
 
 /**
- * Races `promise` against a timer of `ms`: rejects with "did not settle within …" (after calling
- * onTimeout) when the timer wins. The timer is always cleared.
+ * One call's watchdog. `race(promise)` rejects with "did not settle within <ms>" (after calling onTimeout)
+ * when the deadline passes first; the timer is always cleared. `expect(runMs)` is the update's declared long run
+ * (`info.expect`): the deadline becomes max(deadline, now + runMs + ms), so it only ever extends. A `runMs`
+ * that is not a finite number >= 0 throws a TypeError; one above `maxRun` throws an Error. Both throw from
+ * inside the component's update, so they end as that element's error. Once the call has settled or timed out,
+ * `expect` still validates but changes nothing.
  */
-function watchdog(promise, ms, onTimeout) {
+function deadline(ms, onTimeout, maxRun) {
   let timer;
-  const timeout = new Promise((_, reject) => {
+  let end = 0;
+  let over = false;
+  let fail;
+  const arm = () => {
+    clearTimeout(timer);
     timer = setTimeout(() => {
+      over = true;
       try {
         onTimeout?.();
       } finally {
-        reject(new Error(`did not settle within ${durationText(ms)}`));
+        fail(new Error(`did not settle within ${durationText(ms)}`));
       }
-    }, ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }, Math.max(0, end - Date.now()));
+  };
+  return {
+    race(promise) {
+      const timeout = new Promise((_, reject) => (fail = reject));
+      end = Date.now() + ms;
+      arm();
+      return Promise.race([promise, timeout]).finally(() => {
+        over = true;
+        clearTimeout(timer);
+      });
+    },
+    expect(runMs) {
+      if (typeof runMs !== "number" || !Number.isFinite(runMs) || runMs < 0) {
+        throw new TypeError("info.expect(ms) needs a number of milliseconds ≥ 0");
+      }
+      if (runMs > maxRun) throw new Error(`a run of ${(runMs / 1000).toFixed(1)} s is longer than ${maxRun / 1000} s; split it across steps`);
+      const next = Date.now() + runMs + ms;
+      if (over || next <= end) return;
+      end = next;
+      arm();
+    },
+  };
 }
 
 /** Top-level keys whose values differ (added and removed keys included). */
@@ -212,6 +248,7 @@ export class SlideController {
   #appliedIndex = null;
   #destroyed = false;
   #settleTimeout;
+  #maxRun;
   #owns = new Map(); // type -> true when its schema declares "x-enter": "own" (read in mount)
   #order = null; // element id -> index in slide order
   #motion = null; // ctx.motion, shared by every component of the slide
@@ -219,8 +256,9 @@ export class SlideController {
   state = null;
   errors = [];
 
-  constructor({ slide, registry, ctxBase, mountPoint, settleTimeout = SETTLE_TIMEOUT_MS }) {
+  constructor({ slide, registry, ctxBase, mountPoint, settleTimeout = SETTLE_TIMEOUT_MS, maxRun = MAX_RUN_MS }) {
     this.#settleTimeout = settleTimeout;
+    this.#maxRun = maxRun;
     this.#slide = slide;
     this.#registry = registry;
     this.#ctxBase = ctxBase ?? {};
@@ -343,11 +381,16 @@ export class SlideController {
         let instance;
         const call = Promise.resolve().then(() => mod.mount(el, props, this.#ctxFor(el, holder, stepProps)));
         try {
-          instance = await watchdog(call, this.#settleTimeout, () => {
-            // Too late to use: whatever it mounts (children included) is destroyed when it settles.
-            call.then((late) => destroyRecord({ instance: late, holder }), () => destroyRecord({ instance: null, holder }))
-              .catch(() => {});
-          });
+          const clock = deadline(
+            this.#settleTimeout,
+            () => {
+              // Too late to use: whatever it mounts (children included) is destroyed when it settles.
+              call.then((late) => destroyRecord({ instance: late, holder }), () => destroyRecord({ instance: null, holder }))
+                .catch(() => {});
+            },
+            this.#maxRun,
+          );
+          instance = await clock.race(call);
         } catch (err) {
           destroyRecord({ instance: null, holder }); // children the parent mounted before it threw
           throw err;
@@ -492,8 +535,10 @@ export class SlideController {
       const prev = last ? last.props : null;
       // Each element gets its own signal: superseding the goTo aborts all of them, the watchdog only its own.
       const own = new AbortController();
+      const clock = deadline(this.#settleTimeout, () => own.abort(), this.#maxRun);
       const info = {
         ...info0,
+        expect: clock.expect,
         signal: AbortSignal.any([signal, own.signal]),
         prev,
         changed: changedKeys(prev, props),
@@ -505,7 +550,7 @@ export class SlideController {
       calls.push(
         (async () => {
           try {
-            await watchdog(Promise.resolve().then(run), this.#settleTimeout, () => own.abort());
+            await clock.race(Promise.resolve().then(run));
           } catch (error) {
             this.#fail(id, error);
           }

@@ -842,6 +842,79 @@ test("watchdog: a mount that never settles fails its element; the rest of the sl
   assert.equal(c.errors.length, 1);
 });
 
+// ---------- info.expect ----------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const expectSlide = { id: "x", elements: [{ id: "a", type: "run", props: { v: 0 } }], steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 1 } } }] };
+
+/** Runs the slide's second step with an update that calls `body(info)`; resolves to the controller's errors. */
+async function runWithExpect(body) {
+  const run = { mount: () => ({ update: async (p, info) => { if (p.v === 1) await body(info); } }) };
+  const { c } = makeController(expectSlide, { run }, { settleTimeout: 60, maxRun: 200 });
+  await c.goTo(0);
+  await c.goTo(1);
+  await c.settled();
+  return c.errors;
+}
+
+test("expect: a declared run settles past the watchdog", { timeout: 5000 }, async () => {
+  const errors = await runWithExpect(async (info) => {
+    info.expect(150);
+    await sleep(150);
+  });
+  assert.deepEqual(errors, []);
+});
+
+test("expect: without it the same update fails", { timeout: 5000 }, async () => {
+  const errors = await runWithExpect(() => sleep(150));
+  assert.deepEqual(errors, ["x/a: did not settle within 60ms"]);
+});
+
+test("expect: extends, never shortens", { timeout: 5000 }, async () => {
+  const errors = await runWithExpect(async (info) => {
+    info.expect(150);
+    info.expect(10);
+    await sleep(150);
+  });
+  assert.deepEqual(errors, []);
+});
+
+test("expect: above the ceiling is an element error", { timeout: 5000 }, async () => {
+  const errors = await runWithExpect((info) => info.expect(500));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /a run of 0\.5 s is longer than 0\.2 s; split it across steps/);
+});
+
+test("expect: a bad ms is a TypeError", { timeout: 5000 }, async () => {
+  for (const bad of [Number.NaN, -1]) {
+    let thrown = null;
+    const errors = await runWithExpect((info) => {
+      try {
+        info.expect(bad);
+      } catch (e) {
+        thrown = e;
+        throw e;
+      }
+    });
+    assert.ok(thrown instanceof TypeError, `${bad}: a TypeError`);
+    assert.equal(thrown.message, "info.expect(ms) needs a number of milliseconds ≥ 0");
+    assert.equal(errors.length, 1);
+    assert.ok(errors[0].includes("info.expect(ms) needs a number of milliseconds ≥ 0"));
+  }
+});
+
+test("expect: a ctx.mount child extends its parent's watchdog", { timeout: 5000 }, async () => {
+  const out = {};
+  const kid = { mount: () => ({ update: async (p, info) => { if (p.go) { info.expect(150); await sleep(150); } } }) };
+  const slide = { id: "k", elements: [{ id: "par", type: "parent", props: { n: 0 } }], steps: [{ id: "a" }, { id: "b", set: { par: { n: 1 } } }] };
+  const parent = parentMounting({ go: false }, out, { onUpdate: (handle, p, info) => handle.update({ go: p.n === 1 }, info) });
+  const { c } = makeController(slide, { kid, parent }, { settleTimeout: 60, maxRun: 200 });
+  await c.goTo(0);
+  await c.goTo(1);
+  await c.settled();
+  assert.deepEqual(c.errors, []);
+});
+
 // ---------- ctx.assetUrl ----------
 
 test("ctx.assetUrl is the data loader's url(): a deck-relative path resolved against the deck root", async () => {

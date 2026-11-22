@@ -32,10 +32,13 @@
 //     changed: chart
 import { withPage, deckTarget, withTimeout, describePageUrl, PAGE_TIMEOUT_MS } from "./browser.js";
 import { assertTheme, OPTIONAL_THEME_CSS } from "./engine.js";
-import { CANVAS } from "#engine/core/constants.js";
+import { CANVAS, MAX_RUN_MS } from "#engine/core/constants.js";
 import { stripAccent } from "#engine/core/accent.js";
 
 export const CANVAS_W = CANVAS.w;
+
+/** How long a goTo may take before the dump gives up: the page timeout plus the longest run an update may declare. */
+export const GOTO_TIMEOUT_MS = PAGE_TIMEOUT_MS + MAX_RUN_MS;
 
 /** Deep equality for JSON values (key order ignored). */
 export function jsonEqual(a, b) {
@@ -108,7 +111,7 @@ export async function withDeck(deckDir, { size, slide, theme } = {}, fn) {
           await window.STEPDECK.settled();
         }, [s, index]);
         try {
-          await withTimeout(moved, PAGE_TIMEOUT_MS, `waiting for goTo('${s}', ${index}) to settle`);
+          await withTimeout(moved, GOTO_TIMEOUT_MS, `waiting for goTo('${s}', ${index}) to settle`);
           await ctx.quiet();
         } catch (error) {
           throw new Error(`deck did not settle at ${describePageUrl(page.url())}: ${error.message.split("\n")[0]}`, { cause: error });
