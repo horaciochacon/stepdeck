@@ -14,20 +14,29 @@
 // `boundaries`, `id`, `name`, `projection` or the element's size changes (a snap). The stage holds a canvas for every
 // layer any step of the slide declares (`ctx.stepProps`), so no step adds one.
 //
+// `view` is a view of the geography (core/map.js `view`): home, fitted to regions, or to a box of longitude and latitude.
+// The element keeps the raster lookup tables it builds (one per view, size and raster grid) and a bounded cache of
+// raster pictures, both dropped when its size changes and when it is destroyed. At mount it builds the lookup tables of
+// every view its slide's steps name, for the rasters each step declares, for up to 2 s, so a flight does not wait for
+// them; the rest are built on first need (a `ctx.mount` child, with no `stepProps`, builds them all on first need).
+//
 // An update writes the end state of its props whatever came before. With info.animate (a forward step by one, the
 // element already on screen) it first plays the change in one tween bound to info.signal, so an abort snaps to the
 // end: a layer that is shown or hidden fades, and its legend row and the labels that come or go with it, over the
 // step's duration (`--sd-duration`, or the step's `transition`); a change of a layer's data or scale crossfades
 // its colours over the same time; `highlight` turns the other regions and points to `--sd-color-dim` and outlines its own
-// in ink over `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
+// in ink over `--sd-duration-fast`; a change of `view` flies the map there along d3.interpolateZoom over twice the
+// step's duration, every vector redrawn through the view at each frame and each raster crossfading from its picture at
+// the start view to its picture at the end view, both placed at the view of the moment. The map does not own its
+// entrance: the engine moves its box in.
 import { d3 } from "../../core/d3.js";
-import { boundaries, projection } from "../../core/map.js";
+import { boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
 import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs } from "../../core/kit.js";
 import { createStage } from "./stage.js";
 import { createLegend } from "./legend.js";
 import areas from "./areas.js";
-import raster from "./raster.js";
+import raster, { PictureCache } from "./raster.js";
 import points from "./points.js";
 
 /** The layer kinds, in paint order: areas under rasters, the borders over both, and points over the borders. */
@@ -36,18 +45,26 @@ const KINDS = [areas, raster, points];
 const HOME = Object.freeze({ k: 1, x: 0, y: 0 });
 /** How many region ids a "not found" message lists before it stops. */
 const HINT = 5;
+/** How long a mount spends building the lookup tables of the views its slide names, in ms of `performance.now()`. */
+const PREBUILD_MS = 2000;
+/** The raster pictures an element keeps besides a picture and a land mask per view its slide names and raster layer. */
+const SPARE_PICTURES = 8;
 
 const kindOf = (def) => KINDS.find((kind) => def?.[kind.kind] !== undefined);
 const words = (list) => (list.length > 1 ? `${list.slice(0, -1).join(", ")} or ${list.at(-1)}` : list[0]);
 const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+const sameView = (a, b) => a.k === b.k && a.x === b.x && a.y === b.y;
+/** The region ids a `view` names: its id, or its list of them; none for a box or home. */
+const viewIds = (target) => (typeof target === "string" || Array.isArray(target) ? [target].flat() : []);
 
 /**
  * The geography of an element: the regions of `props.boundaries` fitted in `size`, each with its path and its anchor
  * (the centroid of its largest polygon: where its dot and its label sit) in base-projected px, the theme's colours,
  * and `key`, which names the geometry (file, projection, size) in every scene's `source`, so signatures see it. A
- * region is a dot when its projected box is under `DOT_SIZE` across in both directions at the view.
+ * region is a dot when its projected box is under `DOT_SIZE` across in both directions at the view. `caches` are the
+ * element's: `lookups`, the raster lookup tables by `file|projection|k,x,y|w×h|bounds|cols×rows`, and `pictures`.
  */
-async function buildGeo(props, ctx, size) {
+async function buildGeo(props, ctx, size, caches) {
   const file = props.boundaries;
   if (typeof file !== "string" || file === "") throw new Error("map needs a `boundaries` path");
   const { features, byId, ids, names } = boundaries(await ctx.data(file), { id: props.id, name: props.name, file });
@@ -65,6 +82,7 @@ async function buildGeo(props, ctx, size) {
   }
   const token = (name) => ctx.tokens?.[name]?.trim();
   const rule = token("--sd-color-rule");
+  const [w, h] = size.map(Math.round);
   return {
     file, base, size, features, byId, ids, names,
     key: `${file}|${kind}|${size[0]}×${size[1]}`, // the geometry, first in every scene's source
@@ -73,6 +91,55 @@ async function buildGeo(props, ctx, size) {
     isDot: (id, k) => spans.get(id).every((span) => span * k < DOT_SIZE),
     res: { path: (id) => paths.get(id), centroid: (id) => anchors.get(id) },
     prepared: new Map(), // the layers prepared on this geography, by kind and definition
+    views: new Map(), // the views of this geography, by `view` target (viewOf)
+    /** The lookup table of `raster` at view `at` in the element's CSS px, built once for the element. */
+    lookupFor(at, { bounds, size: [cols, rows] }) {
+      const id = `${file}|${kind}|${at.k},${at.x},${at.y}|${w}×${h}|${bounds}|${cols}×${rows}`;
+      if (!caches.lookups.has(id)) caches.lookups.set(id, lookup(base, at, [w, h], bounds, [cols, rows]));
+      return caches.lookups.get(id);
+    },
+    pictures: caches.pictures, // the raster pictures of the element (raster.js)
+  };
+}
+
+const fail = (message) => {
+  throw new Error(message);
+};
+
+/** What a `view` other than null is fitted to: the regions it names, or its box. Throws `region 'X' not found`, and what `view` takes. */
+function fitOf(geo, target) {
+  if (typeof target === "string" || Array.isArray(target)) return viewIds(target).map((id) => geo.byId.get(id) ?? fail(`region '${id}' not found`));
+  const box = target?.bounds;
+  if (Array.isArray(box) && box.length === 4 && box.every(Number.isFinite)) return { bounds: box };
+  return fail("`view` must be a region id, a list of them, `{ bounds: [west, south, east, north] }` or null");
+}
+
+/**
+ * The view a `view` prop asks for on `geo`: home for null, else fitted to a region id, a list of them, or
+ * `{ bounds: [west, south, east, north] }`. One object per geography and target, so the lookup tables built for it are
+ * found again.
+ */
+function viewOf(geo, target = null) {
+  const key = JSON.stringify(target);
+  if (!geo.views.has(key)) geo.views.set(key, target === null ? HOME : view(geo.base, fitOf(geo, target), geo.size));
+  return geo.views.get(key);
+}
+
+/**
+ * The flight from view `a` to view `b` in an element of `size`: a function of `t` (0..1) that gives
+ * `{ from: a, to: b, t, view }`, the view of the moment by d3.interpolateZoom over each view's centre and width in
+ * base-projected px (as d3-zoom measures a view: by the larger side), and exactly `a` and `b` at the ends.
+ */
+function flightOf(a, b, [w, h]) {
+  const side = Math.max(w, h);
+  const centre = (v) => [(w / 2 - v.x) / v.k, (h / 2 - v.y) / v.k, side / v.k];
+  const zoom = d3.interpolateZoom(centre(a), centre(b));
+  return (t) => {
+    if (t <= 0) return { from: a, to: b, t: 0, view: a };
+    if (t >= 1) return { from: a, to: b, t: 1, view: b };
+    const [cx, cy, width] = zoom(t);
+    const k = side / width;
+    return { from: a, to: b, t, view: { k, x: w / 2 - k * cx, y: h / 2 - k * cy } };
   };
 }
 
@@ -89,14 +156,16 @@ function slotsOf(propsList) {
 }
 
 /**
- * The state of a moment between two step states `a` and `b`: fades at `f` (0..1), highlight colours at `c`. With
- * `a === b` and both at 1 it is `b` at rest, with the exact colours a jump writes.
+ * The state of a moment between two step states `a` and `b`: fades at `f` (0..1), highlight colours at `c`, and the
+ * view of `flight` (a moment of `flightOf`), or `b.view` without one; `flight` stays in the state while it is under
+ * way, for the rasters. With `a === b`, both at 1 and no flight it is `b` at rest, with the exact colours a jump writes.
  */
-function between(a, b, f, c) {
+function between(a, b, f, c, flight = null) {
   const was = new Set(a.highlight), now = new Set(b.highlight);
   const dimIn = (set, id) => (set.size > 0 && !set.has(id) ? 1 : 0);
   return {
-    view: b.view,
+    view: flight ? flight.view : b.view,
+    flight: flight && flight.t < 1 ? flight : null,
     frame: null,
     frameMix: 0,
     highlight: {
@@ -120,7 +189,7 @@ function between(a, b, f, c) {
 
 /** Whether going from step state `a` to `b` changes anything on screen that motion would show. */
 const moves = (a, b) =>
-  !sameList(a.highlight, b.highlight) || !sameList(a.labels, b.labels) ||
+  !sameView(a.view, b.view) || !sameList(a.highlight, b.highlight) || !sameList(a.labels, b.labels) ||
   a.layers.some((from, i) => from.alpha !== b.layers[i].alpha || (from.alpha > 0 && from.prepared !== b.layers[i].prepared));
 
 export default {
@@ -131,16 +200,57 @@ export default {
     let stage = null; // the stage on screen: { geo, key, slots, view }, `view` from createStage
     let last = null; // the last state written
 
+    // The caches of the element, for every geography it builds: what a picture costs is bounded by the views the slide
+    // names (a picture and a land mask each, per raster layer), plus a few for views it does not name.
+    const views = new Set(fromSteps.map((p) => JSON.stringify([p.boundaries, p.projection, p.view ?? null]))).size;
+    const rasters = slotsOf(fromSteps).filter((slot) => slot.module === raster).length;
+    const caches = { lookups: new Map(), pictures: new PictureCache(2 * Math.max(1, views) * Math.max(1, rasters) + SPARE_PICTURES) };
+    let measured = null; // the size the caches are for
+
     const sizeOf = () => [Math.max(1, measureWidth(el, ctx)), Math.max(1, measureHeight(el, ctx))];
-    const geoFor = (p, size) => memoAsync(geos, JSON.stringify([p.boundaries, p.id, p.name, p.projection, size]), () => buildGeo(p, ctx, size));
+    /** The geography of `p` at the element's size; a new size drops the geographies and caches of the old one. */
+    function geoFor(p) {
+      const size = sizeOf();
+      if (measured && (measured[0] !== size[0] || measured[1] !== size[1])) {
+        geos.clear();
+        caches.lookups.clear();
+        caches.pictures.clear();
+      }
+      measured = size;
+      return memoAsync(geos, JSON.stringify([p.boundaries, p.id, p.name, p.projection, size]), () => buildGeo(p, ctx, size, caches));
+    }
+
+    /**
+     * Builds the lookup tables of the view each of the slide's steps names, for the rasters that step declares, until
+     * `PREBUILD_MS` have gone; what is left is built on first need. A step whose props fail is passed over: its own
+     * update reports the error.
+     */
+    async function prebuild() {
+      const until = performance.now() + PREBUILD_MS;
+      for (const p of fromSteps) {
+        const files = new Set(Object.values(p.layers ?? {}).filter((def) => kindOf(def) === raster).map((def) => def.raster));
+        if (files.size === 0) continue;
+        try {
+          const geo = await geoFor(p);
+          const at = viewOf(geo, p.view ?? null);
+          for (const file of files) {
+            if (performance.now() > until) return;
+            geo.lookupFor(at, await loadRaster(file, ctx));
+          }
+        } catch {
+          // that step's own update reports it
+        }
+      }
+    }
 
     /** The state `props` asks for, on a stage that has every canvas it needs. Throws the element's errors. */
     async function stateOf(p) {
-      const geo = await geoFor(p, sizeOf());
+      const geo = await geoFor(p);
       const slots = slotsOf([...fromSteps, p]);
       const key = slots.map((slot) => `${slot.kind}:${slot.id}`).join("|");
       if (stage?.geo !== geo || stage.key !== key) {
         stage?.view.destroy();
+        legend.destroy(); // written again, after the new canvases
         stage = { geo, key, slots, view: createStage(el, { name: "main", size: geo.size, geo, layers: slots }) };
       }
 
@@ -168,12 +278,17 @@ export default {
         throw new Error(idLists.length > 0 ? `'${id}' not found (regions: ${hint}; points: ${list([...named].sort())})` : `region '${id}' not found (regions: ${hint})`);
       }
       for (const id of p.labels ?? []) if (!geo.byId.has(id)) throw new Error(`region '${id}' not found (regions: ${hint})`);
-      return { stage, view: HOME, highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers };
+      // `view` names regions only: a point's id says so
+      for (const id of viewIds(p.view)) {
+        if (geo.byId.has(id)) continue;
+        throw new Error(named.has(id) ? `'${id}' is a point: \`view\` names regions only (regions: ${hint})` : `region '${id}' not found (regions: ${hint})`);
+      }
+      return { stage, view: viewOf(geo, p.view ?? null), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers };
     }
 
-    /** Paints `moment` (a `between` state) of step state `s`, and its legend. */
-    function draw(s, moment) {
-      s.stage.view.paint(moment, moment.layers);
+    /** Paints `moment` (a `between` state) of step state `s`, and its legend; `moving` for a frame of a tween. */
+    function draw(s, moment, moving = false) {
+      s.stage.view.paint(moment, moment.layers, { moving });
       const rows = s.stage.slots.flatMap(({ id, module }, i) => {
         const { prepared, alpha } = moment.layers[i];
         const row = alpha > 0 ? module.legend(prepared, moment) : null;
@@ -182,17 +297,25 @@ export default {
       legend.write(s.legend, rows);
     }
 
-    /** Plays `from` -> `to` in one tween: fades over the step's duration, highlight colours over the fast one. */
+    /**
+     * Plays `from` -> `to` in one tween: fades over the step's duration, highlight colours over the fast one, and a
+     * flight over twice the step's duration.
+     */
     function play(from, to, info) {
       const fadeMs = motionMs(info, ctx, 1);
       const { duration: colorMs } = motion(info, ctx, { fast: true });
+      const fly = sameView(from.view, to.view) ? null : flightOf(from.view, to.view, to.stage.geo.size);
+      const flightMs = fly ? motionMs(info, ctx, 2) : 0;
       const { ease } = motion(info, ctx);
-      const total = Math.max(fadeMs, colorMs);
+      const total = Math.max(fadeMs, colorMs, flightMs);
       const part = (u, ms) => (ms > 0 ? ease(clamp01((u * total) / ms)) : 1);
-      return ctx.animate.tween(0, 1, (u) => draw(to, between(from, to, part(u, fadeMs), part(u, colorMs))), { duration: total, signal: info.signal, ease: (u) => u });
+      const frame = (u) => draw(to, between(from, to, part(u, fadeMs), part(u, colorMs), fly?.(part(u, flightMs))), true);
+      return ctx.animate.tween(0, 1, frame, { duration: total, signal: info.signal, ease: (u) => u });
     }
 
     await stateOf(props); // fail early: the boundaries, the layers' data, unknown ids
+    await prebuild();
+    Object.defineProperty(el, "sdMapLookups", { value: () => caches.lookups.size, configurable: true }); // for tests: never an attribute
     return {
       async update(p, info = {}) {
         const target = await stateOf(p);
@@ -203,6 +326,10 @@ export default {
       destroy() {
         stage?.view.destroy();
         legend.destroy();
+        geos.clear();
+        caches.lookups.clear();
+        caches.pictures.clear();
+        delete el.sdMapLookups;
       },
     };
   },

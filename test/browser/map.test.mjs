@@ -1,4 +1,4 @@
-// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, labels, highlight and the legend, on the map fixture deck
+// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, points, labels, highlight, the legend and flights, on the map fixture deck
 // (test/fixtures/decks/map) and its broken twin. Played equals jumped is checked on markup and canvas pixels; pixel
 // positions come from the same projection the component fits, computed here in Node. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map.test.mjs
@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { d3 } from "../../engine/core/d3.js";
-import { boundaries, landCells, projection } from "../../engine/core/map.js";
+import { applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
 import { pngPixels } from "../../cli/png.js";
 import { deckPages, goTo, canvasPixels, tokenRgb, paletteRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
@@ -718,5 +718,115 @@ test("points: highlight names regions and points, and a colour that is neither a
     const [message] = await errorsOf(page);
     assert.match(message, /^hue\/map: data\/sites-ok\.csv: color 'kinds' is not a column \(id, lon, lat, beds, kind\) or a theme colour \(.*\baccent\b/);
     assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+// --- flights ----------------------------------------------------------------------------------------------------
+
+const FLIGHT_STEPS = ["home", "north", "pair", "box", "back"];
+/** The views the flight slide's steps name: home (twice: `back` is `view: null`), one region, two regions, a box. */
+const FLIGHT_VIEWS = 4;
+/** A `sampleFrames` probe of the view on the land's canvas, and the alpha of the raster at the middle of the element. */
+const flightProbe = new Function("el", `
+  const [k, x, y] = el.querySelector('canvas[data-layer="main:base"]').dataset.view.split(",").map(Number);
+  const alpha = el.querySelector('canvas[data-layer="main:raster:density"]').getContext("2d").getImageData(700, 350, 1, 1).data[3];
+  return { k, x, y, alpha };`);
+const viewsOf = (page) => page.evaluate(() => [...document.querySelectorAll('[data-el="map"] canvas')].map((c) => c.dataset.view));
+/** The canvases' state (every `data-*`) and pixels: what a view shows, the names (SVG) aside. */
+const canvasesOf = async (page) => ({ data: await page.evaluate(() => [...document.querySelectorAll('[data-el="map"] canvas')].map((c) => ({ ...c.dataset }))), pixels: await canvasPixels(page, "map") });
+const namesOf = (page) => page.evaluate(() => [...document.querySelectorAll('[data-el="map"] text.sd-map-label')].map((t) => t.dataset.region));
+const lookupsOf = (page) => page.evaluate(() => document.querySelector('[data-el="map"]').sdMapLookups());
+
+test("flight: passes intermediate scales", async () => {
+  await withPage({ root, url: pages.url("flight", "step=home&motion=full") }, async (page, ctx) => {
+    const duration = parseFloat(await page.evaluate(() => getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue("--sd-duration")));
+    const { frames, end, settledMs } = await sampleFrames(page, "flight", "north", "map", flightProbe);
+    const north = view(BASE, [REGIONS.get("N1")], SIZE);
+    assert.equal(frames[0].k, 1, "the flight starts at home");
+    assert.ok(Math.abs(end.k - north.k) < 0.001 && Math.abs(end.x - north.x) < 0.001 && Math.abs(end.y - north.y) < 0.001, `and ends fitted to North (${end.k},${end.x},${end.y})`);
+    const inBetween = frames.filter((f) => f.k > 1 + 1e-3 && f.k < north.k - 1e-3);
+    assert.ok(inBetween.length >= 2, `${inBetween.length} frames at a scale strictly between 1 and ${north.k.toFixed(3)}`);
+    // over 2 × --sd-duration, never a snap
+    const arrived = frames.find((f) => Math.abs(f.k - north.k) < 0.001)?.ms ?? end.ms;
+    assert.ok(arrived >= 0.8 * 2 * duration, `the flight takes about ${2 * duration} ms (arrived at ${arrived.toFixed(0)} ms)`);
+    assert.ok(settledMs <= 2 * 2 * duration + 1000, `within a generous bound (${settledMs.toFixed(0)} ms)`);
+    // the raster stays filled while it moves: the middle of the element is on land in every frame of this flight
+    assert.ok(frames.every((f) => f.alpha === 255), `the raster is opaque in every frame (${frames.map((f) => f.alpha).join(" ")})`);
+    // the names follow the view
+    const anchor = d3.geoPath(BASE).centroid(REGIONS.get("N1"));
+    const [x, y] = applyView(north, anchor);
+    const label = await page.evaluate(() => { const t = document.querySelector('[data-el="map"] text.sd-map-label[data-region="N1"]'); return [Number(t.getAttribute("x")), Number(t.getAttribute("y"))]; });
+    assert.ok(Math.abs(label[0] - x) <= 0.1 && Math.abs(label[1] - y) <= 0.1, `North's name at ${label}, not ${x},${y}`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("flight: played equals jumped, pixels too", async () => {
+  await withPage({ root, url: pages.url("flight", "step=home") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "flight", steps: FLIGHT_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("flight: abort mid-flight snaps", async () => {
+  await withPage({ root, url: pages.url("flight", "step=home") }, async (page, ctx) => {
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "flight", from: "home", via: "north", to: "pair", id: "map", keep: LEGEND_COLOURS });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "flight", from: "pair", via: "box", to: "back", id: "map", keep: LEGEND_COLOURS });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "flight", steps: FLIGHT_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("flight: view null returns home", async () => {
+  await withPage({ root, url: pages.url("flight", "step=home") }, async (page, ctx) => {
+    const home = await canvasesOf(page);
+    await ctx.open(pages.url("flight", "step=back"));
+    assert.ok((await viewsOf(page)).every((v) => v === "1.000,0.000,0.000"), "every canvas is at the home view");
+    assert.deepEqual(await canvasesOf(page), home, "the canvases show what the first step shows, pixels too");
+    // played: from the box, home again
+    await ctx.open(pages.url("flight", "step=box&motion=full"));
+    assert.ok((await viewsOf(page)).every((v) => v !== "1.000,0.000,0.000"), "the box is not home");
+    await goTo(page, "flight", "back");
+    assert.ok((await viewsOf(page)).every((v) => v === "1.000,0.000,0.000"), "and the flight ends at home");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("flight: a name out of the view is not drawn", async () => {
+  await withPage({ root, url: pages.url("flight", "step=north") }, async (page, ctx) => {
+    // zoomed to North, Marshby's centre is far below the element
+    const north = view(BASE, [REGIONS.get("N1")], SIZE);
+    const [, y] = applyView(north, d3.geoPath(BASE).centroid(REGIONS.get("S2")));
+    assert.ok(y > SIZE[1], `Marshby's centre is out of the view (y = ${y.toFixed(0)})`);
+    assert.deepEqual(await namesOf(page), ["N1"]);
+    await goTo(page, "flight", "back");
+    assert.deepEqual(await namesOf(page), ["N1", "S2"], "home again, both names are drawn");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("flight: unknown region errors", async () => {
+  await withPage({ root, url: broken.url("view", "") }, async (page, ctx) => {
+    assert.deepEqual(await errorsOf(page), ["view/map: region 'Nowhere' not found (regions: E1, I1, I2, N1, N2, …)"]);
+    await ctx.open(broken.url("view-point", ""));
+    assert.deepEqual(await errorsOf(page), ["view-point/map: 'S4' is a point: `view` names regions only (regions: E1, I1, I2, N1, N2, …)"]);
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("flight: lookups for every view are ready after mount", async () => {
+  await withPage({ root, url: pages.url("flight", "step=home&motion=full") }, async (page, ctx) => {
+    const ready = await lookupsOf(page);
+    assert.ok(ready >= FLIGHT_VIEWS, `${ready} lookup tables after mount, one per view at least (${FLIGHT_VIEWS})`);
+    // a function the element carries, never an attribute or an own enumerable key
+    const hidden = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="map"]');
+      return { type: typeof el.sdMapLookups, keys: Object.keys(el).includes("sdMapLookups"), html: el.outerHTML.includes("sdMapLookups") || el.outerHTML.includes("lookups") };
+    });
+    assert.deepEqual(hidden, { type: "function", keys: false, html: false });
+    // a flight draws its pictures at its two ends only, so playing every step builds no table for a view in between
+    for (const step of FLIGHT_STEPS.slice(1)) await goTo(page, "flight", step);
+    assert.equal(await lookupsOf(page), ready, "no lookup table was built during the flights");
+    assert.deepEqual(ctx.errors, []);
   });
 });
