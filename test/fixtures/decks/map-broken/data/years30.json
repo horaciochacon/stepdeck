@@ -1,0 +1,221 @@
+{
+  "bounds": [-19, -31, -10, -23],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 800,
+    "unit": "people per km²"
+  },
+  "frames": [
+    {
+      "src": "years30/1990.png",
+      "label": "1990",
+      "numbers": {
+        "people": 52869437
+      }
+    },
+    {
+      "src": "years30/1991.png",
+      "label": "1991",
+      "numbers": {
+        "people": 53698388
+      }
+    },
+    {
+      "src": "years30/1992.png",
+      "label": "1992",
+      "numbers": {
+        "people": 54320971
+      }
+    },
+    {
+      "src": "years30/1993.png",
+      "label": "1993",
+      "numbers": {
+        "people": 54942301
+      }
+    },
+    {
+      "src": "years30/1994.png",
+      "label": "1994",
+      "numbers": {
+        "people": 55668708
+      }
+    },
+    {
+      "src": "years30/1995.png",
+      "label": "1995",
+      "numbers": {
+        "people": 56395586
+      }
+    },
+    {
+      "src": "years30/1996.png",
+      "label": "1996",
+      "numbers": {
+        "people": 57173266
+      }
+    },
+    {
+      "src": "years30/1997.png",
+      "label": "1997",
+      "numbers": {
+        "people": 57796404
+      }
+    },
+    {
+      "src": "years30/1998.png",
+      "label": "1998",
+      "numbers": {
+        "people": 58572304
+      }
+    },
+    {
+      "src": "years30/1999.png",
+      "label": "1999",
+      "numbers": {
+        "people": 59143529
+      }
+    },
+    {
+      "src": "years30/2000.png",
+      "label": "2000",
+      "numbers": {
+        "people": 59816828
+      }
+    },
+    {
+      "src": "years30/2001.png",
+      "label": "2001",
+      "numbers": {
+        "people": 60542012
+      }
+    },
+    {
+      "src": "years30/2002.png",
+      "label": "2002",
+      "numbers": {
+        "people": 61267751
+      }
+    },
+    {
+      "src": "years30/2003.png",
+      "label": "2003",
+      "numbers": {
+        "people": 61889137
+      }
+    },
+    {
+      "src": "years30/2004.png",
+      "label": "2004",
+      "numbers": {
+        "people": 62668568
+      }
+    },
+    {
+      "src": "years30/2005.png",
+      "label": "2005",
+      "numbers": {
+        "people": 63343006
+      }
+    },
+    {
+      "src": "years30/2006.png",
+      "label": "2006",
+      "numbers": {
+        "people": 64120657
+      }
+    },
+    {
+      "src": "years30/2007.png",
+      "label": "2007",
+      "numbers": {
+        "people": 64690132
+      }
+    },
+    {
+      "src": "years30/2008.png",
+      "label": "2008",
+      "numbers": {
+        "people": 65364570
+      }
+    },
+    {
+      "src": "years30/2009.png",
+      "label": "2009",
+      "numbers": {
+        "people": 66141666
+      }
+    },
+    {
+      "src": "years30/2010.png",
+      "label": "2010",
+      "numbers": {
+        "people": 66712892
+      }
+    },
+    {
+      "src": "years30/2011.png",
+      "label": "2011",
+      "numbers": {
+        "people": 67489375
+      }
+    },
+    {
+      "src": "years30/2012.png",
+      "label": "2012",
+      "numbers": {
+        "people": 68215726
+      }
+    },
+    {
+      "src": "years30/2013.png",
+      "label": "2013",
+      "numbers": {
+        "people": 68888413
+      }
+    },
+    {
+      "src": "years30/2014.png",
+      "label": "2014",
+      "numbers": {
+        "people": 69562796
+      }
+    },
+    {
+      "src": "years30/2015.png",
+      "label": "2015",
+      "numbers": {
+        "people": 70289758
+      }
+    },
+    {
+      "src": "years30/2016.png",
+      "label": "2016",
+      "numbers": {
+        "people": 71065630
+      }
+    },
+    {
+      "src": "years30/2017.png",
+      "label": "2017",
+      "numbers": {
+        "people": 71688768
+      }
+    },
+    {
+      "src": "years30/2018.png",
+      "label": "2018",
+      "numbers": {
+        "people": 72257659
+      }
+    },
+    {
+      "src": "years30/2019.png",
+      "label": "2019",
+      "numbers": {
+        "people": 73087806
+      }
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "bounds": [-19, -31, -10, -23],
+  "value": {
+    "scale": "linear",
+    "min": 0,
+    "max": 800,
+    "unit": "people per km²"
+  },
+  "frames": [
+    {
+      "src": "years/2010.png",
+      "label": "2010",
+      "numbers": {
+        "people": 71599478
+      }
+    },
+    {
+      "src": "years/2011.png",
+      "label": "2011",
+      "numbers": {
+        "people": 73588533
+      }
+    },
+    {
+      "src": "years/2012.png",
+      "label": "2012",
+      "numbers": {
+        "people": 75568433
+      }
+    },
+    {
+      "src": "years/2013.png",
+      "label": "2013",
+      "numbers": {
+        "people": 77561352
+      }
+    },
+    {
+      "src": "years/2014.png",
+      "label": "2014",
+      "numbers": {
+        "people": 79552453
+      }
+    },
+    {
+      "src": "years/2015.png",
+      "label": "2015",
+      "numbers": {
+        "people": 81532441
+      }
+    },
+    {
+      "src": "years/2016.png",
+      "label": "2016",
+      "numbers": {
+        "people": 83525790
+      }
+    },
+    {
+      "src": "years/2017.png",
+      "label": "2017",
+      "numbers": {
+        "people": 85505801
+      }
+    },
+    {
+      "src": "years/2018.png",
+      "label": "2018",
+      "numbers": {
+        "people": 87491350
+      }
+    },
+    {
+      "src": "years/2019.png",
+      "label": "2019",
+      "numbers": {
+        "people": 89474952
+      }
+    },
+    {
+      "src": "years/2020.png",
+      "label": "2020",
+      "numbers": {
+        "people": 91470265
+      }
+    },
+    {
+      "src": "years/2021.png",
+      "label": "2021",
+      "numbers": {
+        "people": 93444358
+      }
+    }
+  ]
+}
