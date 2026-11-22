@@ -1,0 +1,28 @@
+{
+  "type": "FeatureCollection",
+  "name": "geoBoundaries-XYZ-ADM1_simplified",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "shapeName": "Northmark", "shapeISO": "XY-NM", "shapeID": "XYZ-ADM1-00000000-B1", "shapeGroup": "XYZ", "shapeType": "ADM1" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [[10.123456, 20.123456], [10.123451, 20.123461], [10.623456, 20.123456], [10.623456, 20.623456], [10.123456, 20.623456], [10.123456, 20.123456]],
+          [[10.2000041, 20.2000041], [10.2000042, 20.2000043], [10.2000044, 20.2000045], [10.2000041, 20.2000041]]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "shapeName": "Southmark", "shapeISO": "XY-SM", "shapeID": "XYZ-ADM1-00000000-B2", "shapeGroup": "XYZ", "shapeType": "ADM1" },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [[[10.123456, 19.123456], [10.623456, 19.123456], [10.623456, 19.623456], [10.123456, 19.623456], [10.123456, 19.123456]]],
+          [[[11.0000011, 19.0000011], [11.0000012, 19.0000012], [11.0000013, 19.0000013], [11.0000011, 19.0000011]]]
+        ]
+      }
+    }
+  ]
+}
