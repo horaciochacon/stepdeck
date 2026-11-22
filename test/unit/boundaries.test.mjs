@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -276,6 +276,64 @@ test("boundaries: the written file loads in map", async () => {
     const loaded = readBoundaries(readJson(out.file), { id: "shapeISO", name: "shapeName", file: "data/xyz-adm1.geojson" });
     assert.deepEqual(loaded.ids, ["XY-NM", "XY-SM"]);
     assert.equal(loaded.names.get("XY-SM"), "Southmark");
+  });
+});
+
+test("boundaries: a source field the API omits is written as null", async () => {
+  const api = JSON.parse(API);
+  for (const f of ["licenseDetail", "licenseSource", "boundaryID", "boundaryYearRepresented", "buildDate"]) delete api[f];
+  const { fetch } = serve({ [API_URL]: JSON.stringify(api), [SIMPLIFIED_URL]: text("simplified.geojson") });
+  await inDeck(async (deck) => {
+    const out = await boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch });
+    const source = readJson(out.sourceFile);
+    assert.deepEqual(Object.keys(source), ["boundaryID", "boundarySource", "boundaryLicense", "licenseDetail", "licenseSource", "boundaryYearRepresented", "buildDate", "url"]);
+    for (const f of ["licenseDetail", "licenseSource", "boundaryID", "boundaryYearRepresented", "buildDate"]) assert.equal(source[f], null, f);
+    assert.equal(source.boundaryLicense, "Creative Commons Attribution 4.0 International (CC BY 4.0)");
+  });
+});
+
+test("boundaries: the file to download must be https", async () => {
+  const api = JSON.stringify({ ...JSON.parse(API), simplifiedGeometryGeoJSON: SIMPLIFIED_URL.replace("https:", "http:") });
+  const { fetch, calls } = serve({ [API_URL]: api });
+  await assert.rejects(
+    inDeck((deck) => boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch })),
+    { message: "geoBoundaries answered something stepdeck cannot read: simplifiedGeometryGeoJSON is not an https URL" },
+  );
+  assert.deepEqual(calls, [API_URL]);
+});
+
+test("boundaries: an existing output is replaced, and said so", async () => {
+  await inDeck(async (deck) => {
+    const first = await boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch: xyz().fetch });
+    assert.deepEqual(first.replaced, []);
+    const again = await boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch: xyz().fetch });
+    assert.deepEqual(again.replaced, [first.file, first.sourceFile]);
+    assert.deepEqual(readdirSync(join(deck, "data")).sort(), ["xyz-adm1.geojson", "xyz-adm1.source.json"], "no temp files are left");
+  });
+});
+
+test("boundaries: after a 404 nothing is written", async () => {
+  await inDeck(async (deck) => {
+    await assert.rejects(boundaries({ iso3: "XYZ", level: "ADM2", deck, fetch: xyz().fetch }), /has no gbOpen ADM2/);
+    assert.equal(existsSync(join(deck, "data")), false);
+  });
+});
+
+test("boundaries: a timeout is could not reach", async () => {
+  const slow = async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); };
+  await assert.rejects(
+    inDeck((deck) => boundaries({ iso3: "XYZ", level: "ADM1", deck, fetch: slow })),
+    { message: "could not reach geoBoundaries (The operation was aborted due to timeout)" },
+  );
+});
+
+test("boundaries: a failed write leaves a source file but no truncated or licence-less GeoJSON", async () => {
+  await inDeck(async (deck) => {
+    const out = join(deck, "regions.geojson");
+    mkdirSync(out); // the GeoJSON cannot be put there
+    await assert.rejects(boundaries({ iso3: "XYZ", level: "ADM1", deck, out, fetch: xyz().fetch }));
+    assert.ok(existsSync(join(deck, "regions.source.json")), "the licence is written first");
+    assert.deepEqual(readdirSync(deck).sort(), ["regions.geojson", "regions.source.json"], "no temp files are left");
   });
 });
 

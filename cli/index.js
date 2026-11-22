@@ -206,6 +206,7 @@ async function run(args) {
         const count = (k, word) => `${k.toLocaleString("en-US")} ${word}${k === 1 ? "" : "s"}`;
         process.stdout.write(`wrote ${displayPath(made.file)} (${count(made.regions, "region")}, ${count(made.points, "point")}) and ${displayPath(made.sourceFile)}\n`);
         process.stdout.write(`licence: ${made.license}\nsource line: ${made.sourceLine}\n`);
+        for (const path of made.replaced) process.stdout.write(`replaced ${displayPath(path)}\n`);
         for (const w of made.warnings) process.stdout.write(`warning: ${w}\n`);
       }
       return 0;

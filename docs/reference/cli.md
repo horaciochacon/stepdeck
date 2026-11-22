@@ -328,7 +328,7 @@ What it does:
 
 1. Asks `https://www.geoboundaries.org/api/current/gbOpen/<ISO3>/ADM<n>/` (the gbOpen release) which files exist and under which licence.
 2. Downloads the geometry the answer names, following redirects, and rewrites it as above. Each feature keeps its properties as geoBoundaries gives them: `shapeName`, `shapeISO`, `shapeID`, `shapeGroup`, `shapeType`. A map names its region id (`id: "shapeISO"`), or you join your own data on one of them.
-3. Writes the GeoJSON, and next to it `<same name>.source.json` holding `boundaryID`, `boundarySource`, `boundaryLicense`, `licenseDetail`, `licenseSource`, `boundaryYearRepresented`, `buildDate` and `url` (the file that was downloaded).
+3. Writes the GeoJSON, and next to it `<same name>.source.json` holding `boundaryID`, `boundarySource`, `boundaryLicense`, `licenseDetail`, `licenseSource`, `boundaryYearRepresented`, `buildDate` and `url` (the file that was downloaded). A field the API leaves out is written as `null`. The source file is written first, and both files are written whole or not at all, so a GeoJSON never sits without its licence.
 
 **Licences differ from one boundary to the next.** gbOpen holds open licences only (public domain, CC0, CC BY, ODbL), but which one applies is for the boundary you fetched, so the command prints it and keeps it in the source file. Check it against how you will publish the deck, and keep the credit it asks for.
 
@@ -348,7 +348,9 @@ warning: data/xyz-adm2.geojson: 6,000 regions is over the map's limit of 5,000; 
 
 The file is still written, but a map refuses a file over these limits when it loads it.
 
-**`--json`** prints `{ file, sourceFile, regions, points, license, sourceLine, warnings }`, with absolute paths.
+**An existing file is replaced.** The command overwrites its output and the source file beside it, and says so: `replaced data/ury-adm1.geojson` (one line per file). Under `--json` they are listed in `replaced`.
+
+**`--json`** prints `{ file, sourceFile, regions, points, license, sourceLine, warnings, replaced }`, with absolute paths.
 
 **Exit codes.** 0 when the files were written, warnings or not. 2 when the run cannot complete, with `stepdeck: <message>` (or `{ "error": … }` under `--json`):
 
@@ -360,7 +362,7 @@ The file is still written, but a map refuses a file over these limits when it lo
 | `precision must be a whole number from 0 to 10` | `--precision` is anything else. |
 | `geoBoundaries has no gbOpen ADM2 for XYZ` | The API has no such country or level (HTTP 404). |
 | `could not reach geoBoundaries (<cause>)` | No network, a timeout, or an HTTP error other than 404. |
-| `geoBoundaries answered something stepdeck cannot read: <what>` | The answer is not JSON, lacks the file's URL, the source or the licence, or the file is not a FeatureCollection. |
+| `geoBoundaries answered something stepdeck cannot read: <what>` | The answer is not JSON, lacks the file's URL (or it is not `https:`), the source or the licence, or the file is not a FeatureCollection. |
 
 ## serve
 
