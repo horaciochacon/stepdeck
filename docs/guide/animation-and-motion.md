@@ -33,7 +33,7 @@ The engine decides this in the slide controller (`core/controller.js`), not in t
 animate: animate && appliedIndex !== null && index === appliedIndex + 1
 ```
 
-`animate` is the shell's request, which is `STEPDECK.flags.animate`. `appliedIndex` is the step the slide currently shows. It is `null` before the first step is applied, so the first render never animates.
+`animate` is the shell's request, which is `STEPDECK.flags.animate`, withheld while the page is hidden (see [Hidden pages](#hidden-pages)). `appliedIndex` is the step the slide currently shows. It is `null` before the first step is applied, so the first render never animates.
 
 ```mermaid
 flowchart TD
@@ -314,11 +314,20 @@ The frame goes as soon as the element enters, and its own entrance plays. It com
 | `motion` | `true` when the URL has `?motion=full`, or when the OS does not ask for reduced motion (`prefers-reduced-motion: reduce` is not set) |
 | `animate` | `!capture && !receiver && motion` |
 
-When `animate` is false, the shell never asks for motion, so every step renders directly and no element is held for a stagger slot. Three things turn it off:
+When `animate` is false, the shell never asks for motion, so every step renders directly and no element is held for a stagger slot. Three things turn it off for the whole page (a hidden page also stops motion, as [Hidden pages](#hidden-pages) describes):
 
 - **Reduced motion.** A viewer whose system prefers reduced motion sees no motion. Add `?motion=full` to the URL to override that, for example when rehearsing on a machine with the setting on.
 - **`?capture`.** Capture mode is for screenshots. It sets `ctx.capture`, adds the `capture` class to `<html>`, and `core/stepdeck.css` then turns off every CSS transition and animation (`html.capture *`). `shoot` and `dump` load pages this way, so their PNGs and boxes show settled steps, never motion.
 - **`?receiver`.** The reveal speaker view's preview frames carry this flag. They never animate. When reduced motion is on and `?motion=full` is absent, they show a "motion off" badge.
+
+## Hidden pages
+
+A hidden page never animates. A browser delivers no animation frames to a tab that is covered or minimized and throttles its timers, so a motion started there would not advance. In a long talk a step can also be left running while the window loses the screen. The engine therefore treats `document.visibilityState === "hidden"` like reduced motion, one step at a time:
+
+- A `goTo` asked while the page is hidden renders its end state at once, with no hold for a stagger slot.
+- When the page becomes hidden, the motion in flight ends at once: the slide's updates see `info.signal` abort, their helpers jump to their end state, and the same target is applied again without motion. Nothing is left half-played and no element fails its watchdog.
+
+This is not part of `STEPDECK.flags`, which describes the page as loaded; the page asks again at every `goTo`.
 
 ## Verifying with `check --played`
 

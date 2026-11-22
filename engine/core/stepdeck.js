@@ -11,6 +11,9 @@
 //                Element errors read "<slide>/<element>: <message>", slide errors "<slide>: <message>".
 //   settled()    Promise<void>; resolves when the pending navigation and every update finished.
 //   goTo(slide, step)  Promise<void>; shows that slide at that step (id or number). Never rejects.
+//                A hidden page (document.visibilityState "hidden") never animates: browsers deliver no animation
+//                frames to it, so motion there would stall. A goTo asked while hidden shows its end state at once,
+//                and hiding the page ends the motion in flight the same way (the slide's finish()).
 //   state()      { slide, step, stepId, title, notes, elements } of the slide on screen, or null.
 //
 // Paths: the engine root comes from this module's URL (…/core/stepdeck.js -> …/). The deck root is
@@ -226,7 +229,8 @@ async function loadDeck({ deckRoot, flags, errors }) {
 /**
  * Mounts one slide into a frame: renders the layout, runs its SlideController and turns every
  * failure into an on-canvas error. Shells call this (bare: one at a time; reveal: current ±1).
- * -> { id, root, errors (getter), goTo(ref, { animate }), settled(), state(), pause(), destroy() }
+ * -> { id, root, errors (getter), goTo(ref, { animate }), finish(), settled(), state(), pause(), destroy() }
+ * finish() ends the motion in flight at once (the controller's finish); a failed slide's resolves at once.
  * `attach(root)` must put the frame in the document (so it is laid out) before mounting.
  */
 export async function mountSlide(env, id, opts = {}) {
@@ -248,6 +252,7 @@ function errorRuntime(id, line, { attach, document: doc = globalThis.document } 
     root: frame.root,
     get errors() { return [line]; },
     goTo: async () => {},
+    finish: async () => {},
     settled: async () => {},
     state: () => null,
     pause() {},
@@ -327,6 +332,7 @@ async function mountSlideUnsafe(env, id, { capture = false, attach, document: do
       return [...slideErrors, ...controller.errors];
     },
     goTo,
+    finish: () => controller.finish(),
     settled: () => controller.settled().catch((e) => record(`${id}: ${message(e)}`)),
     state: () => (controller.state ? { slide: id, ...controller.state } : null),
     pause: () => controller.pause(),
@@ -378,6 +384,9 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
   // Presenter preview frames never animate (spec §9).
   const animateRequest = !flags.capture && !preview && motion;
 
+  // A hidden page gets no animation frames and throttled timers: nothing there animates.
+  const animateNow = () => animateRequest && doc.visibilityState !== "hidden";
+
   const bootErrors = [];
   let env = null;
   let host = null; // the shell host: { current, show(slide, step), showFatal(root), navigated?, idle? }
@@ -406,13 +415,13 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
       // serialized on `nav`.
       const current = host?.current;
       if (current && current.id === slide && switches === 0) {
-        return current.goTo(step ?? 0, { animate: animateRequest });
+        return current.goTo(step ?? 0, { animate: animateNow() });
       }
       switches += 1;
       nav = nav
         .then(() => {
           if (!env || !host) return;
-          if (host.current && host.current.id === slide) return host.current.goTo(step ?? 0, { animate: animateRequest });
+          if (host.current && host.current.id === slide) return host.current.goTo(step ?? 0, { animate: animateNow() });
           return host.show(slide, step);
         })
         .catch((e) => void bootErrors.push(`stepdeck: ${message(e)}`))
@@ -423,6 +432,13 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
     flags: { ...flags, motion, animate: animateRequest },
   };
   if (view) view.STEPDECK = api;
+  // Hiding the page ends the motion in flight: its frames stop, so it would stall until the watchdog fails it.
+  if (typeof doc.addEventListener === "function") {
+    doc.addEventListener("visibilitychange", () => {
+      if (doc.visibilityState !== "hidden") return;
+      Promise.resolve().then(() => host?.current?.finish?.()).catch((e) => void bootErrors.push(`stepdeck: ${message(e)}`));
+    });
+  }
 
   if (!SHELLS.includes(shell)) {
     bootErrors.push(`stepdeck: unknown shell '${shell}' (available: ${SHELLS.join(", ")})`);

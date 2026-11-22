@@ -192,6 +192,8 @@ A slide that fails shows its error on its own canvas. `STEPDECK.errors` lists bo
 
 stepdeck follows the OS setting. When the OS asks for reduced motion (`prefers-reduced-motion: reduce`), steps show their end state directly, with no animation. Content is the same either way; only the movement is skipped.
 
+A page that is hidden (the window is covered or minimized) never animates either: browsers send it no animation frames. Steps asked for there show their end state, and hiding the page snaps a motion in flight to its end.
+
 To animate anyway, for example when the presentation machine has reduced motion on but you want the motion, add `?motion=full`:
 
 ```text

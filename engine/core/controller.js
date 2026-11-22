@@ -86,6 +86,10 @@
 //             Elsewhere (first goTo, jumps, backward, animate not requested) nothing is held and
 //             visibility snaps, as above. Each element's hold, box motion and update run inside its
 //             watchdog; the step settles when all of them have.
+//   finish()  ends the motion at once: the goTo being applied is superseded by the same target without animation
+//             (its updates see their signal abort and snap), and a newer queued target is made non-animated.
+//             Resolves when the latest target is applied; at once when idle. The shell calls it when the page
+//             is hidden, where the browser stops animation frames and throttles timers.
 //   settled() resolves when no goTo is in flight.
 //   pause()   aborts the in-flight goTo and calls instance.pause(). An element still held for its stagger
 //             slot is released by that abort only after pause() returns: it then gets setVisible, enterBox
@@ -244,6 +248,7 @@ export class SlideController {
   #mounting = null;
   #pending = null; // latest requested { index, animate }
   #current = null; // AbortController of the goTo being applied
+  #job = null; // the { index, animate } being applied
   #loop = null;
   #appliedIndex = null;
   #destroyed = false;
@@ -462,6 +467,23 @@ export class SlideController {
     return this.#loop;
   }
 
+  /**
+   * Ends the motion now: the goTo being applied is superseded by the same target, not animated, and a newer
+   * queued target is made non-animated. Every update in flight sees its signal abort and snaps to its end state.
+   * Resolves when the latest target is applied; at once when idle. Re-queuing the target (rather than only
+   * aborting) keeps one still resolving its bindings from being dropped.
+   */
+  finish() {
+    if (this.#destroyed || !this.#loop) return Promise.resolve();
+    if (this.#pending) {
+      this.#pending = { ...this.#pending, animate: false };
+    } else if (this.#job) {
+      this.#pending = { index: this.#job.index, animate: false };
+    }
+    this.#current?.abort();
+    return this.#loop;
+  }
+
   settled() {
     return this.#loop ?? Promise.resolve();
   }
@@ -474,10 +496,12 @@ export class SlideController {
         this.#pending = null;
         const ac = new AbortController();
         this.#current = ac;
+        this.#job = job;
         try {
           await this.#apply(job, ac.signal);
         } finally {
           this.#current = null;
+          this.#job = null;
         }
       }
     } finally {

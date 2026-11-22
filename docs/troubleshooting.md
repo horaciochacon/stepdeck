@@ -219,6 +219,7 @@ Motion plays only when all of these hold:
 
 - You move **forward by exactly one step**. A jump, a step back and the first step shown all show the end state with no motion. A hash change or `STEPDECK.goTo` animates only when it happens to land on the next step, and otherwise snaps. This is by design: a played step must look the same as a jumped-to step.
 - The OS does not ask for reduced motion. With `prefers-reduced-motion: reduce`, steps snap. Add `?motion=full` to the URL to animate anyway.
+- The page is visible. A hidden page (a covered or minimized window) never animates, and hiding it snaps motion in flight to its end state.
 - The page is not a capture (`?capture`) and not a presenter preview frame. Both never animate. The CLI loads pages with `?capture` for `dump` and `shoot`.
 
 `STEPDECK.flags.motion` and `STEPDECK.flags.animate` tell you which applies. A step whose `transition.duration` is `0` also snaps, and so does an element with `enter: "none"` or `exit: "none"`. See [When motion plays](guide/animation-and-motion.md#when-motion-plays) and [Reduced motion](guide/presenting.md#reduced-motion).
