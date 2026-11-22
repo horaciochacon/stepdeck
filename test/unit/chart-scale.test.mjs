@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { colorScale } from "#engine/core/chart-scale.js";
+import { colorScale, legendRow } from "#engine/core/chart-scale.js";
 import { d3 } from "#engine/core/d3.js";
 
 const file = JSON.parse(await readFile(new URL("../../engine/themes/modern/palettes.json", import.meta.url), "utf8"));
@@ -108,6 +108,57 @@ test("colorScale: an explicit domain is used as given, with a midpoint piecewise
   const edge = colorScale({ domain: [0, 10], midpoint: 0 }, palettes);
   assert.equal(rgb(edge.color(0)), along("diverging", 0.5), "the midpoint at an end of the domain");
   assert.equal(rgb(edge.color(10)), along("diverging", 1));
+});
+
+/** Whether two colours are the same to within one unit per channel (rounding). */
+const near = (a, b) => {
+  const [x, y] = [d3.rgb(a), d3.rgb(b)];
+  return Math.abs(x.r - y.r) <= 1 && Math.abs(x.g - y.g) <= 1 && Math.abs(x.b - y.b) <= 1;
+};
+
+test("colorScale: an off-centre midpoint places the ramp legend's stops where their values are", () => {
+  const s = colorScale({ domain: [-2, 10], midpoint: 0 }, palettes);
+  const { stops, positions } = s.legend;
+  assert.equal(positions.length, stops.length);
+  // every stop sits where the value of its colour is on the bar: color(lo + position × (hi − lo)) is that stop
+  stops.forEach((stop, i) => assert.ok(near(s.color(-2 + positions[i] * 12), stop), `stop ${i} at ${positions[i]}`));
+  assert.equal(positions[4], 2 / 12, "the neutral colour sits at 0, a sixth of the way along, not at the centre");
+  assert.deepEqual([positions[0], positions[8]], [0, 1]);
+  // in the logarithm for a log ramp
+  const log = colorScale({ domain: [1, 1000], midpoint: 10, log: true }, palettes);
+  log.legend.stops.forEach((stop, i) => assert.ok(near(log.color(10 ** (3 * log.legend.positions[i])), stop), `log stop ${i}`));
+  // a midpoint at an end of the domain: the arm with no values has all its stops at the midpoint, so the bar never runs back
+  const low = colorScale({ domain: [0, 10], midpoint: 0 }, palettes).legend.positions;
+  assert.deepEqual(low.slice(0, 5), [0, 0, 0, 0, 0]);
+  assert.deepEqual(low.slice(4), [0, 0.25, 0.5, 0.75, 1]);
+  const high = colorScale({ domain: [-10, 0], midpoint: 0 }, palettes).legend.positions;
+  assert.deepEqual(high.slice(4), [1, 1, 1, 1, 1]);
+  for (const list of [positions, low, high]) assert.deepEqual(list, [...list].sort((a, b) => a - b), "never decreasing");
+});
+
+test("colorScale: plain and centred ramps keep their stops evenly spaced", () => {
+  for (const spec of [{ domain: [0, 100] }, { values: [2, 8] }, { midpoint: 0, values: [-2, 8, 3] }, { domain: [-4, 4], midpoint: 0 }, { domain: [1, 100], midpoint: 10, log: true }, { midpoint: 0.1, values: [-0.2, 0.4] }]) {
+    const { legend } = colorScale(spec, palettes);
+    assert.equal(legend.positions, undefined, JSON.stringify(spec));
+    assert.equal(legend.stops.length, 9);
+  }
+});
+
+/** A document just big enough for `legendRow`: elements with a class, text, a style and children. */
+const fakeDocument = () => ({
+  createElement: (tag) => ({ tag, className: "", textContent: "", style: {}, children: [], append(...nodes) { this.children.push(...nodes); } }),
+});
+
+test("legendRow: a ramp writes its stops' places when the legend has them, and plain colours otherwise", () => {
+  const rampOf = (legend) => legendRow(fakeDocument(), legend, { t: () => "no data" }).children.find((n) => n.className === "sd-legend-ramp").style.backgroundImage;
+  const off = rampOf(colorScale({ domain: [-2, 10], midpoint: 0 }, palettes).legend);
+  const stops = off.slice("linear-gradient(to right, ".length, -1).split(/, (?=rgb)/);
+  assert.equal(stops.length, 9);
+  assert.match(stops[0], /^rgb\(\d+, \d+, \d+\) 0%$/);
+  assert.match(stops[4], / 16\.67%$/, "the neutral colour at the midpoint's place");
+  assert.match(stops[8], / 100%$/);
+  const plain = rampOf(colorScale({ domain: [0, 100] }, palettes).legend);
+  assert.match(plain, /^linear-gradient\(to right, (rgb\(\d+, \d+, \d+\)(, )?){9}\)$/, "no places: evenly spaced");
 });
 
 test("colorScale: a zero-width explicit domain is one value", () => {

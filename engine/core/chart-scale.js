@@ -51,7 +51,9 @@ function rampDomain(spec) {
  *   diverging palette: a `domain` is used as given and runs lo, midpoint, hi through t 0, 0.5, 1 (linear on each arm,
  *   in the logarithm for `log`); a domain read from `values` is made symmetric about the midpoint.
  * `color(value)` is `null` for a missing value (a blank string is missing, never 0), a value outside the categories, or (log) a value that is not above 0.
- * `legend` is `{ kind: "steps" | "categories", items: [{ color, label }] }` or `{ kind: "ramp", stops, labels: [lo, hi] }`.
+ * `legend` is `{ kind: "steps" | "categories", items: [{ color, label }] }` or `{ kind: "ramp", stops, labels: [lo, hi] }`:
+ * nine stops, evenly spaced; a diverging ramp whose midpoint is off the domain's centre adds `positions`, the place of
+ * each stop on the bar (0 to 1, in the logarithm for `log`), so the midpoint's colour sits where the midpoint is.
  * @param {{ classes?: number[], midpoint?: number, domain?: [number, number], log?: boolean, categories?: unknown[], color?: string, values?: unknown[] }} spec
  * @param {{ sequential: { colors: string[] }, diverging: { colors: string[] }, categorical: { colors: string[] } }} palettes
  * @param {{ format?: (value: number) => string }} [options]
@@ -110,6 +112,10 @@ export function colorScale(spec, palettes, { format = String } = {}) {
     if (x <= pm) return p0 < pm ? 0.5 * arm(x, p0, pm) : x === pm ? 0.5 : 0; // a midpoint at or below the low end has no lower arm
     return p1 > pm ? 0.5 + 0.5 * arm(x, pm, p1) : 1;
   };
+  const legend = { kind: "ramp", stops: Array.from({ length: RAMP_STOPS }, (_, i) => interpolate(i / (RAMP_STOPS - 1))), labels: [format(lo), format(hi)] };
+  // Off the domain's centre, a midpoint splits the bar unevenly: each arm of the palette spans its own values' share.
+  const m = pm === undefined ? 0.5 : (pm - p0) / (p1 - p0);
+  if (Math.abs(m - 0.5) > 1e-9) legend.positions = legend.stops.map((_, i) => rampPlace(i / (RAMP_STOPS - 1), m, p0 < pm, p1 > pm));
   return {
     kind: "ramp",
     color: (v) => {
@@ -117,21 +123,28 @@ export function colorScale(spec, palettes, { format = String } = {}) {
       const x = n === null ? NaN : place(n);
       return Number.isFinite(x) ? interpolate(position(x)) : null;
     },
-    legend: {
-      kind: "ramp",
-      stops: Array.from({ length: RAMP_STOPS }, (_, i) => interpolate(i / (RAMP_STOPS - 1))),
-      labels: [format(lo), format(hi)],
-    },
+    legend,
   };
+}
+
+/**
+ * Where on a diverging ramp's bar (0..1, in placed values) the palette's colour at `t` is, for a midpoint at `m` of the
+ * bar: the lower half of the palette spans [0, m] and the upper half [m, 1]. An arm with no values (`lower` or `upper`
+ * false: the midpoint at or past that end of the domain) has every stop at the midpoint, so the places never decrease.
+ */
+function rampPlace(t, m, lower, upper) {
+  if (t <= 0.5) return lower ? 2 * t * m : m;
+  return upper ? m + (2 * t - 1) * (1 - m) : m;
 }
 
 /**
  * One legend row, detached: `div.sd-legend-row` with the `title`, then the swatches of a steps or categories legend
  * (`span.sd-legend-item` holding a `span.sd-legend-swatch` and its label) or a ramp (low label, `span.sd-legend-ramp`
- * gradient, high label), then, when `noData` is set, the swatch `.sd-legend-nodata` labelled `t("noData")`. The theme
+ * gradient, its stops at `positions` when the legend has them, high label), then, when `noData` is set, the swatch
+ * `.sd-legend-nodata` labelled `t("noData")`. The theme
  * styles the classes; only the colours of the scale are written inline.
  * @param {Document} doc
- * @param {{ kind: string, items?: Array<{ color: string, label: string }>, stops?: string[], labels?: string[] }} legend
+ * @param {{ kind: string, items?: Array<{ color: string, label: string }>, stops?: string[], positions?: number[], labels?: string[] }} legend
  * @param {{ title?: string, noData?: boolean, t: (key: string) => string }} options
  * @returns {HTMLElement}
  */
@@ -153,7 +166,8 @@ export function legendRow(doc, legend, { title, noData, t }) {
   if (title) row.append(make("span", "sd-legend-title", title));
   if (legend.kind === "ramp") {
     const ramp = make("span", "sd-legend-ramp");
-    ramp.style.backgroundImage = `linear-gradient(to right, ${legend.stops.join(", ")})`;
+    const stops = legend.positions ? legend.stops.map((color, i) => `${color} ${+(legend.positions[i] * 100).toFixed(2)}%`) : legend.stops;
+    ramp.style.backgroundImage = `linear-gradient(to right, ${stops.join(", ")})`;
     row.append(make("span", "sd-legend-label", legend.labels[0]), ramp, make("span", "sd-legend-label", legend.labels[1]));
   } else for (const { color, label } of legend.items) row.append(item(label, "sd-legend-swatch", color));
   if (noData) row.append(item(t("noData"), "sd-legend-swatch sd-legend-nodata"));

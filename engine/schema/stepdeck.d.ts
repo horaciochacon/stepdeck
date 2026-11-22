@@ -404,7 +404,7 @@ export interface ColorScaleSpec {
 /** What a legend row draws. */
 export type ColorLegend =
   | { kind: "steps" | "categories"; items: Array<{ color: string; label: string }> }
-  | { kind: "ramp"; stops: string[]; labels: [string, string] };
+  | { kind: "ramp"; stops: string[]; positions?: number[]; labels: [string, string] };
 
 /** A colour scale: `color(value)` is `null` for a missing or unclassed value. */
 export interface ColorScale {
