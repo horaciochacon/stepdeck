@@ -91,6 +91,32 @@
       "examples": ["N1", ["W1", "S2"], { "bounds": [-15, -28, -12, -25] }, null],
       "x-transition": "tween"
     },
+    "inset": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["view"],
+          "properties": {
+            "view": {
+              "anyOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                { "type": "object", "additionalProperties": false, "required": ["bounds"], "properties": { "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 } } },
+                { "type": "null" }
+              ],
+              "description": "Where the inset looks, as `view` does for the map: a region id or a list of them, a box `{ \"bounds\": [west, south, east, north] }`, or null for the whole map. A change on a forward step flies the inset alone, as `view` flies the map, over twice the step's duration."
+            },
+            "at": { "enum": ["top-right", "top-left", "bottom-right", "bottom-left"], "default": "top-right", "description": "The corner of the element the inset sits in." },
+            "scale": { "type": "boolean", "default": true, "description": "Whether the inset has a scale bar, a round length in km at its bottom-left." }
+          }
+        },
+        { "type": "null" }
+      ],
+      "description": "A second, zoomed view of the same shown layers, in a corner of the element: 36% of its width, with its aspect, 3% of its width in from the two edges. It shows what the map would at `inset.view`, with the same layers, colours, highlight and names. A box on the map marks the part it shows, two dashed lines join the box to the inset (none while the inset covers the box), and a scale bar gives a round length in km. The inset fades in and out; a change of `inset.view` flies the inset only, the box following. Null or absent: no inset.",
+      "examples": [{ "view": "N1" }, { "view": ["W1", "S2"], "at": "bottom-right", "scale": false }, null],
+      "x-transition": "fade"
+    },
     "labels": {
       "type": "array",
       "items": { "type": "string" },

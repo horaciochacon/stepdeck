@@ -150,7 +150,7 @@ export default {
       raster, lutData, cache: geo.pictures,
       land: landOf(geo),
       landCells: hatch ? landCells(raster, geo.features) : null,
-      lookupFor: (at) => geo.lookupFor(at, raster), // a table serves every raster with these bounds and this grid, in every frame
+      lookupFor: (at, size) => geo.lookupFor(at, raster, size), // a table serves every raster with these bounds and this grid, in every frame; `size` is the canvas's (the inset's is not the element's)
     };
     return { source: `${geo.key}|${raster.path}`, title: layer.label, clip: layer.clip !== false, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
   },

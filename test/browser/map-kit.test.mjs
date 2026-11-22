@@ -267,6 +267,20 @@ test("insetFrame: leaders join the nearest corners", async () => {
   });
 });
 
+test("insetFrame: a frame over the box has two hidden leaders, bare of any earlier position", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const html = (frame) => inPage(page, (paint, d3, { box, frames }) => {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      for (const frame of frames) paint.insetFrame(svg, { box, frame });
+      return svg.outerHTML;
+    }, { box: [100, 100, 140, 130], frames: frame });
+    const hidden = await html([[600, 300, 900, 500], [110, 110, 300, 200]]);
+    assert.equal(hidden, await html([[110, 110, 300, 200]]), "after a call with leaders, a call without them writes what a first call does");
+    assert.equal(hidden.match(/<line[^>]*>/g).join(""), '<line class="sd-map-inset-leader" display="none"><line class="sd-map-inset-leader" display="none">'); // opening tags: no coordinates, no dash
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("insetFrame: idempotent", async () => {
   await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
     const result = await inPage(page, (paint) => {

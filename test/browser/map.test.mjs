@@ -919,3 +919,254 @@ test("flight: lookups for every view are ready after mount", async () => {
     assert.deepEqual(ctx.errors, []);
   });
 });
+
+// --- the inset --------------------------------------------------------------------------------------------------
+
+const INSET_STEPS = ["home", "inset", "pair", "named", "corner", "main", "off"];
+/** The inset's room in the 1400 x 700 element: 36% of its width, the element's aspect, a margin of 3% of its width. */
+const [IW, IH, MARGIN] = [504, 252, 42];
+const INSET = ".sd-map-inset-stage";
+const INSET_KEEP = `${LEGEND_COLOURS}, ${INSET}`;
+const toRect = ([x, y, w, h]) => [x, y, x + w, y + h];
+const corners = ([x0, y0, x1, y1]) => [[x0, y0], [x1, y0], [x0, y1], [x1, y1]];
+const near = (a, b, by = 0.51) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= by);
+
+/** What the inset shows through `target` (region ids) at `main`, the main map's view: the rectangle of the inset's px as seen on the main map. */
+function boxOf(target, main = { k: 1, x: 0, y: 0 }) {
+  const fitted = view(BASE, target.map((id) => REGIONS.get(id)), SIZE);
+  const s = IW / SIZE[0];
+  const [k, x, y] = [fitted.k * s, fitted.x * s, fitted.y * s];
+  const [x0, y0] = applyView(main, [(0 - x) / k, (0 - y) / k]);
+  const [x1, y1] = applyView(main, [(IW - x) / k, (IH - y) / k]);
+  return [x0, y0, x1, y1];
+}
+
+/** The inset's furniture on the page: its stage's place, the box, the frame and the leaders in the main SVG, the scale bar in its own. */
+const insetOf = (page) =>
+  page.evaluate(() => {
+    const el = document.querySelector('[data-el="map"]');
+    const stage = el.querySelector(".sd-map-inset-stage");
+    const g = el.querySelector("g.sd-map-inset");
+    const num = (node, name) => Number(node.getAttribute(name));
+    const rect = (name) => { const r = g.querySelector(name); return [num(r, "x"), num(r, "y"), num(r, "x") + num(r, "width"), num(r, "y") + num(r, "height")]; };
+    const bar = stage?.querySelector("g.sd-map-scale");
+    return {
+      stage: stage ? { style: stage.getAttribute("style"), parent: stage.parentElement === el } : null,
+      group: g ? { box: rect(".sd-map-inset-box"), frame: rect(".sd-map-inset-frame"), mainSvg: g.parentElement === el.querySelector(":scope > svg.sd-map-labels"),
+        leaders: [...g.querySelectorAll("line.sd-map-inset-leader")].map((l) => ({ a: [num(l, "x1"), num(l, "y1")], b: [num(l, "x2"), num(l, "y2")], dash: l.getAttribute("stroke-dasharray"), hidden: l.getAttribute("display") === "none" })) } : null,
+      scale: bar ? { label: bar.querySelector("text").textContent, bar: ["x1", "y1", "x2", "y2"].map((n) => num(bar.querySelector("line"), n)) } : null,
+      canvases: [...el.querySelectorAll("canvas")].map((c) => c.dataset.layer),
+    };
+  });
+
+test("inset: played equals jumped, pixels too", async () => {
+  await withPage({ root, url: pages.url("inset", "step=home") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "inset", steps: INSET_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("inset: backward and interrupted, even in the middle of its flight, equal the jump", async () => {
+  await withPage({ root, url: pages.url("inset", "step=home") }, async (page, ctx) => {
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "inset", steps: INSET_STEPS, id: "map" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "inset", from: "home", via: "inset", to: "pair", id: "map", keep: INSET_KEEP });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "inset", from: "inset", via: "pair", to: "corner", id: "map", keep: INSET_KEEP });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "inset", from: "main", via: "off", to: "main", id: "map", keep: INSET_KEEP });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("inset: shows the shown layers at its view", async () => {
+  await withPage({ root, url: pages.url("inset", "step=inset") }, async (page, ctx) => {
+    const state = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el="map"] canvas')].map((c) => [c.dataset.layer, { ...c.dataset }])));
+    assert.deepEqual(Object.keys(state), ["main:base", "main:raster:density", "main:borders", "inset:base", "inset:raster:density", "inset:borders"]);
+    const west = view(BASE, [REGIONS.get("W1")], SIZE);
+    const kOf = (layer) => Number(state[layer].view.split(",")[0]);
+    assert.equal(kOf("main:base"), 1, "the main map is at home");
+    for (const part of ["base", "raster:density", "borders"]) {
+      assert.ok(state[`inset:${part}`].view.startsWith(`${west.k.toFixed(3)},`), `inset:${part} is at Westmere's scale (${state[`inset:${part}`].view})`);
+      assert.ok(kOf(`inset:${part}`) > kOf(`main:${part}`), `inset:${part} is zoomed in on main:${part}`);
+      assert.equal(state[`inset:${part}`].shown, "density", `inset:${part} has the shown layers`);
+      assert.match(state[`inset:${part}`].sig, /^[0-9a-f]{8}$/, `inset:${part} says what it painted`);
+    }
+    // the raster is drawn at the inset's size (a table for its px, not the element's) and fills its middle, with what the main map shows there
+    const middle = await pixelAt(page, "inset:raster:density", [IW / 2, IH / 2]);
+    assert.equal(middle[3], 255, "the inset's raster is opaque in the middle");
+    const scale = IW / SIZE[0];
+    const [px, py] = [(IW / 2 - west.x * scale) / (west.k * scale), (IH / 2 - west.y * scale) / (west.k * scale)];
+    const seen = new Set((await pixelsAround(page, "main:raster:density", [Math.round(px), Math.round(py)], 2)).map(rgb));
+    assert.ok(seen.has(rgb(middle)), `the inset's middle pixel ${rgb(middle)} is a colour the main map has there (${[...seen].join(" | ")})`);
+    // its sea is the page's background, not the main map showing through
+    const sea = await page.evaluate(() => getComputedStyle(document.querySelector(".sd-map-inset-stage")).backgroundColor);
+    assert.equal(sea, await tokenRgb(page, "--sd-color-background"));
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: box and leaders match the inset view", async () => {
+  await withPage({ root, url: pages.url("inset", "step=inset") }, async (page, ctx) => {
+    const check = async (target, main, frame, where) => {
+      const { stage, group } = await insetOf(page);
+      assert.ok(stage.parent, `${where}: the inset's stage is a child of the element`);
+      assert.ok(group.mainSvg, `${where}: the box and leaders are in the main SVG`);
+      const box = boxOf(target, main);
+      assert.ok(near(group.box, box), `${where}: the box ${group.box} is ${box}`);
+      assert.ok(near(group.frame, frame, 0), `${where}: the frame ${group.frame} is ${frame}`);
+      assert.equal(group.leaders.length, 2);
+      const shown = group.leaders.filter((l) => !l.hidden);
+      // a frame that overlaps the box has no leaders
+      const overlap = box[0] < frame[2] && frame[0] < box[2] && box[1] < frame[3] && frame[1] < box[3];
+      assert.equal(shown.length, overlap ? 0 : 2, `${where}: ${overlap ? "the frame overlaps the box, so no" : "two"} leaders`);
+      if (overlap) return group;
+      const [fromBox, fromFrame] = [corners(group.box), corners(group.frame)];
+      for (const { a, b, dash } of shown) {
+        assert.equal(dash, "6 4");
+        assert.ok(fromBox.some((c) => near(c, a, 0.01)), `${where}: a leader starts at a corner of the box (${a})`);
+        assert.ok(fromFrame.some((c) => near(c, b, 0.01)), `${where}: and ends at a corner of the frame (${b})`);
+      }
+      assert.notDeepEqual(shown[0].a, shown[1].a, `${where}: the leaders start at two corners`);
+      return group;
+    };
+    const home = await check(["W1"], undefined, [SIZE[0] - MARGIN - IW, MARGIN, SIZE[0] - MARGIN, MARGIN + IH], "home");
+    const bounds = d3.geoPath(BASE).bounds(REGIONS.get("W1"));
+    assert.ok(home.box[0] <= bounds[0][0] && home.box[1] <= bounds[0][1] && home.box[2] >= bounds[1][0] && home.box[3] >= bounds[1][1], "the box holds all of Westmere");
+    // the box has the aspect of the element, as the frame does
+    assert.ok(Math.abs((home.box[2] - home.box[0]) / (home.box[3] - home.box[1]) - SIZE[0] / SIZE[1]) < 0.01);
+
+    assert.equal(home.leaders.filter((l) => !l.hidden).length, 2, "Westmere's box is beside the frame: it has its two leaders");
+    await goTo(page, "inset", "pair");
+    const pair = await check(["W1", "S2"], undefined, [SIZE[0] - MARGIN - IW, MARGIN, SIZE[0] - MARGIN, MARGIN + IH], "pair");
+    assert.equal(pair.leaders.filter((l) => !l.hidden).length, 0, "the pair's box overlaps the frame: none");
+    await goTo(page, "inset", "corner");
+    await check(["W1", "S2"], undefined, [SIZE[0] - MARGIN - IW, SIZE[1] - MARGIN - IH, SIZE[0] - MARGIN, SIZE[1] - MARGIN], "corner");
+    // the map flies: the box is seen through the map's new view
+    await goTo(page, "inset", "main");
+    await check(["W1", "S2"], view(BASE, [REGIONS.get("N1")], SIZE), [SIZE[0] - MARGIN - IW, SIZE[1] - MARGIN - IH, SIZE[0] - MARGIN, SIZE[1] - MARGIN], "main");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: the stage sits at its corner, 36% wide, and goes with the inset", async () => {
+  await withPage({ root, url: pages.url("inset", "step=home") }, async (page, ctx) => {
+    const style = async () => (await insetOf(page)).stage?.style;
+    assert.deepEqual((({ stage, group, scale, canvases }) => [stage, group, scale, canvases])(await insetOf(page)), [null, null, null, ["main:base", "main:raster:density", "main:borders"]], "no inset, none of its markup");
+    await goTo(page, "inset", "inset");
+    assert.equal(await style(), `left: ${SIZE[0] - MARGIN - IW}px; top: ${MARGIN}px; width: ${IW}px; height: ${IH}px;`);
+    await goTo(page, "inset", "corner");
+    assert.equal(await style(), `left: ${SIZE[0] - MARGIN - IW}px; top: ${SIZE[1] - MARGIN - IH}px; width: ${IW}px; height: ${IH}px;`);
+    await goTo(page, "inset", "off");
+    assert.deepEqual((({ stage, group, scale, canvases }) => [stage, group, scale, canvases])(await insetOf(page)), [null, null, null, ["main:base", "main:raster:density", "main:borders"]], "and none again");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: scale bar label is a round km length", async () => {
+  await withPage({ root, url: pages.url("inset", "step=inset") }, async (page, ctx) => {
+    const west = view(BASE, [REGIONS.get("W1")], SIZE);
+    const s = IW / SIZE[0];
+    const check = async (fitted) => {
+      const { scale } = await insetOf(page);
+      assert.match(scale.label, /^[125](0|,000)* km$/, `the label ${scale.label} is 1, 2 or 5 x 10^n km`);
+      const km = Number(scale.label.replace(/[ ,]|km/g, ""));
+      assert.ok(/^[125]0*$/.test(String(km)), `${km} is 1, 2 or 5 followed by zeros`);
+      // the bar is that long at its own place: one px along its row is this many km
+      const [x1, y1, x2, y2] = scale.bar;
+      assert.equal(y1, y2);
+      assert.deepEqual([x1, y1], [16, IH - 16], "the bar starts 16 px in from the inset's bottom-left corner");
+      const lonLat = (x) => BASE.invert([(x - fitted.x * s) / (fitted.k * s), (y1 - fitted.y * s) / (fitted.k * s)]);
+      const kmPerPx = 6371 * d3.geoDistance(lonLat(x1), lonLat(x1 + 1));
+      assert.ok(Math.abs((x2 - x1) * kmPerPx - km) <= 0.01 * km + kmPerPx, `the bar of ${x2 - x1} px is ${((x2 - x1) * kmPerPx).toFixed(1)} km, labelled ${km}`);
+      // the longest 1, 2 or 5 x 10^n km that fits in 40% of the inset's width: at least 2/5 of it, at most all of it
+      assert.ok(x2 - x1 <= 0.4 * IW + 0.5 && x2 - x1 >= 0.4 * 0.4 * IW - 0.5, `${x2 - x1} px is within 40% of the inset's width, and above 40% of that`);
+      return km;
+    };
+    const near1 = await check(west);
+    await goTo(page, "inset", "pair");
+    const pair = view(BASE, ["W1", "S2"].map((id) => REGIONS.get(id)), SIZE);
+    const wide = await check(pair);
+    assert.ok(wide >= near1, "the wider view's bar is no shorter");
+    await goTo(page, "inset", "corner");
+    assert.equal((await insetOf(page)).scale, null, "scale: false has no bar");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: names are in the inset where it shows them, and not under it on the map", async () => {
+  await withPage({ root, url: pages.url("inset", "step=named") }, async (page, ctx) => {
+    const centroid = d3.geoPath(BASE);
+    const pair = view(BASE, ["W1", "S2"].map((id) => REGIONS.get(id)), SIZE);
+    const s = IW / SIZE[0];
+    const frame = [SIZE[0] - MARGIN - IW, MARGIN, SIZE[0] - MARGIN, MARGIN + IH];
+    const inside = ([x, y], [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const names = ["N1", "W1", "S2"];
+    const onMap = names.filter((id) => !inside(applyView({ k: 1, x: 0, y: 0 }, centroid.centroid(REGIONS.get(id))), frame));
+    const inInset = names.filter((id) => inside(applyView({ k: pair.k * s, x: pair.x * s, y: pair.y * s }, centroid.centroid(REGIONS.get(id))), [0, 0, IW, IH]));
+    assert.ok(onMap.length > 0 && inInset.length > 0, "the slide has names on both");
+    const found = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="map"]');
+      const ids = (root) => [...root.querySelectorAll("text.sd-map-label")].map((t) => t.dataset.region);
+      return { map: ids(el.querySelector(":scope > svg.sd-map-labels")), inset: ids(el.querySelector(".sd-map-inset-stage")) };
+    });
+    assert.deepEqual(found, { map: onMap, inset: inInset });
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: fade in and out", async () => {
+  await withPage({ root, url: pages.url("inset", "step=home&motion=full") }, async (page, ctx) => {
+    const probe = new Function("el", `
+      const stage = el.querySelector(".sd-map-inset-stage");
+      const frame = el.querySelector("g.sd-map-inset");
+      return { opacity: stage ? Number(getComputedStyle(stage).opacity) : 0, frame: frame ? Number(frame.getAttribute("opacity") ?? 1) : 0, style: stage?.getAttribute("style") ?? "" };`);
+    const shows = await sampleFrames(page, "inset", "inset", "map", probe);
+    assert.equal(shows.frames[0].opacity, 0, "no inset to start");
+    assert.equal(shows.end.opacity, 1, "and a whole one at the end");
+    assert.ok(shows.frames.filter((f) => f.opacity > 0 && f.opacity < 1).length >= 2, `passing through partial opacity (${shows.frames.map((f) => f.opacity.toFixed(2)).join(" ")})`);
+    assert.ok(shows.frames.every((f, i) => i === 0 || f.opacity >= shows.frames[i - 1].opacity), "only rising");
+    assert.ok(shows.frames.filter((f) => f.frame > 0 && f.frame < 1).length >= 2, "the box and leaders fade with it");
+    assert.ok(!shows.end.style.includes("opacity") && shows.end.frame === 1, "no opacity is left at rest");
+
+    await ctx.open(pages.url("inset", "step=main&motion=full"));
+    const hides = await sampleFrames(page, "inset", "off", "map", probe);
+    assert.equal(hides.frames[0].opacity, 1, "a whole inset to start");
+    assert.equal(hides.end.opacity, 0, "and none at the end");
+    assert.ok(hides.frames.filter((f) => f.opacity > 0 && f.opacity < 1).length >= 2, "passing through partial opacity");
+    assert.ok(hides.frames.every((f, i) => i === 0 || f.opacity <= hides.frames[i - 1].opacity), "only falling");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: a view change flies the inset only", async () => {
+  await withPage({ root, url: pages.url("inset", "step=inset&motion=full") }, async (page, ctx) => {
+    const duration = parseFloat(await page.evaluate(() => getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue("--sd-duration")));
+    const probe = new Function("el", `
+      const at = (layer) => el.querySelector('canvas[data-layer="' + layer + '"]');
+      const main = ["main:base", "main:raster:density", "main:borders"].map((layer) => at(layer).dataset.view + "|" + at(layer).dataset.sig).join(" ");
+      return { main, k: Number(at("inset:base").dataset.view.split(",")[0]), box: el.querySelector("rect.sd-map-inset-box").getAttribute("x") };`);
+    const before = await lookupsOf(page);
+    const { frames, end, settledMs } = await sampleFrames(page, "inset", "pair", "map", probe);
+    const [west, pair] = [["W1"], ["W1", "S2"]].map((ids) => view(BASE, ids.map((id) => REGIONS.get(id)), SIZE));
+    assert.ok(frames.every((f) => f.main === frames[0].main) && end.main === frames[0].main, "the main map's canvases keep their view and signature in every frame");
+    assert.ok(Math.abs(frames[0].k - west.k) < 0.001, `the inset starts at Westmere (${frames[0].k})`);
+    assert.ok(Math.abs(end.k - pair.k) < 0.001, `and ends at the pair (${end.k})`);
+    const [lo, hi] = [Math.min(west.k, pair.k), Math.max(west.k, pair.k)];
+    assert.ok(frames.filter((f) => f.k > lo + 1e-3 && f.k < hi - 1e-3).length >= 2, `frames at a scale strictly between ${lo.toFixed(3)} and ${hi.toFixed(3)}`);
+    const arrived = frames.find((f) => Math.abs(f.k - pair.k) < 0.001)?.ms ?? end.ms;
+    assert.ok(arrived >= 0.8 * 2 * duration, `it takes about ${2 * duration} ms (arrived at ${arrived.toFixed(0)} ms)`);
+    assert.ok(settledMs <= 2 * 2 * duration + 1000, `within a generous bound (${settledMs.toFixed(0)} ms)`);
+    assert.ok(new Set(frames.map((f) => f.box)).size > 3, "the box moves with the inset");
+    assert.equal(await lookupsOf(page), before, "no table was built for a view in between");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("inset: lookups for its views are ready after mount", async () => {
+  await withPage({ root, url: pages.url("inset", "step=home&motion=full") }, async (page, ctx) => {
+    // the slide's views: home and North for the map, North and the pair for the inset (its own size)
+    const ready = await lookupsOf(page);
+    assert.ok(ready >= 4, `${ready} lookup tables after mount, one per view and size at least (4)`);
+    for (const step of INSET_STEPS.slice(1)) await goTo(page, "inset", step);
+    assert.equal(await lookupsOf(page), ready, "none was built while the steps played");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
