@@ -30,14 +30,18 @@ export function displayPath(path) {
   return rel === "" || rel.startsWith("..") || isAbsolute(rel) ? path : rel;
 }
 
-/** Writes `text` to `path` through a temp file in the same folder, so a failure never leaves a truncated file. */
-async function writeWhole(path, text) {
-  const temp = `${path}.${process.pid}.tmp`;
+/**
+ * Puts each `[path, text]` in place without a half-way state: every text is first written to a temporary file beside its
+ * path, and only when all are written are they renamed, in order. A failed write (a full disk) leaves what was there as it
+ * was, and the temporary files are removed.
+ */
+async function replaceAll(files) {
+  const staged = files.map(([path, text]) => ({ path, text, temp: `${path}.${process.pid}.tmp` }));
   try {
-    await writeFile(temp, text);
-    await rename(temp, path);
+    for (const { temp, text } of staged) await writeFile(temp, text);
+    for (const { path, temp } of staged) await rename(temp, path);
   } catch (e) {
-    await rm(temp, { force: true });
+    await Promise.all(staged.map(({ temp }) => rm(temp, { force: true }).catch(() => {})));
     throw e;
   }
 }
@@ -156,9 +160,8 @@ export async function boundaries({ iso3, level, deck = ".", out, full = false, p
   const replaced = [];
   for (const path of [file, sourceFile]) if (await exists(path)) replaced.push(path);
   await mkdir(dirname(file), { recursive: true });
-  // The source file goes first: there is never a GeoJSON without its licence beside it.
-  await writeWhole(sourceFile, `${JSON.stringify(source, null, 2)}\n`);
-  await writeWhole(file, `${JSON.stringify({ ...geojson, features })}\n`);
+  // The source file is moved into place first: a GeoJSON never lands without its licence beside it.
+  await replaceAll([[sourceFile, `${JSON.stringify(source, null, 2)}\n`], [file, `${JSON.stringify({ ...geojson, features })}\n`]]);
 
   const shown = displayPath(file);
   const over = (n, limit, what) => `${shown}: ${count(n)} ${what} is over the map's limit of ${count(limit)}; simplify it, for example: mapshaper ${shown} -simplify 10% -o ${shown}`;

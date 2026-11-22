@@ -328,7 +328,7 @@ What it does:
 
 1. Asks `https://www.geoboundaries.org/api/current/gbOpen/<ISO3>/ADM<n>/` (the gbOpen release) which files exist and under which licence.
 2. Downloads the geometry the answer names, following redirects, and rewrites it as above. Each feature keeps its properties as geoBoundaries gives them: `shapeName`, `shapeISO`, `shapeID`, `shapeGroup`, `shapeType`. A map names its region id (`id: "shapeISO"`), or you join your own data on one of them.
-3. Writes the GeoJSON, and next to it `<same name>.source.json` holding `boundaryID`, `boundarySource`, `boundaryLicense`, `licenseDetail`, `licenseSource`, `boundaryYearRepresented`, `buildDate` and `url` (the file that was downloaded). A field the API leaves out is written as `null`. The source file is written first, and both files are written whole or not at all, so a GeoJSON never sits without its licence.
+3. Writes the GeoJSON, and next to it `<same name>.source.json` holding `boundaryID`, `boundarySource`, `boundaryLicense`, `licenseDetail`, `licenseSource`, `boundaryYearRepresented`, `buildDate` and `url` (the file that was downloaded). A field the API leaves out is written as `null`. Both files are first written to temporary files beside their final paths and only then moved into place (the source file first), so a failed write leaves any existing pair as it was.
 
 **Licences differ from one boundary to the next.** gbOpen holds open licences only (public domain, CC0, CC BY, ODbL), but which one applies is for the boundary you fetched, so the command prints it and keeps it in the source file. Check it against how you will publish the deck, and keep the credit it asks for.
 
