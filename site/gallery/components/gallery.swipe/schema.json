@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gallery.swipe",
+  "description": "A before/after swipe of a map raster: two frames of one raster file over the same regions, divided by a line you move. Built only from what the engine hands every component (ctx.map, ctx.chart, ctx.motion and the rest), with no import. The second frame is clipped from the divider to the right edge by a CSS clip-path; a played change of `at` moves the divider, and the borders of the regions are drawn over both. Colours come from the theme's sequential palette over the raster's value range; `before` and `after` change at once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["boundaries", "raster", "before", "after"],
+  "properties": {
+    "boundaries": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a GeoJSON FeatureCollection of Polygons and MultiPolygons, relative to the deck root. Each feature's `code` property identifies its region. Read once, at mount.",
+      "examples": ["data/map/regions.geojson"],
+      "x-transition": "snap"
+    },
+    "raster": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a raster file with a linear or log value scale and at least two frames, relative to the deck root. The two frames shown are named by `before` and `after`.",
+      "examples": ["data/map/years.json"],
+      "x-transition": "snap"
+    },
+    "before": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The label of the frame on the left of the divider.",
+      "examples": ["2010"],
+      "x-transition": "snap"
+    },
+    "after": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The label of the frame on the right of the divider.",
+      "examples": ["2021"],
+      "x-transition": "snap"
+    },
+    "at": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "description": "Where the divider sits, from 0 (the left edge: only `after` shows) to 1 (the right edge: only `before` shows). A played change moves the divider over the step's transition.",
+      "examples": [0.5],
+      "x-transition": "tween"
+    }
+  }
+}

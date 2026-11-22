@@ -3,8 +3,9 @@
 // written for the gallery, which show the named motions, a step's choreography and the slide devices (focus-dim,
 // the message line and badges, ghost placeholders); then the data-story slides, which play the chart moves
 // (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, a flight and
-// an inset, a time-lapse, points); last the custom component (components/gallery.slope/), a slope chart built only from
-// what the engine hands every component, with no import.
+// an inset, a time-lapse, points); last the custom components, each built only from what the engine hands every
+// component, with no import: gallery.slope (components/gallery.slope/), a slope chart, and gallery.swipe
+// (components/gallery.swipe/), a before/after swipe of a map raster.
 // All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
 const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"];
@@ -30,7 +31,7 @@ const STORY = [
   ["map-points", "sized points", "map"],
 ];
 // The deck's own components, each with the slide that shows it; their entries link the custom-components guide.
-const CUSTOM = [["custom-slope", "gallery.slope"]];
+const CUSTOM = [["custom-slope", "gallery.slope"], ["map-swipe", "gallery.swipe"]];
 
 // "chart.line" -> "chart-line": the name as it appears in slide ids (slides/<id>.js) and reference pages.
 const dashed = (name) => name.replaceAll(".", "-");
