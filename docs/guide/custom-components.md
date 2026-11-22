@@ -665,6 +665,8 @@ Its data files are the gallery's: copy [`site/gallery/data/map/regions.geojson`]
 
 For a raster, the same order holds with the Rasters group of the contract: `M.loadRaster` reads the file, `M.lut` turns a colour scale into a colour per grey level, and `M.paintRaster` draws it through a lookup table per view (`M.lookup`), hatching land without data. The inset's box, leader lines and scale bar are `M.insetFrame` and `M.scaleBar` on an SVG over the canvases.
 
+The gallery's before/after swipe, [`gallery.swipe`](../../site/gallery/components/gallery.swipe/index.js), is a map story the built-in does not tell, built the same way in about 100 lines and no `import`. It lays two frames of one raster on two canvases (`C.canvasLayer` with `maxRatio: 1`, each painted with `M.paintRaster` through `M.lookup` and `M.lut` and a `C.colorScale` over the raster's value range), clips the second from the divider to the right edge with a CSS `clip-path`, and draws the borders over both with `M.paintBorders`. A played change of `at` is one `C.morph` of the clip and a line; every canvas carries `data-frame`, `data-at` and `data-sig`, so `check --played` sees what it shows. It builds its canvases at the first `update`, from `el.offsetWidth` and `el.offsetHeight`, because `ctx.size` is measured at mount, before the slide's other elements have settled the box. Its slide is `map-swipe` in the [gallery](../../site/gallery/), and its test is [`custom-swipe.test.mjs`](../../test/browser/custom-swipe.test.mjs).
+
 ## Verify it
 
 Run these after every change. All of them work on a deck made by `new`.

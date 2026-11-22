@@ -2,8 +2,8 @@
 // validates: it is where every example.js runs as a slide (test/browser/gallery.test.mjs checks it in a browser).
 // After them come the motion slides, which show the motion vocabulary and the slide devices, the data-story slides,
 // which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, flight
-// and inset, time-lapse, points), and last the custom component built only from what the engine hands every component
-// (gallery.slope).
+// and inset, time-lapse, points), and last the custom components built only from what the engine hands every component
+// (gallery.slope, gallery.swipe).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -32,7 +32,10 @@ const STORY = {
   "map-timelapse": "map",
   "map-points": "map",
 };
-const CUSTOM = [{ slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" }];
+const CUSTOM = [
+  { slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" },
+  { slide: "map-swipe", kind: "custom", name: "gallery.swipe", doc: "docs/guide/custom-components.md" },
+];
 
 test("every built-in component and layout has exactly one gallery entry, and every motion, story and custom slide one", () => {
   for (const name of components) {
@@ -70,16 +73,18 @@ test("the deck lists the cover, then the layouts, the components, the motion sli
   assert.equal(entries.at(-1).kind, "custom", "the custom entry comes last");
 });
 
-// The demo's point: a chart built only from what the engine hands every component (ctx.chart and the rest) needs no
-// import, so it runs wherever the engine's files live, in this repository or in a deck's stepdeck/ copy.
-test("the slope demo imports nothing", () => {
-  const source = readFileSync(join(gallery, "components", "gallery.slope", "index.js"), "utf8");
-  assert.doesNotMatch(source, /^\s*import[\s{*"']/m, "no import statement");
-  assert.doesNotMatch(source, /\bimport\s*\(/, "no dynamic import");
-  assert.doesNotMatch(source, /\brequire\s*\(/, "no require");
-  const lines = source.trimEnd().split("\n").length;
-  assert.ok(lines <= 130, `about 100 lines (${lines})`);
-});
+// The demos' point: a chart or a map built only from what the engine hands every component (ctx.chart, ctx.map and the
+// rest) needs no import, so it runs wherever the engine's files live, in this repository or in a deck's stepdeck/ copy.
+for (const name of ["gallery.slope", "gallery.swipe"]) {
+  test(`the ${name} demo imports nothing and stays short`, () => {
+    const source = readFileSync(join(gallery, "components", name, "index.js"), "utf8");
+    assert.doesNotMatch(source, /^\s*import[\s{*"']/m, "no import statement");
+    assert.doesNotMatch(source, /\bimport\s*\(/, "no dynamic import");
+    assert.doesNotMatch(source, /\brequire\s*\(/, "no require");
+    const lines = source.trimEnd().split("\n").length;
+    assert.ok(lines <= 130, `about 100 lines (${lines})`);
+  });
+}
 
 test("every gallery slide file exists and its id equals its file name", async () => {
   for (const id of deck.slides) {
