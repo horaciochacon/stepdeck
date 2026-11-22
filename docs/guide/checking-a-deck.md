@@ -111,7 +111,7 @@ A slide with `n` steps gives `2(n − 1)` arrivals, so the four-step `chart` sli
 
 `--played` runs every `check` rule first, then the played pass, so a clean `check --played` implies a clean `check`.
 
-The played pass loads pages with `?motion=full`, so it animates even when your system asks for reduced motion; there is nothing to set up. If the page still reports that animation is off, the run stops with exit 2 instead of quietly comparing jumps with jumps.
+The played pass loads pages with `?motion=full`, so it animates even when your system asks for reduced motion; there is nothing to set up. If the page still reports that animation is off, or reports itself hidden (a hidden page draws end states only), the run stops with exit 2 instead of quietly comparing jumps with jumps.
 
 ## dump: what is on screen at each step, as text
 

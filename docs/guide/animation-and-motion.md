@@ -354,7 +354,7 @@ Add `--step <ref>` (with `--slide`) to compare only the arrivals at that step (t
 
 Things to know:
 
-- **It refuses to run when animation is off.** If `STEPDECK.flags.animate` is not `true` on the page, the command stops with exit code 2 and the message `animation is off on the page (flags …); check --played cannot test the animated path`. This prevents a silent test of two jumps. Because it loads pages with `?motion=full`, reduced motion on your machine does not trigger this.
+- **It refuses to run when animation is off.** If `STEPDECK.flags.animate` is not `true` on the page, the command stops with exit code 2 and the message `animation is off on the page (flags …); check --played cannot test the animated path`. It stops the same way when the page reports itself hidden (`document.visibilityState`), since a hidden page renders end states only. This prevents a silent test of two jumps. Because it loads pages with `?motion=full`, reduced motion on your machine does not trigger this.
 - **It does not compare props or inline styles.** A leftover inline `opacity` or `transform` with the same text and box passes. Component authors must still clear their inline styles at the end of `update()`, for example with `clearInlineStyle()` from `core/animate.js`.
 - **The watchdog.** Every `mount()` and `update()` call, an element's stagger hold and box motion included, must settle within 10 seconds (`SETTLE_TIMEOUT_MS`). An element that does not is failed with `<slide>/<element>: did not settle within 10s`, gets no further updates, and shows up as a `render-error` in `check`.
 

@@ -189,11 +189,19 @@ function compare(slide, stepId, jumped, arrived, from, animated, found) {
   }
 }
 
-/** Throws when the page will not animate a forward step: the played pass would silently test a jump. */
-async function animateOn(session) {
+/**
+ * Throws when the page will not animate a forward step, so the played pass would silently compare a jump with a jump:
+ * animation is off on the page (its flags), or the page is hidden (a hidden page renders end states only).
+ * @param {{ flags(): Promise<object>, visibility(): Promise<string> }} session
+ */
+export async function animateOn(session) {
   const flags = await session.flags();
   if (flags.animate !== true) {
     throw new Error(`animation is off on the page (flags ${JSON.stringify(flags)}); check --played cannot test the animated path`);
+  }
+  const visibility = await session.visibility();
+  if (visibility !== "visible") {
+    throw new Error(`the page is hidden (document.visibilityState is '${visibility}'), so it renders end states only; check --played cannot test the animated path`);
   }
 }
 

@@ -53,7 +53,8 @@ export function jsonEqual(a, b) {
 /**
  * Serves the deck (ruling R15 via deckTarget), launches one browser and runs fn with a session:
  *   { slides, steps, page, open(slide, index, query) -> Promise<void>,
- *     measure() -> Promise<measurement>, goTo(slide, index) -> Promise<void>, flags() -> Promise<object> }
+ *     measure() -> Promise<measurement>, goTo(slide, index) -> Promise<void>, flags() -> Promise<object>,
+ *     visibility() -> Promise<string> (document.visibilityState) }
  * `query` is { capture?: true, motion?: "full" }. `theme` (optional) is added to every load as ?theme=, so the
  * whole session runs under that theme instead of the deck's own; a name that is not a theme of the engine the
  * deck loads (engine.js findTheme) throws before the browser starts. Throws for a deck that does not load or an
@@ -118,6 +119,7 @@ export async function withDeck(deckDir, { size, slide, theme } = {}, fn) {
         }
       },
       flags: () => page.evaluate(() => ({ ...window.STEPDECK.flags })),
+      visibility: () => page.evaluate(() => document.visibilityState),
     };
     return fn(session);
   });
