@@ -468,8 +468,8 @@ export default {
         last = target;
       },
       pause() {
-        // Off screen, the slide keeps only what it draws: the lookup tables and pictures are cleared in place (prepared
-        // raster layers hold `geo.pictures` by reference) and the next update builds what its step needs.
+        // The slide is left: its lookup tables and pictures go, cleared in place (prepared raster layers hold
+        // `geo.pictures` by reference), and the next update builds again what its step needs.
         caches.lookups.clear();
         caches.pictures.clear();
       },

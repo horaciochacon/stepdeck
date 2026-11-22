@@ -147,7 +147,7 @@ Calls for one instance never overlap. On one step, the slide's elements update i
 | `step` | `string \| number` | The step id, or the step index when the step has no id. For logging only: never branch on it. |
 | `prevStep` | `string \| number \| null` | The previously applied step, the same way; `null` on the first update. |
 | `animate` | `boolean` | Play motion. True only when the shell asked for motion (never while the page is hidden) and the move is forward by exactly one step from the last applied step. |
-| `signal` | `AbortSignal` | Aborts when a newer `goTo` supersedes this step, when the slide is paused or destroyed, or when this element's watchdog fires. |
+| `signal` | `AbortSignal` | Aborts when a newer `goTo` supersedes this step, when the slide is paused or destroyed, when this element's watchdog fires, or when the page is hidden. |
 | `transition` | `{ duration?, stagger? } \| null` | The step's `transition`, as written in the slide; `null` when the step has none. |
 | `prev` | `object \| null` | The previous resolved props; `null` on the first update. |
 | `changed` | `string[]` | Top-level keys whose values differ from `prev`, added and removed keys included. All keys on the first update; `[]` when only visibility changed. |
@@ -580,7 +580,7 @@ The names are in four groups. Each group has its signatures and one short exampl
 | `view` | `view(base, target, [w, h]) → { k, x, y }` | A zoom transform over the base's pixels. `target` is `null` (home, `{ k: 1, x: 0, y: 0 }`), an array of features, or `{ bounds: [west, south, east, north] }` in degrees (west greater than east crosses the antimeridian). The target is centred and fitted with the same margin. |
 | `applyView` | `applyView(v, [px, py]) → [k·px + x, k·py + y]` | A base-projected point seen through a view. |
 
-**Errors.** Each begins with `<file>: `. `boundaries` throws `not a FeatureCollection`, `feature 3 has no 'code'` (features count from 1), `region 'North' appears twice`, `only Polygon and MultiPolygon features are supported (found LineString)`, `6,000 regions is more than 5,000` and `300,000 points is more than 250,000` (every coordinate of every ring counts). `projection` throws `` unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area) `` and `projection needs at least one region`; `view` throws `view: no regions to fit`.
+**Errors.** `boundaries` errors begin with `<file>: `: it throws `not a FeatureCollection`, `feature 3 has no 'code'` (features count from 1), `region 'North' appears twice`, `only Polygon and MultiPolygon features are supported (found LineString)`, `6,000 regions is more than 5,000` and `300,000 points is more than 250,000` (every coordinate of every ring counts). `projection` throws `` unknown projection 'x' (use equal-earth, natural-earth, mercator or conic-equal-area) `` and `projection needs at least one region`; `view` throws `view: no regions to fit` and, for a target that does not project to finite pixels (a box the projection cannot draw), `view: the target cannot be projected`.
 
 **Winding.** GeoJSON written by `sf` or `geopandas` follows RFC 7946, with outer rings counter-clockwise; d3-geo expects the opposite and would read each region as everything but itself. `boundaries` reverses the rings of any polygon whose `d3.geoArea` is above 2π, on copies, so the file you got from `ctx.data` (which is shared and read-only) is untouched. Give `projection`, `view` and your paths the `features` it returns, never the raw file.
 
