@@ -1,8 +1,9 @@
 // A small PNG reader and writer for the raster maps: 8-bit greyscale (color type 0) and greyscale with alpha
 // (color type 4), the only formats the raster contract allows. No image library; only `node:zlib`.
 //
-// pngInfo(bytes)    -> { width, height, bitDepth, colorType, chunks }   the header and the chunk types in file order;
-//                      `validate` reads this without inflating anything. Throws `not a PNG` on a bad signature.
+// pngInfo(bytes)    -> { width, height, bitDepth, colorType, interlace, chunks }   the header (interlace is 0 for a
+//                      plain PNG, 1 for Adam7) and the chunk types in file order; `validate` reads this without
+//                      inflating anything. Throws `not a PNG` on a bad signature.
 // pngPixels(bytes)  -> { width, height, channels, data }                the decoded samples, `channels` per pixel,
 //                      row by row. Undoes filter types 0 to 4, joins several IDAT chunks, and refuses what the
 //                      raster contract does not allow (another bit depth or color type, interlacing).
@@ -61,12 +62,12 @@ function headerOf(chunks) {
 /**
  * The header of a PNG and the types of its chunks, in file order.
  * @param {Uint8Array} bytes
- * @returns {{ width: number, height: number, bitDepth: number, colorType: number, chunks: string[] }}
+ * @returns {{ width: number, height: number, bitDepth: number, colorType: number, interlace: number, chunks: string[] }}
  */
 export function pngInfo(bytes) {
   const chunks = readChunks(bytes);
-  const { width, height, bitDepth, colorType } = headerOf(chunks);
-  return { width, height, bitDepth, colorType, chunks: chunks.map((c) => c.type) };
+  const { width, height, bitDepth, colorType, interlace } = headerOf(chunks);
+  return { width, height, bitDepth, colorType, interlace, chunks: chunks.map((c) => c.type) };
 }
 
 const paeth = (a, b, c) => {

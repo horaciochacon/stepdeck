@@ -324,7 +324,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `data/rates.csv: key 'N1' appears twice` | Two rows name the same region. |
 | ``\`midpoint\` must be one of \`classes\` (5, 10, 20)`` | `midpoint` and `classes` together, with a midpoint that is not a break. |
 
-`validate` checks the schema and that every file the props name exists. It does not read the files: the join, the columns and the ids in `shown`, `highlight` and `labels` are checked when the slide renders. Run `check` (or `dump`) to see them:
+`validate` checks the schema and that every file the props name exists, and catches much of the rest before the map is shown: the ids in `shown` (`map-layer`), `frame` and the labels and `numbers` keys of the time-lapse files (`map-frame`, `map-prop-unused`), the raster files and their images (`map-raster`), the columns a layer names (`missing-column`) and the length of a run (`map-run`). It does not join the rows to the regions or check the ids in `highlight`, `labels` and `view`: those are checked when the slide renders. Run `check` (or `dump`) to see them:
 
 ```text
 areas/map: data/rates.csv: key '07' matches no region

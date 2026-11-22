@@ -170,6 +170,13 @@ test("pngProblems: depth, colour type and colour chunks", () => {
   ]);
 });
 
+test("pngProblems: an interlaced PNG, which the decoder refuses", () => {
+  assert.deepEqual(pngProblems(info({ interlace: 0 }), "f.png"), []);
+  const [problem, ...rest] = pngProblems(info({ interlace: 1 }), "d/f.png");
+  assert.deepEqual(rest, []);
+  assert.match(problem, /^d\/f\.png: is interlaced; only non-interlaced PNGs are read/);
+});
+
 test("pngProblems: more than 2,000×2,000 pixels", () => {
   assert.deepEqual(pngProblems(info({ width: 2000, height: 2000 }), "f.png"), []);
   assert.deepEqual(pngProblems(info({ width: 2400, height: 1800 }), "data/f.png"), ["data/f.png: 2400×1800 is more than 2,000×2,000 pixels"]);
@@ -290,6 +297,9 @@ test("mapProblems: map-raster for sidecars, PNGs and frame sizes", () => {
   const gone = at("gone");
   assert.deepEqual(rules(gone), ["map-raster:error"]);
   assert.match(gone[0].message, /d\/density\.png/);
+  const unreadable = mapProblems({ layers: { u: { raster: "d/u.json" } }, shown: ["u"] }, { "d/u.json": { json: raster(), pngs: { "density.png": { error: "not a PNG" } } } });
+  assert.deepEqual(rules(unreadable), ["map-raster:error"]);
+  assert.equal(unreadable[0].message, "d/density.png: not a PNG");
   const size = at("size");
   assert.deepEqual(rules(size), ["map-raster:error"]);
   assert.match(size[0].message, /d\/b\.png: 90×80 is not 100×80/);
