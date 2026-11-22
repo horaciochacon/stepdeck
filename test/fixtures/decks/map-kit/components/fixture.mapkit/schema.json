@@ -17,6 +17,7 @@
     "inset": { "type": "boolean", "default": false, "description": "Draw an inset frame and its leaders.", "examples": [true], "x-transition": "snap" },
     "scale": { "type": "boolean", "default": false, "description": "Draw a scale bar.", "examples": [true], "x-transition": "snap" },
     "raster": { "type": "string", "description": "A raster file of the deck, drawn over the regions.", "examples": ["data/levels.json"], "x-transition": "snap" },
+    "rasterClip": { "type": "boolean", "default": false, "description": "Clip the raster to the land outline.", "examples": [true], "x-transition": "snap" },
     "rasterHatch": { "type": "boolean", "default": true, "description": "Hatch the land under the raster.", "examples": [false], "x-transition": "snap" },
     "rasterDraws": {
       "type": "array",

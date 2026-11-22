@@ -571,6 +571,28 @@ test("map-run counts the flight: 28 moves fit alone, not after a flight of 2 x -
   assert.equal(found[0].measured, "first phase 800 ms + 28 frame moves × 700 ms = 20400 ms");
 });
 
+test("map-run: the step's own transition replaces the flight's 2 x --sd-duration as the first phase", async () => {
+  const flight = (duration) => `export default { id: "flight", layout: "full-bleed", title: "A map", elements: [
+      { id: "map", type: "map", box: { x: 160, y: 200, w: 1400, h: 700 }, props: { boundaries: "data/regions.geojson", id: "code", layers: { years: { raster: "data/years30.json" } }, shown: ["years"] } },
+      { id: "src", type: "text", box: { x: 160, y: 920, w: 1400, h: 60 }, props: { role: "source", text: "Synthetic fixture." } },
+    ], steps: [{ id: "first" }, { id: "last", transition: { duration: ${duration} }, set: { map: { frame: "2028", view: "Q1" } } }] };\n`;
+  // one folder for each: a module the process has imported once is not read again from the same path
+  const run = async (duration) => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-transition-")));
+    try {
+      cpSync(fixture("map-run"), tmp, { recursive: true });
+      writeFileSync(join(tmp, "slides", "flight.js"), flight(duration));
+      return atSlide(await validate(tmp), "flight");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  };
+  assert.deepEqual(await run(100), [], "100 + 19600 ms fits");
+  const found = await run(600);
+  assert.deepEqual(rules(found), ["map-run"], show(found));
+  assert.equal(found[0].measured, "first phase 600 ms + 28 frame moves × 700 ms = 20200 ms");
+});
+
 test("map-run: a map that enters on the step plays no run, so a long frame change there is not budgeted", async () => {
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-enter-")));
   try {
