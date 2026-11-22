@@ -95,7 +95,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `chart-orient` | A `chart.bar` with `mode: "back-to-back"` and `orient: "vertical"`: its two sides run left and right, so it fails at render time too (`back-to-back bars are horizontal only`). | Remove `orient: "vertical"`, or choose another `mode`. |
 | `map-layer` | A `map`'s `shown` lists an id that is not a key of `layers`; it fails at render time too. | Add the layer, or remove the id from `shown`. |
 | `map-frame` | A `map`'s `frame` is not a label of its time-lapse layers' files; two time-lapse layers have different label lists; or a `numbers` key is in the frames of two time-lapse layers. | Use a label the message lists, give the files the same labels in the same order, or rename the key in one file. |
-| `map-raster` | A map layer's raster JSON does not parse or breaks the raster format, or an image it names is missing, in another case on disk, not a PNG, not 8-bit greyscale (color type 0 or 4), interlaced, has a color chunk (`gAMA`, `cHRM`, `iCCP`, `sRGB`), is over 2,000 × 2,000 pixels, or differs in size from the other frames. The message starts with the file's path. | Correct the JSON, or re-export the image as 8-bit greyscale, not interlaced, without a color profile, at one size for every frame. |
+| `map-raster` | A map layer's raster JSON does not parse or breaks the raster format (a frame's `numbers` must be finite numbers), or an image it names is missing, in another case on disk, not a PNG, not 8-bit greyscale (color type 0 or 4), interlaced, has a color chunk (`gAMA`, `cHRM`, `iCCP`, `sRGB`) or a `tRNS` chunk, is over 2,000 × 2,000 pixels, or differs in size from the other frames; or a time-lapse holds more than 100 million pixels, every frame together. The message starts with the file's path. | Correct the JSON, or re-export the image as 8-bit greyscale (alpha for no data), not interlaced, without a color profile, at one size for every frame; use fewer or smaller frames. |
 | `map-run` | A step moves a `map`'s `frame` and its run, with the step's other motion before it (a flight takes twice the step's duration), would last more than 20 s; it fails at render time too. Reported at the step that plays it. | Lower `pace` (default 700 ms a frame), or play the frames over two steps. |
 | `map-prop-unused` | Warning. A `map` sets `frame` or `pace` with no time-lapse layer, or a `numbers` key that no frame has. | Add a raster layer whose file has `frames`, or remove the prop; add the key to the frames' `numbers`, or remove it from `numbers`. |
 
@@ -144,7 +144,7 @@ Each step is a fresh load of the bare shell in capture mode, measured after font
 |---|---|---|
 | `played-mismatch` | A played arrival differs from the jump, at its first differing step, with a count of the other differing arrivals. The component is not idempotent. | Make `update()` render the whole state from props, never from earlier calls, and leave no animation residue when it ends or is aborted. Built-ins pass this; look at your custom components. |
 
-If the page reports that animation is off, the played pass stops with an error, exit 2. It never quietly compares jumps with jumps.
+If the page reports that animation is off, or that it is hidden (a hidden page draws end states only), the played pass stops with an error, exit 2. It never quietly compares jumps with jumps.
 
 ## catalog
 
