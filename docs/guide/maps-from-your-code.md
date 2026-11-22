@@ -130,7 +130,7 @@ Two files hold the writers. Copy the one for your language into your project and
 
 Each writes the JSON and its PNGs exactly as above: it rescales the values to the 256 levels with the formulas of the table, writes no data as transparent, adds no colour chunks, and puts a time-lapse's frames in a folder named after the JSON (`years.json`, `years/001.png`, …). Their output passes `validate`, and decodes to exactly the levels the formulas give; the stepdeck repository tests both on every run where R and Python are installed. The `terra` and rasterio wrappers are written to those packages' documented interfaces but are not tested there.
 
-The grid is a matrix (R) or rows of cells (Python: nested lists, or a NumPy array), rows north to south, with `NA` (R) or `None` or `NaN` (Python) for no data. For classes, the cells hold class names. A time-lapse is a list of grids of one size, one per frame. `bounds` is `c(west, south, east, north)` or `[west, south, east, north]`.
+The grid is a matrix (R) or rows of cells (Python: nested lists, or a NumPy array), rows north to south, with `NA` (R) or `None` or `NaN` (Python) for no data. For classes, the cells hold class names, compared as text (a class named `1` matches a cell `1`). A time-lapse is a list of grids of one size, one per frame. `bounds` is `c(west, south, east, north)` or `[west, south, east, north]`.
 
 | Argument | Meaning |
 |---|---|
@@ -183,7 +183,7 @@ with rasterio.open("density.tif") as ds:
     write_stepdeck_raster("my-talk/data/density.json", ds)
 ```
 
-The writers check what they can before writing: a grid of one size, labels for every frame, a range with *min* below *max* (a grid of one value needs `value` with both), class names that are in the list. A mistake stops your script with a message, never with a file that fails later.
+The writers check everything before they write anything, and refuse what `validate` would reject: `bounds` that are not a box in degrees (west < east, south < north), frames of different sizes, cells that are not finite numbers (`Inf` is an error, not no data), a log scale over values at or below 0, a range that is not finite or has *min* at or above *max* (a grid of one value needs `value` with both), class names that are empty, repeated or not in the list, labels missing or repeated, `numbers` that are not one finite number per frame. A mistake stops your script with a message that names the cell or argument, and leaves no file behind, never a file that fails later. The R and Python writers give the same message for the same mistake.
 
 ## Writing boundaries
 
@@ -289,7 +289,8 @@ When something fails, the message says which side to fix:
 
 | Message | Fix it in |
 |---|---|
-| `data/rates.csv: key '07' matches no region` | Your code: write the ids the boundaries have, or declare the key column `types: { code: "string" }` in the slide. |
+| `data/rates.csv: key '7' matches no region`, where the file says `07` | The slide: the CSV loader read the codes as numbers. Declare the key column as text, `types: { code: "string" }`. |
+| `data/rates.csv: key '07' matches no region` | Your code: the boundaries have no region `07`. Write the ids the boundaries have. |
 | `data/rates.csv: key 'N1' appears twice` | Your code: one row per region. |
 | `data/regions.geojson: region 'N1' appears twice` | Your code: one feature per region (dissolve the parts into a MultiPolygon). |
 | `data/regions.geojson: 6,000 regions is more than 5,000`, `… points is more than 250,000` | Your code: simplify, or map a coarser level. |

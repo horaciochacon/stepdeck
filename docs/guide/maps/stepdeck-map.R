@@ -34,15 +34,30 @@
 # `stepdeck validate` checks.
 
 write_stepdeck_grid <- function(m, bounds, path, value = NULL, labels = NULL, numbers = NULL) {
+  # Everything is checked before anything is written: a call that stops leaves no file behind.
   if (!grepl("\\.json$", path)) stop("`path` must end in .json")
-  if (!is.numeric(bounds) || length(bounds) != 4) stop("`bounds` must be c(west, south, east, north)")
+  b <- bounds
+  if (!(is.numeric(b) && length(b) == 4 && all(is.finite(b)) && b[1] < b[3] && b[2] < b[4] &&
+        b[1] >= -180 && b[3] <= 180 && b[2] >= -90 && b[4] <= 90)) {
+    stop("`bounds` must be west, south, east, north in degrees: four finite numbers, with west < east and south < north, within -180 to 180 and -90 to 90")
+  }
   lapse <- is.list(m)
   frames <- if (lapse) m else list(m)
-  if (length(frames) == 0) stop("`m` has no frames")
-  size <- dim(frames[[1]])
-  for (f in frames) if (!is.matrix(f) || !identical(dim(f), size)) stop("every frame must be a matrix of one size")
-  if (!lapse && (!is.null(labels) || !is.null(numbers))) stop("`labels` and `numbers` are for a time-lapse: pass a list of matrices")
-  scaled <- .stepdeck_levels(frames, if (is.null(value)) list(scale = "linear") else value)
+  size <- if (length(frames) && is.matrix(frames[[1]])) dim(frames[[1]]) else c(0, 0)
+  if (prod(size) == 0 || !all(vapply(frames, function(f) is.matrix(f) && identical(dim(f), size), logical(1)))) {
+    stop("every frame must be a grid of one size, with at least one cell")
+  }
+  if (!lapse && (!is.null(labels) || !is.null(numbers))) stop("`labels` and `numbers` are for a time-lapse: pass a list of grids")
+  if (lapse) {
+    labels <- as.character(if (is.null(labels)) names(m) else labels)
+    if (length(labels) != length(frames) || anyDuplicated(labels) || any(is.na(labels) | labels == "")) {
+      stop("a time-lapse needs `labels`: one per frame, unique and not empty")
+    }
+    for (n in numbers) {
+      if (length(n) != length(frames) || !is.numeric(n) || !all(is.finite(n))) stop("`numbers` needs one finite number per frame for every key")
+    }
+  }
+  scaled <- .stepdeck_levels(frames, if (is.null(value)) list(scale = "linear") else value, lapse)
 
   folder <- dirname(path)
   name <- sub("\\.json$", "", basename(path))
@@ -52,12 +67,6 @@ write_stepdeck_grid <- function(m, bounds, path, value = NULL, labels = NULL, nu
     sidecar$src <- paste0(name, ".png")
     .stepdeck_png(scaled$levels[[1]], file.path(folder, sidecar$src))
   } else {
-    if (is.null(labels)) labels <- names(m)
-    labels <- as.character(labels)
-    if (length(labels) != length(frames) || anyDuplicated(labels) || any(is.na(labels) | labels == "")) {
-      stop("a time-lapse needs `labels`: one per frame, unique and not empty")
-    }
-    for (n in numbers) if (length(n) != length(frames)) stop("`numbers` needs one value per frame for every key")
     dir.create(file.path(folder, name), showWarnings = FALSE)
     sidecar$frames <- lapply(seq_along(frames), function(i) {
       src <- sprintf("%s/%03d.png", name, i)
@@ -82,37 +91,63 @@ write_stepdeck_raster <- function(r, path, value = NULL, labels = NULL, numbers 
 
 # --- inside -----------------------------------------------------------------------------------------------------------
 
+# The first cell, row by row and frame by frame, where bad(frame) is TRUE: c(frame, row, column), or NULL.
+.stepdeck_first <- function(frames, bad) {
+  for (i in seq_along(frames)) {
+    at <- which(t(bad(frames[[i]])))[1] # t(): which() then counts row by row
+    if (!is.na(at)) return(c(i, (at - 1) %/% ncol(frames[[i]]) + 1, (at - 1) %% ncol(frames[[i]]) + 1))
+  }
+  NULL
+}
+
+# A cell's place in a message, counted from 1.
+.stepdeck_where <- function(cell, lapse) {
+  if (lapse) sprintf("(frame %d, row %d, column %d)", cell[1], cell[2], cell[3]) else sprintf("(row %d, column %d)", cell[2], cell[3])
+}
+
 # The sidecar's `value`, completed, and each frame as a matrix of levels 0 to 255 (NA for no data).
-.stepdeck_levels <- function(frames, value) {
+.stepdeck_levels <- function(frames, value, lapse) {
   if (!is.null(value$classes)) {
     if (!is.null(value$scale)) stop("`value` takes `classes` or `scale`, not both")
-    classes <- as.character(value$classes)
-    levels <- lapply(frames, function(f) {
-      g <- match(f, classes) - 1L
-      bad <- !is.na(f) & is.na(g)
-      if (any(bad)) stop("'", f[bad][1], "' is not one of `classes` (with `classes`, cells hold class names)")
-      matrix(g, nrow(f), ncol(f))
-    })
+    classes <- unlist(value$classes)
+    if (length(classes) < 1 || length(classes) > 256) stop("`classes` must list 1 to 256 names")
+    classes <- as.character(classes)
+    if (any(is.na(classes) | classes == "")) stop("class names must not be empty")
+    twice <- classes[duplicated(classes)]
+    if (length(twice)) stop("class names must be unique (found '", twice[1], "' twice)")
+    text <- function(f) matrix(as.character(f), nrow(f), ncol(f)) # cells match class names as text
+    cell <- .stepdeck_first(frames, function(f) !is.na(f) & is.na(matrix(match(text(f), classes), nrow(f), ncol(f))))
+    if (!is.null(cell)) {
+      stop("'", text(frames[[cell[1]]])[cell[2], cell[3]], "' is not one of `classes`: with `classes`, cells hold class names ", .stepdeck_where(cell, lapse))
+    }
+    levels <- lapply(frames, function(f) matrix(match(text(f), classes) - 1L, nrow(f), ncol(f)))
     value$classes <- I(classes)
     return(list(value = value, levels = levels))
   }
 
   scale <- if (is.null(value$scale)) "linear" else value$scale
-  if (!scale %in% c("linear", "log")) stop('`scale` must be "linear" or "log"')
-  data <- unlist(frames)
-  data <- data[!is.na(data)]
-  if (!is.numeric(data) && length(data) > 0) stop("cells must be numbers or NA")
+  if (!identical(scale, "linear") && !identical(scale, "log")) stop('`scale` must be "linear" or "log"')
+  cell <- .stepdeck_first(frames, function(f) if (is.numeric(f)) !is.na(f) & !is.finite(f) else !is.na(f))
+  if (!is.null(cell)) stop("cells must be finite numbers, or NA, None or NaN for no data ", .stepdeck_where(cell, lapse))
+  if (scale == "log") {
+    cell <- .stepdeck_first(frames, function(f) !is.na(f) & f <= 0)
+    if (!is.null(cell)) stop("a log scale needs every value above 0 ", .stepdeck_where(cell, lapse))
+  }
+  data <- unlist(lapply(frames, function(f) f[!is.na(f)]))
   if (length(data) == 0) stop("the grid has no data")
-  if (scale == "log" && any(data <= 0)) stop("a log scale needs every value above 0 (found ", data[data <= 0][1], ")")
   lo <- if (is.null(value$min)) min(data) else value$min
   hi <- if (is.null(value$max)) max(data) else value$max
-  if (!(lo < hi)) stop("`min` must be less than `max` (are all the values equal? then give `value` with min and max)")
+  finite <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x)
+  if (!finite(lo) || !finite(hi)) stop("`min` and `max` must be finite numbers")
+  if (!(lo < hi)) stop("`min` must be less than `max` (are all the values equal? then give `value` with `min` and `max`)")
   if (scale == "log" && !(lo > 0)) stop("a log scale needs `min` above 0")
+  if (!is.finite(if (scale == "log") hi / lo else hi - lo)) stop("`min` and `max` are too far apart to compute levels")
   rest <- value[setdiff(names(value), c("scale", "min", "max"))]
   value <- c(list(scale = scale, min = lo, max = hi), rest)
 
   share <- if (scale == "log") function(v) log(v / lo) / log(hi / lo) else function(v) (v - lo) / (hi - lo)
-  levels <- lapply(frames, function(f) pmin(pmax(floor(share(f) * 255 + 0.5), 0), 255)) # the matrix first keeps its dim
+  # a value past the range is written at its nearer end; the matrix first keeps its dim
+  levels <- lapply(frames, function(f) pmin(pmax(floor(share(f) * 255 + 0.5), 0), 255))
   list(value = value, levels = levels)
 }
 
