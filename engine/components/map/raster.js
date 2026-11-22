@@ -12,7 +12,10 @@
 //
 // The interface is that of every layer kind (see ./areas.js). A raster is painted in CSS px with the view's lookup table,
 // so its canvas is made with `maxRatio: 1`; the pictures, lookup tables and land mask of a geography are cached for it.
-// A layer that changes its file or scale shows the new one at once (only a layer's own opacity fades).
+// While a layer's file, scale or colour changes (`state.from`, `state.change`), the old picture is painted on a scratch
+// canvas at 1 - change and the new one on the layer's canvas at change, and the old is added over the new with
+// `lighter`: exact where both are opaque (the two shares sum to one), fading where one is clear. At the end of the
+// change the scene is the plain paint of the new picture, whatever way it was reached.
 import { signature } from "../../core/canvas.js";
 import { colorScale } from "../../core/chart-scale.js";
 import { landCells, loadRaster, lookup, lut, rasterGaps } from "../../core/map.js";
@@ -55,6 +58,21 @@ function roleColor(role, ctx, file) {
   const roles = Object.keys(ctx.tokens ?? {}).filter((name) => name.startsWith(COLOR)).map((name) => name.slice(COLOR.length));
   throw new Error(`${file}: color '${role}' is not a theme colour (${roles.join(", ")})`);
 }
+
+/** The canvas the old picture of `canvas` is painted on while a layer changes: a detached twin of it, the same size. */
+const scratches = new WeakMap();
+function scratchOf(canvas) {
+  if (!scratches.has(canvas)) scratches.set(canvas, canvas.ownerDocument.createElement("canvas"));
+  const scratch = scratches.get(canvas);
+  if (scratch.width !== canvas.width) scratch.width = canvas.width;
+  if (scratch.height !== canvas.height) scratch.height = canvas.height;
+  scratch.style.width = canvas.style.width;
+  scratch.style.height = canvas.style.height;
+  return scratch;
+}
+
+/** The plain scene of a prepared layer at `view`, drawn at `alpha`. */
+const sceneOf = (prepared, view, alpha) => ({ source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, draws: [{ frame: 0, at: view, alpha }] });
 
 /** A short name for a colour table: equal exactly when the tables are. */
 function tableName(table) {
@@ -101,12 +119,27 @@ export default {
     return { source: `${geo.key}|${raster.path}`, title: layer.label, legend: scale.legend, noData: hatch ? await gapsOf(raster, geo.features) : false, hatch, lutName: tableName(lutData), res, geo };
   },
 
-  scene(prepared, { view, alpha }) {
-    return { source: prepared.source, lut: prepared.lutName, view, hatch: prepared.hatch, draws: [{ frame: 0, at: view, alpha }] };
+  scene(prepared, { view, alpha, from, change }) {
+    // At the end of a change the scene is the plain one: what a jump paints.
+    if (!from || change >= 1) return sceneOf(prepared, view, alpha);
+    return { ...sceneOf(prepared, view, alpha * change), was: { scene: sceneOf(from, view, alpha * (1 - change)), res: from.res } };
   },
 
   paint(canvas, scene, prepared) {
-    return paintRaster(canvas, scene, prepared.res);
+    const sig = paintRaster(canvas, scene, prepared.res);
+    if (!scene.was) return sig;
+    const scratch = scratchOf(canvas);
+    const hash = signature();
+    hash.text(`${sig}|${paintRaster(scratch, scene.was.scene, scene.was.res)}`);
+    const g = canvas.getContext("2d");
+    if (g) {
+      g.save();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = "lighter";
+      g.drawImage(scratch, 0, 0);
+      g.restore();
+    }
+    return hash.hex();
   },
 
   legend(prepared) {

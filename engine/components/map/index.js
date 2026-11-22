@@ -15,8 +15,8 @@
 // An update writes the end state of its props whatever came before. With info.animate (a forward step by one, the
 // element already on screen) it first plays the change in one tween bound to info.signal, so an abort snaps to the
 // end: a layer that is shown or hidden fades, and its legend row and the labels that come or go with it, over the
-// step's duration (`--sd-duration`, or the step's `transition`); a change of an areas layer's data or scale crossfades
-// its colours over the same time (a raster layer shows its new picture at once); `highlight` turns the other regions to `--sd-color-dim` and outlines its own in ink over
+// step's duration (`--sd-duration`, or the step's `transition`); a change of a layer's data or scale crossfades
+// its colours over the same time; `highlight` turns the other regions to `--sd-color-dim` and outlines its own in ink over
 // `--sd-duration-fast`. The map does not own its entrance: the engine moves its box in.
 import { d3 } from "../../core/d3.js";
 import { boundaries, projection } from "../../core/map.js";

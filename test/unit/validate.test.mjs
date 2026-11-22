@@ -435,7 +435,7 @@ test("a misspelt mode gets a did-you-mean", async () => {
   }
 });
 
-test("a map layer has exactly one of areas (with value) and raster", async () => {
+test("a map layer has exactly one kind: areas with value, or raster with color", async () => {
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-map-layers-")));
   try {
     mkdirSync(join(tmp, "slides"));
@@ -448,15 +448,17 @@ test("a map layer has exactly one of areas (with value) and raster", async () =>
       neither: { label: "No kind" },
       both: { areas: "data/rates.csv", value: "rate", raster: "data/density.json" },
       "no-value": { areas: "data/rates.csv" },
+      "raster-value": { raster: "data/density.json", value: "rate" },
+      "areas-color": { areas: "data/rates.csv", value: "rate", color: "alert" },
     };
     writeFileSync(join(tmp, "slides", "s.js"), `export default { id: "s", layout: "full-bleed", title: "Layers", elements: [
       { id: "map", type: "map", props: { boundaries: "data/regions.geojson", layers: ${JSON.stringify(layers)} } },
       { id: "src", type: "text", props: { role: "source", text: "Synthetic data." } },
     ] };\n`);
     const problems = await validate(tmp);
-    assert.deepEqual(rules(problems), ["prop-invalid", "prop-invalid", "prop-invalid"], show(problems));
-    assert.deepEqual(problems.map((p) => p.measured.split(" = ")[0]).sort(), ["layers.both", "layers.neither", "layers.no-value"]);
-    assert.match(problems[0].fix, /make layers\.[a-z-]+ an object with 'areas' and 'value' or an object with 'raster'/);
+    assert.deepEqual(rules(problems), Array(5).fill("prop-invalid"), show(problems));
+    assert.deepEqual(problems.map((p) => p.measured.split(" = ")[0]).sort(), ["layers.areas-color", "layers.both", "layers.neither", "layers.no-value", "layers.raster-value"]);
+    for (const p of problems) assert.match(p.fix, /^make layers\.[a-z-]+ an object with 'areas' and 'value' \(without 'raster', 'color'\) or an object with 'raster' \(without 'areas', 'value', 'key', 'types'\)/);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
