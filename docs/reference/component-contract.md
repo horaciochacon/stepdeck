@@ -343,7 +343,7 @@ const y = ctx.d3.scaleLinear().domain(ctx.d3.extent(all)).range([height, 0]);
 
 `ctx.chart` is the set of building blocks the built-in charts are made of, for a component that draws its own chart. A component that reads only `ctx.chart` needs no `import`, so it keeps working wherever the engine's files live. The object is frozen and is the same one for every component and child. The marks take d3 selections and write attributes; their colours and sizes are yours, from theme tokens and `ctx.palette()`, and the theme styles what it decides (the background outline of a dot, the ink of a whisker, the halos) through generic classes. Where an option says "value or accessor", a function is called per node as `(d, i, nodes)`.
 
-**Public and internal.** The 29 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
+**Public and internal.** The 33 names below are the contract: a change to one is a changelog entry. Everything else in the engine's `core/chart*.js` files (`chart-layout.js`, `chart-marks.js`, `chart-motion.js`, `chart-rules.js`) and in the built-ins' folders (`components/chart.line/fan.js`, `components/chart.points/model.js`, `components/chart.bar/modes.js` and the like) is internal, because the engine's path differs between the repository and a deck's `stepdeck/` copy and those files change with the charts. Use `ctx.chart`, not an import. A built-in that has a feature you want (the draw fan, the strips) is a reference to read, not an API.
 
 The names are in eleven groups. Each group has its signatures and one short example. The examples are fragments: they assume a selection per kind of mark (`circles`, `whiskers`, `rules`, `labels`, `shade`, and the axis group `axisG`) and the rows, scales (`x`, `y`) and frame (`f`) of the groups before them. The Joins group shows a whole `update`, and `test/fixtures/decks/chart-kit/components/fixture.marks/index.js` is a working component that calls the Data, Frame, Joins, Motion, Marks and Canvas groups.
 
@@ -535,13 +535,30 @@ layer.setAttribute("data-signature", sig.hex());
 | `focusPaint` | `focusPaint(ctx, color, dimmed) → color` | The theme's `--sd-color-dim` for a mark out of focus. |
 | `tweenColor` | `tweenColor(ctx, from, to, set, opts) → Promise` | An RGB colour tween. |
 | `textColor` | `textColor(color, background) → color` | A palette colour darkened (or lightened) until it has 4.5:1 contrast, for text. |
+| `colorScale` | `colorScale(spec, palettes, { format }) → { kind, color(value), legend }` | A colour scale: stepped classes, a continuous ramp (linear or log), a diverging scale about a midpoint, or categories. `color` is `null` for a missing value. |
+| `legendRow` | `legendRow(doc, legend, { title, noData, t }) → HTMLElement` | A detached `div.sd-legend-row` for a scale's `legend`, with a hatched "no data" swatch when `noData` is set. |
+| `classIndex` | `classIndex(value, breaks) → number \| null` | The number of `breaks` at most `value` (a value equal to a break is in the class above it); `null` for a missing value. |
+| `classLabels` | `classLabels(breaks, fmt) → labels` | `breaks.length + 1` labels: `< b0`, `b0–b1`, …, `≥ bn` (en dashes). |
 
 Focus-dim goes through `focusPaint`, never through opacity. Text coloured from a palette goes through `textColor`, which reaches 4.5:1.
+
+A scale takes the theme's palettes, so a heatmap, a choropleth and a raster all colour one way. `spec` is `{ classes, midpoint, domain, log, categories, color, values }`; `palettes` is `{ sequential, diverging, categorical }`, as `ctx.palette(kind)` returns them; `format` writes a number in a legend label (default `String`).
+
+- **Classes** (`classes: [5, 10, 20]`): four stepped classes, sampled evenly along the sequential palette, labelled `< 5`, `5–10`, `10–20`, `≥ 20`. With `midpoint` (which must be one of the breaks, else the error is `` `midpoint` must be one of `classes` (5, 10, 20) ``) the classes below it take the first half of the diverging palette and those above it the second, so the midpoint's neutral colour sits where the classes meet.
+- **A continuous ramp** (no `classes`): over `domain`, else the extent of `values` (one value v gives `[v, v + 1]`, none gives `[0, 1]`). `log: true` positions values by their logarithm and needs a domain above 0 (a value that is not above 0 has no colour). With `midpoint`, the diverging palette and a domain symmetric about it. A value outside `domain` takes the end colour.
+- **Categories** (`categories: ["forest", "water"]`): the categorical palette in order; more categories than colours throws (`7 categories but the palette has 6 colours`). One category with `color` is a mask, coloured `color`. A value that is not a category has no colour.
+
+`legend` is the plain data a row draws: `{ kind: "steps" | "categories", items: [{ color, label }] }` or `{ kind: "ramp", stops, labels: [lo, hi] }` (nine stops; the labels are the formatted domain ends, for `log` too). `legendRow` is yours to place: it only builds the row.
 
 ```js
 const fill = ctx.chart.focusPaint(ctx, color, dimmed); // the theme's --sd-color-dim when dimmed
 await ctx.chart.tweenColor(ctx, from, to, (c) => path.attr("stroke", c), ctx.motion.timing(info));
 label.attr("fill", ctx.chart.textColor(color, ctx.tokens["--sd-color-background"]));
+
+const palettes = { sequential: ctx.palette("sequential"), diverging: ctx.palette("diverging"), categorical: ctx.palette("categorical") };
+const scale = ctx.chart.colorScale({ classes: [5, 10, 20] }, palettes, { format: ctx.format(".0f") }); // or { domain, log } or { midpoint, values }
+cells.attr("fill", (d) => scale.color(d.value) ?? missingColor); // null: no value, drawn by you (a hatch, the surface)
+el.append(ctx.chart.legendRow(document, scale.legend, { title: "Rate", noData: true, t: ctx.t }));
 ```
 
 ## Helpers inside the engine

@@ -290,6 +290,15 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-canvas-layer { position: absolute; pointer-events: none; }
 .sd-canvas-layer ~ svg { position: relative; }
 
+/* legend row (ctx.chart.legendRow): a title, then swatches with their labels or a gradient ramp between two end labels, then
+   the hatched "no data" swatch. A swatch or ramp gets its colour inline from the scale; the hatch is the theme's. */
+.sd-legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--sd-grid) / 2) var(--sd-grid); font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
+.sd-legend-title { color: var(--sd-color-ink); }
+.sd-legend-item { display: inline-flex; align-items: center; gap: calc(var(--sd-grid) / 2); }
+.sd-legend-swatch { flex: none; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid var(--sd-color-rule); }
+.sd-legend-ramp { flex: none; width: 6em; height: 0.6em; box-sizing: border-box; border: 1px solid var(--sd-color-rule); }
+.sd-legend-nodata { background-image: repeating-linear-gradient(45deg, var(--sd-color-dim) 0 1.5px, var(--sd-color-surface) 1.5px 6px); }
+
 /* terminal component: a window with a command line, a log of the newest lines that fit, and a side panel.
    The element fills its region; the log has a definite height (it never grows with its lines), so the
    component can measure how many lines fit. Text is at least --sd-min-audience-font everywhere. */

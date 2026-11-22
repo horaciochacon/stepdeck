@@ -376,6 +376,42 @@ export interface ChartFrame {
   ph: number;
 }
 
+/** What `ctx.chart.colorScale` reads: the palettes of a theme (`ctx.palette(kind)`). */
+export interface ColorScalePalettes {
+  sequential: { colors: string[] };
+  diverging: { colors: string[] };
+  categorical: { colors: string[] };
+}
+
+/** The props of a colour scale. `categories` wins over `classes`; without either the scale is a continuous ramp. */
+export interface ColorScaleSpec {
+  /** Ascending breaks of stepped classes (`n` breaks, `n + 1` classes). */
+  classes?: number[];
+  /** Colours from the diverging palette around this value; with `classes` it must be one of them. */
+  midpoint?: number;
+  /** A ramp's ends; default the extent of `values`. */
+  domain?: [number, number];
+  /** Place a ramp's values by their logarithm (the domain must be above 0). */
+  log?: boolean;
+  /** Categorical colours in order; one category with `color` is a mask. */
+  categories?: unknown[];
+  color?: string;
+  /** The values the default domain is read from. */
+  values?: unknown[];
+}
+
+/** What a legend row draws. */
+export type ColorLegend =
+  | { kind: "steps" | "categories"; items: Array<{ color: string; label: string }> }
+  | { kind: "ramp"; stops: string[]; labels: [string, string] };
+
+/** A colour scale: `color(value)` is `null` for a missing or unclassed value. */
+export interface ColorScale {
+  kind: "steps" | "ramp" | "categories";
+  color(value: unknown): string | null;
+  legend: ColorLegend;
+}
+
 export interface CanvasLine {
   /** Plot pixels. A point with a non-finite (or null) coordinate breaks the line; a stretch of fewer than 2 points draws nothing. */
   points: Array<[number | null, number | null]>;
@@ -446,6 +482,14 @@ export interface ChartKit {
   tweenColor(ctx: ComponentContext, from: string, to: string, set: (color: string) => void, options?: MotionTiming | { duration?: number; ease?: (t: number) => number; signal?: AbortSignal }): Promise<void>;
   /** `color` darkened (or lightened on a dark background) until it has 4.5:1 contrast with `background`, for text. */
   textColor(color: string, background: string, min?: number): string;
+  /** A colour scale from `spec` and the theme's palettes (see the contract); `format` writes the numbers in legend labels (default `String`). */
+  colorScale(spec: ColorScaleSpec, palettes: ColorScalePalettes, options?: { format?: (value: number) => string }): ColorScale;
+  /** A detached `div.sd-legend-row`: the title, the swatches or ramp of `legend`, and, with `noData`, a hatched swatch labelled `t("noData")`. */
+  legendRow(doc: Document, legend: ColorLegend, options: { title?: string; noData?: boolean; t: (key: string) => string }): HTMLElement;
+  /** The class of a value among ascending `breaks`: how many breaks are at most the value; `null` for a missing value. */
+  classIndex(value: unknown, breaks: number[]): number | null;
+  /** One label per class of `breaks` (`breaks.length + 1`): `< b0`, `b0–b1`, ..., `≥ bn`. */
+  classLabels(breaks: number[], fmt: (value: number) => string): string[];
 }
 
 export interface ComponentContext {
