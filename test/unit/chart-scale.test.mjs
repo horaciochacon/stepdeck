@@ -98,6 +98,44 @@ test("colorScale: symmetric domain about the midpoint", () => {
   assert.deepEqual(one.legend.labels, ["4", "6"], "one value: [v, v + 1], then symmetric");
 });
 
+test("colorScale: an explicit domain is used as given, with a midpoint piecewise", () => {
+  const s = colorScale({ domain: [-5, 20], midpoint: 0 }, palettes);
+  assert.deepEqual(s.legend.labels, ["-5", "20"], "never widened");
+  assert.deepEqual([-5, -2.5, 0, 10, 20, 99, -99].map((v) => rgb(s.color(v))), [0, 0.25, 0.5, 0.75, 1, 1, 0].map((t) => along("diverging", t)));
+  const log = colorScale({ domain: [1, 100], midpoint: 10, log: true }, palettes);
+  assert.deepEqual(log.legend.labels, ["1", "100"]);
+  assert.deepEqual([1, Math.sqrt(10), 10, Math.sqrt(1000), 100].map((v) => rgb(log.color(v))), [0, 0.25, 0.5, 0.75, 1].map((t) => along("diverging", t)), "linear in ln on each arm");
+  const edge = colorScale({ domain: [0, 10], midpoint: 0 }, palettes);
+  assert.equal(rgb(edge.color(0)), along("diverging", 0.5), "the midpoint at an end of the domain");
+  assert.equal(rgb(edge.color(10)), along("diverging", 1));
+});
+
+test("colorScale: a zero-width explicit domain is one value", () => {
+  const s = colorScale({ domain: [5, 5] }, palettes);
+  assert.deepEqual(s.legend.labels, ["5", "6"]);
+  assert.equal(rgb(s.color(5)), along("sequential", 0));
+  assert.equal(rgb(s.color(6)), along("sequential", 1));
+  const log = colorScale({ domain: [5, 5], log: true }, palettes);
+  assert.deepEqual(log.legend.labels, ["5", "50"]);
+  assert.equal(rgb(log.color(5)), along("sequential", 0));
+  assert.equal(rgb(log.color(50)), along("sequential", 1));
+  const mid = colorScale({ domain: [5, 5], midpoint: 5 }, palettes);
+  assert.equal(rgb(mid.color(5)), along("diverging", 0.5));
+  const logMid = colorScale({ domain: [5, 5], midpoint: 5, log: true }, palettes);
+  assert.equal(rgb(logMid.color(5)), along("diverging", 0.5));
+  assert.equal(rgb(logMid.color(50)), along("diverging", 1));
+});
+
+test("colorScale: a blank string is missing, never 0", () => {
+  const ramp = colorScale({ domain: [-1, 1] }, palettes);
+  const steps = colorScale({ classes: [5] }, palettes);
+  for (const blank of [" ", "\t", "\n "]) {
+    assert.equal(ramp.color(blank), null, JSON.stringify(blank));
+    assert.equal(steps.color(blank), null, JSON.stringify(blank));
+  }
+  assert.equal(rgb(ramp.color(" 0 ")), along("sequential", 0.5), "a padded number is a number");
+});
+
 test("colorScale: categories take the categorical palette in order", () => {
   const s = colorScale({ categories: ["forest", "water", "ice"] }, palettes);
   assert.equal(s.kind, "categories");

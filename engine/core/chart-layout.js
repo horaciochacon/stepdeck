@@ -34,6 +34,21 @@ function byCodePoint(a, b) {
 }
 
 /**
+ * A value as a number, by the one rule every colour and chart reader shares: a finite number as it is, a string that
+ * trims to a finite number, else null (null, undefined, a blank string, text, a non-finite number, anything else).
+ * @param {unknown} raw
+ * @returns {number | null}
+ */
+export function numberOf(raw) {
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (text === "") return null;
+  const v = Number(text);
+  return Number.isFinite(v) ? v : null;
+}
+
+/**
  * The cell `column` of `row` as a number: a finite number as it is, a string that trims to a finite number (`Number`),
  * else null: an empty or blank cell, text, a non-finite number, anything else, and an undefined `column`. Every chart
  * reads a value through it, so a blank-looking cell is missing and never drawn as zero. Not part of `ctx.chart`.
@@ -42,14 +57,7 @@ function byCodePoint(a, b) {
  * @returns {number | null}
  */
 export function cellValue(row, column) {
-  if (column === undefined) return null;
-  const raw = row?.[column];
-  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
-  if (typeof raw !== "string") return null;
-  const text = raw.trim();
-  if (text === "") return null;
-  const v = Number(text);
-  return Number.isFinite(v) ? v : null;
+  return column === undefined ? null : numberOf(row?.[column]);
 }
 
 /** A cell as text for `sort: { by }`: a string that is not blank, else null. */
@@ -330,15 +338,14 @@ export function swarm(xs, { r, maxDy }) {
 /**
  * The class of `value` among `breaks` (ascending lower bounds): the number of breaks that are at most `value`, so
  * `[5, 10, 20]` has classes 0 (below 5) to 3 (20 and above), and a value equal to a break starts the class above it.
- * `null` for a missing value: `null`, undefined, `""`, text, or a number that is not finite.
+ * `null` for a missing value: `null`, undefined, a blank string, text, or a number that is not finite (`numberOf`).
  * @param {unknown} value
  * @param {number[]} breaks
  * @returns {number | null}
  */
 export function classIndex(value, breaks) {
-  if (value === null || value === "" || (typeof value !== "number" && typeof value !== "string")) return null;
-  const v = Number(value);
-  if (!Number.isFinite(v)) return null;
+  const v = numberOf(value);
+  if (v === null) return null;
   let lo = 0;
   let hi = breaks.length;
   while (lo < hi) {

@@ -4,7 +4,7 @@
 // (a choropleth, a raster, a heatmap), so they all read the same palette the same way. The class arithmetic is in
 // ./chart-layout.js and the extent rules are `extentOf`'s.
 import { d3 } from "./d3.js";
-import { extentOf, classIndex, classLabels } from "./chart-layout.js";
+import { extentOf, classIndex, classLabels, numberOf } from "./chart-layout.js";
 
 /** The number of colour stops in a ramp legend. */
 const RAMP_STOPS = 9;
@@ -17,17 +17,22 @@ function classPosition(i, n, below) {
   return 1 - (0.5 * (above - 1 - (i - below))) / above;
 }
 
-/** The domain of a ramp: `spec.domain`, else the extent of `spec.values` (`extentOf`'s rules); about `midpoint` when it has one. */
+/**
+ * The ends of a ramp. An explicit `spec.domain` is used as given, except that a zero-width one is a single value v:
+ * `[v, v + 1]` (`[v, 10 v]` for `log`). Without one, the extent of `spec.values` (`extentOf`'s rules), made symmetric
+ * about `midpoint` when it has one (in ratio for `log`).
+ */
 function rampDomain(spec) {
-  let [lo, hi] = spec.domain ?? extentOf((spec.values ?? []).map((v) => ({ v })), ["v"]);
   const mid = spec.midpoint;
+  let [lo, hi] = spec.domain ?? extentOf((spec.values ?? []).map((v) => ({ v })), ["v"]);
   if (spec.log && !(lo > 0 && hi > 0 && (mid === undefined || mid > 0))) throw new Error("`log` needs a domain above 0");
-  if (mid !== undefined) {
+  if (spec.domain && lo === hi) hi = spec.log ? lo * 10 : lo + 1;
+  else if (!spec.domain && mid !== undefined) {
     if (spec.log) {
-      const r = Math.max(mid / lo, hi / mid) || 1;
+      const r = Math.max(mid / lo, hi / mid);
       [lo, hi] = [mid / r, mid * r];
     } else {
-      const r = Math.max(Math.abs(lo - mid), Math.abs(hi - mid)) || 1;
+      const r = Math.max(Math.abs(lo - mid), Math.abs(hi - mid));
       [lo, hi] = [mid - r, mid + r];
     }
   }
@@ -43,8 +48,9 @@ function rampDomain(spec) {
  *   the diverging one when `midpoint` (one of the breaks) is set: classes below it fill the first half, above it the second.
  * - otherwise (kind `"ramp"`): a continuous ramp over `domain`, else the extent of `values` (one value v: `[v, v + 1]`,
  *   none: `[0, 1]`); `log` places values by their logarithm (the domain must be above 0); with `midpoint` the
- *   diverging palette and a domain symmetric about it.
- * `color(value)` is `null` for a missing value, a value outside the categories, or (log) a value that is not above 0.
+ *   diverging palette: a `domain` is used as given and runs lo, midpoint, hi through t 0, 0.5, 1 (linear on each arm,
+ *   in the logarithm for `log`); a domain read from `values` is made symmetric about the midpoint.
+ * `color(value)` is `null` for a missing value (a blank string is missing, never 0), a value outside the categories, or (log) a value that is not above 0.
  * `legend` is `{ kind: "steps" | "categories", items: [{ color, label }] }` or `{ kind: "ramp", stops, labels: [lo, hi] }`.
  * @param {{ classes?: number[], midpoint?: number, domain?: [number, number], log?: boolean, categories?: unknown[], color?: string, values?: unknown[] }} spec
  * @param {{ sequential: { colors: string[] }, diverging: { colors: string[] }, categorical: { colors: string[] } }} palettes
@@ -96,13 +102,20 @@ export function colorScale(spec, palettes, { format = String } = {}) {
 
   const [lo, hi] = rampDomain(spec);
   const place = spec.log ? Math.log : (v) => v;
-  const span = place(hi) - place(lo);
+  const [p0, p1] = [place(lo), place(hi)];
+  const pm = mid === undefined ? undefined : place(mid);
+  const arm = (x, from, to) => Math.min(1, Math.max(0, (x - from) / (to - from)));
+  const position = (x) => {
+    if (pm === undefined) return arm(x, p0, p1);
+    if (x <= pm) return p0 < pm ? 0.5 * arm(x, p0, pm) : x === pm ? 0.5 : 0; // a midpoint at or below the low end has no lower arm
+    return p1 > pm ? 0.5 + 0.5 * arm(x, pm, p1) : 1;
+  };
   return {
     kind: "ramp",
     color: (v) => {
-      const x = v === null || v === "" || (typeof v !== "number" && typeof v !== "string") ? NaN : place(Number(v));
-      if (!Number.isFinite(x)) return null;
-      return interpolate(Math.min(1, Math.max(0, (x - place(lo)) / span)));
+      const n = numberOf(v);
+      const x = n === null ? NaN : place(n);
+      return Number.isFinite(x) ? interpolate(position(x)) : null;
     },
     legend: {
       kind: "ramp",
