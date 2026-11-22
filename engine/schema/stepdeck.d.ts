@@ -492,6 +492,56 @@ export interface ChartKit {
   classLabels(breaks: number[], fmt: (value: number) => string): string[];
 }
 
+/** A Polygon or MultiPolygon GeoJSON feature, as `ctx.map.boundaries` returns it (rings wound the way d3-geo expects). */
+export interface MapFeature {
+  type: "Feature";
+  id?: string | number;
+  properties: Record<string, unknown> | null;
+  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: number[][][] | number[][][][] };
+}
+
+/** The regions of a boundaries file, indexed by id. */
+export interface MapBoundaries {
+  /** In file order. */
+  features: MapFeature[];
+  byId: Map<string, MapFeature>;
+  ids: string[];
+  /** Display names by id: `properties[name]`, else the id. */
+  names: Map<string, string>;
+}
+
+/** A zoom transform over base-projected pixels: a point `[px, py]` is drawn at `[k * px + x, k * py + y]`. */
+export interface MapView {
+  k: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The geography building blocks every component gets as `ctx.map` (one frozen object). See the component contract
+ * for each one's behavior.
+ */
+export interface MapKit {
+  /**
+   * Validates a parsed FeatureCollection of Polygons and MultiPolygons (what `ctx.data` returns for a `.geojson`) and
+   * indexes its regions by `properties[id]` (the feature's own `id` when `id` is omitted). Rewinds rings d3 reads as
+   * covering the sphere, on copies. `file` names the file in error messages (default "boundaries").
+   */
+  boundaries(geojson: unknown, options?: { id?: string; name?: string; file?: string }): MapBoundaries;
+  /** The base projection, rotated to the regions' centre longitude and fitted to them in `size` (6% margin). A d3 geo projection. */
+  projection(spec: "equal-earth" | "natural-earth" | "mercator" | "conic-equal-area", features: MapFeature[], size: [number, number]): any;
+  /** A view over `base`: `null` is home (`{ k: 1, x: 0, y: 0 }`), features or `{ bounds: [west, south, east, north] }` are fitted in `size`. */
+  view(base: any, target: MapFeature[] | { bounds: [number, number, number, number] } | null, size: [number, number]): MapView;
+  /** A base-projected point seen through a view: `[k * px + x, k * py + y]`. */
+  applyView(view: MapView, point: [number, number]): [number, number];
+  /**
+   * The raster cell under each canvas pixel (`row * cols + col`, row 0 the northern edge) or -1: row-major from the
+   * top-left pixel. `bounds` are `[west, south, east, north]`, the outer edges of the edge cells; `step` is the
+   * spacing in pixels of the grid inverted exactly (default 8), the rest interpolated.
+   */
+  lookup(base: any, view: MapView, size: [number, number], bounds: [number, number, number, number], grid: [number, number], options?: { step?: number }): Int32Array;
+}
+
 export interface ComponentContext {
   /** d3 v7. */
   d3: any;
@@ -535,6 +585,8 @@ export interface ComponentContext {
   stepProps: ReadonlyArray<Props | null> | null;
   /** The shared chart building blocks (marks, joins, motion, canvas layer): one frozen object. */
   chart: ChartKit;
+  /** The shared geography building blocks (boundaries, projection, views, the raster lookup): one frozen object. */
+  map: MapKit;
 }
 
 // ---------------------------------------------------------------------------------------------
