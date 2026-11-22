@@ -58,7 +58,7 @@ Behaviour:
   two rows are element errors, never a silently missing value.
 - **Motion** (a forward step by one, the map already on screen): a layer that appears or leaves fades over the step's
   duration (`--sd-duration`, or the step's `transition`), with its legend row; labels that come or go fade with it; a
-  change to a shown areas layer's data or scale crossfades its colours (a raster shows its new picture at once); `highlight` tweens the colours over
+  change to a shown layer's data or scale (a raster's file, scale or `color` too) crossfades its colours; `highlight` tweens the colours over
   `--sd-duration-fast`. Jumps, backward steps and reduced motion show the end state at once. The map does not own its
   entrance: the engine moves its box in.
 - **State on the canvases.** Each canvas layer (`data-layer` `main:base`, `main:areas:<id>`, `main:raster:<id>`, `main:borders`) carries

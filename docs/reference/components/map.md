@@ -118,8 +118,7 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | Change | What you see |
 | --- | --- |
 | A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. |
-| A shown areas layer's data or scale changes | Its colours crossfade from the old to the new over the same time. |
-| A shown raster layer's file or scale changes | The new picture is shown at once. |
+| A shown layer's data or scale changes (a raster's file, scale or `color` too) | Its colours crossfade from the old picture to the new over the same time. |
 | `highlight` set, changed or cleared | The regions' colours and the ink outlines tween over `--sd-duration-fast`. |
 | `labels` changes | Labels that come fade in, labels that go fade out. |
 | `boundaries`, `id`, `name`, `projection`, `legend` change | Drawn at once. |

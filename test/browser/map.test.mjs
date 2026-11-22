@@ -371,6 +371,8 @@ test("rasters: backward and interrupted equal the jump", async () => {
   await withPage({ root, url: pages.url("rasters", "step=base") }, async (page, ctx) => {
     await expectBackwardEqualsJump(ctx, page, { pages, slide: "rasters", steps: RASTER_STEPS, id: "map" });
     await expectInterruptEqualsJump(ctx, page, { pages, slide: "rasters", from: "base", via: "density", to: "cover", id: "map", keep: LEGEND_COLOURS });
+    // in the middle of a crossfade between two colours of one layer, then on
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "rasters", from: "wells", via: "alert", to: "half", id: "map", keep: LEGEND_COLOURS });
     assert.deepEqual(await errorsOf(page), []);
   });
 });
@@ -518,6 +520,23 @@ test("rasters: fade in and out", async () => {
     assert.equal(hides.end.alpha, 0, "and ends clear");
     assert.ok(hides.frames.filter((f) => f.alpha > 0 && f.alpha < 255).length >= 2, "passing through partial opacity");
     assert.ok(hides.frames.every((f, i) => i === 0 || f.alpha <= hides.frames[i - 1].alpha), "and only falling");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("rasters: a change of colour crossfades", async () => {
+  await withPage({ root, url: pages.url("rasters", "step=wells&motion=full") }, async (page, ctx) => {
+    const wells = rasterFile("wells");
+    const [cols, rows] = wells.size;
+    const on = Array.from({ length: cols * rows }, (_, i) => [i % cols, Math.floor(i / cols)]).find(([col, row]) => wells.cell(col, row).data);
+    const { frames, end } = await sampleFrames(page, "rasters", "alert", "map", colourProbe(RASTER("wells"), wells.pixelOf(...on)));
+    const from = frames[0].color;
+    assert.equal(from, await tokenRgb(page, "--sd-color-accent"));
+    assert.equal(end.color, await tokenRgb(page, "--sd-color-alert"));
+    // strictly between the two on every channel: the old picture goes as the new one comes
+    const [a, b] = [from, end.color].map((c) => c.match(/\d+/g).map(Number));
+    const mid = frames.filter((f) => f.color.match(/\d+/g).map(Number).every((v, i) => v > Math.min(a[i], b[i]) && v < Math.max(a[i], b[i])));
+    assert.ok(mid.length >= 2, `${mid.length} frames between ${from} and ${end.color} (${frames.map((f) => f.color).join(" | ")})`);
     assert.deepEqual(ctx.errors, []);
   });
 });

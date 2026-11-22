@@ -39,8 +39,8 @@
         "type": "object",
         "additionalProperties": false,
         "oneOf": [
-          { "properties": { "areas": true, "value": true, "raster": false }, "required": ["areas", "value"] },
-          { "properties": { "areas": false, "raster": true }, "required": ["raster"] }
+          { "properties": { "areas": true, "value": true, "key": true, "types": true, "raster": false, "color": false }, "required": ["areas", "value"] },
+          { "properties": { "raster": true, "color": true, "areas": false, "value": false, "key": false, "types": false }, "required": ["raster"] }
         ],
         "properties": {
           "areas": { "type": "string", "minLength": 1, "description": "Path to a CSV with one row per region, relative to the deck root: a choropleth. A layer has exactly one of `areas` and `raster`.", "examples": ["data/rates.csv"] },
@@ -55,7 +55,7 @@
           "color": { "type": "string", "minLength": 1, "description": "For a raster of one class (a mask): the theme colour role that paints it, such as `accent` (the default), `alert`, `ink` or `muted`. A name the theme has no colour for is an element error.", "examples": ["accent", "alert"] }
         }
       },
-      "description": "The layers of data, keyed by an id that `shown` refers to. A layer with `areas` is a choropleth: its `value` column colours the regions its `key` column names, through a scale of the theme's palettes (`classes` for stepped classes, `midpoint` for a diverging one, `domain` to fix a ramp's ends), with `label` as the title of its legend row. A layer with `raster` is a picture over the land, drawn between the areas and the borders, with the same scale props. An object, not a list, so a step can change one layer. A change to a shown areas layer's data or scale crossfades its colours; a raster layer shows its new picture at once.",
+      "description": "The layers of data, keyed by an id that `shown` refers to. A layer with `areas` is a choropleth: its `value` column colours the regions its `key` column names, through a scale of the theme's palettes (`classes` for stepped classes, `midpoint` for a diverging one, `domain` to fix a ramp's ends), with `label` as the title of its legend row. A layer with `raster` is a picture over the land, drawn between the areas and the borders, with the same scale props. An object, not a list, so a step can change one layer. A change to a shown layer's data or scale crossfades its colours.",
       "examples": [{ "rate": { "areas": "data/rates.csv", "key": "code", "value": "rate", "label": "Cases per 1,000", "classes": [5, 10, 20] } }, { "density": { "raster": "data/density.json", "label": "People per km²", "midpoint": 400 } }],
       "x-transition": "fade"
     },
