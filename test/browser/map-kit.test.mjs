@@ -10,6 +10,7 @@ import { deckPages, goTo, canvasPixels, tokenRgb, paletteRgb, expectJumpEqualsPl
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const pages = deckPages("test/fixtures/decks/map-kit/");
+const brokenPages = deckPages("test/fixtures/decks/map-kit-broken/");
 const THEME = "academic-light";
 /** The element is 1400 x 760 canvas pixels, and the one square sits at its middle. */
 const [W, H] = [1400, 760];
@@ -41,13 +42,14 @@ const inPage = (page, fn, arg) =>
 
 /**
  * Runs `fn(M, ctx, arg)` in the page, where `M` is the module of `core/map.js` and `ctx` is what a component reads of its
- * own: `ctx.data` and `ctx.assetUrl` of the map-kit deck (the engine's own data loader, so the paths are the deck's).
+ * own: `ctx.data` and `ctx.assetUrl` of `deck`, a fixture deck (the map-kit deck by default; the engine's own data loader,
+ * so the paths are the deck's).
  */
-const withKit = (page, fn, arg) =>
+const withKit = (page, fn, arg, deck = "map-kit") =>
   page.evaluate(`(async () => {
     const M = await import(new URL("map.js", document.baseURI).href);
     const { createDataLoader } = await import(new URL("data.js", document.baseURI).href);
-    const root = new URL("../../test/fixtures/decks/map-kit", document.baseURI).href;
+    const root = new URL("../../test/fixtures/decks/${deck}", document.baseURI).href;
     const data = createDataLoader({ root, read: (url) => fetch(url) });
     return (${fn})(M, { data, assetUrl: data.url }, ${JSON.stringify(arg ?? null)});
   })()`);
@@ -438,11 +440,11 @@ test("loadRaster: too many pixels errors, as an element error on a slide", async
     const got = await withKit(page, async (M, ctx) => {
       const attempt = () => M.loadRaster("data/wide.json", ctx).then(() => null, (e) => e.message);
       return [await attempt(), await attempt()];
-    });
+    }, null, "map-kit-broken");
     const message = "data/wide.png: 2001×2000 is more than 2,000×2,000 pixels";
     assert.deepEqual(got, [message, message], "the limit is on the area: 2001 wide is fine on its own, and a failure is tried again");
   });
-  await withPage({ root, url: pages.url("broken", "step=a") }, async (page) => {
+  await withPage({ root, url: brokenPages.url("broken", "step=a") }, async (page) => {
     const errors = await page.evaluate(() => window.STEPDECK.errors);
     assert.deepEqual(errors, [`broken/map: data/wide.png: 2001×2000 is more than 2,000×2,000 pixels`]);
   });
