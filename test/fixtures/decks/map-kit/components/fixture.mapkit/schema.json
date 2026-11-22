@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "fixture.mapkit",
+  "description": "Test fixture: paints a scene of regions, dots and points through ctx.map, with an inset frame and a scale bar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "projection"],
+  "properties": {
+    "data": { "type": "string", "description": "A GeoJSON file of the deck whose regions have a `code` property.", "examples": ["data/regions.geojson"] },
+    "projection": { "enum": ["equal-earth", "natural-earth", "mercator", "conic-equal-area"], "description": "The base projection.", "examples": ["mercator"] },
+    "fills": { "enum": ["palette", "shifted", "background"], "default": "palette", "description": "Fill every region with the palette in order, shifted by one, or with the background.", "examples": ["shifted"], "x-transition": "snap" },
+    "hatch": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Regions drawn hatched (no data).", "examples": [["N1"]], "x-transition": "snap" },
+    "dots": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Regions drawn as dots.", "examples": [["I1"]], "x-transition": "snap" },
+    "zoom": { "type": "number", "exclusiveMinimum": 0, "default": 1, "description": "The view's scale, about `about` (the middle of the element when omitted).", "examples": [2], "x-transition": "snap" },
+    "about": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "A [lon, lat] that keeps its place when the view zooms.", "examples": [[-14, -27]], "x-transition": "snap" },
+    "points": { "type": "boolean", "default": false, "description": "Draw a point on the first region's centre.", "examples": [true], "x-transition": "snap" },
+    "inset": { "type": "boolean", "default": false, "description": "Draw an inset frame and its leaders.", "examples": [true], "x-transition": "snap" },
+    "scale": { "type": "boolean", "default": false, "description": "Draw a scale bar.", "examples": [true], "x-transition": "snap" }
+  }
+}
