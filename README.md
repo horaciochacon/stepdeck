@@ -24,7 +24,7 @@ This page is the front door. It shows what you get, a quick start and one slide,
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Themes | 2: `modern` (the default: Geist, a deep blue accent, a large cover title) and `academic-light`, with color-vision-safe palettes and vendored fonts | [Themes](docs/reference/themes.md) |
 | Shells | 2: `reveal` for presenting (keyboard, presenter view), `bare` for the CLI checks | |
-| CLI | 9 commands: `help`, `new`, `new-component`, `catalog`, `serve`, `validate`, `dump`, `check`, `shoot` | [CLI](docs/reference/cli.md) |
+| CLI | 10 commands: `help`, `new`, `new-component`, `catalog`, `boundaries`, `serve`, `validate`, `dump`, `check`, `shoot` | [CLI](docs/reference/cli.md) |
 
 ## Quick start
 

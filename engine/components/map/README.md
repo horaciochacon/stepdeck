@@ -7,7 +7,9 @@ mask. A layer with `points` puts a circle at the longitude and latitude of each 
 true to the value, with a two-circle size key in the legend) and coloured by a column or a theme role. Built for step-by-step stories: steps bring layers in and out (each adds its legend row), highlight
 regions and name them on the map, fly the map to a region or a box and back, and play a time-lapse raster through its
 frames, with a corner panel of the frame's label and its numbers; a region (or land under a raster) without a value is hatched, never a colour of the scale. Colours come
-from the theme, so the same deck reads correctly in every theme.
+from the theme, so the same deck reads correctly in every theme. The files it draws come from the project's own
+analysis code (R or Python); their exact shapes and writer functions for rasters are in the stepdeck docs, "From your
+analysis code to a map slide".
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
@@ -79,7 +81,8 @@ Behaviour:
 - **Highlight.** The highlighted regions keep their colour and get an ink outline (a dot's ring turns ink); the other
   regions of a shown areas layer turn `--sd-color-dim`, never faded. A hatched region stays hatched. `highlight` also
   names points, by their `id`: a highlighted point keeps its colour and gets an ink ring, and every other point of a
-  shown points layer turns `--sd-color-dim` while anything is highlighted.
+  shown points layer turns `--sd-color-dim` while anything is highlighted. Region and point ids are one list: an id
+  highlights the region and every point that has it, so give points ids no region has.
 - **Views.** `view` fits its regions (or its box) to the element, centred, with the same 6% margin as the whole map.
   A view names regions only: a point's id is an error. Lines
   keep their width on screen, points and dots their size; a region too small to see at home becomes an area again
@@ -127,7 +130,8 @@ Behaviour:
   `div.sd-map-inset-stage`, each with the inset's own `data-view`; they exist only while the inset is on (or fading).
   The panel is `div.sd-map-panel[data-at]`: `div.sd-map-panel-frame` (the label), then a `div.sd-map-panel-number[data-key]`
   per number, holding `span.sd-map-panel-name` and `span.sd-map-panel-value`.
-- **Errors** (on the slide): an inset's `view` raises the errors the map's does, and ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"``; `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
+- **Errors** (on the slide): an inset's `view` raises the errors the map's does, and `` `inset` must be `{ view, at, scale }` or null ``,
+  ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"`` and `` inset `scale` must be true or false ``; `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
   points, `'X' not found (regions: …; points: …)` for `highlight`; ``'S4' is a point: `view` names regions only (regions: …)``; `layer 'x' not found (layers: …)` for `shown`;
   `<csv>: row 4 has no lon` (also `lat`, and `size` for a size that is not a number; rows count from 1, not counting the
   header), `<csv>: color 'kinds' is not a column (…) or a theme colour (…)`; `<csv>: key 'X' matches no region`; `<csv>: key 'X' appears twice`;

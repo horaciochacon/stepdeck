@@ -24,7 +24,7 @@ Esta página es la puerta de entrada. Muestra lo que incluye, un inicio rápido 
 | Layouts | 5: `title`, `figure-notes`, `full-bleed`, `statement`, `halves` | [Layouts](docs/reference/layouts.md) |
 | Temas | 2: `modern` (el tema por defecto: Geist, un acento azul profundo, un título de portada grande) y `academic-light`, con paletas seguras para daltonismo y fuentes incluidas | [Temas](docs/reference/themes.md) |
 | Shells | 2: `reveal` para presentar (teclado, vista del presentador), `bare` para las revisiones de la CLI | |
-| CLI | 9 comandos: `help`, `new`, `new-component`, `catalog`, `serve`, `validate`, `dump`, `check`, `shoot` | [CLI](docs/reference/cli.md) |
+| CLI | 10 comandos: `help`, `new`, `new-component`, `catalog`, `boundaries`, `serve`, `validate`, `dump`, `check`, `shoot` | [CLI](docs/reference/cli.md) |
 
 ## Inicio rápido
 

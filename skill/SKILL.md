@@ -1,6 +1,6 @@
 ---
 name: stepdeck
-description: Build, validate, check and screenshot step-by-step HTML presentations (decks) with stepdeck. Slides are declarative JS specs (a layout, elements, steps) with built-in components (line chart, bar chart, points chart, big number, terminal session, text, markdown, list, diagram, chat, timeline, image), data bindings and custom components. Use when asked to create or edit a stepdeck deck or slide, to make an HTML presentation or slide deck with stepdeck, or to write a stepdeck component.
+description: Build, validate, check and screenshot step-by-step HTML presentations (decks) with stepdeck. Slides are declarative JS specs (a layout, elements, steps) with built-in components (line chart, bar chart, points chart, big number, terminal session, text, markdown, list, diagram, chat, timeline, image, map), data bindings and custom components. Use when asked to create or edit a stepdeck deck or slide, to make an HTML presentation or slide deck with stepdeck, or to write a stepdeck component.
 ---
 
 # stepdeck
@@ -25,10 +25,11 @@ node "$STEPDECK/cli/index.js" --help
 node "$STEPDECK/cli/index.js" new my-talk          # a new deck, with the engine copied into my-talk/stepdeck/
 ```
 
-Every command takes the deck folder as its positional argument; without one, it uses the current folder. There are three exceptions:
+Every command takes the deck folder as its positional argument; without one, it uses the current folder. There are four exceptions:
 - `new <dir>` takes the new folder to create, not an existing deck.
 - `new-component <name> [deckDir]` takes the component name first, then the deck folder.
 - `catalog [name] [folder]` takes the entry name and the folder in either order.
+- `boundaries <ISO3> <ADM0-ADM5> [--deck dir]` takes a country code and an admin level, and the deck folder as `--deck`. It fetches open admin boundaries from geoBoundaries into `<deck>/data/` and is the only command that needs the network; use it only when the project has no boundaries of its own (see the map rule below).
 
 See [the CLI reference](../docs/reference/cli.md#new-component).
 
@@ -80,6 +81,7 @@ Exit codes:
 - **`from` and `at` are for visibility.** `set`, `replace` and `only` change props. `only` lasts one step. `advance` drives a prop step by step (terminal `shown`, a custom `stage`).
 - **A slide with a figure needs a source line.** A figure is `chart.*`, `map` or `big-number`. The source line is an element with `props.role: "source"`, usually in the `footer` region. Without it validate reports `figure-source`.
 - **No figure is typed by hand.** Numbers come from data files through bindings (`{{data/summary.json#/total}}`) or chart columns. Generate the data with a script in `data/`.
+- **A map's files come from the project's own code.** Boundaries, region ids, values, rasters and time-lapse frames are made by the project's R or Python analysis, which writes them into the deck's `data/`: rasters with the writer functions in `$STEPDECK/docs/guide/maps/` (copy one into the project). Run `boundaries` only when the project has no boundaries; put the source line it prints in the slide's source element. See `map` in [components](references/components.md) and [From your analysis code to a map slide](../docs/guide/maps-from-your-code.md).
 - **Props are JSON only.** Never put hex colors in props (`hex-color`); colors come from the theme palette. No remote URLs, so copy assets into the deck. Paths are relative to the deck root and case-exact.
 - **Kicker and accent.** A slide's `section` is the kicker above its title, and `*phrase*` in a `title` is the accent phrase (one per title; `\*` for a literal asterisk). Do not define an element with id `kicker`. See [themes-layouts](references/themes-layouts.md).
 - **Text is at least 28px.** That is the theme's `--min-audience-font`. Sources and the footer are exempt.
@@ -113,4 +115,4 @@ Add `?motion=full` to animate even when the OS asks for reduced motion.
 - [custom-components.md](references/custom-components.md): when and how to write your own component.
 - [themes-layouts.md](references/themes-layouts.md): layouts and regions, the kicker and accent phrase, tokens, hooks and `theme.css`, palettes, `{{color:role}}`, the audience font, adding a theme or layout.
 - [checks.md](references/checks.md): every validate and check rule, what it means and how to fix it. Also the known limits.
-- [cookbook.md](references/cookbook.md): complete slide specs that pass validate and check.
+- [cookbook.md](references/cookbook.md): complete slide specs that pass validate and check, maps included.

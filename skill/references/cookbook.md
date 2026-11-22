@@ -637,6 +637,78 @@ export default {
 };
 ```
 
+## Maps
+
+A map's files come from the project's own analysis code (R or Python), which already holds the boundaries, the region ids and the values: add the writing of the files to that code, and write rasters with the writer functions in `$STEPDECK/docs/guide/maps/` (`stepdeck-map.R`, `stepdeck_map.py`; copy one into the project). Use `stepdeck boundaries` only when the project has no boundaries. The file shapes are in [From your analysis code to a map slide](../../docs/guide/maps-from-your-code.md).
+
+### Rates, a closer look, then the years
+
+A choropleth of a rate by region, a flight to the region with the highest rate, then a time-lapse of a population surface played there. The flight is one step (`view`); the last step fades the time-lapse in at its first frame, then runs it to `2021`, 700 ms a frame, while the panel counts the people. Played, the run takes 11 × 700 ms = 7.7 s after a 400 ms fade, inside the 20 s a run may take; a jump or a backward step shows the last frame at once.
+
+The files, all written by the project's code into `data/`:
+- `data/regions.geojson`: the project's boundaries, one feature per region, with the properties `code` (the id the data uses) and `name`. The stepdeck repository has a fictional country of this shape at `site/gallery/data/map/regions.geojson`.
+- `data/rates.csv`: one row per region, keyed by `code`. `N3` has no row, so it is hatched and the legend adds "no data".
+- `data/years.json` and `data/years/001.png` to `012.png`: a time-lapse, written by the writer function.
+
+`data/rates.csv`:
+
+```csv
+code,rate
+N1,10.4
+N2,5.6
+E1,2.4
+W1,13.3
+E2,6.2
+E3,10.7
+E4,2.6
+E5,4.9
+W2,15.6
+S1,16.1
+E6,8.8
+W3,14.2
+W4,18.5
+S2,17.6
+S3,11.2
+I1,8.9
+I2,2.0
+```
+
+In the project's Python code, once the yearly surfaces are computed (`surface[year]`: rows north to south, `None` where there is no data; `total[year]`: the people in that year):
+
+```python
+from stepdeck_map import write_stepdeck_grid   # copied from $STEPDECK/docs/guide/maps/stepdeck_map.py
+
+years = range(2010, 2022)
+write_stepdeck_grid("my-talk/data/years.json", [surface[y] for y in years], [-19, -31, -10, -23],
+                    value={"scale": "linear", "min": 0, "max": 800},
+                    labels=[str(y) for y in years], numbers={"people": [total[y] for y in years]})
+```
+
+```js
+export default {
+  id: "map-story",
+  layout: "full-bleed",
+  title: "Where the rate is highest, and how many live there",
+  elements: [
+    { id: "map", region: "main", type: "map",
+      props: { boundaries: "data/regions.geojson", id: "code", name: "name", shown: ["rate"],
+               layers: {
+                 rate: { areas: "data/rates.csv", value: "rate", label: "Cases per 1,000", classes: [5, 10, 15], types: { code: "string" } },
+                 years: { raster: "data/years.json", label: "People per km²" },
+               },
+               numbers: [{ key: "people", label: "People", format: ",.0f" }] } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "rates" },
+    { id: "zoom", set: { map: { view: "W4", labels: ["W4"] } } },
+    { id: "years", set: { map: { shown: ["years"], frame: "2021" } } },
+  ],
+};
+```
+
+The region ids in `view` and `labels` must be ids of the boundaries (`check` reports any other as `render-error`), and the labels in `frame` must be labels of the time-lapse file (`validate` reports any other as `map-frame`).
+
 ## Motion
 
 Every element that appears on a forward step enters in turn: its box plays the theme's entrance (`rise` in `modern`), or a component whose catalog entry says `enter: own` builds itself. These recipes use the data of a deck made with `new` (`data/series.csv`, `data/summary.json`). They pass `validate`, `check` and `check --played` there. The stepdeck gallery's motion slides (`site/gallery/slides/motion-*.js` in the repository) show the same devices at full size.

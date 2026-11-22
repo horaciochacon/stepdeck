@@ -22,7 +22,7 @@ The order is the order of `components/index.json`. **Required** lists the props 
 | `chat` | An exchange shown as bubbles, or a single prompt or quote shown as a card. | `messages` | `shown`, `typing` | own: the messages rise in turn | [chat](chat.md) |
 | `timeline` | A track between stops that fills as `progress` grows. Each stop lights up as the fill passes it. | `stops`, `progress` | `progress`, `current` | own: the track fills | [timeline](timeline.md) |
 | `image` | A local image with required alt text, an optional caption and a fit mode. | `src`, `alt` | `src`, `caption` | box | [image](image.md) |
-| `map` | Regions from a GeoJSON file with layers of data over them: a choropleth from a CSV in the theme's palettes, with a hatch for a region without a value, highlighted regions, names on the map and a legend. | `boundaries` | `layers`, `shown`, `highlight`, `labels` | box | [map](map.md) |
+| `map` | Regions from a GeoJSON file with layers of data over them in the theme's palettes: a choropleth from a CSV, rasters and points, with a hatch for no data, highlighted regions, names on the map, a legend, flights to a region, a zoom inset and time-lapses. | `boundaries` | `layers`, `shown`, `highlight`, `view`, `inset`, `frame`, `numbers`, `labels` | box | [map](map.md) |
 
 `typing` (on `terminal` and `chat`) is a boolean that turns on a typing animation. It is listed as animated because its transition is `draw`, not because toggling it moves anything.
 

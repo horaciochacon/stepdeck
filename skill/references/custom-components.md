@@ -117,6 +117,7 @@ export default {
 | `ctx.capture` | True when rendering for screenshots, where nothing animates. |
 | `ctx.stepProps` | `ctx.stepProps[k]` is what `update` gets as `props` at step `k`: the element's props after the patches up to that step, bindings resolved. Frozen, computed before `mount`. An entry is `null` when that step fails (skip it); the array itself is `null` for a `ctx.mount` child (use `ctx.stepProps ?? [props]`). Use it to size an axis from every step. |
 | `ctx.chart` | The chart building blocks, frozen and the same for every component: `loadTable`, `tickFormat`, `extentOf`, `rank`, `splitAt`, `spread`, `fit`, `wrapLabel`, `drawOrder`, `swarm`, `frame`, `keyed`, `settle`, `dot`, `whisker`, `band`, `rule`, `axis`, `halo`, `canvasLayer`, `paintLines`, `morph`, `entrance`, `undraw`, `lerp`, `signature`, `focusPaint`, `tweenColor`, `textColor`, `colorScale`, `legendRow`, `classIndex`, `classLabels`. These 33 names are the public set; use them instead of importing from `core/`. See below. |
+| `ctx.map` | The map building blocks, frozen and the same for every component: `boundaries`, `projection`, `view`, `applyView` (geography); `loadRaster`, `lut`, `landCells`, `rasterGaps`, `lookup`, `paintRaster` (rasters); `paintAreas`, `paintBorders`, `paintPoints` (regions and points); `insetFrame`, `scaleBar` (inset and scale bar). These 15 names are the public set; colours and legend rows come from `ctx.chart.colorScale` and `ctx.chart.legendRow`. See below. |
 
 ### Charts from the engine's pieces
 
@@ -130,6 +131,18 @@ For a bespoke chart, build on `ctx.chart` instead of drawing everything yourself
 6. **Layout is deterministic.** `rank`, `drawOrder` and `swarm` are pure functions of data and props: no `Math.random`. A missing value is a gap (a `null` point breaks a `paintLines` line), never a zero. `halo` on a dot does nothing (a dot already has its outline).
 
 The stepdeck gallery's slope chart, `gallery.slope` (`site/gallery/components/gallery.slope/`, the `custom-slope` slide), is a whole chart built in this order from `ctx.chart` alone, with no `import`: `loadTable`, `frame` and `tickFormat`, one scale over every step with `extentOf`, `keyed` joins then `settle`, `dot` and `halo`, labels ranked with `rank` and kept apart with `spread`, one `morph` for a played change, `focusPaint` and `tweenColor` for `highlight`, `textColor` for its labels, and an owned entrance with `entrance`, `undraw` and `ctx.animate.drawPath`. The guide `docs/guide/custom-components.md` ("Build a chart from the engine's pieces") describes it and walks a smaller chart through the order above.
+
+### Maps from the engine's pieces
+
+Use the built-in `map` first: it covers choropleths, rasters, points, flights, an inset and time-lapses. For a map story it does not tell, build on `ctx.map` and `ctx.chart`. The signatures are in `docs/reference/component-contract.md` (the `ctx.map` section, one example per group), and `docs/guide/custom-components.md` ("Build a map from the engine's pieces") walks a whole component through. The order:
+
+1. **At mount, the geometry.** `ctx.map.boundaries(await ctx.data(path), { id, file: path })` checks the GeoJSON, fixes the winding and returns `{ features, byId, ids }`: use its `features`, never the raw file. `ctx.map.projection("equal-earth", features, [w, h])` is the base projection, fixed for the element's life; make one `Path2D` per region with `ctx.d3.geoPath(base)`.
+2. **The join is strict.** Read the values with `ctx.chart.loadTable`, compare keys with region ids as text, and throw on a key that matches no region, so a data mismatch is an error on the slide, never a blank region.
+3. **Colours from the theme.** `ctx.chart.colorScale({ classes }, palettes)` gives `color(value)` (`null` for no value, which the painters hatch) and a `legend` that `ctx.chart.legendRow` draws.
+4. **Views are three numbers.** `ctx.map.view(base, [feature] or null or { bounds }, [w, h])` is `{ k, x, y }`. A flight on a played step is `ctx.chart.morph` blending them with `ctx.chart.lerp`, painting every frame through the view of the moment.
+5. **Painters are pure.** `paintAreas`, `paintBorders`, `paintPoints` and `paintRaster` clear their canvas (one `ctx.chart.canvasLayer` each, with a `name`; `maxRatio: 1` for a raster), paint a plain scene and return a signature to put on the canvas. End every update by painting the end state from the props, so played equals jumped.
+
+The map's files are the project's, made by its own code, as for the built-in (see [components](components.md), `map`).
 
 ### Styling
 

@@ -1,5 +1,7 @@
 # map
 
+`map` draws files that your project's own analysis code makes: boundaries as GeoJSON, values as CSV, rasters as a JSON and greyscale PNGs. Where those files come from, their exact shapes, and writer functions for R and Python are in [From your analysis code to a map slide](../../guide/maps-from-your-code.md). This page is about the component that draws them.
+
 `map` draws the regions of a GeoJSON file and, over them, layers of data, and tells a story with them step by step. A layer with `areas` is a choropleth: a CSV joined to the regions by key, each region coloured by its value in the theme's palettes, as stepped classes, a diverging scale or a continuous ramp. A layer with `raster` is a picture over the land from a raster file: a value ramp, classes, or a mask. A layer with `points` puts a circle at the longitude and latitude of each row of a CSV, sized by a column and coloured by a column or a theme role. Steps bring layers in and out (each adds its legend row), highlight regions, put their names on the map, fly the map to a region or a box and back, and play a time-lapse raster through its frames, with a corner panel of the frame's label and its numbers. A region, or land a raster has no data for, is hatched, never a colour of the scale, and a region too small to see is drawn as a dot. This page lists every prop and default, what each change does on a forward step, the markup the map renders and the errors it raises. It is for anyone writing map slides by hand or reviewing what an agent wrote.
 
 Sources: [`components/map/schema.json`](../../../engine/components/map/schema.json), [`components/map/index.js`](../../../engine/components/map/index.js), [`components/map/areas.js`](../../../engine/components/map/areas.js), [`components/map/raster.js`](../../../engine/components/map/raster.js), [`components/map/points.js`](../../../engine/components/map/points.js), [`components/map/stage.js`](../../../engine/components/map/stage.js), [`components/map/inset.js`](../../../engine/components/map/inset.js), [`components/map/legend.js`](../../../engine/components/map/legend.js), [`components/map/panel.js`](../../../engine/components/map/panel.js), [`components/map/lapse.js`](../../../engine/components/map/lapse.js), [`core/map-rules.js`](../../../engine/core/map-rules.js), [`core/map.js`](../../../engine/core/map.js), [`core/map-paint.js`](../../../engine/core/map-paint.js), [`core/chart-scale.js`](../../../engine/core/chart-scale.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
@@ -135,6 +137,8 @@ A region whose box is under 6 px across in both directions is drawn as a **dot**
 
 `highlight` outlines its regions in ink (3 px; a dot's ring turns ink) and turns every other region of a shown areas layer to `--sd-color-dim`. Regions dim by colour, never by opacity. A hatched region stays hatched. It also names points, by the `id` column of their layer: a highlighted point keeps its colour and gets a 1.5 px ink ring, and while anything is highlighted every other point of a shown points layer turns `--sd-color-dim`, whether the highlight names a region or a point. Rasters are not dimmed. Use `only` so a highlight lasts one step.
 
+Region ids and point ids are one namespace for `highlight`: an id highlights the region that has it and every point that has it. So give points ids no region has (`S01` for a site, not `N1`), or highlighting a region also rings a point.
+
 `labels` writes each region's name in the note size (`--sd-font-size-note`) in ink, centred on the centroid of its largest polygon, on a 4 px halo of the background colour. Labels are not moved apart: name regions whose centres are far enough apart for their names. A name is drawn only while that centre is inside the element, so a view that zooms in leaves out the names of the regions it leaves out.
 
 ## Views and flights
@@ -154,6 +158,8 @@ steps: [
 A view names regions only. A point's id, or an id that is not a region, is an element error.
 
 On a forward step a change of `view` is a **flight**: the map moves along d3's zoom path (`d3.interpolateZoom`), which zooms out and in again as far as the distance asks, over twice the step's duration. The land, the borders, the areas, the points and the names are redrawn at every frame through the view of the moment. A raster crossfades between two pictures, the one made at the start view and the one made at the end view, both moving with the map. The wider of the two is drawn underneath at full strength and the other blends over it, so the raster stays filled as the map zooms in or out, and is sharp, one cell per pixel, when it lands. A long flight whose path zooms out past both ends can leave a thin unfilled margin at its widest moment, where neither picture reaches. A raster's hatch moves with its picture during the flight.
+
+Zooming out, the wider picture is the end view's, so it is underneath at full strength from the first frame of the flight and the start view's picture fades out over it. Where the start picture is clear (a cell with no data, the sea beyond a clipped coast, or land outside the start view) and the end picture has data, that data shows at full strength from the start of the flight instead of fading in.
 
 Each view needs, for each raster, a table from the element's pixels to the raster's cells. The map builds the tables of every view its slide names, its insets' included, when it mounts (for up to 2 s; any left over are built when first needed), so no flight waits for one. No table or picture is ever made for a view in between.
 
@@ -177,7 +183,7 @@ steps: [
 ]
 ```
 
-**What it shows.** The inset is a second stage inside the element, not another component: it draws the same prepared layers, colours, highlight and names as the map (the `shown` layers, the `highlight` and the `labels`), through its own view. It shows what the whole map would at that view, fitted as `view` is, only smaller: 36% of the element's width, with the element's aspect, in the corner `at`, 3% of the element's width in from each of the two edges. It sits on `--sd-color-background`, so it hides the map beneath it, and has an ink border. A region's name under the inset is left off the map.
+**What it shows.** The inset is a second stage inside the element, not another component: it draws the same prepared layers, colours, highlight and names as the map (the `shown` layers, the `highlight` and the `labels`), through its own view. It shows what the whole map would at that view, fitted as `view` is, only smaller: 36% of the element's width, with the element's aspect, in the corner `at`, 3% of the element's width in from each of the two edges. It sits on `--sd-color-background`, so it hides the map beneath it, and has an ink border. A region's name under the inset is left off the map. The inset and the legend are placed independently: an inset in the legend's corner (`at: "bottom-left"` with the default legend) overlaps the legend, so put them in different corners.
 
 **Box and leaders.** A box on the map marks the part the inset shows, seen through the map's own view. Two dashed lines (`6 4`, in `--sd-color-muted`) join the two corners of the box nearest the inset to the matching corners of its border, and cross neither; while the inset covers the box (they overlap) there are none. When the map flies, the box moves with it, and when the inset flies, the box does.
 
@@ -239,20 +245,23 @@ The legend sits in the corner `legend` names, 16 px in from the edges, on a pane
 
 The engine animates only a forward move of exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (used by `shoot` and `check`) draw the target state directly. See [Animation and motion](../../guide/animation-and-motion.md).
 
-| Change | What you see |
-| --- | --- |
-| `view` changes | The map flies there over twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration`. See [Views and flights](#views-and-flights). |
-| A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. |
-| A shown layer's data or scale changes (a raster's file, scale, `color` or `clip` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. |
-| `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`. |
-| `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. |
-| `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. |
-| `labels` changes | Labels that come fade in, labels that go fade out. |
-| `frame` changes | A run through every frame in between, `pace` ms per frame moved, the panel's numbers counting. See [Time-lapse](#time-lapse). |
-| `frame` and other things change | The other changes first, together; then the run, at the end view. |
-| `numbers` changes | Rows of the panel that come fade in, rows that go fade out. |
-| `boundaries`, `id`, `name`, `projection`, `legend`, `pace` change | Drawn at once. |
-| The element becomes visible | The engine moves its box in (`map` does not own its entrance), already showing that step's layers. |
+| Change | Played (a forward step by one) | Jumped, backward, capture, preview |
+| --- | --- | --- |
+| `view` changes | The map flies there over twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration`. See [Views and flights](#views-and-flights). | The end view. |
+| A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. | At once. |
+| A shown layer's data or scale changes (a raster's file, scale, `color` or `clip` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. | At once. |
+| `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`. | At once. |
+| `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. | At once. |
+| `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. | The end view. |
+| `labels` changes | Labels that come fade in, labels that go fade out. | At once. |
+| `frame` changes | A run through every frame in between, `pace` ms per frame moved, the panel's numbers counting (`info.expect` gives the engine its length). See [Time-lapse](#time-lapse). | The step's frame and its numbers. |
+| `frame` and other things change | The other changes first, together; then the run, at the end view. | The end state. |
+| `numbers` changes | Rows of the panel that come fade in, rows that go fade out. | At once. |
+| `boundaries`, `id`, `name`, `projection`, `legend`, `pace` change | Drawn at once. | At once. |
+| The element becomes visible | The engine moves its box in (`map` does not own its entrance), already showing that step's layers. | Shown at once. |
+| The page is hidden (a covered or minimized window) | Nothing moves; motion in flight snaps to its end state. | — |
+| A click during a run | The run snaps to its end and the next step applies, as any motion does. | — |
+| Leaving the slide during a run | The run stops at once. | — |
 
 All of it runs as one `ctx.animate.tween` bound to the step's signal (a run is a second one, after it), so an aborted step (you press next again) snaps to its end state. Every update ends by painting the target state from the props alone, so the markup and the pixels after a played step equal those after jumping to it, which is what `check --played` compares.
 
@@ -302,7 +311,9 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``'S4' is a point: `view` names regions only (regions: E1, I1, I2, N1, N2, …)`` | `view` names a point of a layer the step declares. |
 | `` `view` must be a region id, a list of them, `{ bounds: [west, south, east, north] }` or null `` | `view` is neither (`validate` reports it too). |
 | `'Nowhere' not found (regions: E1, I1, I2, N1, N2, …; points: S1, S2, S3, S4, S5, …)` | `highlight` names an id that is neither a region nor a point of a layer the step declares. Written when a layer has points; `labels` keeps the message above. |
+| ``` `inset` must be `{ view, at, scale }` or null ``` | `inset` is neither an object nor `null`. `validate` reports it too. |
 | ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"`` | `inset.at` is none of the four corners. `inset.view` raises the errors `view` does. |
+| ``inset `scale` must be true or false`` | `inset.scale` is not a boolean. `validate` reports it too. |
 | `layer 'pop' not found (layers: rate)` | `shown` names a layer that `layers` does not have. |
 | ``layer 'pop' needs `areas`, `raster` or `points` `` | A layer without a kind key. |
 | `data/sites.csv: row 4 has no lon` | A row's longitude is empty or not a number; also `lat`, and `size` for a size that is not a number (`has a negative size` for a negative one). Rows count from 1, not counting the header. |
@@ -346,12 +357,19 @@ areas/map: data/rates.csv: key '07' matches no region
 
 **A run longer than 20 s.** Split it across steps (`frame: "2005"`, then `frame: "2018"`), or lower `pace`.
 
+**An inset of the whole map from a step.** A step's `set` is a merge patch, where `null` deletes a key, so `set: { map: { inset: { view: null } } }` leaves an inset without a `view`, and `validate` reports `'view' missing`. Give such an inset in the element's own props, or in a `replace`; from a step, an inset can look at regions or a `{ bounds }` box.
+
+**An inset in the legend's corner.** The two do not move apart: keep them in different corners.
+
+**A region and a point with one id.** `highlight` treats them as one: give points ids no region has.
+
 ## For agents
 
 The agent-facing summary of this component is in [`skill/references/components.md`](../../../skill/references/components.md). `node cli/index.js catalog map` prints the same props from the schema. A deck component that needs a map the built-in does not draw can use the same pieces: `ctx.map` (boundaries, projection, views, painters) and `ctx.chart.colorScale` and `ctx.chart.legendRow`, described in the [Component contract](../component-contract.md#ctxmap).
 
 ## See also
 
+- [From your analysis code to a map slide](../../guide/maps-from-your-code.md): where the files come from, their exact shapes, writer functions for R and Python, and `stepdeck boundaries`.
 - [Components](index.md): the rules every component shares.
 - [Component contract](../component-contract.md#ctxmap): `ctx.map`, the geography the map is built from.
 - [Data and bindings](../../guide/data-and-bindings.md): CSV column types and paths.
