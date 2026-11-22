@@ -9,13 +9,13 @@ import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
 import { d3 } from "../../engine/core/d3.js";
 import { boundaries, projection } from "../../engine/core/map.js";
-import { deckPages, goTo, canvasPixels, tokenRgb, sampleFrames, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
+import { deckPages, goTo, canvasPixels, tokenRgb, sampleFrames, colorMove, expectJumpEqualsPlayed, expectBackwardEqualsJump, expectInterruptEqualsJump } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const DECK = "test/fixtures/decks/map/";
 const pages = deckPages(DECK);
 const broken = deckPages("test/fixtures/decks/map-broken/");
-const STEPS = { areas: ["base", "rates", "focus", "named"], legends: ["steps", "ramp"] };
+const STEPS = { areas: ["base", "rates", "focus", "named"], legends: ["steps", "classes", "ramp"], projection: ["equal", "conic"] };
 /** The main map of the fixture slides is 1400 x 700 px; the small one 140 x 76. */
 const SIZE = [1400, 700];
 const SMALL = [140, 76];
@@ -64,6 +64,15 @@ const legendOf = (page) =>
   })));
 
 const errorsOf = (page) => page.evaluate(() => window.STEPDECK.errors);
+
+/** A `sampleFrames` probe of the colour of one pixel of a canvas layer: its source is sent to the page, so the pixel is written into it. */
+const colourProbe = (layer, [x, y]) =>
+  new Function("el", `const d = el.querySelector('canvas[data-layer="${layer}"]').getContext("2d").getImageData(${x}, ${y}, 1, 1).data; return { color: \`rgb(\${d[0]}, \${d[1]}, \${d[2]})\` };`);
+/** Whether `c` lies strictly between colours `a` and `b`: different from both, and every channel within theirs. */
+const strictlyBetween = (c, a, b) => {
+  const [x, p, q] = [c, a, b].map((s) => s.match(/\d+/g).map(Number));
+  return c !== a && c !== b && x.every((v, i) => v >= Math.min(p[i], q[i]) && v <= Math.max(p[i], q[i]));
+};
 
 test("areas: played equals jumped, pixels too", async () => {
   await withPage({ root, url: pages.url("areas", "step=base") }, async (page, ctx) => {
@@ -266,6 +275,49 @@ test("map: labels show region names at their centroids", async () => {
       const [x, y] = AT.get(id);
       assert.ok(Math.abs(labels[i].x - x) <= 1 && Math.abs(labels[i].y - y) <= 1, `${id} at ${labels[i].x},${labels[i].y}, not ${x},${y}`);
     }
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("areas: a change of classes crossfades the colours", async () => {
+  await withPage({ root, url: pages.url("legends", "step=steps&motion=full") }, async (page, ctx) => {
+    // North (9.3) is in the top class of [2.5, 5] and in 5–10 of [5, 10, 20]: two colours of the sequential palette.
+    const { frames, end } = await sampleFrames(page, "legends", "classes", "map", colourProbe("main:areas:low", AT.get("N1")));
+    const from = frames[0].color;
+    assert.notEqual(from, end.color, "the class colour changes");
+    const between = frames.filter((f) => strictlyBetween(f.color, from, end.color));
+    assert.ok(between.length >= 1, `a frame shows a colour between the two (${frames.map((f) => f.color).join(" | ")})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("areas: highlight colours tween over --sd-duration-fast", async () => {
+  await withPage({ root, url: pages.url("areas", "step=rates&motion=full") }, async (page, ctx) => {
+    const fast = parseFloat(await page.evaluate(() => getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue("--sd-duration-fast")));
+    const r = await sampleFrames(page, "areas", "focus", "map", colourProbe(AREAS, AT.get("S2")));
+    const move = colorMove(r.frames);
+    assert.equal(move.to, await tokenRgb(page, "--sd-color-dim"), "Marshby ends in the dim colour");
+    assert.ok(r.frames.some((f) => strictlyBetween(f.color, move.from, move.to)), "and passes colours between");
+    assert.ok(move.arrived >= 0.8 * fast, `${fast} ms, not a snap (arrived at ${move.arrived.toFixed(0)} ms)`);
+    assert.ok(move.arrived - move.start <= 3 * fast, `done within a generous bound of ${fast} ms (${(move.arrived - move.start).toFixed(0)} ms)`);
+    assert.ok(move.arrived <= r.settledMs - 0.4 * fast, `on the fast clock, before the step's own duration ends (${move.arrived.toFixed(0)} of ${r.settledMs.toFixed(0)} ms)`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("map: a projection change changes every signature", async () => {
+  await withPage({ root, url: pages.url("projection", "step=equal") }, async (page, ctx) => {
+    const sigs = () => page.evaluate(() => [...document.querySelectorAll('[data-el="map"] canvas')].map((c) => [c.dataset.layer, c.dataset.sig, c.dataset.view]));
+    const equal = await sigs();
+    const pixels = await canvasPixels(page, "map");
+    await goTo(page, "projection", "conic");
+    const conic = await sigs();
+    assert.deepEqual(conic.map(([layer]) => layer), ["main:base", "main:areas:rate", "main:borders"]);
+    conic.forEach(([layer, sig, view], i) => {
+      assert.equal(view, equal[i][2], `${layer}: the same home view`);
+      assert.notEqual(sig, equal[i][1], `${layer}: the geometry changed, so the signature does`);
+    });
+    assert.ok((await canvasPixels(page, "map")).some((px, i) => px !== pixels[i]), "as the pixels do");
     assert.deepEqual(ctx.errors, []);
   });
 });

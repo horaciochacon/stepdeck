@@ -184,7 +184,7 @@ These parts of the design doc are stale:
 | Section | What it says | What is true |
 | --- | --- | --- |
 | §9 shell interface | A shell has `goto(slide, step)`, `onChange` and `scale`. | A host is `{ current, show(slide, step), showFatal(root), initial?, navigated?(slide, step), idle?() }`. `boot()` keeps the navigation queue; the host decides what is mounted. |
-| §6.2 escape-hatch example | `ctx.mount("map", el.appendChild(document.createElement("div")), …)` | There is no `map` component. Use a built-in from `components/index.json`, and create nodes with `el.ownerDocument`. See [Custom components](../guide/custom-components.md). |
+| §6.2 escape-hatch example | `ctx.mount("map", el.appendChild(document.createElement("div")), …)` | `map` is a built-in now, so the call mounts it. Create the child's node with `el.ownerDocument`, not the global `document`. See [Custom components](../guide/custom-components.md). |
 | §6.3 `settled()` | Resolves "when every visible component has finished". | It waits for the navigation queue, the host's pending prefetches (reveal) and every element's update, hidden ones included. |
 | §5, §9, §10 `pdf` command | `stepdeck pdf` renders one page per step. | Not built. The CLI has no `pdf` command. |
 | §8 milestone table | `chart.bar`, `chat`, `image` and `list` in M2; `diagram` and `timeline` in M3. | All six shipped early, with the slide kit 1 work package (see the [changelog](../../CHANGELOG.md)), along with the `statement` and `halves` layouts. |

@@ -33,16 +33,17 @@ Layers (`layers.<id>`):
 
 Behaviour:
 - **Paint order.** The land (`--sd-color-surface`), then the shown layers in the order `layers` declares them, then
-  the borders (`--sd-color-rule`) on top, then the labels. Each is its own canvas layer; the labels are SVG text.
+  the borders (`--sd-color-rule`, drawn with `ctx.map.paintBorders`) on top, then the labels. Each is its own canvas
+  layer; the labels are SVG text.
 - **No data.** A region without a value is hatched: lines at 45°, 6 px apart and 1.5 px wide, `--sd-color-dim` over
   `--sd-color-surface`. The legend row then ends with a hatched "no data" swatch (`sin datos` in Spanish).
 - **Small regions.** A region under 6 px across in both directions is drawn as a dot of radius 5 px at its centroid,
   in its colour, ringed in the background colour, so a tiny island stays visible.
 - **Highlight.** The highlighted regions keep their colour and get an ink outline (a dot's ring turns ink); the other
   regions of a shown areas layer turn `--sd-color-dim`, never faded. A hatched region stays hatched.
-- **Legend.** One row per shown layer: its `label`, then its classes (a swatch each, 28 px) or a ramp between its two
-  end values, then the "no data" swatch when a region has no value. Rows stack away from the legend's corner. Numbers
-  are written in the deck language (`2,5` in Spanish).
+- **Legend.** On a panel of the background colour, one row per shown layer: its `label`, then its classes (a swatch
+  each, 28 px) or a ramp between its two end values, then the "no data" swatch when a region has no value. Rows stack
+  away from the legend's corner. Numbers are written in the deck language (`2,5` in Spanish).
 - **Joins.** Keys compare with region ids as text, trimmed. A key column the loader reads as numbers turns `07` into
   `7`, which matches no region `07`: declare it as `"string"` in `types`. A key that matches no region and a region in
   two rows are element errors, never a silently missing value.

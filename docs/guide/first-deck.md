@@ -137,7 +137,7 @@ export default {
 
 - `data` is a path relative to the deck folder. `x`, `y` and `series` are column names in the CSV; `validate` checks them against the header (`missing-column`).
 - `chart.line` requires `data`, `x`, `y` and `axes`.
-- The `source` element is required. Any slide with a `chart.*` or `big-number` element needs an element with `props.role: "source"`, or `validate` reports `figure-source`. Source text is exempt from the minimum font size, and so is everything in a `footer` region.
+- The `source` element is required. Any slide with a `chart.*`, `map` or `big-number` element needs an element with `props.role: "source"`, or `validate` reports `figure-source`. Source text is exempt from the minimum font size, and so is everything in a `footer` region.
 
 Keep figures in data files written by a script, such as `data/make-data.mjs`, rather than typing numbers into slides.
 

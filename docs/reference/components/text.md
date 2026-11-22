@@ -115,7 +115,7 @@ Run `validate` before you trust a slide that looks right in the browser.
 
 **`role: "source"` has two special meanings for the checks.**
 
-- It satisfies `figure-source`: a slide with a figure (a `chart.*` or `big-number` element, or the reserved `map` / `map.*` types) fails `validate` unless some element has `props.role === "source"` from the start.
+- It satisfies `figure-source`: a slide with a figure (a `chart.*`, `map`, `map.*` or `big-number` element) fails `validate` unless some element has `props.role === "source"` from the start.
 - It is exempt from `font-too-small`: `check` lets source lines go below the minimum audience font (`--sd-min-audience-font`, 28px in both built-in themes). Elements in a region named `footer` are exempt too. A `label` or `note` gets no exemption, so do not shrink them below the minimum with slide `style`.
 
 See [Rules](../rules.md) for every rule, and the [CLI reference](../cli.md) for the commands that run them.

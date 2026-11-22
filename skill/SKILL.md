@@ -78,7 +78,7 @@ Exit codes:
 - **Step ids are words, never digits only.** Use `"base"`, not `"1"`. Reference steps by id (`from: "annotate"`), so inserting a step never shifts anything.
 - **Hidden elements keep their space.** Add `collapse: true` to let the layout reflow.
 - **`from` and `at` are for visibility.** `set`, `replace` and `only` change props. `only` lasts one step. `advance` drives a prop step by step (terminal `shown`, a custom `stage`).
-- **A slide with a figure needs a source line.** A figure is `chart.*` or `big-number`. The source line is an element with `props.role: "source"`, usually in the `footer` region. Without it validate reports `figure-source`.
+- **A slide with a figure needs a source line.** A figure is `chart.*`, `map` or `big-number`. The source line is an element with `props.role: "source"`, usually in the `footer` region. Without it validate reports `figure-source`.
 - **No figure is typed by hand.** Numbers come from data files through bindings (`{{data/summary.json#/total}}`) or chart columns. Generate the data with a script in `data/`.
 - **Props are JSON only.** Never put hex colors in props (`hex-color`); colors come from the theme palette. No remote URLs, so copy assets into the deck. Paths are relative to the deck root and case-exact.
 - **Kicker and accent.** A slide's `section` is the kicker above its title, and `*phrase*` in a `title` is the accent phrase (one per title; `\*` for a literal asterisk). Do not define an element with id `kicker`. See [themes-layouts](references/themes-layouts.md).

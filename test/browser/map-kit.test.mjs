@@ -140,6 +140,59 @@ test("paintAreas: the view transform moves pixels, widths stay", async () => {
   });
 });
 
+test("paintBorders: strokes only, keeps its width under zoom, and rings a dot where paintAreas draws it", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    // A 200 x 200 layer with a 400 x 400 backing store (2x); the square at base px (10, 10)-(60, 60), centroid (35, 35).
+    const got = await inPage(page, (paint) => {
+      const layer = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 400;
+        canvas.style.width = canvas.style.height = "200px";
+        return canvas;
+      };
+      const res = { path: () => new Path2D("M10,10H60V60H10Z"), centroid: () => [35, 35] };
+      const blue = "rgb(0, 0, 200)";
+      const alpha = (canvas) => {
+        const data = canvas.getContext("2d").getImageData(0, 0, 400, 400).data;
+        return Array.from({ length: 400 * 400 }, (_, i) => data[i * 4 + 3]);
+      };
+      const row = (canvas, y, from, to) => [...canvas.getContext("2d").getImageData(from, y, to - from, 1).data].filter((_, i) => i % 4 === 3);
+      const outline = (k) => {
+        const canvas = layer();
+        const sig = paint.paintBorders(canvas, { source: "s", view: { k, x: 0, y: 0 }, items: [{ id: "a", stroke: blue, width: 2, alpha: 1, dot: false }] }, res);
+        return { canvas, sig };
+      };
+      // Stroke only: at k = 1 the outline runs along CSS x = 10 (device 18 to 22); the inside (CSS 35, 35) stays clear.
+      const one = outline(1);
+      const four = outline(4);
+      const inside = [...one.canvas.getContext("2d").getImageData(70, 70, 1, 1).data];
+      const opaque = (a) => a.filter((v) => v === 255).length;
+      // The same 2 px on screen at k = 4, where the left edge is at CSS x = 40 (device 78 to 82).
+      const widths = [opaque(row(one.canvas, 70, 0, 60)), opaque(row(four.canvas, 200, 40, 120))];
+
+      // A dot ring over a dot: the ring's outer edge is the dot's own.
+      const dot = layer();
+      paint.paintAreas(dot, { source: "s", view: { k: 1, x: 0, y: 0 }, alpha: 1, hatch: { line: blue, background: blue }, items: [{ id: "a", fill: blue, stroke: blue, width: 1.5, dot: true }] }, res);
+      const ring = layer();
+      paint.paintBorders(ring, { source: "s", view: { k: 1, x: 0, y: 0 }, items: [{ id: "a", stroke: blue, width: 1.5, alpha: 1, dot: true }] }, res);
+      const [a, b] = [alpha(dot), alpha(ring)];
+      const edge = a.flatMap((v, i) => (v > 0 && v < 255 ? [[v, b[i]]] : []));
+      return {
+        inside, widths, sigs: [one.sig, four.sig],
+        edge, ringOutsideDot: b.filter((v, i) => v > 0 && a[i] === 0).length, centre: b[70 * 400 + 70],
+      };
+    });
+    assert.deepEqual(got.inside, [0, 0, 0, 0], "nothing is filled inside the region");
+    assert.deepEqual(got.widths, [4, 4], "2 CSS px (4 device px) wide at k = 1 and at k = 4");
+    assert.notEqual(got.sigs[0], got.sigs[1], "the view is in the signature");
+    assert.ok(got.edge.length > 10, "the dot has an anti-aliased rim");
+    assert.ok(got.edge.every(([dot, ring]) => dot === ring), "the ring's outer edge matches the dot's, pixel by pixel");
+    assert.equal(got.ringOutsideDot, 0, "the ring never leaves the dot");
+    assert.equal(got.centre, 0, "and its middle stays clear");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("paintAreas: the transform holds the backing-store ratio, so the same scene is the same at 2x", async () => {
   await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
     // A 200 x 200 layer with a 400 x 400 backing store (2x). The square at base px (10, 10)-(60, 60), seen at k = 2 from

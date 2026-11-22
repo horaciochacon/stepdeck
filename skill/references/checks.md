@@ -98,7 +98,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 
 | Rule | Severity | Means | Fix |
 |---|---|---|---|
-| `figure-source` | error | A slide with a figure (`chart.*`, `big-number`) has no element with `role: "source"` in its initial props. | Add a source line, e.g. `{ id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }`. |
+| `figure-source` | error | A slide with a figure (`chart.*`, `map`, `map.*`, `big-number`) has no element with `role: "source"` in its initial props. | Add a source line, e.g. `{ id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }`. |
 | `noop-step` | warning | The step's state (elements, props, visibility) equals the previous step's, so a click shows nothing new. This includes steps that only add `notes`. | Merge the step into the previous one, moving its notes there, or give it a patch. |
 
 ## check (headless Chrome)

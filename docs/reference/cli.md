@@ -232,7 +232,7 @@ Built-in components come from `components/index.json` and deck components from `
 **Without a name**, `catalog` rewrites the output folder. It first removes every `*.json` file in it (nothing else), then writes `index.json` (the entries) and one `<name>.json` per entry (the detail). It does this with `--json` too.
 
 ```
-catalog: 12 components, 5 layouts, 2 themes -> my-talk/catalog/index.json
+catalog: 13 components, 5 layouts, 2 themes -> my-talk/catalog/index.json
 ```
 
 Any catalog problems come first, as `warning: <problem line>`. With `--json`, stdout holds only the entries array, and the problems are dropped. They are not printed at all.

@@ -9,18 +9,15 @@
 //   scene(prepared, state)            what the layer shows at one moment, as plain data (the painter's scene)
 //   paint(canvas, scene, prepared)    paints the scene on the layer's canvas; returns its signature
 //   legend(prepared, state)           the layer's legend row, { title, legend, noData }, or null for none
-// `state` is { view, alpha, highlight, frame, frameMix, size, from, change }: the view { k, x, y }; the layer's opacity;
-// `highlight` { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the frame and its mix (for
-// rasters); the stage's [w, h]; and, while the layer's data or scale changes, `from` (what it showed before) and
-// `change`, how far the change has gone. A scene at the end of a motion uses the exact colours a jump writes.
+// `state` is { view, alpha, highlight, frame, frameMix, size, from, change }: the view { k, x, y }; the layer's
+// opacity; `highlight` { ids, dim(id), ring(id) }, how far each region is dimmed and outlined (0..1); the frame and
+// its mix (for rasters); the stage's [w, h]; and, while the layer's data or scale changes, `from` (what it showed
+// before) and `change`, how far the change has gone. A scene at the end of a motion uses the exact colours a jump writes.
 import { d3 } from "../../core/d3.js";
 import { loadTable } from "../../core/chart.js";
 import { colorScale } from "../../core/chart-scale.js";
 import { joinValues } from "../../core/map-rules.js";
-import { paintAreas } from "../../core/map-paint.js";
-
-/** The outline of a dot, in px: the background colour, so neighbouring dots and areas stay apart. */
-const DOT_OUTLINE = 1.5;
+import { DOT_OUTLINE, paintAreas } from "../../core/map-paint.js";
 
 const mixes = new Map();
 /** `a` blended toward `b` by `t` in RGB (d3.interpolateRgb), with `a` and `b` themselves at the ends. */
@@ -32,7 +29,10 @@ function blend(a, b, t) {
   return mixes.get(key)(t);
 }
 
-/** The fill of region `id`: its colour (from `from` toward the prepared one while the data changes), dimmed by `dim`; null is the hatch, which never dims. */
+/**
+ * The fill of region `id`: its colour (moving from `from` to the prepared one while the data changes), dimmed by how
+ * far it is out of the highlight; null is the hatch, which never dims.
+ */
 function fillOf(prepared, { from, change, highlight }, id) {
   const now = prepared.fills.get(id);
   const was = from ? from.fills.get(id) : now;
@@ -67,9 +67,10 @@ export default {
     const { dim, surface, background } = geo.colors;
     const items = geo.ids.map((id) => {
       const dot = geo.isDot(id, view.k);
+      // a dot is ringed in the background colour, so neighbouring dots and areas stay apart
       return { id, fill: fillOf(prepared, state, id), stroke: background, width: dot ? DOT_OUTLINE : 0, dot };
     });
-    return { source: prepared.source, view, alpha, hatch: { line: dim, background: surface }, items };
+    return { source: `${geo.key}|${prepared.source}`, view, alpha, hatch: { line: dim, background: surface }, items };
   },
 
   paint(canvas, scene, prepared) {
