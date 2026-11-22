@@ -11,6 +11,8 @@ import {
   pngProblems,
   mapProblems,
   mapRunProblems,
+  firstPhase,
+  stepRun,
   niceLength,
 } from "#engine/core/map-rules.js";
 
@@ -316,8 +318,10 @@ test("mapRunProblems: the first phase follows what else changes", () => {
   const flight = mapRunProblems(prev, { ...prev, frame: "2019", view: "north" }, files, timing, 19_500);
   assert.deepEqual(rules(flight), ["map-run:error"]);
   assert.match(flight[0].message, /800 ms/);
-  const inset = mapRunProblems(prev, { ...prev, frame: "2019", inset: { view: "north" } }, files, timing, 19_500);
+  const withInset = { ...prev, inset: { view: "south" } };
+  const inset = mapRunProblems(withInset, { ...withInset, frame: "2019", inset: { view: "north" } }, files, timing, 19_500);
   assert.deepEqual(rules(inset), ["map-run:error"], "inset.view is a flight too");
+  assert.deepEqual(mapRunProblems(prev, { ...prev, frame: "2019", inset: { view: "north" } }, files, timing, 19_500), [], "an inset that comes in fades (400 ms)");
   assert.deepEqual(mapRunProblems(prev, { ...prev, frame: "2019", highlight: ["x"] }, files, timing, 19_500), [], "a fade lasts 400 ms");
   assert.deepEqual(mapRunProblems(prev, { ...prev, frame: "2019" }, files, timing, 19_000), [], "nothing else: no first phase");
   // the step's own transition duration replaces the token
@@ -336,7 +340,45 @@ test("mapRunProblems: pace defaults to 700, an unset frame is the first label, a
   const backward = mapRunProblems({ ...prev, frame: "2029" }, { ...prev, frame: "2000" }, files, timing, 20_000);
   assert.deepEqual(rules(backward), ["map-run:error"]);
   assert.deepEqual(mapRunProblems(prev, { ...prev, frame: "2005" }, { "d/a.json": files["d/still.json"] }, timing, 20_000), [], "no time-lapse layer, no run");
-  assert.deepEqual(mapRunProblems(prev, { ...prev, shown: [], frame: "2029" }, files, timing, 20_000).length, 1, "the first time-lapse layer in `layers`, shown or not");
+  assert.deepEqual(mapRunProblems(prev, { ...prev, shown: ["b"], frame: "2029" }, files, timing, 20_000).length, 1, "the first time-lapse layer in `layers` gives the labels, whichever is shown");
+  assert.deepEqual(mapRunProblems({ ...prev, frame: "2029" }, { ...prev, shown: [], frame: "2000" }, files, timing, 100), [], "hiding the time-lapse while rewinding: no run");
+  assert.deepEqual(mapRunProblems({ ...prev, frame: "2029", pace: 2000 }, { ...prev, frame: "2000", legend: false, pace: 100 }, files, timing, 2_900), [], "pace and legend are not a first phase (29 × 100 ms)");
+});
+
+test("firstPhase: what the map animates before a run", () => {
+  const base = { layers, shown: ["a"], frame: "2000", view: null, legend: "bottom-left" };
+  const phase = (change, from = base) => firstPhase(from, { ...from, ...change });
+  assert.equal(phase({ frame: "2010" }), 0, "the frame alone is the run");
+  assert.equal(phase({ pace: 300, legend: false }), 0, "drawn at once");
+  assert.equal(phase({ layers: { ...layers, b: { raster: "d/b.json", midpoint: 1 } } }), 0, "a hidden layer's definition");
+  assert.equal(phase({ view: "north" }), 2, "a flight");
+  assert.equal(phase({ view: "north" }, { ...base, view: "north" }), 0, "the same view");
+  const inset = { ...base, inset: { view: "south" } };
+  assert.equal(phase({ inset: { view: "north" } }, inset), 2, "the inset flies");
+  assert.equal(phase({ inset: { view: "south", at: "top-left", scale: false } }, inset), 0, "its corner and scale bar are drawn at once");
+  assert.equal(phase({ inset: { view: "north" } }), 1, "an inset that comes in fades");
+  assert.equal(phase({ inset: null }, inset), 1, "and one that goes");
+  for (const change of [{ highlight: ["x"] }, { labels: ["x"] }, { numbers: [{ key: "n", format: "," }] }, { shown: ["a", "s"] }, { layers: { ...layers, a: { raster: "d/a.json", midpoint: 1 } } }]) {
+    assert.equal(phase(change), 1, JSON.stringify(change));
+  }
+  assert.equal(phase({ shown: ["a"] }, { ...base, shown: ["a"] }), 0, "the same layers shown");
+  assert.equal(phase({ shown: ["s", "a"] }, { ...base, shown: ["a", "s"] }), 0, "in another order");
+});
+
+test("stepRun: a run needs the same labels on both steps, a time-lapse shown, another frame and the same geometry", () => {
+  const labels = ["2000", "2001", "2002", "2003"];
+  const prevProps = { layers, shown: ["a"], frame: "2000" };
+  const step = (change, more = {}) => stepRun({ prevLabels: labels, nextLabels: labels, nextShowsLapse: true, prevProps, nextProps: { ...prevProps, ...change }, ...more });
+  assert.deepEqual(step({ frame: "2003" }), { run: [0, 1, 2, 3], moves: 3, factor: 0 });
+  assert.deepEqual(step({ frame: 2003, view: "north" }), { run: [0, 1, 2, 3], moves: 3, factor: 2 }, "labels compare as text");
+  assert.deepEqual(stepRun({ prevLabels: labels, nextLabels: labels, nextShowsLapse: true, prevProps: { ...prevProps, frame: "2002" }, nextProps: { ...prevProps, frame: undefined } }), { run: [2, 1, 0], moves: 2, factor: 0 }, "backward, an unset frame the first");
+  assert.equal(step({ frame: "2000" }), null, "the same frame");
+  assert.equal(step({ frame: "2003", shown: [] }, { nextShowsLapse: false }), null, "hiding the time-lapse while the frame changes");
+  assert.equal(step({ frame: "2003" }, { prevLabels: null }), null, "no time-lapse before");
+  assert.equal(step({ frame: "2003" }, { nextLabels: null }), null, "none now");
+  assert.equal(step({ frame: "2002" }, { nextLabels: ["1999", "2000", "2001", "2002"] }), null, "other labels: the layer crossfades instead");
+  for (const key of ["boundaries", "id", "name", "projection"]) assert.equal(step({ frame: "2003", [key]: "other" }), null, `a new ${key} redraws at once`);
+  assert.throws(() => step({ frame: "1999" }), /frame '1999' not found/);
 });
 
 test("map-rules.js imports only ./chart-layout.js", async () => {

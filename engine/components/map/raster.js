@@ -10,8 +10,8 @@
 // adds a "no data" row exactly when there is hatch to explain. A mask has no no-data: the cells that are not the class
 // stay clear.
 //
-// A file with `frames` is a time-lapse: the prepared layer has `lapse`, the frames' labels and numbers and the raster
-// to decode them from (index.js decodes the frames a step and its run need, a few at a time). A scene shows the frame
+// A file with `frames` is a time-lapse (./lapse.js): the prepared layer has `lapse`, the frames' labels and numbers and
+// the raster to decode them from (index.js decodes the frames a step and its run need, a few at a time). A scene shows the frame
 // pair of `state.frame`, `{ at, next, mix }` (indexes into the frames): the picture of frame `at`, and, while a run
 // crossfades, the picture of `next` over it at `mix`, both at the view of the moment; `state.fromFrame` is the pair the
 // old picture of a change of data shows. A raster without `frames` shows its one image whatever the pair.
@@ -37,6 +37,7 @@ import { colorScale } from "../../core/chart-scale.js";
 import { landCells, loadRaster, lut, rasterGaps } from "../../core/map.js";
 import { paintRaster } from "../../core/map-paint.js";
 import { DEFAULT_ROLE, roleColor, roleNames } from "./colors.js";
+import { isLapse, still } from "./lapse.js";
 
 /**
  * The pictures and land masks `paintRaster` keeps for an element (its `res.cache`): a Map of at most `limit` entries,
@@ -103,12 +104,7 @@ function scratchOf(canvas) {
   return scratch;
 }
 
-/** The frame pair of a moment that rests on frame `i`. */
-export const still = (i) => ({ at: i, next: i, mix: 0 });
 const FIRST = still(0);
-
-/** Whether a raster from `loadRaster` is a time-lapse: a file with `frames`, each labelled (one `src` has one frame, labelled ""). */
-export const isLapse = (raster) => raster.frames[0].label !== "";
 
 /**
  * The scene of a prepared layer at `view`, drawn at `alpha`: the picture of frame `pair.at` at `view`, or, during

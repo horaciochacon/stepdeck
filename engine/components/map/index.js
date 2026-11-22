@@ -9,6 +9,7 @@
 //   ./stage.js    one view of the map: its canvases in paint order, the borders, the labels
 //   ./inset.js    the inset: a second, smaller stage at a corner, with its box on the map, leaders and scale bar
 //   ./legend.js   the legend rows in a corner
+//   ./lapse.js    the time-lapse: a step's frame and numbers, whether it runs, the frames a run decodes, its moments
 //   ./panel.js    the corner panel of a time-lapse: the frame's label and the numbers
 //   core/map.js, core/map-paint.js, core/chart-scale.js   the public pieces (`ctx.map`, `ctx.chart`) they are built on
 //
@@ -42,28 +43,28 @@
 // A raster layer whose file has `frames` is a time-lapse. `frame` names the frame on screen by its label (the first
 // without it), one value for the whole map, so every time-lapse layer the step declares must have the same labels; the
 // panel (./panel.js) shows the label and the `numbers` the step names, each from the one time-lapse layer whose frames
-// have its key, formatted with `ctx.format`. A played step that changes `frame` plays in two phases. First everything
-// else together, as above, at the frame it starts from; then the run, at the end view: one tween, linear in time, of
-// `pace` ms per frame moved, through every frame between the two in list order (backward when the new one comes first,
-// core/map-rules.js `frameRun`). At progress u over n moves the frames on screen are run[⌊u·n⌋] and the next, which
-// crossfades in at the fractional part while the panel's numbers go linearly from one frame's value to the next; the
-// label (and `data-frame`) shows the frame the crossfade heads to once it is half way. Before either phase the frames
-// the run starts with are decoded, `READ_AHEAD` past the first (the rest follow as it plays, never all at once), and
-// the update calls `info.expect` with the two phases' length, so the engine's watchdog allows the run (a run past
-// MAX_RUN_MS is that element's error). The first phase lasts twice the step's duration when `view` or `inset.view`
-// changes, once when anything else on screen does, and nothing otherwise. Jumped, backward or aborted (a click, a
-// hidden page, leaving the slide), the step's frame and its numbers are drawn at once.
+// have its key, formatted with `ctx.format`. A played step that changes `frame` runs (./lapse.js `runOf`, after
+// core/map-rules.js `stepRun`, the rule `validate` budgets by) in two phases. First everything else together, as above,
+// at the frame it starts from, for `firstPhase` times the step's duration (core/map-rules.js: twice when `view` or
+// `inset.view` changes, once when anything else on screen does, not at all otherwise; every step's motion lasts that
+// long); then the run, at the end view: one tween, linear in time, of `pace` ms per frame moved, through every frame
+// between the two in list order (backward when the new one comes first), each crossfading into the next while the
+// panel's numbers count (./lapse.js `pairAt`, `runMoment`). Before either phase the frames the run starts with are
+// decoded and the update calls `info.expect` with the two phases' length, so the engine's watchdog allows the run (a
+// run past MAX_RUN_MS is that element's error); the rest are decoded as it plays, never all at once. Jumped, backward
+// or aborted (a click, a hidden page, leaving the slide), the step's frame and its numbers are drawn at once.
 import { d3 } from "../../core/d3.js";
 import { boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
-import { DEFAULT_PACE, frameRun } from "../../core/map-rules.js";
+import { firstPhase } from "../../core/map-rules.js";
 import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs } from "../../core/kit.js";
 import { createStage, through } from "./stage.js";
 import { createInset, insetLayout, CORNERS } from "./inset.js";
 import { createLegend } from "./legend.js";
 import { createPanel } from "./panel.js";
+import { decodeFrame, lapseLayers, lapseOf, pairAt, panelBetween, READ_AHEAD, rowsOf, runFrames, runMoment, runOf, still } from "./lapse.js";
 import areas from "./areas.js";
-import raster, { PictureCache, isLapse, still } from "./raster.js";
+import raster, { PictureCache } from "./raster.js";
 import points from "./points.js";
 
 /** The layer kinds, in paint order: areas under rasters, the borders over both, and points over the borders. */
@@ -76,10 +77,6 @@ const HINT = 5;
 const PREBUILD_MS = 2000;
 /** The raster pictures an element keeps besides a picture and a land mask per view its slide names and raster layer. */
 const SPARE_PICTURES = 8;
-/** How many frames past the one on screen a run decodes, in its direction. */
-const READ_AHEAD = 4;
-/** The `pace` a map takes, ms per frame moved. */
-const PACES = [100, 2000];
 
 const kindOf = (def) => KINDS.find((kind) => def?.[kind.kind] !== undefined);
 const words = (list) => (list.length > 1 ? `${list.slice(0, -1).join(", ")} or ${list.at(-1)}` : list[0]);
@@ -241,91 +238,6 @@ function between(a, b, f, c, flight = null, insetFlight = null) {
   };
 }
 
-/** Whether two `numbers` rows of a step state's time-lapse show the same thing. */
-const sameRow = (a) => (b) => a.key === b.key && a.label === b.label && a.format === b.format;
-
-/**
- * The corner panel of a moment between time-lapses `a` and `b` (a step state's `lapse`, or null) at fade `f`, over
- * `layers`, the moment's: the label of `b`'s frame (or `a`'s, while `b` has none) and each of its numbers at that frame,
- * a row that `numbers` gains or loses fading in or out, the whole at the opacity of the time-lapse layers on screen
- * (`alpha`, 0 when none is shown); null when neither has a time-lapse.
- */
-function panelBetween(a, b, f, layers) {
-  const lapse = b ?? a;
-  if (!lapse) return null;
-  const was = a?.numbers ?? [], is = b?.numbers ?? [];
-  const row = (number, at, opacity) => ({ key: number.key, label: number.label, text: number.fmt(number.values[at]), opacity });
-  return {
-    label: lapse.labels[lapse.index],
-    alpha: Math.max(0, ...layers.filter((layer) => layer.prepared?.lapse).map((layer) => layer.alpha)),
-    rows: [
-      ...is.map((number) => row(number, b.index, was.some(sameRow(number)) ? 1 : f)),
-      ...was.filter((number) => !is.some(sameRow(number))).map((number) => row(number, a.index, 1 - f)),
-    ],
-  };
-}
-
-/**
- * The moment of a run of step state `s` at frame pair `pair` ({ at, next, mix }): `rest`, the state at rest, with its
- * time-lapse layers on the pair, the panel's numbers between the values of its two frames, and the label of the frame
- * the crossfade heads to once it is half way.
- */
-function runMoment(rest, s, pair) {
-  const label = s.lapse.labels[pair.mix >= 0.5 ? pair.next : pair.at];
-  const text = (number) => number.fmt(lerp(number.values[pair.at], number.values[pair.next], pair.mix));
-  return {
-    ...rest,
-    frame: label,
-    layers: rest.layers.map((layer) => ({ ...layer, frame: pair })),
-    panel: { ...rest.panel, label, rows: rest.panel.rows.map((r, i) => ({ ...r, text: text(s.lapse.numbers[i]) })) },
-  };
-}
-
-/**
- * The run of a step from state `a` to `b`: the frame indexes it shows, `a`'s frame to `b`'s inclusive (`frameRun`), or
- * null for none: the frame stays, a state has no time-lapse or `b` shows none of its layers, or the two have different
- * frame labels (their layers then crossfade, as any change of data does).
- */
-function runOf(a, b) {
-  if (!a.lapse || !b.lapse || a.lapse.index === b.lapse.index || !sameList(a.lapse.labels, b.lapse.labels)) return null;
-  if (!b.layers.some((layer) => layer.alpha > 0 && layer.prepared?.lapse)) return null;
-  const { labels } = b.lapse;
-  return frameRun(labels, labels[a.lapse.index], labels[b.lapse.index]);
-}
-
-/** The rasters of the time-lapse layers a step state declares. */
-const lapseRasters = (s) => [...new Set(s.layers.flatMap(({ prepared }) => (prepared?.lapse ? [prepared.lapse.raster] : [])))];
-/** Decodes frame `i` (default: the step's own) of every time-lapse layer of step state `s`, so it can be painted. */
-const decodeFrame = (s, i = s.lapse?.index) => Promise.all(lapseRasters(s).map((r) => r.grid(i)));
-
-/**
- * The time-lapse of a step: null when none of the layers it declares (`slots`, with `layers` prepared for them) is a
- * time-lapse; else `{ labels, index, pace, numbers }`: their frame labels, the index of the one `frame` names (the first
- * without it), the step's `pace`, and for each entry of `numbers` `{ key, label, format, fmt, values }`, `fmt` the
- * formatter of `format` and `values` the key's value in each frame. Throws `time-lapse layers 'a' and 'b' have different
- * frame labels`, `frame '1999' not found (frames: …)`, what `pace` takes, and for a `numbers` key that is not in exactly
- * one time-lapse layer, or comes without a `format`.
- */
-function lapseOf(p, slots, layers, ctx) {
-  const found = slots.flatMap(({ id }, i) => (layers[i].prepared?.lapse ? [{ id, ...layers[i].prepared.lapse }] : []));
-  if (found.length === 0) return null;
-  const [first] = found;
-  const other = found.find((layer) => !sameList(layer.labels, first.labels));
-  if (other) fail(`time-lapse layers '${first.id}' and '${other.id}' have different frame labels`);
-  const index = p.frame === undefined || p.frame === null ? 0 : frameRun(first.labels, p.frame, p.frame)[0];
-  const pace = p.pace ?? DEFAULT_PACE;
-  if (typeof pace !== "number" || !(pace >= PACES[0] && pace <= PACES[1])) fail(`\`pace\` must be ${PACES[0]} to ${PACES[1]} ms a frame`);
-  const keys = [...new Set(found.flatMap((layer) => Object.keys(layer.numbers[0])))];
-  const numbers = (p.numbers ?? []).map(({ key, label = "", format } = {}) => {
-    const holders = found.filter((layer) => Object.hasOwn(layer.numbers[0], key));
-    if (holders.length === 0) fail(`\`numbers\` key '${key}' is in no time-lapse layer (keys: ${keys.join(", ") || "none"})`);
-    if (holders.length > 1) fail(`\`numbers\` key '${key}' is in time-lapse layers ${holders.map((layer) => `'${layer.id}'`).join(" and ")}`);
-    if (typeof format !== "string" || format === "") fail(`\`numbers\` key '${key}' needs a \`format\` (a d3-format string such as ",.0f")`);
-    return { key, label, format, fmt: ctx.format(format), values: holders[0].numbers.map((n) => n[key]) };
-  });
-  return { labels: first.labels, index, pace, numbers };
-}
-
 /** The inset of a moment between insets `a` and `b` (each `{ view, at, scale }` or null) at fade `f`; see `between`. */
 function insetBetween(a, b, f, flight) {
   const now = b ?? a;
@@ -336,30 +248,11 @@ function insetBetween(a, b, f, flight) {
 /** Whether insets `a` and `b` (each `{ view, ... }` or null) are both on, or both off, and at one view. */
 const sameInset = (a, b) => (a && b ? sameView(a.view, b.view) : !a && !b);
 
-/** The `numbers` rows of a step state, as text: equal when the panel shows the same rows. */
-const rowsOf = (s) => (s.lapse?.numbers ?? []).map(({ key, label, format }) => `${key}|${label}|${format}`).join("\n");
-
 /** Whether going from step state `a` to `b` changes anything on screen that motion would show, a run aside. */
 const moves = (a, b) =>
   !sameView(a.view, b.view) || !sameInset(a.inset, b.inset) || !sameList(a.highlight, b.highlight) || !sameList(a.labels, b.labels) ||
   rowsOf(a) !== rowsOf(b) ||
   a.layers.some((from, i) => from.alpha !== b.layers[i].alpha || (from.alpha > 0 && from.prepared !== b.layers[i].prepared));
-
-/**
- * How many raster layers of `propsList` show a time-lapse at some step. A file that fails to load does not count: the
- * step that shows it reports it.
- */
-async function lapseLayers(propsList, ctx) {
-  const files = new Map(); // layer id -> the raster files it names
-  for (const p of propsList) {
-    for (const [id, def] of Object.entries(p.layers ?? {})) {
-      if (kindOf(def) === raster && typeof def.raster === "string") files.set(id, new Set([...(files.get(id) ?? []), def.raster]));
-    }
-  }
-  const lapse = (file) => loadRaster(file, ctx).then(isLapse, () => false);
-  const found = await Promise.all([...files.values()].map(async (names) => (await Promise.all([...names].map(lapse))).some(Boolean)));
-  return found.filter(Boolean).length;
-}
 
 export default {
   async mount(el, props, ctx) {
@@ -382,7 +275,7 @@ export default {
     const views = viewsOf(fromSteps);
     const insetViews = viewsOf(fromSteps.filter((p) => p.inset).map((p) => ({ ...p, view: p.inset.view })));
     const rasters = slotsOf(fromSteps).filter((slot) => slot.module === raster).length;
-    const frames = (READ_AHEAD + 2) * (await lapseLayers(fromSteps, ctx));
+    const frames = (READ_AHEAD + 2) * (await lapseLayers(fromSteps, (def) => kindOf(def) === raster, ctx));
     const caches = { lookups: new Map(), pictures: new PictureCache(2 * (Math.max(1, views) + insetViews) * Math.max(1, rasters) + SPARE_PICTURES + frames) };
     let measured = null; // the size the caches are for
 
@@ -472,7 +365,7 @@ export default {
         }
       };
       checkView(p.view);
-      const s = { stage, view: viewOf(geo, p.view ?? null), inset: insetOf(geo, p.inset, checkView), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers, lapse: lapseOf(p, stage.slots, layers, ctx) };
+      const s = { stage, props: p, view: viewOf(geo, p.view ?? null), inset: insetOf(geo, p.inset, checkView), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers, lapse: lapseOf(p, stage.slots, layers, ctx) };
       await decodeFrame(s);
       return s;
     }
@@ -498,67 +391,61 @@ export default {
       panel.write(moment.panel?.alpha > 0 ? { ...moment.panel, at } : null);
     }
 
+    /** How long a step's motion lasts before its run: `factor` (core/map-rules.js `firstPhase`) times the step's duration. */
+    const phaseMs = (info, factor) => (factor > 0 ? motionMs(info, ctx, factor) : 0);
+
     /**
-     * Plays `from` -> `to` in one tween: fades over the step's duration (the inset's too), highlight colours over the
-     * fast one, and the flights of the map and of the inset over twice the step's duration.
+     * Plays `from` -> `to` in one tween of `total` ms (`phaseMs`): fades over the step's duration (the inset's too),
+     * highlight colours over the fast one, and the flights of the map and of the inset over twice the step's duration.
      */
-    function play(from, to, info) {
+    function play(from, to, info, total) {
       const fadeMs = motionMs(info, ctx, 1);
       const { duration: colorMs } = motion(info, ctx, { fast: true });
       const fly = sameView(from.view, to.view) ? null : flightOf(from.view, to.view, to.stage.geo.size);
       const insetFly = from.inset && to.inset && !sameView(from.inset.view, to.inset.view) ? flightOf(from.inset.view, to.inset.view, to.stage.geo.size) : null;
       const flightMs = fly || insetFly ? motionMs(info, ctx, 2) : 0;
       const { ease } = motion(info, ctx);
-      const total = Math.max(fadeMs, colorMs, flightMs);
       const part = (u, ms) => (ms > 0 ? ease(clamp01((u * total) / ms)) : 1);
       const frame = (u) => draw(to, between(from, to, part(u, fadeMs), part(u, colorMs), fly?.(part(u, flightMs)), insetFly?.(part(u, flightMs))), true);
       return ctx.animate.tween(0, 1, frame, { duration: total, signal: info.signal, ease: (u) => u });
     }
 
     /**
-     * Plays the run `run` (frame indexes) of step state `s` in one tween, linear in time, `s.lapse.pace` ms a move (see
-     * the top of this file). The frames `READ_AHEAD` past the one on screen are asked for as it goes; a pair still being
-     * decoded is not painted (the moment before stays on screen), and a frame that cannot be decoded fails the update.
+     * Plays run `run` (frame indexes) of step state `s` in one tween, linear in time, `s.lapse.pace` ms a move, its
+     * frames decoded by `frames` (./lapse.js `runFrames`) as it goes. Aborted, it paints nothing more (the end state
+     * follows). A pair not decoded yet is not painted, so the moment before stays on screen; a pair that failed to decode
+     * fails the update when the run reaches it.
      */
-    async function playRun(s, run, info) {
-      const n = run.length - 1;
-      const decoders = lapseRasters(s);
+    function playRun(s, run, frames, info) {
       const rest = between(s, s, 1, 1);
-      let failed = null;
-      let asked = READ_AHEAD; // the run's places up to here are decoded or on their way (playStep decoded the first ones)
       const frame = (u) => {
+        if (info.signal?.aborted) return;
+        const pair = pairAt(run, u);
+        frames.ask(pair.place);
+        const failed = frames.failure(pair.at) ?? frames.failure(pair.next);
         if (failed) throw failed;
-        if (info.signal?.aborted) return; // the end state is painted next
-        const k = Math.min(n - 1, Math.floor(u * n));
-        while (asked < Math.min(n, k + READ_AHEAD)) {
-          asked += 1;
-          for (const r of decoders) r.grid(run[asked]).catch((error) => (failed ??= error));
-        }
-        const pair = { at: run[k], next: run[k + 1], mix: Math.min(1, u * n - k) };
-        if (decoders.some((r) => !r.decoded(pair.at) || !r.decoded(pair.next))) return;
-        draw(s, runMoment(rest, s, pair), true);
+        if (frames.ready(pair.at) && frames.ready(pair.next)) draw(s, runMoment(rest, s, pair), true);
       };
-      await ctx.animate.tween(0, 1, frame, { duration: n * s.lapse.pace, signal: info.signal, ease: (u) => u });
-      if (failed) throw failed;
+      return ctx.animate.tween(0, 1, frame, { duration: (run.length - 1) * s.lapse.pace, signal: info.signal, ease: (u) => u });
     }
 
     /**
      * Plays the change from step state `from` to `to`: everything that changes on screen together (`play`), at the frame
-     * it starts from, then the run of a changed `frame` (`playRun`). For a run, the frames it starts with are decoded
-     * first and `info.expect` is told the length of both phases, before either plays.
+     * the run starts from, then the run (`playRun`). For a run, the frames it starts with are decoded first, and then,
+     * unless the step was aborted meanwhile, `info.expect` is told the length of both phases, before either plays.
      */
     async function playStep(from, to, info) {
-      const run = runOf(from, to);
-      const start = run ? { ...to, lapse: { ...to.lapse, index: run[0] } } : to;
-      const changes = moves(from, start);
-      if (run) {
-        await Promise.all(run.slice(0, READ_AHEAD + 1).map((i) => decodeFrame(to, i)));
-        const flies = !sameView(from.view, to.view) || (from.inset && to.inset && !sameView(from.inset.view, to.inset.view));
-        const first = flies ? motionMs(info, ctx, 2) : changes ? motionMs(info, ctx, 1) : 0;
-        info.expect?.(first + (run.length - 1) * to.lapse.pace);
+      const step = runOf(from, to);
+      const start = step ? { ...to, lapse: { ...to.lapse, index: step.run[0] } } : to;
+      const first = phaseMs(info, firstPhase(from.props, to.props));
+      const frames = step && runFrames(to, step.run);
+      if (step) {
+        await frames.ask(0);
+        if (!canAnimate(info)) return; // superseded, hidden or destroyed while decoding: the end state follows
+        info.expect?.(first + step.moves * to.lapse.pace);
       }
-      if (changes) await play(from, start, info);
-      if (run && canAnimate(info)) await playRun(to, run, info);
+      if (moves(from, start)) await play(from, start, info, first);
+      if (step && canAnimate(info)) await playRun(to, step.run, frames, info);
     }
 
     await stateOf(props); // fail early: the boundaries, the layers' data, unknown ids
