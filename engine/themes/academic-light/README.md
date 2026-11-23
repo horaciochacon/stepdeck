@@ -105,6 +105,7 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-stagger` | `60ms` | The gap between the elements that enter on one step, and between the items of a build. |
 | `--sd-enter` | `fade` | How an element enters when its component has no build of its own: a plain fade, the quietest entrance. |
 | `--sd-motion-distance` | `16px` | How far a `rise` travels (list and chat items rise in this theme too). |
+| `--sd-flow-period` | `1600ms` | Ambient motion: how long one dash and one gap of a flowing `diagram` edge (`flow: true`) take to pass, at a constant speed, while the page animates. |
 
 ## Fonts (`fonts/`)
 
