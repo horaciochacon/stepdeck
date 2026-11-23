@@ -319,10 +319,54 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 | Animate anything else | `ctx.animate.fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. Each takes `{ duration, signal }` (pass `ctx.motion.timing(info)`) and resolves at the end state, also on abort. |
 | Know whether this is a screenshot render | `ctx.capture` |
 | Draw with d3 | `ctx.d3` |
-| Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. |
+| Place a built-in or another deck component inside yours | `await ctx.mount(type, el, props)` returns a handle with `update(props, info)`, `pause()` and `destroy()`. Pass your `info` to `handle.update`. Children are paused and destroyed with the parent. A compact `diagram` or `map` can be one: see [Mount a compact view](#mount-a-compact-view). |
 | Keep a scale the same on every step | `ctx.stepProps[k]` is what `update` gets as `props` at step `k` (`null` when that step fails, and `null` altogether for a `ctx.mount` child). Size an axis from all of them. |
 | Draw a chart from ready-made pieces | `ctx.chart`: table loading, scale extents, the plot frame, keyed joins, dots, whiskers, rules, halos, a canvas layer, morph and entrance helpers, colour helpers. See [Build a chart from the engine's pieces](#build-a-chart-from-the-engines-pieces). |
 | Draw a map | `ctx.map`: boundaries, the projection, views, the raster lookup and the painters, with `ctx.chart`'s colour scales and legend rows. See [Build a map from the engine's pieces](#build-a-map-from-the-engines-pieces). |
+
+## Mount a compact view
+
+A component that draws its own figure can keep a "you are here" copy of a `diagram` or a `map` beside it, with `ctx.mount`, the same second view a slide gets by setting `compact: true` (see [Show where we are](second-views.md)). This `my.stage` writes the name of the current stage of `data/process.json` and mounts a compact diagram of the whole process, lit at that stage. Its `schema.json` has one prop, `stage` (an integer, `x-transition: "snap"`).
+
+```js
+export default {
+  async mount(el, props, ctx) {
+    const doc = el.ownerDocument;
+    const process = await ctx.data("data/process.json"); // the file the slides bind their diagrams to
+
+    // Your own drawing, and an HTML element of its own for the compact diagram, with a size.
+    const name = doc.createElement("p");
+    Object.assign(name.style, { margin: "0 0 var(--sd-space)", font: "var(--sd-font-weight-strong) var(--sd-font-size-heading) var(--sd-font-body)" });
+    const copy = doc.createElement("div");
+    Object.assign(copy.style, { width: "560px", height: "200px" });
+    el.append(name, copy);
+
+    const stageOf = (p) => Math.max(0, Math.min(process.nodes.length - 1, Math.round(Number(p.stage ?? 0))));
+    const view = (p) => ({ ...process, compact: true, caption: "You are here", highlight: [process.nodes[stageOf(p)].id] });
+    const diagram = await ctx.mount("diagram", copy, view(props));
+
+    const render = (p) => { name.textContent = process.nodes[stageOf(p)].label; };
+    render(props);
+
+    return {
+      async update(p, info) {
+        render(p);
+        await diagram.update(view(p), info); // the first update too: the engine never updates a child
+      },
+      destroy() {
+        name.remove();
+        copy.remove();
+      },
+    };
+  },
+};
+```
+
+- **The props are yours.** The child gets the props you pass it, not the slide's, so read the shared definition yourself (`ctx.data`, as here) or take it as props the slide binds. The child's `highlight`, `caption` and the rest change with your own props, through `handle.update`.
+- **Give its element a size.** A compact view fills the element it is mounted in, so give that element a width and a height of its own.
+- **The caption band comes from the current props.** A diagram or map mounted with `ctx.mount` has no step list (`ctx.stepProps` is `null` for a child), so unlike the same view on a slide it cannot see the captions of other steps. Its caption band is reserved when the props it has now carry a caption, and a caption turning empty or non-empty redraws the view. Keep a caption in every update to keep the drawing still.
+- **Not inside a chart's SVG.** A chart's `settle` clears the inline styles inside its SVG, which a compact view writes. Mount the view in an HTML element beside your SVG, as above, never in a node inside it.
+- **Pass your `info`** to `handle.update`, as with any child, so an abort reaches it. A flowing edge in the child stands still, whatever you do: compact views never flow.
 
 ## Build a chart from the engine's pieces
 

@@ -709,6 +709,156 @@ export default {
 
 The region ids in `view` and `labels` must be ids of the boundaries (`check` reports any other as `render-error`), and the labels in `frame` must be labels of the time-lapse file (`validate` reports any other as `map-frame`).
 
+## Second views
+
+A second view is a small copy of a `diagram` or a `map` that keeps the audience's bearings while another figure carries the slide. The full guide is [Show where we are](../../docs/guide/second-views.md); these are the recipes. They pass `validate` and `check` in both themes on a deck made with `new`.
+
+### One process, a full diagram and a compact copy on the result slides
+
+The definition lives once, in `data/process.json`, and every slide binds every structural prop (`cols`, `rows`, `nodes`, `edges`, `groups`) to it. A whole-string binding resolves to the raw array, so no engine feature is needed, and ids and kind colours agree in both views. State (`shown`, `highlight`, `compact`, `caption`) stays in the slide. The loop edge `again` is routed over the top and flows (dashed standing still, marching while the page animates; it stands still in the compact copy).
+
+`data/process.json`:
+
+```json
+{
+  "cols": 4,
+  "rows": 1,
+  "nodes": [
+    { "id": "collect", "label": "Collect", "sub": "survey rounds", "shape": "card", "kind": "data", "col": 0, "row": 0 },
+    { "id": "clean", "label": "Clean", "sub": "one row per person", "shape": "card", "kind": "data", "col": 1, "row": 0 },
+    { "id": "fit", "label": "Fit", "sub": "the model", "shape": "card", "kind": "model", "col": 2, "row": 0 },
+    { "id": "report", "label": "Report", "sub": "tables and figures", "shape": "card", "kind": "output", "col": 3, "row": 0 }
+  ],
+  "edges": [
+    { "id": "to-clean", "from": "collect", "to": "clean" },
+    { "id": "to-fit", "from": "clean", "to": "fit" },
+    { "id": "to-report", "from": "fit", "to": "report" },
+    { "id": "again", "from": "report", "to": "collect", "route": "over", "label": "next round", "flow": true }
+  ],
+  "groups": [
+    { "id": "analysis", "label": "Analysis", "contains": ["fit", "report"] }
+  ]
+}
+```
+
+`data/stage-times.csv`:
+
+```csv
+stage,hours
+Collect,40
+Clean,22
+Fit,65
+Report,18
+```
+
+`slides/process.js`, the full diagram:
+
+```js
+const process = {
+  cols: "{{data/process.json#/cols}}",
+  rows: "{{data/process.json#/rows}}",
+  nodes: "{{data/process.json#/nodes}}",
+  edges: "{{data/process.json#/edges}}",
+  groups: "{{data/process.json#/groups}}",
+};
+
+export default {
+  id: "process",
+  layout: "full-bleed",
+  title: "How a round runs",
+  elements: [
+    { id: "flow", region: "main", type: "diagram", props: { ...process, shown: ["collect"] } },
+  ],
+  steps: [
+    { id: "start" },
+    { id: "stages", set: { flow: { shown: ["collect", "clean", "fit", "report", "analysis"] } } },
+    { id: "arrows", set: { flow: { shown: ["collect", "clean", "fit", "report", "analysis", "to-clean", "to-fit", "to-report"] } } },
+    { id: "loop", set: { flow: { shown: ["collect", "clean", "fit", "report", "analysis", "to-clean", "to-fit", "to-report", "again"] } } },
+  ],
+};
+```
+
+`slides/result.js`, a result slide with the compact copy in a corner `box` of the notes column, lit where the result belongs. Put the box clear of the title band (a short title would also do in a top corner): `check` reports a caption that overlaps the title. Give each cell about 40 px or more (this box gives about 120 px), and keep the caption short: an overflowing caption in a `box` is caught only when it leaves the canvas or overlaps other text, so look at `shoot`'s screenshot.
+
+```js
+const process = {
+  cols: "{{data/process.json#/cols}}",
+  rows: "{{data/process.json#/rows}}",
+  nodes: "{{data/process.json#/nodes}}",
+  edges: "{{data/process.json#/edges}}",
+  groups: "{{data/process.json#/groups}}",
+};
+
+export default {
+  id: "result",
+  layout: "figure-notes",
+  title: "Fitting takes longest",
+  elements: [
+    { id: "times", region: "main", type: "chart.bar",
+      props: { data: "data/stage-times.csv", x: "stage", y: "hours", orient: "horizontal",
+               axes: { x: "Hours per round" }, highlight: "Fit" } },
+    { id: "note", region: "notes", type: "text",
+      props: { role: "note", text: "Fitting takes nearly half of a round." } },
+    { id: "where", type: "diagram", box: { x: 1264, y: 700, w: 560, h: 200 },
+      props: { ...process, compact: true, caption: "You are here", highlight: ["fit"] } },
+    { id: "source", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "fit" },
+    { id: "report", set: { times: { highlight: "Report" }, where: { highlight: ["report"] } } },
+  ],
+};
+```
+
+### A compact map beside a chart
+
+The same boundaries file as the full maps, the same `id`; the region under discussion is lit, and a step moves both the chart's highlight and the map's. The data is the stepdeck repository's fictional country: `site/gallery/data/map/regions.geojson` and `rates.csv`, copied into `data/`.
+
+```js
+export default {
+  id: "region",
+  layout: "figure-notes",
+  title: "Rates differ across the regions",
+  elements: [
+    { id: "rates", region: "main", type: "chart.bar",
+      props: { data: "data/rates.csv", x: "code", y: "rate", orient: "vertical",
+               axes: { y: "Cases per 1,000" }, highlight: "W4" } },
+    { id: "where", type: "map", box: { x: 1264, y: 400, w: 560, h: 420 },
+      props: { boundaries: "data/regions.geojson", id: "code", compact: true, caption: "West", highlight: ["W4"] } },
+    { id: "source", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "west" },
+    { id: "south", set: { rates: { highlight: "S1" }, where: { caption: "South", highlight: ["S1"] } } },
+  ],
+};
+```
+
+### A locator inset on a map that flies
+
+With `locator: true` the inset is an overview (`inset.view` is optional and defaults to the whole map); its box marks what the map shows and follows each flight. Keep the inset and the legend in different corners.
+
+```js
+export default {
+  id: "locator",
+  layout: "full-bleed",
+  title: "Zooming in on the west coast",
+  elements: [
+    { id: "map", region: "main", type: "map",
+      props: { boundaries: "data/regions.geojson", id: "code", name: "name",
+               layers: { rate: { areas: "data/rates.csv", value: "rate", label: "Cases per 1,000", classes: [5, 10, 15], types: { code: "string" } } },
+               shown: ["rate"], legend: "bottom-right",
+               inset: { view: null, at: "top-right", locator: true } } },
+    { id: "source", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "country" },
+    { id: "west", set: { map: { view: "W4" } } },
+    { id: "coast", set: { map: { view: ["W4", "S1"] } } },
+  ],
+};
+```
+
 ## Motion
 
 Every element that appears on a forward step enters in turn: its box plays the theme's entrance (`rise` in `modern`), or a component whose catalog entry says `enter: own` builds itself. These recipes use the data of a deck made with `new` (`data/series.csv`, `data/summary.json`). They pass `validate`, `check` and `check --played` there. The stepdeck gallery's motion slides (`site/gallery/slides/motion-*.js` in the repository) show the same devices at full size.

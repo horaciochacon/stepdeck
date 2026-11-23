@@ -1,6 +1,6 @@
 # Animation and motion
 
-This page explains how things move in a stepdeck talk: when a step change plays motion, the named motions that elements enter and leave with, how the entrances of one step follow each other, the theme tokens that set the timing, and the four slide devices built on them (focus-dim, the message line, badges and ghost placeholders). It also covers how reduced motion and screenshots turn motion off, and how to check that a played step ends exactly where a jump to it ends.
+This page explains how things move in a stepdeck talk: when a step change plays motion, the named motions that elements enter and leave with, how the entrances of one step follow each other, the theme tokens that set the timing, and the four slide devices built on them (focus-dim, the message line, badges and ghost placeholders). It also covers ambient motion, the endless kind that belongs to no step (a flowing diagram edge), how reduced motion and screenshots turn motion off, and how to check that a played step ends exactly where a jump to it ends.
 
 It is for two readers:
 
@@ -316,7 +316,7 @@ The frame goes as soon as the element enters, and its own entrance plays. It com
 
 When `animate` is false, the shell never asks for motion, so every step renders directly and no element is held for a stagger slot. Three things turn it off for the whole page (a hidden page also stops motion, as [Hidden pages](#hidden-pages) describes):
 
-- **Reduced motion.** A viewer whose system prefers reduced motion sees no motion. Add `?motion=full` to the URL to override that, for example when rehearsing on a machine with the setting on.
+- **Reduced motion.** A viewer whose system prefers reduced motion sees no motion, ambient motion included. Add `?motion=full` to the URL to override that, for example when rehearsing on a machine with the setting on.
 - **`?capture`.** Capture mode is for screenshots. It sets `ctx.capture`, adds the `capture` class to `<html>`, and `core/stepdeck.css` then turns off every CSS transition and animation (`html.capture *`). `shoot` and `dump` load pages this way, so their PNGs and boxes show settled steps, never motion.
 - **`?receiver`.** The reveal speaker view's preview frames carry this flag. They never animate. When reduced motion is on and `?motion=full` is absent, they show a "motion off" badge.
 
@@ -328,6 +328,30 @@ A hidden page never animates. A browser delivers no animation frames to a tab th
 - When the page becomes hidden, the motion in flight ends at once: the slide's updates see `info.signal` abort, their helpers jump to their end state, and the same target is applied again without motion. Nothing is left half-played and no element fails its watchdog.
 
 This is not part of `STEPDECK.flags`, which describes the page as loaded; the page asks again at every `goTo`.
+
+Ambient motion follows the same condition: the shell takes `sd-ambient` off `<html>` while the page is hidden and puts it back when it is shown (see [Ambient motion](#ambient-motion)).
+
+## Ambient motion
+
+Everything above is step motion: it plays once, when a step moves forward by one, and ends where a jump would. **Ambient motion** is the other kind. It has no end and belongs to no step: while something is on screen, it keeps moving. Today there is one case: `flow: true` on a [`diagram`](../reference/components/diagram.md#flowing-edges) edge, whose dashes march from source to target without end, for a loop that keeps turning or material that keeps moving along a step.
+
+```js
+edges: [
+  { id: "feed", from: "collect", to: "fit" },
+  { id: "again", from: "report", to: "collect", route: "over", label: "next round", flow: true },
+],
+```
+
+The engine holds ambient motion to one rule, so that it can never break played-equals-jumped:
+
+- **It is CSS only.** The diagram's flow is a keyframe animation of `stroke-dashoffset` and nothing else. It writes no inline style, so a step's markup is the same played or jumped, and `check --played` has nothing to compare.
+- **It runs only while the page animates.** The shell keeps the class `sd-ambient` on `<html>` exactly when step motion would play, and the animation is under that class. So there is no flow under `?capture` (screenshots from `shoot` and `dump`), in a presenter preview frame, or under reduced motion, unless the URL has `?motion=full`. It also stops while the page is hidden, and starts again when the page is shown.
+- **A still frame says the same.** A flowing edge is drawn dashed, so a screenshot, a preview or a viewer with reduced motion sees a dashed line, which is the same thing standing still.
+- **Nothing waits on it.** It has no end state. A step that changes a flowing edge resolves as any other, the 10 s watchdog is not involved, and no check or test waits for the animation.
+- **The theme sets the pace.** `--sd-flow-period` (1600ms in both built-in themes) is how long one dash and one gap take to pass, at a constant speed. A step's `transition` does not change it.
+- **It stands still where it would compete.** A flowing edge that `highlight` has dimmed stands still. So does every flowing edge in a [compact](../reference/components/diagram.md#compact) diagram: a small copy that stays on screen for whole slides should not pull the eye from the slide's own figure.
+
+A flowing edge enters like a dashed one: it fades in with its label, and then flows.
 
 ## Verifying with `check --played`
 
@@ -388,4 +412,5 @@ The full contract is in the [component contract](../reference/component-contract
 - **Use `ctx.motion` for parts.** `ctx.motion.in(node, name, opts)` and `ctx.motion.out(node, name, opts)` play a named motion on one of your nodes with the theme's duration, easing and distance; `ctx.motion.timing(info, { factor, fast })` returns `{ duration, ease, stagger, signal }` from the theme tokens and the step's `transition`. Pass that `signal` (or `info.signal`) to every helper and `await` it: on abort the helpers jump to their end state and resolve.
 - **Write the full target state at the end of `update()`**, whether the motion ran, was aborted or never started. Then remove inline styles. Never derive the end state from `info.prev` or from earlier calls.
 - **Children of `ctx.mount`** get your `info`. An element that appears with `info.entered` and no `info.entrance` (a child whose parent's box moves) renders at once; a parent that owns its entrance passes `entrance` through in the child's info, so a child chart builds with it.
+- **Endless motion is ambient motion.** If your component has motion with no end (a pulse, a marching dash), do it in CSS under `html.sd-ambient`, switched by an attribute you write from your props, and never wait for it. See [Ambient motion](../reference/component-contract.md#ambient-motion) in the contract.
 - Keep motion well under 10 seconds, and set `x-transition` on each prop to match what your code does, so `catalog` reports it correctly.

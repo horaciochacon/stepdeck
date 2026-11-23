@@ -126,7 +126,8 @@ All notable changes to stepdeck are recorded here. The format follows
   `noData`.
 - **`map`, a thirteenth built-in.** The regions of a GeoJSON file, with layers of data over them, told step by
   step. Files written by `sf` and `geopandas` draw as they are (the winding is fixed); four projections are fitted
-  to the regions. Each layer is one of three kinds:
+  to the regions, an equal-area conic by default (it keeps a country's areas and nearly its shape; `equal-earth` is for a
+  world or continent map). Each layer is one of three kinds:
   - **`areas`**: a choropleth joined from a CSV by region id, as text, in stepped `classes`, a diverging scale
     about a `midpoint` or a continuous ramp from the theme's palettes. A key that matches no region, or a region
     in two rows, is an error on the slide, never a quietly missing value. A region without a value is hatched,
@@ -173,6 +174,43 @@ All notable changes to stepdeck are recorded here. The format follows
   canvases in the order it makes them, and a `maxRatio` (pass 1 for a raster painted pixel by pixel).
 - **`info.expect(ms)`.** An update that plays a long run says how long it will be, and its watchdog follows, up to
   20 s (`MAX_RUN_MS`). Asking for more fails the element with a message that says to split the run across steps.
+- **Second views: a compact `diagram` and `map`.** `compact: true` draws the same diagram or map small, for a
+  "you are here" copy in a corner `box` beside a slide's own figure, with one optional `caption` (a line at the label
+  size, in a band at the top; a change crossfades). A compact view has no text but the caption: a diagram creates no
+  label, sub, group legend or edge label and fills each cell with its shape, and a map leaves out names, legend,
+  time-lapse panel and inset. A highlighted part is lit: a node takes its kind's colour and a tint of it, a
+  highlighted region's land takes a tint of the accent, and everything else dims. Two views share their definition
+  by binding `cols`, `rows`, `nodes`, `edges` and `groups` to one data file, so ids and colours agree; no engine
+  feature is needed. `validate` warns `diagram-caption-unused` for a `caption` without `compact` and
+  `map-compact-ignored` for a prop a compact map ignores, and checks the compact gap and pad as it does the full
+  ones. A new guide, "Show where we are", walks through the pattern.
+- **A locator inset on `map`.** `inset: { locator: true }` makes the inset an overview of `inset.view` (by default the
+  whole map) with the box drawn inside it, marking what the map shows; the box follows a flight of either view and is
+  cut to the inset's frame. Without `locator` the inset is the zoom it was.
+- **`diagram` cards and kinds.** `shape: "card"` is a rounded rectangle that fills its cell, with a stripe on its left
+  edge and its label and sub left-aligned and wrapped inside it. A node's `kind` takes the next colour of the theme's
+  categorical palette in order of first appearance in `nodes`, so every step and both views agree: it colours a card's
+  stripe or the outline of a box, pill or circle. A dimmed node goes to the dim grey, stripe included.
+- **`diagram` edges that route and flow.** `route: "over"`, `"under"`, `"left"` or `"right"` sends an edge around the
+  grid in a lane on that side, with rounded corners, for a loop back ("next round"); the lanes are reserved whether
+  the edge is shown or not, so nothing moves between steps. `flow: true` draws an edge dashed and marches its dashes
+  from source to target while the page animates.
+- **Ambient motion.** A new engine rule for motion that has no end and belongs to no step, such as a flowing edge: it is
+  CSS only, switched on by an attribute the component writes from its props (`data-flow="true"`), and runs only under
+  the root class `sd-ambient`, which the shell keeps on `<html>` while the page animates. It is off with `?capture`, in
+  a presenter preview frame, under reduced motion (unless `?motion=full`) and while the page is hidden, so
+  screenshots and previews show a still dashed line; nothing waits on it, and a step's markup is the same played or
+  jumped. A dimmed flowing edge, and any flowing edge in a compact diagram, stands still. The contract has new
+  sections, "Second views" and "Ambient motion", and the motion guide a new one, "Ambient motion".
+- **Theme tokens for second views.** `--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill` and
+  `--sd-inset-radius` give a compact view and the map's inset one frame look, owned by the theme; `--sd-compact-tint`
+  (20%) is the share of a colour mixed into the background for a lit part; `--sd-diagram-compact-gap` (16px) and
+  `--sd-diagram-compact-pad` (6px) space a compact diagram; `--sd-diagram-stripe` is a card's stripe; and
+  `--sd-flow-period` (1600ms) is how long one dash and one gap of a flowing edge take to pass. A theme without them
+  falls back to values built from the existing tokens.
+- **For component authors:** a deck component can mount a compact `diagram` or `map` beside its own drawing with
+  `ctx.mount`; the custom-components guide has a section, "Mount a compact view". A mounted view has no step list, so
+  its caption band comes from its current props.
 
 ## [0.1.0] · 2026-11-19 · first public release
 
