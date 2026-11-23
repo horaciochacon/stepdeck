@@ -1614,3 +1614,78 @@ test("a theme that sets --sd-inset-stroke recolours the map inset frame; one wit
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+/** The rgba of the pixel at the middle of an element's box as the page paints it, read back from a screenshot. */
+async function paintedAtMiddle(page, id) {
+  const box = await page.evaluate((id) => {
+    const r = document.querySelector(`[data-el="${id}"]`).getBoundingClientRect();
+    return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+  }, id);
+  const png = await page.screenshot({ clip: { x: box.x, y: box.y, width: 2, height: 2 } });
+  return page.evaluate(async (b64) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(bitmap, 0, 0);
+    return [...ctx.getImageData(0, 0, 1, 1).data];
+  }, png.toString("base64"));
+}
+
+test("a second-view frame paints under the element's canvases whatever the DOM order; its caption sits on the tight leading", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    await withPage({ root, url: pages.url("inset", `step=home&theme=${theme}`) }, async (page, ctx) => {
+      const plain = await paintedAtMiddle(page, "map");
+      assert.notDeepEqual(plain, [255, 0, 255, 255], "the probe colour is not the map's own");
+      // The frame div goes in as a probe, filled with a colour no map has: first child (before the canvases) and last
+      // child (after them, which is where a canvas layer added later puts the frame).
+      for (const place of ["first", "last"]) {
+        await page.evaluate((place) => {
+          const el = document.querySelector('[data-el="map"]');
+          const frame = document.createElement("div");
+          frame.className = "sd-second-view-frame";
+          frame.style.setProperty("--sd-inset-fill", "rgb(255, 0, 255)");
+          if (place === "first") el.insertBefore(frame, el.firstChild);
+          else el.appendChild(frame);
+        }, place);
+        assert.deepEqual(await paintedAtMiddle(page, "map"), plain, `${theme}: a frame as ${place} child is under the map's canvases`);
+        await page.evaluate(() => document.querySelector('[data-el="map"] > .sd-second-view-frame').remove());
+      }
+      // The frame does show where nothing is drawn over it (so the pixels above are not the frame being lost).
+      const shown = await page.evaluate(() => {
+        const el = document.querySelector('[data-el="map"]');
+        const frame = document.createElement("div");
+        frame.className = "sd-second-view-frame";
+        frame.style.setProperty("--sd-inset-fill", "rgb(255, 0, 255)");
+        el.appendChild(frame);
+        for (const c of el.querySelectorAll("canvas, svg")) c.style.visibility = "hidden";
+        return true;
+      });
+      assert.ok(shown);
+      assert.deepEqual(await paintedAtMiddle(page, "map"), [255, 0, 255, 255], `${theme}: the frame is painted when nothing covers it`);
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-el="map"]');
+        el.querySelector(":scope > .sd-second-view-frame").remove();
+        for (const c of el.querySelectorAll("canvas, svg")) c.style.visibility = "";
+      });
+      // The caption carries the label size on the tight leading, as its sibling classes do, not the body leading.
+      const lines = await page.evaluate(() => {
+        const el = document.querySelector('[data-el="map"]');
+        const caption = document.createElement("div");
+        caption.className = "sd-second-view-caption";
+        caption.textContent = "Caption";
+        const twin = document.createElement("div");
+        twin.style.cssText = "font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); position: absolute; visibility: hidden";
+        twin.textContent = "Caption";
+        el.append(caption, twin);
+        const out = { caption: getComputedStyle(caption).lineHeight, tight: getComputedStyle(twin).lineHeight, body: getComputedStyle(el).lineHeight };
+        caption.remove();
+        twin.remove();
+        return out;
+      });
+      assert.equal(lines.caption, lines.tight, `${theme}: the caption's line height is the tight leading`);
+      assert.notEqual(lines.caption, lines.body, `${theme}: and not the body leading`);
+    });
+  }
+});
