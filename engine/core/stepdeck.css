@@ -351,8 +351,10 @@ html.sd-ambient .sd-diagram:not([data-compact="true"]) .sd-diagram-edge[data-flo
 rect.sd-second-view-frame { fill: var(--sd-inset-fill, var(--sd-color-background)); stroke: var(--sd-inset-stroke, var(--sd-color-ink)); stroke-width: var(--sd-inset-stroke-width, var(--sd-rule-width)); rx: var(--sd-inset-radius, 0px); ry: var(--sd-inset-radius, 0px); }
 /* "Under" does not depend on DOM order (a canvas layer inserts itself at the element's first child): the frame sits at
    z-index -1 and the element that holds it makes its own stacking context, so the frame is above the element's own
-   background and below everything it draws. */
-.sd-el:has(> .sd-second-view-frame) { isolation: isolate; }
+   background and below everything it draws. That element is the slide's element box, or the node a deck component
+   mounts the map in (ctx.mount): without a stacking context of its own there, the frame would drop into an ancestor's
+   and the canvas's background could paint over it. */
+:has(> div.sd-second-view-frame) { isolation: isolate; }
 div.sd-second-view-frame { position: absolute; z-index: -1; inset: 0; box-sizing: border-box; border: var(--sd-inset-stroke-width, var(--sd-rule-width)) solid var(--sd-inset-stroke, var(--sd-color-ink)); background: var(--sd-inset-fill, var(--sd-color-background)); border-radius: var(--sd-inset-radius, 0px); pointer-events: none; }
 .sd-second-view-caption { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); color: var(--sd-color-ink); line-height: var(--sd-line-height-tight); margin: 0; white-space: nowrap; background: var(--sd-inset-fill, var(--sd-color-background)); }
 /* a compact map (components/map/index.js): its stage sits in div.sd-map-compact-body, placed inside the frame in px
