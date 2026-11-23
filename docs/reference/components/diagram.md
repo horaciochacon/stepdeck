@@ -117,6 +117,7 @@ Ids are shared by nodes, groups and edges: one id may name one thing only, becau
 | `label` | string | no | Plain text beside the arrow's midpoint. On a routed edge, one line on its lane. |
 | `dashed` | boolean | no | Draw the line dashed. |
 | `route` | `over` \| `under` \| `left` \| `right` | no | Draw the edge around the grid, in a lane on that side, instead of straight. See [Routed edges](#routed-edges). |
+| `flow` | boolean | no | Draw the line dashed, its dashes marching from source to target while the page animates. See [Flowing edges](#flowing-edges). |
 
 ### Groups
 
@@ -157,6 +158,7 @@ const process = {
 - **The caption** takes its own band at the top, inside the frame: one label line plus the compact pad, reserved when any step of the slide has a compact caption, so nothing moves when it comes or goes. It is `div.sd-second-view-caption`, at `--sd-font-size-label` in ink, on one line, on the frame's fill (`--sd-inset-fill`, carried by the caption itself so `check`'s contrast test sees it). A caption too long for the width is never shrunk: it overflows. In a region, `check` reports it (`text-outside-region`); in a `box`, it catches it only when it leaves the canvas or overlaps other text, so look at a screenshot.
 - **Lighting.** With no `highlight`, every part keeps its normal look. With one, a lit node takes its kind's colour (the accent when it has no kind) as an outline twice `--sd-rule-width` wide, and a card's stripe that colour too, over a tint of it: `--sd-compact-tint` (20% in both built-in themes) of the colour mixed into the background. Every other part dims as at full size. A lit edge or group keeps its look (they have no kind).
 - **Steps.** `compact` is structure: a step that turns it on or off rebuilds the drawing, at once. The caption is state: a change crossfades (see [Motion](#motion)).
+- **Flowing edges stand still** in a compact view, drawn dashed: a copy that stays on screen for whole slides should not pull the eye from the slide's own figure (see [Flowing edges](#flowing-edges)).
 
 ## Reveal and highlight parts by step
 
@@ -205,7 +207,7 @@ edges: [
 - **Lanes.** Every routed edge reserves its own lane on its side, whether it is shown or not, so nothing moves between steps. A lane is half `--sd-diagram-gap` wide, plus one label line (`--sd-font-size-label` x `--sd-line-height-tight`) when the edge has a label. A side's lanes stack outward in the order of `edges`, the first nearest the grid, outside how far the groups reach; the cells shrink by the lanes on each side, so a diagram with routed edges has smaller cells than the same diagram without them. A diagram without routed edges reserves no lane. An edge with an unknown end reserves none.
 - **The label** sits on the middle of the lane's run, centred on the line, one line high, over the background backing, in the top layer: across on an over or under lane, turned a quarter on a side lane (reading upward on the left, downward on the right). Its box is as long as the run, and at least four label lines. A longer label does not wrap into the grid: it runs past its box along the lane, and `check` reports it when it leaves the region or the canvas (on a side lane, see [Not detected](#not-detected)). Lane spacing does not grow with a label's length, so keep routed labels short.
 - **In a compact diagram** a lane is one whole `--sd-diagram-compact-gap` (not half) and has no label line (compact draws no label): its line runs half a compact gap off the cells, clear of their outlines, and its last leg is long enough for the arrowhead's tip to reach the target's border. An edge left out because it touches a `text` node reserves no lane.
-- **Motion.** A routed edge draws on from source to target, like a straight one; a dashed one fades in.
+- **Motion.** A routed edge draws on from source to target, like a straight one; a dashed or flowing one fades in.
 
 ### Spacing tokens
 
@@ -234,11 +236,28 @@ The engine animates only a forward move of exactly one step. A jump, a backward 
 On an animated step (the entrance, or a step while the diagram stays visible), the motion runs in this order:
 
 1. At the same time (in the entrance, the groups first, then the nodes): newly shown groups fade in (the shared `fade` motion); newly shown nodes pop in (the shared `pop` motion: they fade in while scaling up from 0.92), one after another, `--sd-stagger` apart (80ms in `modern`, 60ms in `academic-light`, or the step's `transition.stagger`); parts whose highlight changed tween their outline, fill and label text color, in RGB over `--sd-duration-fast`.
-2. Then newly shown edges, staggered: a solid edge, straight or routed, draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed edge fades in with its label instead of drawing.
+2. Then newly shown edges, staggered: a solid edge, straight or routed, draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed or flowing edge fades in with its label instead of drawing.
 
 In a compact diagram a node that becomes lit, or stops being lit, tweens its outline and fill colours with the others; the outline's width changes at once. A caption change fades the old caption out and the new one in, each over half of `--sd-duration` (or of the step's `transition.duration`), at the same time as step 1.
 
 Each motion lasts the theme's `--sd-duration` (400ms in both built-in themes), or the step's `transition.duration` (see [Setting a duration on a step](../../guide/animation-and-motion.md#setting-a-duration-on-a-step)) if set; the highlight color tween lasts `--sd-duration-fast` (200ms in both themes) instead, or the step's `transition.duration`. Only parts that change visibility or highlight move. A step that also rebuilds the drawing (see [Size](#size)) plays no motion.
+
+### Flowing edges
+
+`flow: true` on an edge, straight or routed, marches its dashes from source to target, without end, while the edge is shown and not dimmed: a loop that keeps turning, or material that keeps moving along a step.
+
+```js
+edges: [
+  { id: "feed", from: "collect", to: "fit", flow: true },
+  { id: "again", from: "report", to: "collect", route: "over", label: "next round", flow: true },
+],
+```
+
+- **Dashed, standing or flowing.** A flowing edge is drawn with the dashed edge's pattern (`1.5 x --sd-grid` on, `--sd-grid` off), so it says the same thing when it stands still.
+- **Ambient motion.** The flow is a CSS keyframe animation of `stroke-dashoffset` and nothing else: one dash and one gap pass in the theme's `--sd-flow-period` (1600ms in both built-in themes), at a constant speed. It runs only under the root class `sd-ambient`, which the shell keeps on `<html>` while the page animates. Under `?capture`, in a presenter preview frame, with reduced motion (unless `?motion=full`) and while the page is hidden there is no `sd-ambient`, so screenshots (`shoot` loads every step with `?capture`) and previews show a still dashed line.
+- **Not step state.** The edge's `g` gets `data-flow="true"` (an edge without `flow` has no such attribute). The flow writes no other markup and no inline style, so the markup at a step is the same played or jumped, and `update()` resolves as it does without it: nothing waits on an animation that has no end.
+- **Where it stands still.** A flowing edge dimmed by `highlight` stands still, and so does every flowing edge in a [compact](#compact) diagram.
+- **Entrance.** A flowing edge enters as a dashed one does: it fades in with its label instead of drawing on, then flows.
 
 ## Errors and problems
 

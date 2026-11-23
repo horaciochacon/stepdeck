@@ -38,6 +38,11 @@
 // Query flags (readFlags, shared by every shell): slide, step, capture (html.capture, ctx.capture, no
 // animation), motion=full (animate even with prefers-reduced-motion), lang=, theme=. `receiver` marks a
 // presenter preview frame: never animates (it is not part of STEPDECK.flags).
+//
+// Ambient motion: <html> has the class sd-ambient exactly while the page animates (STEPDECK.flags.animate, and the
+// page not hidden), set at boot and on every visibilitychange. CSS animations that are not step state (a flowing
+// diagram edge's marching dashes) run only under it, so capture, preview frames, reduced motion and a hidden page show
+// them still. They write no markup, and nothing in the engine waits on them.
 import { SlideController } from "./controller.js";
 import { createRegistry } from "./registry.js";
 import { createDataLoader } from "./data.js";
@@ -386,6 +391,9 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
 
   // A hidden page gets no animation frames and throttled timers: nothing there animates.
   const animateNow = () => animateRequest && doc.visibilityState !== "hidden";
+  // Ambient motion (CSS only, such as a flowing diagram edge) runs under html.sd-ambient, kept equal to animateNow().
+  const ambient = () => doc.documentElement.classList.toggle("sd-ambient", animateNow());
+  ambient();
 
   const bootErrors = [];
   let env = null;
@@ -432,9 +440,11 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
     flags: { ...flags, motion, animate: animateRequest },
   };
   if (view) view.STEPDECK = api;
-  // Hiding the page ends the motion in flight: its frames stop, so it would stall until the watchdog fails it.
+  // Hiding the page stops the ambient motion and ends the motion in flight: its frames stop, so it would stall until
+  // the watchdog fails it. Showing it again restarts the ambient motion.
   if (typeof doc.addEventListener === "function") {
     doc.addEventListener("visibilitychange", () => {
+      ambient();
       if (doc.visibilityState !== "hidden") return;
       Promise.resolve().then(() => host?.current?.finish?.()).catch((e) => void bootErrors.push(`stepdeck: ${message(e)}`));
     });

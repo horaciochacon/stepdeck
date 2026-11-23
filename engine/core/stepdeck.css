@@ -193,6 +193,14 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-group .sd-diagram-shape { fill: none; stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
 .sd-diagram-group[data-dashed="true"] .sd-diagram-shape,
 .sd-diagram-edge[data-dashed="true"] .sd-diagram-line { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
+/* A flowing edge (data-flow) is drawn dashed, so it says the same thing standing still. Its dashes march from source
+   to target only under html.sd-ambient (the shell keeps it while the page animates), not when dimmed, and never in a
+   compact diagram. One dash plus one gap is 2.5 grid units, so the loop is seamless; the theme owns the period. */
+.sd-diagram-edge[data-flow="true"] .sd-diagram-line { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
+html.sd-ambient .sd-diagram:not([data-compact="true"]) .sd-diagram-edge[data-flow="true"]:not([data-dim="true"]) .sd-diagram-line {
+  animation: sd-flow var(--sd-flow-period, 1600ms) linear infinite;
+}
+@keyframes sd-flow { to { stroke-dashoffset: calc(var(--sd-grid) * -2.5); } }
 .sd-diagram-line { fill: none; stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
 /* The arrowhead takes its line's stroke (a browser without context-stroke keeps the ink). */
 .sd-diagram-arrowhead { fill: var(--sd-color-ink); fill: context-stroke; stroke: none; }
@@ -425,7 +433,7 @@ div.sd-second-view-frame + .sd-second-view-caption { position: absolute; top: va
 .sd-terminal-file-status { color: var(--sd-color-muted); }
 .sd-terminal-file[data-status="created"] .sd-terminal-file-status { color: var(--sd-color-accent); }
 
-/* Capture mode: no CSS motion at all. */
+/* Capture mode: no CSS motion at all (the shell never sets sd-ambient there either). */
 html.capture *, html.capture *::before, html.capture *::after {
   transition: none !important;
   animation: none !important;
