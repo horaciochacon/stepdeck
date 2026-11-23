@@ -680,6 +680,19 @@ test("map-prop-unused: frame, pace and a numbers key that nothing uses are warni
   assert.equal(only(atSlide(problems, "numbers"), "map-prop-unused").measured, "`numbers` key 'deaths' is in no frame");
 });
 
+test("map-compact-ignored: labels, a legend, numbers and an inset on a compact map are a warning each; legend: false is not", async () => {
+  const problems = await validate(fixture("map-compact-ignored"));
+  assert.deepEqual(rules(problems), Array(4).fill("map-compact-ignored"), show(problems));
+  assert.ok(problems.every((p) => p.severity === "warning" && p.element === "small" && p.slide === "s"), show(problems));
+  assert.deepEqual(errors(problems), [], "warnings only: the map still draws");
+  const byProp = Object.fromEntries(problems.map((p) => [p.measured.match(/^`(\w+)`/)?.[1], p]));
+  assert.deepEqual(Object.keys(byProp).sort(), ["inset", "labels", "legend", "numbers"]);
+  assert.equal(byProp.labels.measured, "`labels` does nothing on a compact map");
+  assert.equal(byProp.legend.measured, "`legend` does nothing on a compact map");
+  assert.match(byProp.legend.fix, /legend: false/);
+  assert.match(byProp.inset.fix, /remove `inset`/);
+});
+
 test("missing-column in a map layer: a misspelt value, longitude and colour column, each with a did-you-mean", async () => {
   const broken = decks("map-broken");
   const column = only(await validate(broken, { slide: "column" }), "missing-column");

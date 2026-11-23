@@ -27,6 +27,8 @@ analysis code to a map slide".
 | `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label: a key of the frames' `numbers`, its label, and a d3-format specifier (as `big-number`'s). |
 | `labels` | string[] | none | fade | Regions named on the map, at the centroid of their largest polygon, on a halo. |
 | `legend` | corner \| `false` | `"bottom-left"` | snap | Where the legend sits (`"bottom-left"`, `"bottom-right"`, `"top-left"`, `"top-right"`), or no legend. |
+| `compact` | boolean | `false` | snap | Draw the same map small, as a second view: inside the theme's second-view frame, with no legend, names, time-lapse panel or inset. See Compact. |
+| `caption` | string | none | fade | With `compact`, one line of inline Markdown at the label size in a band at the top. |
 
 Layers (`layers.<id>`):
 
@@ -126,6 +128,24 @@ Behaviour:
   page or leaving the slide ends it at once on the step's frame. Jumps,
   backward steps and reduced motion show the end state at once. The map does not own its
   entrance: the engine moves its box in.
+- **Compact.** `compact: true` draws the same map small, for a locator beside a chart: the region under discussion
+  highlighted, on several slides from one boundaries file. What a small map cannot carry is not created at all:
+  `labels`, `legend`, `numbers` (the time-lapse panel) and `inset` are ignored, and `validate` warns about each one a
+  compact map sets (`map-compact-ignored`; `legend: false` is fine). Points still draw at their size; layers, `shown`,
+  `view`, flights and `frame` work as at full size. The element's children are `div.sd-second-view-frame`, the
+  theme's second-view frame (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`)
+  at the element's edge, under everything; the caption, `div.sd-second-view-caption`, one line of inline Markdown at
+  `--sd-font-size-label` in ink on the frame's fill, never shrunk (a caption too long for the width overflows); and
+  `div.sd-map-compact-body`, which holds the canvases and the SVG. The body is the element less the compact pad
+  (`--sd-diagram-compact-pad`, the compact diagram's, 6px in both built-in themes; a quarter of `--sd-space` in a
+  theme without it) on every side, and less the caption's band at the top: one label line plus the pad, reserved when
+  any step of the slide has a caption, so nothing moves when it comes or goes. The projection is fitted to the body,
+  so the geometry in every signature is the body's size. A highlighted region's land takes a tint of the accent
+  (`--sd-compact-tint` of it mixed into the background, 20% in both built-in themes and in a theme without it) under
+  its ink outline; the other regions keep the surface colour, and an areas layer dims them as at full size. On a played
+  step the tint fades with the outline, over `--sd-duration-fast`, and a caption change fades the old caption out and
+  the new one in, each over half of `--sd-duration`, alongside the rest of the step. A step that turns `compact` on
+  or off redraws the map at once.
 - **State on the canvases.** Each canvas layer (`data-layer` `main:base`, `main:areas:<id>`, `main:raster:<id>`, `main:borders`, `main:points:<id>`) carries
   `data-view` (the view of the moment as `k,x,y`, during a flight too), `data-shown`, `data-highlight`, `data-frame` (the label of the frame the map's time-lapse is at, as the panel shows it; empty when no layer the step declares is a time-lapse) and `data-sig` (the signature of what it painted), which
   `dump` and `check --played` compare. An inset has the same canvases, named `inset:base`, `inset:areas:<id>`, `inset:raster:<id>`, `inset:borders` and `inset:points:<id>`, in a
@@ -153,6 +173,8 @@ Behaviour:
 // points instead: layers: { sites: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "id", size: "beds", color: "kind", label: "Beds" } }
 // a time-lapse: layers: { years: { raster: "data/years.json", label: "People per km²" } }, shown: ["years"],
 //   numbers: [{ key: "people", label: "People", format: ",.0f" }]; then a run: { set: { map: { frame: "2021" } } }
+// a locator beside a chart: { id: "where", type: "map", box: { x: 1264, y: 600, w: 560, h: 340 },
+//   props: { boundaries: "data/regions.geojson", id: "code", compact: true, caption: "West", highlight: ["W4"] } }
 ```
 
 The map is a figure: its slide needs a `role: "source"` line. Its pieces are public as `ctx.map` and `ctx.chart`

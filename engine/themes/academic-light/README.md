@@ -83,7 +83,7 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-diagram-pad` | `16px` | Padding of a `diagram` group box around its members; each nesting level adds one more. |
 | `--sd-diagram-stripe` | `var(--sd-grid)` | Width of the stripe on a `diagram` card's left edge. |
 | `--sd-diagram-compact-gap` | `16px` | Gap between the grid cells of a compact `diagram`. Keep it at least twice `--sd-diagram-compact-pad` (`validate` flags it). |
-| `--sd-diagram-compact-pad` | `6px` | Padding of a compact `diagram` group box around its members, and the inset of its drawing inside its frame. |
+| `--sd-diagram-compact-pad` | `6px` | Padding of a compact `diagram` group box around its members, and the inset of a compact `diagram`'s or `map`'s drawing inside its frame. |
 
 ### Second views
 
