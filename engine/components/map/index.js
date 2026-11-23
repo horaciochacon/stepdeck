@@ -54,11 +54,28 @@
 // decoded and the update calls `info.expect` with the two phases' length, so the engine's watchdog allows the run (a
 // run past MAX_RUN_MS is that element's error); the rest are decoded as it plays, never all at once. Jumped, backward
 // or aborted (a click, a hidden page, leaving the slide), the step's frame and its numbers are drawn at once.
+//
+// Compact (`compact: true`, a second view): the same map drawn small, for a locator beside a chart. The props it cannot
+// carry are not drawn at all, whatever they say (`drawnOf`: no names, legend, corner panel or inset; `validate` warns,
+// `map-compact-ignored`). The element's children are then `div.sd-second-view-frame` (the theme's frame, at the element's
+// edge, under everything: core/stepdeck.css), the caption `div.sd-second-view-caption` (inline Markdown, one line, placed
+// by core/stepdeck.css; only when there is a band) and `div.sd-map-compact-body`, which holds the stage at the body rectangle (`layoutOf`): the element
+// less the compact pad (`--sd-diagram-compact-pad`, else a quarter of `--sd-space`) on every side and less the caption's
+// band at the top (one label line plus the pad, reserved when this step or any step of the slide, `ctx.stepProps`, has
+// a caption, so a caption that comes or goes moves nothing). The geography is fitted to the body, so its key and the
+// caches follow the body's size. A highlighted region's land takes a tint of the accent (colors.js `compactTint`), as far
+// as its ring is drawn (stage.js), so the tint and the ring fade together; the rest is as at full size. The caption is
+// state: a change crossfades, the old text out and the new in, each over half the step's duration, alongside the rest of
+// the step's motion and bound to info.signal; it leaves no inline style. `compact` is structure: a step that turns it on
+// or off redraws the map at once.
 import { d3 } from "../../core/d3.js";
+import { clearInlineStyle } from "../../core/animate.js";
+import { renderInline } from "../../core/inline.js";
 import { DEFAULT_PROJECTION, boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
 import { firstPhase } from "../../core/map-rules.js";
-import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs } from "../../core/kit.js";
+import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs, num } from "../../core/kit.js";
+import { compactTint } from "./colors.js";
 import { createStage, through } from "./stage.js";
 import { createInset, insetLayout, CORNERS } from "./inset.js";
 import { createLegend } from "./legend.js";
@@ -85,6 +102,10 @@ const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]
 const sameView = (a, b) => a.k === b.k && a.x === b.x && a.y === b.y;
 /** The region ids a `view` names: its id, or its list of them; none for a box or home. */
 const viewIds = (target) => (typeof target === "string" || Array.isArray(target) ? [target].flat() : []);
+/** Whether props `p` draw a caption: compact, with some text. */
+const captioned = (p) => p?.compact === true && typeof p.caption === "string" && p.caption.trim() !== "";
+/** The props a map draws: a compact map draws no names, legend, corner panel numbers or inset, whatever `p` says. */
+const drawnOf = (p) => (p?.compact === true ? { ...p, labels: [], legend: false, numbers: [], inset: null } : p);
 
 /**
  * The geography of an element: the regions of `props.boundaries` fitted in `size`, each with its path and its anchor
@@ -258,15 +279,29 @@ const moves = (a, b) =>
 
 export default {
   async mount(el, props, ctx) {
+    const doc = el.ownerDocument;
     const geos = new Map();
-    const fromSteps = (ctx.stepProps ?? []).filter(Boolean);
+    const fromSteps = (ctx.stepProps ?? []).filter(Boolean).map(drawnOf);
     const legend = createLegend(el, ctx);
     const panel = createPanel(el);
-    let stage = null; // the stage on screen: { geo, key, slots, view, inset }, `view` from createStage, `inset` from createInset (or null)
+    let stage = null; // the stage on screen: { geo, key, slots, compact, view, inset }, `view` from createStage, `inset` from createInset (or null)
     const dropStage = () => {
       stage?.inset?.destroy();
       stage?.view.destroy();
     };
+    let chrome = null; // a compact map's frame, caption (null without a band) and body, the stage's host: { frame, caption, body }
+    let captionText = null; // the caption source the caption holds
+    const dropChrome = () => {
+      for (const node of [chrome?.frame, chrome?.caption, chrome?.body]) node?.remove();
+      chrome = null;
+      captionText = null;
+    };
+
+    // A compact map's spacing, from the theme: the compact pad and one label line, the caption's.
+    const T = ctx.tokens ?? {};
+    const pad = num(T["--sd-diagram-compact-pad"], 0.25 * num(T["--sd-space"], 0));
+    const line = Math.ceil(num(T["--sd-font-size-label"], 0) * num(T["--sd-line-height-tight"], 1));
+    const tint = compactTint(ctx);
     let last = null; // the last state written
     let gone = false; // destroyed: an update still under way paints nothing more
 
@@ -281,10 +316,43 @@ export default {
     const caches = { lookups: new Map(), pictures: new PictureCache(2 * (Math.max(1, views) + insetViews) * Math.max(1, rasters) + SPARE_PICTURES + frames) };
     let measured = null; // the size the caches are for
 
-    const sizeOf = () => [Math.max(1, measureWidth(el, ctx)), Math.max(1, measureHeight(el, ctx))];
-    /** The geography of `p` at the element's size; a new size drops the geographies and caches of the old one. */
-    function geoFor(p) {
-      const size = sizeOf();
+    /**
+     * Where props `p` draw in the element, `rect` `[x, y, w, h]` in its px: the whole element, or, compact, the body: the
+     * element less the compact pad on every side and less the caption's `band` at the top (one label line plus the pad,
+     * when this step or any step of the slide has a caption; 0 otherwise).
+     */
+    function layoutOf(p) {
+      const [w, h] = [Math.max(1, measureWidth(el, ctx)), Math.max(1, measureHeight(el, ctx))];
+      if (p.compact !== true) return { compact: false, band: 0, rect: [0, 0, w, h] };
+      const band = [p, ...fromSteps].some(captioned) ? line + pad : 0;
+      return { compact: true, band, rect: [pad, pad + band, Math.max(1, w - 2 * pad), Math.max(1, h - 2 * pad - band)] };
+    }
+
+    /**
+     * The host of a stage drawn at `layout` (`layoutOf`): the element, or, compact, a body made afresh at its rectangle,
+     * after the frame and the caption (only when there is a band), as the element's children in that order.
+     */
+    function hostFor({ compact, band, rect }) {
+      dropChrome();
+      if (!compact) return el;
+      const div = (className) => Object.assign(doc.createElement("div"), { className });
+      chrome = { frame: div("sd-second-view-frame"), caption: band > 0 ? div("sd-second-view-caption") : null, body: div("sd-map-compact-body") };
+      const [x, y, w, h] = rect;
+      for (const [name, value] of [["left", x], ["top", y], ["width", w], ["height", h]]) chrome.body.style.setProperty(name, `${value}px`);
+      el.append(...[chrome.frame, chrome.caption, chrome.body].filter(Boolean));
+      return chrome.body;
+    }
+
+    /** Writes the caption's text (inline Markdown), when there is a caption that does not hold it already. */
+    function writeCaption(text) {
+      if (!chrome?.caption || text === captionText) return;
+      captionText = text;
+      chrome.caption.innerHTML = renderInline(text);
+    }
+
+    /** The geography of `p` at the size it draws at (`layoutOf`); a new size drops the geographies and caches of the old one. */
+    function geoFor(p, layout = layoutOf(p)) {
+      const size = layout.rect.slice(2);
       if (measured && (measured[0] !== size[0] || measured[1] !== size[1])) {
         geos.clear();
         caches.lookups.clear();
@@ -325,14 +393,16 @@ export default {
 
     /** The state `props` asks for, on a stage that has every canvas it needs. Throws the element's errors. */
     async function stateOf(p) {
-      const geo = await geoFor(p);
+      const layout = layoutOf(p);
+      const geo = await geoFor(p, layout);
       const slots = slotsOf([...fromSteps, p]);
-      const key = slots.map((slot) => `${slot.kind}:${slot.id}`).join("|");
+      const key = [layout.compact ? `compact:${layout.band}` : "full", ...slots.map((slot) => `${slot.kind}:${slot.id}`)].join("|");
       if (stage?.geo !== geo || stage.key !== key) {
         dropStage();
         legend.destroy(); // written again, after the new canvases
         panel.destroy();
-        stage = { geo, key, slots, view: createStage(el, { name: "main", size: geo.size, geo, layers: slots }), inset: null };
+        const host = hostFor(layout);
+        stage = { geo, key, slots, compact: layout.compact, view: createStage(host, { name: "main", size: geo.size, geo, layers: slots, tint: layout.compact ? tint : null }), inset: null };
       }
 
       const defs = p.layers ?? {};
@@ -367,7 +437,7 @@ export default {
         }
       };
       checkView(p.view);
-      const s = { stage, props: p, view: viewOf(geo, p.view ?? null), inset: insetOf(geo, p.inset, checkView), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", layers, lapse: lapseOf(p, stage.slots, layers, ctx) };
+      const s = { stage, props: p, view: viewOf(geo, p.view ?? null), inset: insetOf(geo, p.inset, checkView), highlight: [...(p.highlight ?? [])], labels: [...(p.labels ?? [])], legend: p.legend ?? "bottom-left", caption: captioned(p) ? p.caption : "", layers, lapse: lapseOf(p, stage.slots, layers, ctx) };
       await decodeFrame(s);
       // A time-lapse layer prepared without the slide's steps (a `ctx.mount` child) has its "no data" row from the frame
       // this step shows, never from a frame a run passes through, so the row stays still while frames play (raster.js).
@@ -377,7 +447,10 @@ export default {
       return s;
     }
 
-    /** Paints `moment` (a `between` state) of step state `s`, its legend and its panel; `moving` for a frame of a tween. */
+    /**
+     * Paints `moment` (a `between` state) of step state `s`, its legend and its panel (none on a compact map); `moving` for
+     * a frame of a tween. The caption is not written here: the update writes it, or crossfades it (`recaption`).
+     */
     function draw(s, moment, moving = false) {
       const { inset } = moment;
       s.stage.view.paint({ ...moment, cover: inset && { rect: insetLayout(s.stage.geo.size, inset.at).rect, alpha: inset.alpha } }, moment.layers, { moving });
@@ -395,7 +468,26 @@ export default {
       });
       legend.write(s.legend, rows);
       const at = s.inset?.at === "top-left" ? "top-right" : "top-left";
-      panel.write(moment.panel?.alpha > 0 ? { ...moment.panel, at } : null);
+      panel.write(!s.stage.compact && moment.panel?.alpha > 0 ? { ...moment.panel, at } : null);
+    }
+
+    /**
+     * A caption change on a played step: the old caption fades out, the text swaps to `text`, the new one fades in, each
+     * over half the step's duration, bound to info.signal (an abort ends on `text`). No inline style is left.
+     */
+    async function recaption(text, info) {
+      const node = chrome?.caption;
+      if (!node || text === captionText) return;
+      const opts = motion(info, ctx);
+      const half = { ...opts, duration: (opts.duration ?? motionMs(info, ctx)) / 2 };
+      try {
+        await ctx.animate.tween(1, 0, (v) => { node.style.opacity = String(v); }, half);
+        writeCaption(text);
+        await ctx.animate.tween(0, 1, (v) => { node.style.opacity = String(v); }, half);
+      } finally {
+        writeCaption(text);
+        clearInlineStyle(node);
+      }
     }
 
     /** How long a step's motion lasts before its run: `factor` (core/map-rules.js `firstPhase`) times the step's duration. */
@@ -455,16 +547,17 @@ export default {
       if (step && canAnimate(info)) await playRun(to, step.run, frames, info);
     }
 
-    await stateOf(props); // fail early: the boundaries, the layers' data, unknown ids
+    await stateOf(drawnOf(props)); // fail early: the boundaries, the layers' data, unknown ids
     await prebuild();
     Object.defineProperty(el, "sdMapLookups", { value: () => caches.lookups.size, configurable: true }); // for tests: never an attribute
     return {
       async update(p, info = {}) {
-        const target = await stateOf(p);
-        if (canAnimate(info) && !info.entered && last?.stage === target.stage) await playStep(last, target, info);
+        const target = await stateOf(drawnOf(p));
+        if (canAnimate(info) && !info.entered && last?.stage === target.stage) await Promise.all([playStep(last, target, info), recaption(target.caption, info)]);
         await decodeFrame(target); // a long run may have pushed it out of the frames the raster keeps
         if (gone) return;
         draw(target, between(target, target, 1, 1));
+        writeCaption(target.caption);
         last = target;
       },
       pause() {
@@ -476,6 +569,7 @@ export default {
       destroy() {
         gone = true;
         dropStage();
+        dropChrome();
         legend.destroy();
         panel.destroy();
         geos.clear();

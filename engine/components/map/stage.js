@@ -22,10 +22,14 @@
 // scaled by `scale`, so the stage shows what the element would show at that view, only smaller, while its canvases say the
 // view itself (`data-view`). The labels are the SVG's `text` children; whatever else is drawn on the SVG (the inset's
 // frame, a scale bar) is left alone.
+//
+// A compact map's stage has a `tint`: its land lights a highlighted region in it, as far as the region's ring is drawn,
+// so the land's signature follows the highlight. Without one (the full-size map) the land is the surface colour alone.
 import { canvasLayer } from "../../core/canvas.js";
 import { applyView } from "../../core/map.js";
 import { DOT_OUTLINE, paintAreas, paintBorders } from "../../core/map-paint.js";
 import { SVG_NS } from "../../core/kit.js";
+import { blend } from "./colors.js";
 
 /** The line between two regions, in px. */
 const BORDER = 1;
@@ -59,12 +63,13 @@ function clear(canvas) {
 /**
  * The canvases and labels of one view of a map, inside `el`.
  * @param {HTMLElement} el
- * @param {{ name: string, size: [number, number], geo: object, layers: { kind: string, id: string, module: object }[], scale?: number }} options
+ * @param {{ name: string, size: [number, number], geo: object, layers: { kind: string, id: string, module: object }[], scale?: number, tint?: string | null }} options
  *   `geo` is the element's geography (index.js), `layers` the layer slots in paint order, `scale` how much smaller than the
- *   element the stage is (default 1)
+ *   element the stage is (default 1), `tint` the colour a highlighted region's land takes (a compact map's; none at full
+ *   size, where the land is the surface colour whatever the highlight)
  * @returns {{ paint(state: object, layerStates: object[]): void, svg: SVGSVGElement, destroy(): void }}
  */
-export function createStage(el, { name, size, geo, layers, scale = 1 }) {
+export function createStage(el, { name, size, geo, layers, scale = 1, tint = null }) {
   const [w, h] = size;
   const doc = el.ownerDocument;
   const make = (part, maxRatio) => canvasLayer(el, { left: 0, top: 0, pw: w, ph: h, name: `${name}:${part}`, maxRatio });
@@ -90,12 +95,17 @@ export function createStage(el, { name, size, geo, layers, scale = 1 }) {
     canvas.setAttribute("data-sig", sig);
   };
 
-  /** The land: every region in the surface colour, a region too small to see as a dot ringed in the background. */
-  const landScene = (v) => ({
+  /**
+   * The land: every region in the surface colour, a region too small to see as a dot ringed in the background. Given
+   * `tint` (a compact map's), a highlighted region's land is the tint, blended toward it as far as its ring is drawn
+   * (`highlight.ring`), so the two fade together.
+   */
+  const landScene = (v, highlight, tint) => ({
     source: geo.key, view: v, alpha: 1, hatch: { line: colors.dim, background: colors.surface },
     items: geo.ids.map((id) => {
       const dot = geo.isDot(id, v.k);
-      return { id, fill: colors.surface, stroke: colors.background, width: dot ? DOT_OUTLINE : 0, dot };
+      const fill = tint ? blend(colors.surface, tint, highlight.ring(id)) : colors.surface;
+      return { id, fill, stroke: colors.background, width: dot ? DOT_OUTLINE : 0, dot };
     }),
   });
 
@@ -180,7 +190,7 @@ export function createStage(el, { name, size, geo, layers, scale = 1 }) {
         const same = moving && canvas.getAttribute("data-view") === marks.view && painter(SIGN_ONLY) === shows;
         mark(canvas, same ? shows : painter(canvas), marks);
       };
-      const lands = landScene(v);
+      const lands = landScene(v, highlight, tint);
       put(land, (canvas) => paintAreas(canvas, lands, geo.res));
       layers.forEach((slot, i) => {
         const { prepared, alpha, from, change, frame, fromFrame } = layerStates[i];

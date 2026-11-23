@@ -27,7 +27,9 @@
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
 //             theme's tokens.css, the compact pair for a compact diagram) and not set `caption` without
 //             `compact: true` (diagram-caption-unused, a warning), and every element goes through chartProblems (core/chart-rules.js:
-//             chart-prop-unused, a warning; chart-orient, an error); a `map` that matches its schema goes through
+//             chart-prop-unused, a warning; chart-orient, an error); a compact `map` must not set what it does not
+//             draw (map-compact-ignored, a warning per prop: `labels`, `legend` other than false, `numbers`,
+//             `inset`); a `map` that matches its schema goes through
 //             mapProblems (core/map-rules.js, with each layer's raster JSON and the headers of its PNGs read from the
 //             deck: map-layer, map-frame, map-raster, errors; map-prop-unused, a warning). A map's layers name CSV
 //             columns too: areas key (else the map's id) and value, points lon, lat, id, size, and a color that is
@@ -859,6 +861,9 @@ async function validateSlide(spec, env) {
       }
       for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
       if (type === "map") {
+        if (resolved.compact === true) {
+          for (const item of compactIgnored(resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), "warning");
+        }
         const { files, unreadable } = await rasterFilesOf(env, resolved);
         for (const message of unreadable) {
           report(`${id}|map-raster|${message}`, { slide, element: id, step, rule: "map-raster", measured: message, limit: "a raster file that parses as JSON", fix: "fix the JSON of the raster file" });
@@ -878,6 +883,22 @@ async function validateSlide(spec, env) {
   if (figures.length > 0 && !all.some((d) => isObject(d.props) && d.props.role === "source")) {
     add({ slide, element: figures[0].id, rule: "figure-source", measured: `${figures.map((d) => `${d.id} (${d.type})`).join(", ")} without a source`, limit: "an element with role: \"source\"", fix: `add { id: "src", region: "${regions?.includes("footer") ? "footer" : "main"}", type: "text", props: { role: "source", text: "Source: …" } }` });
   }
+}
+
+/** The props a compact map draws nothing for. */
+const COMPACT_IGNORED = ["labels", "legend", "numbers", "inset"];
+
+/**
+ * What a compact map is given and does not draw: one `map-compact-ignored` item for each of `labels`, `legend` (other
+ * than false), `numbers` and `inset` that is set (not null).
+ */
+function compactIgnored(props) {
+  return COMPACT_IGNORED.filter((prop) => props[prop] !== undefined && props[prop] !== null && !(prop === "legend" && props.legend === false)).map((prop) => ({
+    rule: "map-compact-ignored",
+    message: `\`${prop}\` does nothing on a compact map`,
+    limit: "no `labels`, `legend` (other than false), `numbers` or `inset` with `compact: true`",
+    fix: prop === "legend" ? "set `legend: false`, or remove `legend`" : `remove \`${prop}\`, or set \`compact: false\` for the full-size map`,
+  }));
 }
 
 function checkFile(env, rel, path) {

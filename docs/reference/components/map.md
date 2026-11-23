@@ -51,6 +51,8 @@ export default {
 | `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label. |
 | `labels` | string[] | none | fade | Regions to name, by id: each region's `name` at the centroid of its largest polygon, on a halo. |
 | `legend` | `"bottom-left"` \| `"bottom-right"` \| `"top-left"` \| `"top-right"` \| `false` | `"bottom-left"` | snap | The corner the legend sits in, or no legend. |
+| `compact` | boolean | `false` | snap | Draw the same map small, as a second view: inside the theme's second-view frame, with no legend, names, time-lapse panel or inset. See [Compact](#compact). |
+| `caption` | string | none | fade | With `compact: true`, one line of inline Markdown at the label size in a band at the top. Without `compact` it draws nothing. |
 
 The transition column is the schema's `x-transition` annotation. It feeds the catalog; the motion itself is written in `index.js` and described in [Motion](#motion).
 
@@ -193,6 +195,23 @@ steps: [
 
 The lookup tables the rasters need for the inset's views, at the inset's size, are built at mount with the map's own (see [Views and flights](#views-and-flights)).
 
+## Compact
+
+`compact: true` draws the same map small: a locator in a corner `box` beside a chart, the region under discussion highlighted, on several slides from one boundaries file. Region ids mean the same as at full size, so `highlight` and `view` read the same on both.
+
+```js
+// in a slide's elements, beside the chart:
+{ id: "where", type: "map", box: { x: 1264, y: 600, w: 560, h: 340 },
+  props: { boundaries: "data/regions.geojson", id: "code", compact: true, caption: "West", highlight: ["W4"] } },
+```
+
+- **What it leaves out.** A small map cannot carry names, a legend, the time-lapse panel or an inset, so none of them is created: `labels`, `legend`, `numbers` and `inset` are ignored, and `validate` warns about each one a compact map sets (`map-compact-ignored`; `legend: false` is fine). `check`, `dump` and the accessibility tree see only the caption. Points still draw at their size; layers, `shown`, `view` and its flights, and `frame` and its runs work as at full size.
+- **The frame.** The element's first child is `div.sd-second-view-frame`: the theme's second-view frame (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`; see [Themes](../themes.md)) at the element's edge, its stroke inside the element, under everything the map draws.
+- **The body.** The canvases and the SVG sit in `div.sd-map-compact-body`: the element less the compact pad on every side and less the caption's band at the top. The pad is `--sd-diagram-compact-pad`, the one a compact `diagram` uses (6px in both built-in themes; a theme without it gets a quarter of `--sd-space`). The projection is fitted to the body, with the usual 6% margin of its smaller side, so the geometry every canvas signature names is the body's size.
+- **The caption** takes its own band at the top, inside the frame: one label line (`--sd-font-size-label` × `--sd-line-height-tight`, rounded up) plus the pad, reserved when any step of the slide has a caption, so nothing moves when it comes or goes. It is `div.sd-second-view-caption`, one line of inline Markdown at the label size in ink, on the frame's fill (`--sd-inset-fill`, carried by the caption itself so `check`'s contrast test sees it). A caption too long for the width is never shrunk: it overflows. `check` reports it only when it leaves the canvas or overlaps other text, so look at a screenshot.
+- **Lighting.** A highlighted region's land is filled with a tint of the accent: `--sd-compact-tint` of it mixed into the background (20% in both built-in themes, and in a theme without the token), under the usual ink outline. The other regions keep the surface colour. A shown areas layer covers the land and dims the other regions as at full size. A full-size map's land never takes the tint.
+- **Steps.** `compact` is structure: a step that turns it on or off redraws the map at once. The caption is state: a change crossfades (see [Motion](#motion)).
+
 ## Time-lapse
 
 A raster file with `frames` in place of `src` is a time-lapse: one PNG per frame, each with a unique `label` and, optionally, `numbers` (the same keys in every frame). All frames share the file's `bounds` and `value`, so a colour means the same in every frame.
@@ -254,14 +273,15 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | `view` changes | The map flies there over twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration`. See [Views and flights](#views-and-flights). | The end view. |
 | A layer enters or leaves `shown` | It fades in or out over the theme's `--sd-duration` (400 ms in both built-in themes), or the step's `transition.duration`, with its legend row. | At once. |
 | A shown layer's data or scale changes (a raster's file, scale, `color` or `clip` too) | Its colours crossfade from the old picture to the new over the same time. Points that stay move, resize and change colour from one to the other; new points grow and points that are gone shrink away. | At once. |
-| `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`. | At once. |
+| `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`; on a compact map a region's tint fades with its outline. | At once. |
+| `caption` changes (compact) | The old caption fades out and the new one in, each over half of `--sd-duration` (or of the step's `transition.duration`), alongside the rest of the step. | At once. |
 | `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. | At once. |
 | `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. | The end view. |
 | `labels` changes | Labels that come fade in, labels that go fade out. | At once. |
 | `frame` changes | A run through every frame in between, `pace` ms per frame moved, the panel's numbers counting (`info.expect` gives the engine its length). See [Time-lapse](#time-lapse). | The step's frame and its numbers. |
 | `frame` and other things change | The other changes first, together; then the run, at the end view. | The end state. |
 | `numbers` changes | Rows of the panel that come fade in, rows that go fade out. | At once. |
-| `boundaries`, `id`, `name`, `projection`, `legend`, `pace` change | Drawn at once. | At once. |
+| `boundaries`, `id`, `name`, `projection`, `legend`, `pace`, `compact` change | Drawn at once. | At once. |
 | The element becomes visible | The engine moves its box in (`map` does not own its entrance), already showing that step's layers. | Shown at once. |
 | The page is hidden (a covered or minimized window) | Nothing moves; motion in flight snaps to its end state. | — |
 | A click during a run | The run snaps to its end and the next step applies, as any motion does. | — |
@@ -294,6 +314,16 @@ div.sd-map-panel[data-at]                                with a time-lapse layer
 div.sd-map-legend[data-at]                               the corner, when a shown layer has a legend
   div.sd-legend-row[data-layer]                          from ctx.chart.legendRow
     span.sd-legend-item > svg.sd-legend-circle + label   a size key's circles, after the swatches
+```
+
+A compact map has these children instead, and no inset, panel, legend or names:
+
+```text
+div.sd-second-view-frame                                 the theme's second-view frame, at the element's edge, under everything
+div.sd-second-view-caption                               the caption (inline Markdown), when a step of the slide has one
+div.sd-map-compact-body                                  the body: left, top, width, height in px
+  canvas.sd-canvas-layer[data-layer="main:<part>"]       the canvases above, at the body's size
+  svg.sd-map-labels                                      empty
 ```
 
 Every canvas carries the state it shows, which `dump` prints and `check --played` compares without reading pixels: `data-view` (the view as `k,x,y`, `1.000,0.000,0.000` for the whole map, the view of the moment during a flight), `data-shown` (the layers painted), `data-highlight` (the highlighted regions and points), `data-frame` (the label of the frame the map's time-lapse is at, as the panel shows it; empty when no layer the step declares is a time-lapse) and `data-sig`, the signature of what was painted (empty for a cleared layer); the inset's canvases say the same, with the inset's own `data-view`. A signature covers the geometry too (the boundaries file, the projection and the element's size), so a step that changes `projection` changes it. The element fills the room its region leaves, like a chart.
@@ -340,7 +370,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `data/rates.csv: key 'N1' appears twice` | Two rows name the same region. |
 | ``\`midpoint\` must be one of \`classes\` (5, 10, 20)`` | `midpoint` and `classes` together, with a midpoint that is not a break. |
 
-`validate` checks the schema and that every file the props name exists, and catches much of the rest before the map is shown: the ids in `shown` (`map-layer`), `frame` and the labels and `numbers` keys of the time-lapse files (`map-frame`, `map-prop-unused`), the raster files and their images (`map-raster`), the columns a layer names (`missing-column`) and the length of a run (`map-run`). It does not join the rows to the regions or check the ids in `highlight`, `labels` and `view`: those are checked when the slide renders. Run `check` (or `dump`) to see them:
+`validate` checks the schema and that every file the props name exists, warns when a compact map sets a prop it does not draw (`map-compact-ignored`), and catches much of the rest before the map is shown: the ids in `shown` (`map-layer`), `frame` and the labels and `numbers` keys of the time-lapse files (`map-frame`, `map-prop-unused`), the raster files and their images (`map-raster`), the columns a layer names (`missing-column`) and the length of a run (`map-run`). It does not join the rows to the regions or check the ids in `highlight`, `labels` and `view`: those are checked when the slide renders. Run `check` (or `dump`) to see them:
 
 ```text
 areas/map: data/rates.csv: key '07' matches no region
@@ -367,6 +397,8 @@ areas/map: data/rates.csv: key '07' matches no region
 **An inset in the legend's corner.** The two do not move apart: keep them in different corners.
 
 **A region and a point with one id.** `highlight` treats them as one: give points ids no region has.
+
+**A compact map under a shown layer.** The tint is on the land: a shown areas layer or raster covers it. For a locator, show the regions alone and let `highlight` light the region.
 
 ## For agents
 

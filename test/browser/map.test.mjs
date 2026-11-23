@@ -1,4 +1,4 @@
-// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, points, labels, highlight, the legend, flights, the inset and time-lapse runs, on the map fixture deck
+// The built-in `map` in Chrome: boundaries, choropleth areas, raster layers, points, labels, highlight, the legend, flights, the inset, time-lapse runs and a compact map, on the map fixture deck
 // (test/fixtures/decks/map) and its broken twin. Played equals jumped is checked on markup and canvas pixels; pixel
 // positions come from the same projection the component fits, computed here in Node. Run with:
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map.test.mjs
@@ -9,6 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deckTarget, withPage } from "../../cli/browser.js";
+import { check } from "../../cli/check.js";
+import { dump } from "../../cli/dump.js";
+import { formatProblem } from "../../cli/problems.js";
 import { copyEngine } from "../../cli/engine.js";
 import { d3 } from "../../engine/core/d3.js";
 import { DEFAULT_PROJECTION, applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
@@ -1688,4 +1691,221 @@ test("a second-view frame paints under the element's canvases whatever the DOM o
       assert.notEqual(lines.caption, lines.body, `${theme}: and not the body leading`);
     });
   }
+});
+
+// --- a compact map: the second view -------------------------------------------------------------------------------
+
+const COMPACT_STEPS = ["plain", "lit", "rates", "fly", "years", "run", "home"];
+/**
+ * The compact map of the fixture is 560 x 340 px. Both themes have a compact pad of 6 px and a label line of 28 px on a
+ * tight leading of 1.15, so the caption's band is ceil(28 × 1.15) + 6 = 39 px, and the body the map is fitted to is
+ * the element less the pad on every side and the band at the top.
+ */
+const COMPACT_SIZE = [560, 340];
+const PAD = 6;
+const BAND = Math.ceil(28 * 1.15) + PAD;
+const BODY = [COMPACT_SIZE[0] - 2 * PAD, COMPACT_SIZE[1] - 2 * PAD - BAND];
+const BODY_AT = anchors("data/regions.geojson", BODY);
+/** The body's place is inline, in px: content, not motion residue. */
+const COMPACT_KEEP = ".sd-map-compact-body";
+const ignored = deckPages("test/fixtures/validate/map-compact-ignored/");
+const rgbOf = (s) => s.match(/\d+/g).slice(0, 3).map(Number);
+/** `share` of colour `c` mixed into `bg` in RGB, as `rgb(...)`. */
+const mixRgb = (bg, c, share) => `rgb(${rgbOf(bg).map((v, i) => Math.round(v + (rgbOf(c)[i] - v) * share)).join(", ")})`;
+const within = (a, b, by) => rgbOf(a).every((v, i) => Math.abs(v - rgbOf(b)[i]) <= by);
+const tokenOf = (page, name) => page.evaluate((name) => getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue(name).trim(), name);
+/** The tint a compact map lights a region with: --sd-compact-tint of the accent mixed into the background. */
+const tintOf = async (page) => mixRgb(await tokenRgb(page, "--sd-color-background"), await tokenRgb(page, "--sd-color-accent"), parseFloat(await tokenOf(page, "--sd-compact-tint")) / 100);
+
+/** The element's children and boxes, in its own px: the frame, the caption, the body and the canvases and SVG in it. */
+const compactLayout = (page, id = "map") =>
+  page.evaluate((id) => {
+    const el = document.querySelector(`[data-el="${id}"]`);
+    const at = el.getBoundingClientRect();
+    const scale = at.width / el.offsetWidth;
+    const box = (n) => {
+      const b = n.getBoundingClientRect();
+      return [b.left - at.left, b.top - at.top, b.width, b.height].map((v) => Math.round((v / scale) * 100) / 100);
+    };
+    const body = el.querySelector(":scope > .sd-map-compact-body");
+    return {
+      children: [...el.children].map((n) => `${n.localName}.${n.getAttribute("class")}`),
+      frame: box(el.querySelector(":scope > .sd-second-view-frame")),
+      caption: box(el.querySelector(":scope > .sd-second-view-caption")),
+      body: box(body),
+      canvases: [...body.querySelectorAll(":scope > canvas")].map((c) => [...box(c), c.width, c.height]),
+      svg: box(body.querySelector(":scope > svg")),
+      loose: el.querySelectorAll(":scope > canvas, :scope > svg").length,
+    };
+  }, id);
+
+test("compact map: no legend, names, panel or inset, even when the props name them", async () => {
+  await withPage({ root, url: ignored.url("s") }, async (page, ctx) => {
+    const parts = (id) =>
+      page.evaluate((id) => {
+        const el = document.querySelector(`[data-el="${id}"]`);
+        return {
+          legend: el.querySelectorAll(".sd-map-legend").length,
+          labels: el.querySelectorAll("text.sd-map-label").length,
+          panel: el.querySelectorAll(".sd-map-panel").length,
+          inset: el.querySelectorAll(".sd-map-inset-stage, g.sd-map-inset").length,
+          text: el.textContent.replace(/\s+/g, " ").trim(),
+        };
+      }, id);
+    const full = await parts("full");
+    assert.ok(full.legend === 1 && full.labels >= 1 && full.panel === 1 && full.inset >= 1, `the same props draw them all at full size (${JSON.stringify(full)})`);
+    const small = await parts("small");
+    assert.deepEqual([small.legend, small.labels, small.panel, small.inset], [0, 0, 0, 0], "compact draws none of them");
+    assert.equal(small.text, "Where", "the caption is the compact map's only text");
+    const layout = await compactLayout(page, "small");
+    assert.deepEqual(layout.children, ["div.sd-second-view-frame", "div.sd-second-view-caption", "div.sd-map-compact-body"]);
+    assert.equal(layout.loose, 0, "every canvas and the SVG are in the body");
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[data-el="small"] canvas')].map((c) => c.dataset.layer)), ["main:base", "main:raster:years", "main:borders"]);
+    assert.equal((await parts("quiet")).text, "Here");
+    assert.deepEqual(await errorsOf(page), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact map: the caption band shifts the map down; the canvases are the body's size", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    await withPage({ root, url: pages.url("compact", `step=plain&theme=${theme}`) }, async (page, ctx) => {
+      const pad = parseFloat(await tokenOf(page, "--sd-diagram-compact-pad"));
+      const line = Math.ceil(parseFloat(await tokenOf(page, "--sd-font-size-label")) * parseFloat(await tokenOf(page, "--sd-line-height-tight")));
+      assert.deepEqual([pad, line + pad], [PAD, BAND], `${theme}: the pad and the band the test expects`);
+      const r = await compactLayout(page);
+      assert.deepEqual(r.children, ["div.sd-second-view-frame", "div.sd-second-view-caption", "div.sd-map-compact-body"], `${theme}: the frame, the caption and the body`);
+      assert.deepEqual(r.frame, [0, 0, ...COMPACT_SIZE], `${theme}: the frame is at the element's edge`);
+      assert.deepEqual(r.body, [PAD, PAD + BAND, ...BODY], `${theme}: the body is in by the pad, below the caption's band`);
+      assert.deepEqual(r.caption.slice(0, 3), [PAD, PAD, COMPACT_SIZE[0] - 2 * PAD], `${theme}: the caption spans the top of the band`);
+      assert.ok(r.caption[1] + r.caption[3] <= r.body[1], `${theme}: and ends above the body (${r.caption} vs ${r.body})`);
+      assert.equal(r.canvases.length, 4, `${theme}: the land, the two layers and the borders`);
+      for (const c of r.canvases) assert.deepEqual(c, [PAD, PAD + BAND, ...BODY, ...BODY], `${theme}: each canvas is the body's size, at its place`);
+      assert.deepEqual(r.svg, [PAD, PAD + BAND, ...BODY], `${theme}: and so is the SVG`);
+      assert.equal(r.loose, 0);
+      // the projection is fitted to the body: North's centre, through it, is land
+      assert.equal(rgb(await pixelAt(page, "main:base", BODY_AT.get("N1"))), await tokenRgb(page, "--sd-color-surface"));
+      assert.deepEqual(await errorsOf(page), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  }
+});
+
+for (const theme of ["academic-light", "modern"]) {
+  test(`compact map (${theme}): a highlighted region's land takes the tint`, async () => {
+    await withPage({ root, url: pages.url("compact", `step=plain&theme=${theme}`) }, async (page, ctx) => {
+      const sig = () => page.evaluate(() => document.querySelector('[data-el="map"] canvas[data-layer="main:base"]').dataset.sig);
+      const [surface, ink, tint] = [await tokenRgb(page, "--sd-color-surface"), await tokenRgb(page, "--sd-color-ink"), await tintOf(page)];
+      assert.equal(await tokenOf(page, "--sd-compact-tint"), "20%");
+      assert.notEqual(tint, surface);
+      const plain = await sig();
+      assert.equal(rgb(await pixelAt(page, "main:base", BODY_AT.get("N1"))), surface, "unlit, North is the surface colour");
+      await goTo(page, "compact", "lit");
+      const north = rgb(await pixelAt(page, "main:base", BODY_AT.get("N1")));
+      assert.ok(within(north, tint, 2), `lit, North's land is the tint (${north} vs ${tint})`);
+      for (const id of ["W1", "S2", "E1"]) assert.equal(rgb(await pixelAt(page, "main:base", BODY_AT.get(id))), surface, `${id} keeps the surface colour`);
+      assert.notEqual(await sig(), plain, "the land's signature changes with the highlight");
+      assert.equal(rgb(await pixelAt(page, "main:borders", BODY_AT.edge("N1"))), ink, "and North keeps its ink ring");
+      assert.deepEqual(await errorsOf(page), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("compact map: the tint moves with the highlight on a played step, the ring with it", async () => {
+  await withPage({ root, url: pages.url("compact", "step=plain&motion=full") }, async (page, ctx) => {
+    const [surface, tint] = [await tokenRgb(page, "--sd-color-surface"), await tintOf(page)];
+    const [[x, y], [ex, ey]] = [BODY_AT.get("N1"), BODY_AT.edge("N1")];
+    const probe = new Function("el", `
+      const px = (layer, x, y) => [...el.querySelector('canvas[data-layer="' + layer + '"]').getContext("2d").getImageData(x, y, 1, 1).data];
+      const land = px("main:base", ${x}, ${y});
+      return { color: "rgb(" + land.slice(0, 3).join(", ") + ")", ring: px("main:borders", ${ex}, ${ey}).join(",") };`);
+    const { frames, end } = await sampleFrames(page, "compact", "lit", "map", probe);
+    assert.equal(frames[0].color, surface, "North starts in the surface colour");
+    assert.ok(within(end.color, tint, 2), `and ends in the tint (${end.color})`);
+    const part = frames.filter((f) => strictlyBetween(f.color, surface, end.color));
+    assert.ok(part.length >= 1, `a frame shows a colour between the two (${frames.map((f) => f.color).join(" | ")})`);
+    assert.notEqual(frames[0].ring, end.ring, "the ring comes in");
+    assert.ok(part.every((f) => f.ring !== frames[0].ring && f.ring !== end.ring), "and is part-way in whenever the tint is");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact map: played equals jumped, pixels too, backward and interrupted", async () => {
+  await withPage({ root, url: pages.url("compact", "step=plain") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "compact", steps: COMPACT_STEPS, id: "map" });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "compact", steps: COMPACT_STEPS, id: "map" });
+    // across the highlight change, the flight and the frame change
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "plain", via: "lit", to: "rates", id: "map", keep: COMPACT_KEEP });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "rates", via: "fly", to: "years", id: "map", keep: COMPACT_KEEP });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "years", via: "run", to: "home", id: "map", keep: COMPACT_KEEP });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("compact map: a caption change crossfades over --sd-duration, in two halves", async () => {
+  await withPage({ root, url: pages.url("compact", "step=plain&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "compact", "lit", "map", (el) => {
+      const c = el.querySelector(".sd-second-view-caption");
+      return { text: c.textContent, opacity: Number(getComputedStyle(c).opacity), inline: c.getAttribute("style") };
+    });
+    assert.ok(r.frames.some((f) => f.text === "All regions" && f.opacity > 0 && f.opacity < 0.5), "the old caption fades out");
+    assert.ok(r.frames.some((f) => f.text === "North" && f.opacity > 0 && f.opacity < 1), "the new caption fades in");
+    const swap = r.frames.find((f) => f.text === "North");
+    assert.ok(swap.ms >= 150, `the text swaps half-way, not at once (${swap.ms.toFixed(0)} ms)`);
+    const done = r.frames.find((f) => f.text === "North" && f.opacity === 1);
+    assert.ok(done.ms >= 330 && done.ms < 3000, `the crossfade takes --sd-duration (in at ${done.ms.toFixed(0)} ms)`);
+    assert.ok(r.frames.every((f) => f.text === "All regions" || f.ms >= swap.ms), "the old text never comes back");
+    assert.deepEqual([r.end.text, r.end.opacity, r.end.inline], ["North", 1, null]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a compact map draws under a theme without the new tokens: the frame, the pad and the tint fall back", async () => {
+  // A test-only theme in a temporary engine copy next to the map fixture deck; nothing is added under engine/themes/.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-compact-map-")));
+  try {
+    const dir = join(tmp, "deck");
+    copyEngine(join(dir, "stepdeck"));
+    cpSync(join(root, DECK), dir, { recursive: true });
+    const themes = join(dir, "stepdeck/themes");
+    cpSync(join(themes, "modern"), join(themes, "compact-bare"), { recursive: true });
+    const file = join(themes, "compact-bare/tokens.css");
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^\s*--sd-(inset|compact|diagram-compact)-[\w-]+:[^;]*;\n/gm, ""));
+    assert.doesNotMatch(readFileSync(file, "utf8"), /--sd-(inset|compact|diagram-compact)-/, "the theme has none of the new tokens");
+    const target = deckTarget(dir);
+    await withPage({ root: target.root, url: target.url({ slide: "compact", step: "lit", query: { theme: "compact-bare" } }) }, async (page, ctx) => {
+      const pad = parseFloat(await tokenOf(page, "--sd-space")) / 4;
+      const band = Math.ceil(parseFloat(await tokenOf(page, "--sd-font-size-label")) * parseFloat(await tokenOf(page, "--sd-line-height-tight"))) + pad;
+      assert.notEqual(pad, PAD, "the fallback pad differs from the theme's own");
+      const body = [COMPACT_SIZE[0] - 2 * pad, COMPACT_SIZE[1] - 2 * pad - band];
+      const r = await compactLayout(page);
+      assert.deepEqual(r.body, [pad, pad + band, ...body], "the pad falls back to a quarter of --sd-space");
+      assert.deepEqual(r.caption.slice(0, 2), [pad, pad], "the caption takes the same pad");
+      const look = await page.evaluate(() => {
+        const cs = getComputedStyle(document.querySelector('[data-el="map"] > .sd-second-view-frame'));
+        return { color: cs.borderTopColor, width: parseFloat(cs.borderTopWidth), fill: cs.backgroundColor };
+      });
+      const [ink, bg, rule] = [await tokenRgb(page, "--sd-color-ink"), await tokenRgb(page, "--sd-color-background"), parseFloat(await tokenOf(page, "--sd-rule-width"))];
+      assert.deepEqual([look.color, look.width, look.fill], [ink, rule, bg], "the frame falls back to ink, the rule width and the background");
+      const tint = mixRgb(bg, await tokenRgb(page, "--sd-color-accent"), 0.2);
+      const north = rgb(await pixelAt(page, "main:base", anchors("data/regions.geojson", body).get("N1")));
+      assert.ok(within(north, tint, 2), `the tint falls back to 20% (${north} vs ${tint})`);
+      assert.deepEqual(await errorsOf(page), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("check is clean on the compact map, played, in both themes; dump reports its caption as its text", async () => {
+  const deck = join(root, DECK);
+  for (const theme of ["academic-light", "modern"]) {
+    const problems = await check(deck, { slide: "compact", played: true, theme });
+    assert.deepEqual(problems.map(formatProblem), [], theme);
+  }
+  const out = await dump(deck, { slide: "compact" });
+  const text = Object.fromEntries(out.map((d) => [d.stepId, d.elements.find((e) => e.id === "map").text]));
+  assert.deepEqual(text, { plain: "All regions", lit: "North", rates: "Rates in North", fly: "Closer", years: "People, 2010", run: "People, 2013", home: "All regions" });
 });

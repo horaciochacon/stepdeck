@@ -343,6 +343,12 @@ rect.sd-second-view-frame { fill: var(--sd-inset-fill, var(--sd-color-background
 .sd-el:has(> .sd-second-view-frame) { isolation: isolate; }
 div.sd-second-view-frame { position: absolute; z-index: -1; inset: 0; box-sizing: border-box; border: var(--sd-inset-stroke-width, var(--sd-rule-width)) solid var(--sd-inset-stroke, var(--sd-color-ink)); background: var(--sd-inset-fill, var(--sd-color-background)); border-radius: var(--sd-inset-radius, 0px); pointer-events: none; }
 .sd-second-view-caption { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); color: var(--sd-color-ink); line-height: var(--sd-line-height-tight); margin: 0; white-space: nowrap; background: var(--sd-inset-fill, var(--sd-color-background)); }
+/* a compact map (components/map/index.js): its stage sits in div.sd-map-compact-body, placed inside the frame in px
+   (inline left, top, width, height); its caption, the div after the frame, sits at the top of the band above the body,
+   in by the compact pad as the body is (the component reads the same token, with the same fallback). The caption's
+   place is here, not inline, because a crossfade wipes the inline style of what it fades. */
+.sd-map-compact-body { position: absolute; pointer-events: none; }
+div.sd-second-view-frame + .sd-second-view-caption { position: absolute; top: var(--sd-diagram-compact-pad, calc(var(--sd-space) * 0.25)); left: var(--sd-diagram-compact-pad, calc(var(--sd-space) * 0.25)); right: var(--sd-diagram-compact-pad, calc(var(--sd-space) * 0.25)); }
 
 /* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
    background colour; the legend in the corner `legend` names (data-at), on a panel of the background colour so its text
