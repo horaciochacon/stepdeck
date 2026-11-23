@@ -1,5 +1,5 @@
-// Process story: where we are. A result slide (estimates with intervals) carries a compact copy of the process in the
-// corner of its notes column, lit at the stage the result belongs to. The copy binds the same five props as the full
+// Process story: where we are. A result slide (estimates with intervals) carries a compact copy of the process in its
+// right column, lit at the stage the result belongs to. The copy binds the same five props as the full
 // diagram on explain-process, so the two cannot drift. Data: data/story-estimates.csv and data/process.json.
 const process = {
   cols: "{{data/process.json#/cols}}",
@@ -11,7 +11,7 @@ const process = {
 export default {
   id: "explain-fit",
   layout: "figure-notes",
-  title: "The fit puts two regions above average",
+  title: "The fit puts some regions above average",
   elements: [
     { id: "points", region: "main", type: "chart.points",
       props: { data: "data/story-estimates.csv", x: "region", y: "rate", interval: { lower: "low", upper: "high" },

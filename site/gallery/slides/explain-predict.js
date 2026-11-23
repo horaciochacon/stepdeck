@@ -22,7 +22,7 @@ export default {
   ],
   steps: [
     { id: "observed" },
-    { id: "forecast", set: { chart: { until: 2040 }, where: { caption: "Predicting: tables", highlight: ["predict", "predict-tables", "predict-briefs", "tables", "briefs"] } } },
+    { id: "forecast", set: { chart: { until: 2040 }, where: { caption: "Predicting: outputs", highlight: ["predict", "predict-tables", "predict-briefs", "tables", "briefs"] } } },
   ],
   notes: "The same compact diagram as explain-fit, lit at the next stage. Reference: docs/guide/second-views.md",
 };
