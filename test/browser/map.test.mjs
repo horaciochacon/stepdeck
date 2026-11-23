@@ -1909,3 +1909,235 @@ test("check is clean on the compact map, played, in both themes; dump reports it
   const text = Object.fromEntries(out.map((d) => [d.stepId, d.elements.find((e) => e.id === "map").text]));
   assert.deepEqual(text, { plain: "All regions", lit: "North", rates: "Rates in North", fly: "Closer", years: "People, 2010", run: "People, 2013", home: "All regions" });
 });
+
+// --- the locator inset ------------------------------------------------------------------------------------------
+// `inset.locator`: the inset shows `inset.view` (here the whole map, or a region) and the box is drawn inside it, marking
+// what the map shows; no leaders. The box is clipped to the inset. These tests could move to a file of their own.
+
+const LOCATOR_STEPS = ["home", "locator", "north", "west", "closer", "wide", "pair", "partial", "away", "corner", "zoom", "off"];
+/** What each step with a locator shows: the map's view (region ids, or null for home), the inset's and the corner. */
+const LOCATOR = {
+  locator: { main: null, inset: null, at: "top-right" },
+  north: { main: ["N1"], inset: null, at: "top-right" },
+  west: { main: ["W1"], inset: null, at: "top-right" },
+  closer: { main: ["W1"], inset: ["W1", "S2"], at: "top-right" },
+  wide: { main: null, inset: ["W1"], at: "top-right" },
+  pair: { main: ["W1", "S2"], inset: ["W1"], at: "top-right" },
+  partial: { main: ["S1"], inset: ["W1"], at: "top-right" },
+  away: { main: ["N1"], inset: ["W1"], at: "top-right" },
+  corner: { main: ["N1"], inset: null, at: "bottom-left" },
+};
+const HOME = { k: 1, x: 0, y: 0 };
+const fitted = (ids) => (ids ? view(BASE, ids.map((id) => REGIONS.get(id)), SIZE) : HOME);
+/** The part of the element's px the inset's px `[0, 0, IW, IH]` cover. */
+const INSET_PX = [0, 0, IW, IH];
+
+/** Where the map's view `main` (region ids or null) is, in the px of an inset that looks at `inset`: the element's two corners seen through the inset's view, unclipped. */
+function locatorBoxOf(main, inset) {
+  const [m, i] = [fitted(main), fitted(inset)];
+  const s = IW / SIZE[0];
+  const seen = { k: i.k * s, x: i.x * s, y: i.y * s };
+  const at = ([x, y]) => applyView(seen, [(x - m.x) / m.k, (y - m.y) / m.k]);
+  return [...at([0, 0]), ...at(SIZE)];
+}
+/** `box` cut to the inset's rectangle, or null when nothing of it is inside. */
+function clipped([x0, y0, x1, y1]) {
+  const box = [Math.max(x0, 0), Math.max(y0, 0), Math.min(x1, IW), Math.min(y1, IH)];
+  return box[0] < box[2] && box[1] < box[3] ? box : null;
+}
+const insideOf = (box, [x0, y0, x1, y1]) => box[0] >= x0 - 1e-6 && box[1] >= y0 - 1e-6 && box[2] <= x1 + 1e-6 && box[3] <= y1 + 1e-6;
+
+/** The locator's furniture on the page: the box and where it is, the frame group in the main SVG with what is in it, the inset's own SVG's children. */
+const locatorOf = (page) =>
+  page.evaluate(() => {
+    const el = document.querySelector('[data-el="map"]');
+    const stage = el.querySelector(".sd-map-inset-stage");
+    const g = el.querySelector(":scope > svg.sd-map-labels > g.sd-map-inset");
+    const num = (node, name) => Number(node.getAttribute(name));
+    const rectOf = (r) => (r ? [num(r, "x"), num(r, "y"), num(r, "x") + num(r, "width"), num(r, "y") + num(r, "height")] : null);
+    const inner = stage?.querySelector(":scope > svg.sd-map-labels");
+    return {
+      box: rectOf(inner?.querySelector(":scope > rect.sd-map-inset-box")),
+      boxes: el.querySelectorAll(".sd-map-inset-box").length,
+      frame: rectOf(g?.querySelector("rect.sd-map-inset-frame")),
+      group: g ? [...g.children].map((c) => c.getAttribute("class")) : null,
+      leaders: el.querySelectorAll("line.sd-map-inset-leader").length,
+      inner: inner ? [...inner.children].map((c) => c.localName + (c.getAttribute("class") ? `.${c.getAttribute("class")}` : "")).filter((c) => !c.startsWith("text")) : null,
+    };
+  });
+
+/** The inset's rectangle in the element at corner `at`. */
+const insetRect = (at) => {
+  const [x, y] = [at.endsWith("left") ? MARGIN : SIZE[0] - MARGIN - IW, at.startsWith("top") ? MARGIN : SIZE[1] - MARGIN - IH];
+  return [x, y, x + IW, y + IH];
+};
+
+test("locator: the box is inside the inset and marks the main view", async () => {
+  await withPage({ root, url: pages.url("locator", "step=locator") }, async (page, ctx) => {
+    for (const step of LOCATOR_STEPS.slice(1, 10)) {
+      await goTo(page, "locator", step);
+      const { main, inset, at } = LOCATOR[step];
+      const { box, boxes, frame, group } = await locatorOf(page);
+      const unclipped = locatorBoxOf(main, inset);
+      const expected = clipped(unclipped);
+      assert.ok(near(frame, insetRect(at), 0), `${step}: the frame is the inset's rectangle (${frame})`);
+      assert.deepEqual(group, ["sd-map-inset-frame"], `${step}: the main SVG's group holds the frame alone`);
+      if (!expected) {
+        assert.equal(box, null, `${step}: the inset shows nothing of what the map shows, so there is no box`);
+        assert.equal(boxes, 0, `${step}: and none anywhere`);
+        continue;
+      }
+      assert.equal(boxes, 1, `${step}: one box in the element`);
+      assert.ok(box, `${step}: and it is in the inset's SVG`);
+      assert.ok(insideOf(box, INSET_PX), `${step}: the box ${box} lies inside the inset`);
+      assert.ok(near(box, expected), `${step}: the box ${box} is ${expected.map((v) => v.toFixed(1))}`);
+      if (clipped(unclipped).every((v, i) => v === unclipped[i])) {
+        assert.ok(Math.abs((box[2] - box[0]) / (box[3] - box[1]) - SIZE[0] / SIZE[1]) < 0.02, `${step}: the box has the map's aspect`);
+      }
+    }
+    // the whole map at home in an inset of the whole map: the box is all of the inset, and a map zoomed to a region a part of it
+    await goTo(page, "locator", "locator");
+    assert.ok(near((await locatorOf(page)).box, INSET_PX), "home in the whole map: the box is the whole inset");
+    await goTo(page, "locator", "west");
+    const west = (await locatorOf(page)).box;
+    assert.ok(west[2] - west[0] < IW / 2 && west[3] - west[1] < IH / 2, "Westmere's view is a small part of the whole map");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("locator: no leaders", async () => {
+  await withPage({ root, url: pages.url("locator", "step=locator") }, async (page, ctx) => {
+    for (const step of LOCATOR_STEPS.slice(1, 10)) {
+      await goTo(page, "locator", step);
+      assert.equal((await locatorOf(page)).leaders, 0, `${step}: no leaders`);
+    }
+    // the same inset without `locator` has them again, and its box is on the map
+    await goTo(page, "locator", "zoom");
+    const zoom = await locatorOf(page);
+    assert.equal(zoom.leaders, 2, "a zoom inset has its two leaders");
+    assert.deepEqual(zoom.group, ["sd-map-inset-leader", "sd-map-inset-leader", "sd-map-inset-box", "sd-map-inset-frame"]);
+    assert.deepEqual([zoom.box, zoom.boxes], [null, 1], "its box is the map's, none in the inset");
+    await goTo(page, "locator", "off");
+    assert.deepEqual(await locatorOf(page), { box: null, boxes: 0, frame: null, group: null, leaders: 0, inner: null }, "and nothing is left when it goes");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("locator: the inset's SVG holds the names, the box and the scale bar, in that order, however it got there", async () => {
+  await withPage({ root, url: pages.url("locator", "step=locator") }, async (page, ctx) => {
+    assert.deepEqual((await locatorOf(page)).inner, ["rect.sd-map-inset-box", "g.sd-map-scale"]);
+    await goTo(page, "locator", "corner"); // no scale bar
+    assert.deepEqual((await locatorOf(page)).inner, ["rect.sd-map-inset-box"]);
+    await goTo(page, "locator", "zoom"); // not a locator, a scale bar again
+    assert.deepEqual((await locatorOf(page)).inner, ["g.sd-map-scale"]);
+    await goTo(page, "locator", "off");
+    assert.equal((await locatorOf(page)).inner, null);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+/** A `sampleFrames` probe of the locator's box in the inset's px, with the box's four edges (null when there is none). */
+const locatorProbe = new Function("el", `
+  const r = el.querySelector(".sd-map-inset-stage rect.sd-map-inset-box");
+  const n = (name) => Number(r.getAttribute(name));
+  return { box: r ? [n("x"), n("y"), n("x") + n("width"), n("y") + n("height")] : null };`);
+/** How far `box` is from `end`: the largest difference of an edge. */
+const apart = (box, end) => Math.max(...box.map((v, i) => Math.abs(v - end[i])));
+
+test("locator: the box follows a flight of the main view", async () => {
+  await withPage({ root, url: pages.url("locator", "step=locator&motion=full") }, async (page, ctx) => {
+    const { frames, end, settledMs } = await sampleFrames(page, "locator", "north", "map", locatorProbe);
+    const [from, to] = [locatorBoxOf(null, null), locatorBoxOf(["N1"], null)];
+    assert.ok(near(frames[0].box, from, 0.51), `the box starts at the whole map's (${frames[0].box})`);
+    assert.ok(near(end.box, to), `and ends at North's (${end.box} vs ${to})`);
+    const boxes = frames.map((f) => f.box).filter(Boolean);
+    assert.equal(boxes.length, frames.length, "there is a box in every frame");
+    assert.ok(boxes.filter((b) => apart(b, from) > 2 && apart(b, to) > 2).length >= 2, "frames with the box strictly between its two ends");
+    assert.ok(new Set(boxes.map((b) => b.join())).size > 3, "the box moves from frame to frame");
+    // toward its end position: never farther from it than the frame before (a pixel of slack for rounding)
+    boxes.forEach((b, i) => i && assert.ok(apart(b, to) <= apart(boxes[i - 1], to) + 1, `frame ${i}: ${apart(b, to).toFixed(1)} px from the end, was ${apart(boxes[i - 1], to).toFixed(1)}`));
+    assert.ok(settledMs < 5000, `it settles (${settledMs.toFixed(0)} ms)`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("locator: the box follows a flight of the inset too", async () => {
+  await withPage({ root, url: pages.url("locator", "step=west&motion=full") }, async (page, ctx) => {
+    const { frames, end } = await sampleFrames(page, "locator", "closer", "map", locatorProbe);
+    const [from, to] = [locatorBoxOf(["W1"], null), locatorBoxOf(["W1"], ["W1", "S2"])];
+    assert.ok(near(frames[0].box, from), `the box starts where the whole map puts Westmere (${frames[0].box})`);
+    assert.ok(near(end.box, to), `and ends where the pair does (${end.box} vs ${to})`);
+    const boxes = frames.map((f) => f.box);
+    assert.ok(boxes.every(Boolean), "a box in every frame");
+    assert.ok(boxes.filter((b) => apart(b, from) > 2 && apart(b, to) > 2).length >= 2, "frames with the box strictly between its two ends");
+    boxes.forEach((b, i) => i && assert.ok(apart(b, to) <= apart(boxes[i - 1], to) + 1, `frame ${i} is no farther from the end`));
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("locator: a main view wider than the inset is clipped", async () => {
+  await withPage({ root, url: pages.url("locator", "step=west&motion=full") }, async (page, ctx) => {
+    // at rest: the map at home, the inset on Westmere: the box would be far larger than the inset
+    await goTo(page, "locator", "wide");
+    const unclipped = locatorBoxOf(null, ["W1"]);
+    assert.ok(unclipped[2] - unclipped[0] > 2 * IW, "the map's view is much wider than the inset's");
+    const rest = await locatorOf(page);
+    assert.ok(near(rest.box, INSET_PX), `the box is cut to the inset (${rest.box})`);
+    // a box cut on two sides only
+    await goTo(page, "locator", "partial");
+    const partial = (await locatorOf(page)).box;
+    const raw = locatorBoxOf(["S1"], ["W1"]);
+    assert.ok(raw[0] > 0 && raw[1] > 0 && raw[2] > IW && raw[3] > IH, "Southmouth's view runs off the inset's right and bottom");
+    assert.ok(near(partial, [raw[0], raw[1], IW, IH]), `the box keeps its top-left and is cut at the other two sides (${partial})`);
+
+    // in flight: the box stays inside the inset in every frame, as the map and the inset both fly
+    await ctx.open(pages.url("locator", "step=west&motion=full"));
+    const { frames, end } = await sampleFrames(page, "locator", "wide", "map", locatorProbe);
+    const boxes = frames.map((f) => f.box).filter(Boolean);
+    assert.ok(boxes.length >= 2, "the box is there while it flies");
+    assert.ok(boxes.every((b) => insideOf(b, INSET_PX)), `every box lies inside the inset (${boxes.filter((b) => !insideOf(b, INSET_PX)).join(" | ")})`);
+    assert.ok(near(end.box, INSET_PX), "and ends as the whole inset");
+
+    // nothing of the map's view inside the inset: no box, in flight as at rest
+    await goTo(page, "locator", "partial");
+    await goTo(page, "locator", "away");
+    const gone = await locatorOf(page);
+    assert.deepEqual([gone.box, gone.boxes], [null, 0], "no box when the inset shows nothing of the map's view");
+    assert.deepEqual(gone.group, ["sd-map-inset-frame"], "the frame is still there");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("locator: played equals jumped, pixels too", async () => {
+  await withPage({ root, url: pages.url("locator", "step=home") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "locator", steps: LOCATOR_STEPS, id: "map" });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("locator: backward and interrupted, even in the middle of a flight, equal the jump", async () => {
+  await withPage({ root, url: pages.url("locator", "step=home") }, async (page, ctx) => {
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "locator", steps: LOCATOR_STEPS, id: "map" });
+    const [slide, id, keep] = ["locator", "map", INSET_KEEP];
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "home", via: "locator", to: "north", id, keep });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "locator", via: "north", to: "west", id, keep });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "west", via: "closer", to: "wide", id, keep });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "closer", via: "wide", to: "pair", id, keep });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "away", via: "corner", to: "zoom", id, keep });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide, from: "corner", via: "zoom", to: "off", id, keep });
+    assert.deepEqual(await errorsOf(page), []);
+  });
+});
+
+test("an inset without locator is unchanged", async () => {
+  await withPage({ root, url: pages.url("inset", "step=inset") }, async (page, ctx) => {
+    for (const step of ["inset", "pair"]) {
+      await goTo(page, "inset", step);
+      const { box, boxes, group, leaders, inner } = await locatorOf(page);
+      assert.deepEqual([box, boxes, leaders], [null, 1, 2], `${step}: the box is on the map, with its two leaders, and none is in the inset`);
+      assert.deepEqual(group, ["sd-map-inset-leader", "sd-map-inset-leader", "sd-map-inset-box", "sd-map-inset-frame"], `${step}: the main SVG's group is as it was`);
+      assert.deepEqual(inner, ["g.sd-map-scale"], `${step}: the inset's SVG has only its scale bar`);
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
+});

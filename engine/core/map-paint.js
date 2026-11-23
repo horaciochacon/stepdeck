@@ -422,14 +422,22 @@ function leaders([bx0, by0, bx1, by1], [fx0, fy0, fx1, fy1]) {
 /**
  * Draws an inset's frame on an SVG: one `g.sd-map-inset` holding two dashed (`6 4`) leader lines, the box on the main
  * map (`rect.sd-map-inset-box`) and the inset's frame (`rect.sd-map-inset-frame`), in that order. Both rectangles are
- * `[x0, y0, x1, y1]` in the element's px. Idempotent: the group is created once and rewritten in place, so a repeat call
- * changes nothing. Colours are in core/stepdeck.css (ink for the rectangles, muted for the leaders).
+ * `[x0, y0, x1, y1]` in the element's px. With no `box` (a locator inset, whose box is drawn inside the inset) the group
+ * holds the frame alone: no leaders, no box. Idempotent: the group is created once and rewritten in place, so a repeat
+ * call changes nothing (a group that holds the other kind of drawing is made again). Colours are in core/stepdeck.css
+ * (ink for the rectangles, muted for the leaders).
  * @param {SVGSVGElement} svg
- * @param {{ box: [number, number, number, number], frame: [number, number, number, number] }} where
+ * @param {{ box: [number, number, number, number] | null, frame: [number, number, number, number] }} where
  * @returns {SVGGElement}
  */
 export function insetFrame(svg, { box, frame }) {
   const g = group(svg, "sd-map-inset");
+  const rect = (index, name, [x0, y0, x1, y1]) => setAll(part(g, index, "rect", name), { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
+  if (g.children.length !== (box ? 4 : 1)) g.replaceChildren();
+  if (!box) {
+    rect(0, "sd-map-inset-frame", frame);
+    return g;
+  }
   const joins = leaders(box, frame);
   for (let i = 0; i < 2; i++) {
     const line = part(g, i, "line", "sd-map-inset-leader");
@@ -443,7 +451,6 @@ export function insetFrame(svg, { box, frame }) {
     line.removeAttribute("display");
     setAll(line, { x1, y1, x2, y2, "stroke-dasharray": "6 4" });
   }
-  const rect = (index, name, [x0, y0, x1, y1]) => setAll(part(g, index, "rect", name), { x: x0, y: y0, width: x1 - x0, height: y1 - y0 });
   rect(2, "sd-map-inset-box", box);
   rect(3, "sd-map-inset-frame", frame);
   return g;

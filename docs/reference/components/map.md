@@ -45,7 +45,7 @@ export default {
 | `shown` | string[] | none | fade | The layers on screen, by id. Without it the map shows the regions alone. |
 | `highlight` | string[] | none | fade | Regions and points to emphasize, by id. They get an ink outline; every other region of a shown areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds: [west, south, east, north] }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of regions, or to a box in degrees; `null` is the whole map. See [Views and flights](#views-and-flights). |
-| `inset` | `{ view, at, scale }` \| `null` | none | fade | A zoomed second view of the same layers in a corner. See [Inset](#inset). |
+| `inset` | `{ view, at, scale, locator }` \| `null` | none | fade | A second view of the same layers in a corner: a zoom, or with `locator` an overview. See [Inset](#inset). |
 | `frame` | string \| number | the first frame | tween | The time-lapse frame on screen, by its label (compared as text). See [Time-lapse](#time-lapse). |
 | `pace` | number, 100 to 2000 | `700` | snap | How long a run spends on each frame it moves, in ms. |
 | `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label. |
@@ -171,9 +171,10 @@ Each view needs, for each raster, a table from the element's pixels to the raste
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `view` | as the map's `view` | (required) | Where the inset looks: a region id or a list of them, `{ bounds }`, or `null` for the whole map. |
+| `view` | as the map's `view` | `null` | Where the inset looks: a region id or a list of them, `{ bounds }`, or `null` for the whole map. A step's `set` that gives `view: null` deletes the key, which is the same thing. |
 | `at` | `"top-right"` \| `"top-left"` \| `"bottom-right"` \| `"bottom-left"` | `"top-right"` | The corner of the element the inset sits in. |
 | `scale` | boolean | `true` | Whether the inset has a scale bar. |
+| `locator` | boolean | `false` | Turn the inset into an overview whose box marks what the map shows. See [Locator](#locator). |
 
 ```js
 steps: [
@@ -189,11 +190,30 @@ steps: [
 
 **Box and leaders.** A box on the map marks the part the inset shows, seen through the map's own view. Two dashed lines (`6 4`, in `--sd-color-muted`) join the two corners of the box nearest the inset to the matching corners of its border, and cross neither; while the inset covers the box (they overlap) there are none. When the map flies, the box moves with it, and when the inset flies, the box does.
 
+**Locator.** With `locator: true` the inset is the other way round: it is an overview, and the box is drawn inside it. See [Locator](#locator) below.
+
 **Scale bar.** At the inset's bottom-left, 16 px in from its edges: a bar of the longest round length (1, 2 or 5 × 10ⁿ km) that fits in 40% of the inset's width, with its label (`200 km`, `1,000 km`) above it, in the deck language. The length is measured on the sphere at the bar's start, as the great-circle distance of one pixel, so it follows the view. `scale: false` leaves it out.
 
-**Motion.** An inset that comes or goes fades over the step's duration (its box and leaders with it). A change of `inset.view` between two steps that both have an inset flies the inset alone, over twice the step's duration, along the same zoom path as the map's flights; the map does not move. Jumped, backward or aborted, the end state is drawn at once. Changing `at` or `scale` is drawn at once.
+**Motion.** An inset that comes or goes fades over the step's duration (its box and leaders with it). A change of `inset.view` between two steps that both have an inset flies the inset alone, over twice the step's duration, along the same zoom path as the map's flights; the map does not move. Jumped, backward or aborted, the end state is drawn at once. Changing `at`, `scale` or `locator` is drawn at once.
 
 The lookup tables the rasters need for the inset's views, at the inset's size, are built at mount with the map's own (see [Views and flights](#views-and-flights)).
+
+### Locator
+
+`locator: true` turns the inset into an overview, a "you are here" for a map that has flown into a place:
+
+```js
+steps: [
+  { id: "country", set: { map: { inset: { view: null, locator: true } } } },     // the whole map, small, in the corner
+  { id: "west", set: { map: { view: "W4" } } },                                   // the box in the inset marks Westmere
+  { id: "coast", set: { map: { view: ["W4", "S1"] } } },                          // the map flies; the box follows
+]
+```
+
+- **What it shows.** The inset shows `inset.view`, typically `null` (the whole map), and the box is drawn **inside the inset**, marking what the map shows at its current `view`: `rect.sd-map-inset-box` on the inset's own SVG, in the ink of the box on a zoom inset. There are no leaders, and the main map's SVG holds the inset's border alone.
+- **Clipped.** The box is cut to the inset's rectangle: a map that shows more than the inset (the map at home and the inset on a region) gives a box that is the whole inset, and one that runs off an edge is cut there. Where the map shows nothing of what the inset shows there is no box.
+- **Motion.** The box is recomputed at every frame of a flight of either view, so it follows the map's flights and the inset's alike, and fades in and out with the inset. Jumped or backward, the end state is drawn at once.
+- **Without `locator`** (or with `locator: false`) the inset is the zoom described above: its box is on the map, with its leaders. A step's `set` merges into the inset a step before it set, so a step that turns a locator back into a zoom says `locator: false`.
 
 ## Compact
 
@@ -248,7 +268,7 @@ steps: [
 
 **A run.** On a forward step that changes `frame`, the map runs through every frame from the old one to the new one in the file's order, backward when the new frame comes first, each crossfading into the next: the frame after the one on screen is drawn over it, more opaque as the run goes, so the picture is always whole. The run lasts frames moved × `pace` (from 2010 to 2021 at 700 ms: 11 × 700 = 7.7 s), and it is linear in time. During it the panel's numbers count linearly from one frame's value to the next, and its label (and the canvases' `data-frame`) shows the frame the crossfade is heading to once it is half way there. A step runs only when it shows a time-lapse layer, both steps have the same frame labels and the map keeps its `boundaries`, `id`, `name` and `projection`; otherwise the new frame is drawn at once (or crossfades with its layer, when the layer's file changes), so hiding a time-lapse while moving `frame` back plays no run.
 
-**Two phases.** A step that changes `frame` and other things plays them in order: first everything else together (layers fading in or out, a highlight, labels, a flight of the map or the inset), at the frame the step starts from; then the run, at the end view. The audience sees the map go somewhere, then the frames play there; frames never crossfade during a flight. The first phase lasts twice the step's duration when `view` changes, or `inset.view` on a step that keeps its inset; the step's duration when anything else the map animates changes (the layers in `shown`, `highlight`, `labels`, `numbers`, an inset coming or going, the definition of a layer that was shown); and nothing otherwise (`frame`, `pace`, `legend`, a hidden layer's definition, the inset's `at` or `scale`). Every played step's motion lasts that long, a run or not. `validate` budgets a step's run by the same rule (`stepRun` and `firstPhase` in `core/map-rules.js`).
+**Two phases.** A step that changes `frame` and other things plays them in order: first everything else together (layers fading in or out, a highlight, labels, a flight of the map or the inset), at the frame the step starts from; then the run, at the end view. The audience sees the map go somewhere, then the frames play there; frames never crossfade during a flight. The first phase lasts twice the step's duration when `view` changes, or `inset.view` on a step that keeps its inset; the step's duration when anything else the map animates changes (the layers in `shown`, `highlight`, `labels`, `numbers`, an inset coming or going, the definition of a layer that was shown); and nothing otherwise (`frame`, `pace`, `legend`, a hidden layer's definition, the inset's `at`, `scale` or `locator`). Every played step's motion lasts that long, a run or not. `validate` budgets a step's run by the same rule (`stepRun` and `firstPhase` in `core/map-rules.js`).
 
 **Long runs.** An update normally has 10 s to settle. A run tells the engine how long it will be (`info.expect`, with both phases together), so a run of 12.6 s (18 frames at 700 ms) plays out. Both phases together may last at most 20 s: a longer step is an element error, `a run of 20.3 s is longer than 20 s; split it across steps`. Lower `pace`, or move `frame` over two steps.
 
@@ -276,7 +296,7 @@ The engine animates only a forward move of exactly one step, in a live presentat
 | `highlight` set, changed or cleared | The regions' and points' colours and the ink outlines tween over `--sd-duration-fast`; on a compact map a region's tint fades with its outline. | At once. |
 | `caption` changes (compact) | The old caption fades out and the new one in, each over half of `--sd-duration` (or of the step's `transition.duration`), alongside the rest of the step. | At once. |
 | `inset` set or cleared | The inset fades in or out over the theme's `--sd-duration`, with its box and leaders. | At once. |
-| `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows. | The end view. |
+| `inset.view` changes | The inset flies there over twice `--sd-duration`, as `view` flies the map; the map stays, and the box follows (a locator's, inside the inset, as well). | The end view. |
 | `labels` changes | Labels that come fade in, labels that go fade out. | At once. |
 | `frame` changes | A run through every frame in between, `pace` ms per frame moved, the panel's numbers counting (`info.expect` gives the engine its length). See [Time-lapse](#time-lapse). | The step's frame and its numbers. |
 | `frame` and other things change | The other changes first, together; then the run, at the end view. | The end state. |
@@ -303,10 +323,11 @@ div.sd-map-inset-stage                                   only while the inset is
   canvas.sd-canvas-layer[data-layer="inset:<part>"]      the canvases above, named inset:base, inset:areas:<id>, inset:raster:<id>, inset:borders, inset:points:<id>
   svg.sd-map-labels                                      the names in the inset
     text.sd-map-label[data-region]
+    rect.sd-map-inset-box                                with `locator`: what the map shows, cut to the inset
     g.sd-map-scale                                       the scale bar (line, path.sd-map-scale-caps, its label), with `scale`
 svg.sd-map-labels
   text.sd-map-label[data-region]                         one per entry of `labels` whose region's centre is in view
-  g.sd-map-inset                                         with the inset: two leaders, rect.sd-map-inset-box, rect.sd-map-inset-frame
+  g.sd-map-inset                                         with the inset: two leaders, rect.sd-map-inset-box, rect.sd-map-inset-frame (the frame alone with `locator`)
 div.sd-map-panel[data-at]                                with a time-lapse layer shown: top-left, or top-right when the inset is top-left
   div.sd-map-panel-frame                                 the label of the frame on screen
   div.sd-map-panel-number[data-key]                      one per entry of `numbers`
@@ -345,9 +366,10 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``'S4' is a point: `view` names regions only (regions: E1, I1, I2, N1, N2, …)`` | `view` names a point of a layer the step declares. |
 | `` `view` must be a region id, a list of them, `{ bounds: [west, south, east, north] }` or null `` | `view` is neither (`validate` reports it too). |
 | `'Nowhere' not found (regions: E1, I1, I2, N1, N2, …; points: S1, S2, S3, S4, S5, …)` | `highlight` names an id that is neither a region nor a point of a layer the step declares. Written when a layer has points; `labels` keeps the message above. |
-| ``` `inset` must be `{ view, at, scale }` or null ``` | `inset` is neither an object nor `null`. `validate` reports it too. |
+| ``` `inset` must be `{ view, at, scale, locator }` or null ``` | `inset` is neither an object nor `null`. `validate` reports it too. |
 | ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"`` | `inset.at` is none of the four corners. `inset.view` raises the errors `view` does. |
 | ``inset `scale` must be true or false`` | `inset.scale` is not a boolean. `validate` reports it too. |
+| ``inset `locator` must be true or false`` | `inset.locator` is not a boolean. `validate` reports it too. |
 | `layer 'pop' not found (layers: rate)` | `shown` names a layer that `layers` does not have. |
 | ``layer 'pop' needs `areas`, `raster` or `points` `` | A layer without a kind key. |
 | `data/sites.csv: row 4 has no lon` | A row's longitude is empty or not a number; also `lat`, and `size` for a size that is not a number (`has a negative size` for a negative one). Rows count from 1, not counting the header. |

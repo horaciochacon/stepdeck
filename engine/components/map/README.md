@@ -21,7 +21,7 @@ analysis code to a map slide".
 | `shown` | string[] | none | fade | The layers on screen, by id. A layer that appears fades in with its legend row; one that leaves fades out. |
 | `highlight` | string[] | none | fade | Regions and points (by id) outlined in ink; every other region of an areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of them, or to `{ bounds: [west, south, east, north] }` in degrees; `null` is the whole map. A change flies the map there. |
-| `inset` | `{ view, at, scale }` \| `null` | none | fade | A second, zoomed view of the same shown layers in a corner of the element, with a box on the map, two dashed leaders and a scale bar. `view` is as the map's own (a change flies the inset alone); `at` is `"top-right"` (default), `"top-left"`, `"bottom-right"` or `"bottom-left"`; `scale` (default `true`) shows the scale bar. |
+| `inset` | `{ view, at, scale, locator }` \| `null` | none | fade | A second, zoomed view of the same shown layers in a corner of the element, with a box on the map, two dashed leaders and a scale bar. `view` is as the map's own (a change flies the inset alone); `at` is `"top-right"` (default), `"top-left"`, `"bottom-right"` or `"bottom-left"`; `scale` (default `true`) shows the scale bar; `locator` (default `false`) makes it an overview with the box inside it. |
 | `frame` | string \| number | the first frame | tween | The time-lapse frame on screen, by its label (compared as text). One value for the map: every time-lapse layer on it has the same labels. A change runs through the frames in between. |
 | `pace` | number, 100–2000 | `700` | snap | A run's ms per frame moved. |
 | `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label: a key of the frames' `numbers`, its label, and a d3-format specifier (as `big-number`'s). |
@@ -99,6 +99,10 @@ Behaviour:
   two corners nearest the inset to the matching corners of its border, never crossing either; while the inset covers the
   box there are none. The scale bar sits at the inset's bottom-left: the longest 1, 2 or 5 × 10ⁿ km that fits in 40% of its width, measured
   where the bar starts, labelled `200 km` (`1,000 km` in English, `1.000 km` in Spanish).
+- **Locator.** With `locator: true` the inset is an overview: it shows `inset.view` (typically `null`, the whole map) and the
+  box is drawn inside it, marking what the map shows at its current view (`rect.sd-map-inset-box` on the inset's own SVG);
+  there are no leaders. The box is cut to the inset's rectangle (its edges clamped to it), and there is none where the map
+  shows nothing of what the inset shows. It is recomputed at every frame of a flight of either view.
 - **Legend.** On a panel of the background colour, one row per shown layer: its `label`, then its classes (a swatch
   each, 28 px) or a ramp between its two end values, then the "no data" swatch when a region has no value. Rows stack
   away from the legend's corner. Numbers are written in the deck language (`2,5` in Spanish).
@@ -152,8 +156,8 @@ Behaviour:
   `div.sd-map-inset-stage`, each with the inset's own `data-view`; they exist only while the inset is on (or fading).
   The panel is `div.sd-map-panel[data-at]`: `div.sd-map-panel-frame` (the label), then a `div.sd-map-panel-number[data-key]`
   per number, holding `span.sd-map-panel-name` and `span.sd-map-panel-value`.
-- **Errors** (on the slide): an inset's `view` raises the errors the map's does, and `` `inset` must be `{ view, at, scale }` or null ``,
-  ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"`` and `` inset `scale` must be true or false ``; `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
+- **Errors** (on the slide): an inset's `view` raises the errors the map's does, and `` `inset` must be `{ view, at, scale, locator }` or null ``,
+  ``inset `at` must be "top-right", "top-left", "bottom-right" or "bottom-left"``, `` inset `scale` must be true or false `` and `` inset `locator` must be true or false ``; `region 'X' not found (regions: …)` for `highlight`, `labels` and `view`, and, when a layer has
   points, `'X' not found (regions: …; points: …)` for `highlight`; ``'S4' is a point: `view` names regions only (regions: …)``; `layer 'x' not found (layers: …)` for `shown`;
   `<csv>: row 4 has no lon` (also `lat`, and `size` for a size that is not a number; rows count from 1, not counting the
   header), `<csv>: color 'kinds' is not a column (…) or a theme colour (…)`; `<csv>: key 'X' matches no region`; `<csv>: key 'X' appears twice`;

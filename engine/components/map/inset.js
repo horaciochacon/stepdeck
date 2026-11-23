@@ -6,6 +6,12 @@
 // names and, with `scale`, the scale bar (`scaleBar`). The div is on the theme's background, so the inset's sea hides the
 // map beneath it, and the div, the box and the leaders fade with the inset.
 //
+// A locator inset (`locator: true`) is the other way round: it shows `inset.view` (typically the whole map) and the box
+// is drawn inside it, marking what the map shows at its current view (`locatorBox`), so there are no leaders and the
+// main SVG holds the inset's frame alone. The box is a `rect.sd-map-inset-box` on the inset's own SVG, cut to the inset's
+// rectangle: its edges are clamped to it, and a view of the map that shows nothing of what the inset shows has no box. It
+// is recomputed with every frame of a flight of either view, as the box on the map is.
+//
 // The inset exists only while the inset is on (or fading): at rest the markup is a function of the props alone, so a
 // played step and a jump to it are the same.
 //
@@ -13,6 +19,7 @@
 // each of its two edges. A frame that overlaps the box (the inset covers what it shows) has no leaders.
 import { applyView } from "../../core/map.js";
 import { insetFrame, scaleBar } from "../../core/map-paint.js";
+import { SVG_NS } from "../../core/kit.js";
 import { createStage, through } from "./stage.js";
 
 /** The corners `at` names, the default first. */
@@ -58,11 +65,41 @@ export function boxOf(main, seen, [w, h]) {
 }
 
 /**
+ * What the map shows, as a rectangle in the px of the inset: the element's two corners taken back through the map's view
+ * `main` to base-projected px, then through the inset's view `seen` (scaled to its size, `through`). Not clipped: a map
+ * that shows more than the inset gives a rectangle larger than it (`clipTo`).
+ * @param {{ k: number, x: number, y: number }} main
+ * @param {{ k: number, x: number, y: number }} seen the inset's view, scaled to its size (`through`)
+ * @param {[number, number]} size the element's size
+ * @returns {[number, number, number, number]}
+ */
+export function locatorBox(main, seen, [w, h]) {
+  const to = ([x, y]) => applyView(seen, [(x - main.x) / main.k, (y - main.y) / main.k]);
+  const [x0, y0] = to([0, 0]);
+  const [x1, y1] = to([w, h]);
+  return [x0, y0, x1, y1];
+}
+
+/**
+ * `box` cut to the rectangle `[0, 0, w, h]` by clamping its edges, or null when nothing of it is inside.
+ * @param {[number, number, number, number]} box
+ * @param {[number, number]} size
+ * @returns {[number, number, number, number] | null}
+ */
+export function clipTo([x0, y0, x1, y1], [w, h]) {
+  const cut = [Math.max(x0, 0), Math.max(y0, 0), Math.min(x1, w), Math.min(y1, h)];
+  return cut[0] < cut[2] && cut[1] < cut[3] ? cut : null;
+}
+
+/** A px length as the box writes it: three decimals, so the markup does not carry the noise of the arithmetic. */
+const px = (v) => String(Math.round(v * 1000) / 1000);
+
+/**
  * The inset of `main`, a stage of an element.
  * @param {HTMLElement} el
  * @param {{ main: { svg: SVGSVGElement }, geo: object, slots: object[], ctx: object }} options `main` the map's stage, `geo` and `slots` its geography and layers
  * @returns {{ paint(moment: object, layers: object[], options: { moving: boolean }): void, destroy(): void }}
- *   `paint` draws `moment` (a state of index.js: `view`, `highlight`, `labels`, and `inset`, `{ at, scale, alpha, view, flight }`)
+ *   `paint` draws `moment` (a state of index.js: `view`, `highlight`, `labels`, and `inset`, `{ at, scale, locator, alpha, view, flight }`)
  */
 export function createInset(el, { main, geo, slots, ctx }) {
   const holder = el.ownerDocument.createElement("div");
@@ -72,6 +109,24 @@ export function createInset(el, { main, geo, slots, ctx }) {
   const stage = createStage(holder, { name: "inset", size, geo, layers: slots, scale });
   const format = ctx.format(",");
   let placed = null; // the rectangle the holder is placed at
+
+  /** Draws the locator's box (`[x0, y0, x1, y1]` in the inset's px) on the inset's SVG, before the scale bar; none (null) takes it away. */
+  function placeLocatorBox(box) {
+    let node = stage.svg.querySelector(":scope > rect.sd-map-inset-box");
+    if (!box) {
+      node?.remove();
+      return;
+    }
+    if (!node) {
+      node = el.ownerDocument.createElementNS(SVG_NS, "rect");
+      node.setAttribute("class", "sd-map-inset-box");
+      const bar = stage.svg.querySelector(":scope > g.sd-map-scale");
+      if (bar) bar.before(node);
+      else stage.svg.append(node);
+    }
+    const [x0, y0, x1, y1] = box;
+    for (const [name, value] of [["x", x0], ["y", y0], ["width", x1 - x0], ["height", y1 - y0]]) node.setAttribute(name, px(value));
+  }
 
   return {
     paint(moment, layers, { moving = false } = {}) {
@@ -87,9 +142,10 @@ export function createInset(el, { main, geo, slots, ctx }) {
 
       stage.paint({ ...moment, view: inset.view, flight: inset.flight, cover: null }, layers, { moving });
       const seen = through(inset.view, scale);
-      const frame = insetFrame(main.svg, { box: boxOf(moment.view, seen, size), frame: rect });
+      const frame = insetFrame(main.svg, { box: inset.locator ? null : boxOf(moment.view, seen, size), frame: rect });
       if (inset.alpha < 1) frame.setAttribute("opacity", String(inset.alpha));
       else frame.removeAttribute("opacity");
+      placeLocatorBox(inset.locator ? clipTo(locatorBox(moment.view, seen, geo.size), size) : null);
       const bar = stage.svg.querySelector(":scope > g.sd-map-scale");
       if (inset.scale) scaleBar(stage.svg, { base: geo.base, view: seen, at: [BAR_INSET, size[1] - BAR_INSET], maxWidth: size[0] * BAR_SHARE, format });
       else bar?.remove();
