@@ -157,7 +157,7 @@ const process = {
 - **Lighting.** With no `highlight`, every part keeps its normal look. With one, a lit node takes its kind's colour (the accent when it has no kind) as an outline twice `--sd-rule-width` wide, and a card's stripe that colour too, over a tint of it: `--sd-compact-tint` (20% in both built-in themes) of the colour mixed into the background. Every other part dims as at full size. A lit edge or group keeps its look (they have no kind).
 - **Steps.** `compact` is structure: a step that turns it on or off rebuilds the drawing, at once. The caption is state: a change crossfades (see [Motion](#motion)).
 
-
+## Reveal and highlight parts by step
 
 All state lives in `shown` and `highlight`. Change them per step with `set`, as in the examples above, or with `advance` over a list of `shown` arrays. See the [step model](../../guide/step-model.md).
 
@@ -258,7 +258,7 @@ bad/d · diagram-id · shown names an unknown id 'ghost' vs ids of nodes, groups
 bad/d · diagram-overlap · sibling groups 'g' and 'h' share cells (from col 0, row 0) vs sibling groups cover separate cells · move the members of 'g' or 'h' to other cells, or nest one group inside the other
 ```
 
-A `diagram-id` problem is also an element error at runtime. A `diagram-overlap` problem is not: the diagram still renders, but its boxes may overlap or touch. The gap check uses the theme's `tokens.css` values only; it does not see a `--sd-diagram-gap` or `--sd-diagram-pad` override in a slide's `style`. The fix text printed for this problem mentions the slide style, but changing only the slide style does not clear the `validate` problem; raise `--sd-diagram-gap` or lower `--sd-diagram-pad` in the theme's `tokens.css` to clear it. All rules are listed in [Rules](../rules.md).
+A `diagram-id` problem is also an element error at runtime. A `diagram-overlap` problem is not: the diagram still renders, but its boxes may overlap or touch. The gap check uses the theme's `tokens.css` values only; it does not see a `--sd-diagram-gap` or `--sd-diagram-pad` override (or one of the compact pair) in a slide's `style`. The fix text printed for this problem mentions the slide style, but changing only the slide style does not clear the `validate` problem; raise the gap or lower the pad in the theme's `tokens.css` to clear it (`--sd-diagram-gap` and `--sd-diagram-pad`, or `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad` for a compact diagram). All rules are listed in [Rules](../rules.md).
 
 ### Not detected
 
