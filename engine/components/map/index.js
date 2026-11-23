@@ -7,7 +7,7 @@
 //   ./raster.js   the `raster` layer kind: value rasters, class rasters and masks
 //   ./points.js   the `points` layer kind: places from longitude and latitude columns, sized and coloured by a column
 //   ./stage.js    one view of the map: its canvases in paint order, the borders, the labels
-//   ./inset.js    the inset: a second, smaller stage at a corner, with its box on the map, leaders and scale bar
+//   ./inset.js    the inset: a second, smaller stage at a corner, with its box on the map, leaders and scale bar (or, as a locator, the box in the inset)
 //   ./legend.js   the legend rows in a corner
 //   ./lapse.js    the time-lapse: a step's frame and numbers, whether it runs, the frames a run decodes, its moments
 //   ./panel.js    the corner panel of a time-lapse: the frame's label and the numbers
@@ -36,10 +36,11 @@
 // inset alone, with the box on the map following. An inset that comes or goes fades, with its box and leaders. The map
 // does not own its entrance: the engine moves its box in.
 //
-// `inset` is `{ view, at, scale }` or none. The inset is a second stage that shows the same prepared layers, scales,
+// `inset` is `{ view, at, scale, locator }` or none. The inset is a second stage that shows the same prepared layers, scales,
 // highlight and names through its own view (./inset.js); it exists on the page only while the inset is on (or fading), so
 // the markup at rest is a function of the props. The step state keeps `inset.at`, where the inset sits, for the panel
-// of a time-lapse to keep out of its way: the panel sits at the top-left, or the top-right when the inset is there.
+// of a time-lapse to keep out of its way: the panel sits at the top-left, or the top-right when the inset is there. With
+// `locator` the inset is the overview and its box, inside it, marks what the map shows (no leaders; ./inset.js).
 //
 // A raster layer whose file has `frames` is a time-lapse. `frame` names the frame on screen by its label (the first
 // without it), one value for the whole map, so every time-lapse layer the step declares must have the same labels; the
@@ -176,18 +177,19 @@ function viewOf(geo, target = null) {
 }
 
 /**
- * The inset a step asks for on `geo`: `{ view, at, scale }` with the view fitted as a map's own is (to the element's
+ * The inset a step asks for on `geo`: `{ view, at, scale, locator }` with the view fitted as a map's own is (to the element's
  * size: the inset shows what the element would at that view, smaller), or null for none. `checkView` throws for a
  * region that is not one. Throws what `inset` takes.
  */
 function insetOf(geo, spec, checkView) {
   if (spec === undefined || spec === null) return null;
-  if (typeof spec !== "object" || Array.isArray(spec)) fail("`inset` must be `{ view, at, scale }` or null");
+  if (typeof spec !== "object" || Array.isArray(spec)) fail("`inset` must be `{ view, at, scale, locator }` or null");
   const at = spec.at ?? CORNERS[0];
   if (!CORNERS.includes(at)) fail(`inset \`at\` must be ${words(CORNERS.map((corner) => `"${corner}"`))}`);
   if (spec.scale !== undefined && typeof spec.scale !== "boolean") fail("inset `scale` must be true or false");
+  if (spec.locator !== undefined && typeof spec.locator !== "boolean") fail("inset `locator` must be true or false");
   checkView(spec.view);
-  return { view: viewOf(geo, spec.view ?? null), at, scale: spec.scale ?? true };
+  return { view: viewOf(geo, spec.view ?? null), at, scale: spec.scale ?? true, locator: spec.locator ?? false };
 }
 
 /**
@@ -223,7 +225,7 @@ function slotsOf(propsList) {
 /**
  * The state of a moment between two step states `a` and `b`: fades at `f` (0..1), highlight colours at `c`, and the
  * view of `flight` (a moment of `flightOf`), or `b.view` without one; `flight` stays in the state while it is under
- * way, for the rasters. The inset is the same: `inset` is `{ at, scale, alpha, view, flight }` (null when neither state has
+ * way, for the rasters. The inset is the same: `inset` is `{ at, scale, locator, alpha, view, flight }` (null when neither state has
  * one), its alpha going with `f` and its view that of `insetFlight`, or of the state that has one. Each layer shows the
  * frame of its state (`frame`, a still pair: a layer going away keeps `a`'s, and the old picture of a change of data
  * shows `a`'s as `fromFrame`), and the `noData` of its state, when the state decides it (see `stateOf`); `frame` is the
@@ -261,11 +263,11 @@ function between(a, b, f, c, flight = null, insetFlight = null) {
   };
 }
 
-/** The inset of a moment between insets `a` and `b` (each `{ view, at, scale }` or null) at fade `f`; see `between`. */
+/** The inset of a moment between insets `a` and `b` (each `{ view, at, scale, locator }` or null) at fade `f`; see `between`. */
 function insetBetween(a, b, f, flight) {
   const now = b ?? a;
   if (!now) return null;
-  return { at: now.at, scale: now.scale, alpha: lerp(a ? 1 : 0, b ? 1 : 0, f), view: flight ? flight.view : now.view, flight: flight && flight.t < 1 ? flight : null };
+  return { at: now.at, scale: now.scale, locator: now.locator, alpha: lerp(a ? 1 : 0, b ? 1 : 0, f), view: flight ? flight.view : now.view, flight: flight && flight.t < 1 ? flight : null };
 }
 
 /** Whether insets `a` and `b` (each `{ view, ... }` or null) are both on, or both off, and at one view. */

@@ -114,7 +114,7 @@ const asSet = (list) => [...new Set(Array.isArray(list) ? list.map(String) : [])
  * step before (`prev`) and of the step (`next`), as the map plays them: 2 when the map flies (`view` changes) or the
  * inset does (`inset.view` changes, the inset being on at both steps); 1 when anything else the map animates changes
  * (the layers in `shown`, `highlight`, `labels`, `numbers`, an inset coming or going, the definition of a layer shown at
- * `prev`); 0 otherwise (`frame`, `pace`, `legend`, a hidden layer's definition, the inset's `at` or `scale` are drawn
+ * `prev`); 0 otherwise (`frame`, `pace`, `legend`, a hidden layer's definition, the inset's `at`, `scale` or `locator` are drawn
  * at once, or by the run).
  * @param {Record<string, unknown>} prev
  * @param {Record<string, unknown>} next
