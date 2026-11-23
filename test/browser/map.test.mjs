@@ -1618,12 +1618,15 @@ test("a theme that sets --sd-inset-stroke recolours the map inset frame; one wit
   }
 });
 
-/** The rgba of the pixel at the middle of an element's box as the page paints it, read back from a screenshot. */
-async function paintedAtMiddle(page, id) {
-  const box = await page.evaluate((id) => {
-    const r = document.querySelector(`[data-el="${id}"]`).getBoundingClientRect();
+/**
+ * The rgba of the pixel at the middle of an element's box as the page paints it, read back from a screenshot. `slide`
+ * looks for the element in that slide only (the reveal shell keeps the slides around the current one mounted).
+ */
+async function paintedAtMiddle(page, id, slide) {
+  const box = await page.evaluate(([id, slide]) => {
+    const r = document.querySelector(`${slide ? `[data-slide="${slide}"] ` : ""}[data-el="${id}"]`).getBoundingClientRect();
     return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
-  }, id);
+  }, [id, slide]);
   const png = await page.screenshot({ clip: { x: box.x, y: box.y, width: 2, height: 2 } });
   return page.evaluate(async (b64) => {
     const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
@@ -1908,6 +1911,31 @@ test("check is clean on the compact map, played, in both themes; dump reports it
   const out = await dump(deck, { slide: "compact" });
   const text = Object.fromEntries(out.map((d) => [d.stepId, d.elements.find((e) => e.id === "map").text]));
   assert.deepEqual(text, { plain: "All regions", lit: "North", rates: "Rates in North", fly: "Closer", years: "People, 2010", run: "People, 2013", home: "All regions" });
+});
+
+test("a compact map mounted by a component paints its frame in either shell", async () => {
+  // The frame (z-index -1) goes in the ctx.mount target, which must make its own stacking context: without one the frame
+  // drops into an ancestor's. The bare shell's canvas is transformed, a stacking context that still shows the frame;
+  // the reveal shell's is not, and the canvas's background paints over it.
+  await withPage({ root }, async (page, ctx) => {
+    await revealPage(page);
+    for (const [shell, url] of [["reveal", `${REVEAL_PAGE}#/childcompact/0`], ["bare", pages.url("childcompact")]]) {
+      await ctx.open(url);
+      const r = await page.evaluate(() => {
+        const frame = document.querySelector('[data-slide="childcompact"] [data-el="map"] .sd-second-view-frame');
+        const target = frame.parentElement;
+        // The probe: the frame filled with a colour no map has, and nothing the map draws over it.
+        frame.style.setProperty("--sd-inset-fill", "rgb(255, 0, 255)");
+        for (const n of target.querySelectorAll("canvas, svg")) n.style.visibility = "hidden";
+        return { mounted: !target.classList.contains("sd-el"), isolation: getComputedStyle(target).isolation };
+      });
+      const painted = await paintedAtMiddle(page, "map", "childcompact");
+      assert.deepEqual({ ...r, painted }, { mounted: true, isolation: "isolate", painted: [255, 0, 255, 255] },
+        `${shell}: the mount target isolates the frame, and the frame paints over the canvas's background`);
+      assert.deepEqual(await errorsOf(page), [], shell);
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
 });
 
 // --- the locator inset ------------------------------------------------------------------------------------------

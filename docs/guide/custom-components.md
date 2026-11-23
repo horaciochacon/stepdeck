@@ -363,7 +363,7 @@ export default {
 ```
 
 - **The props are yours.** The child gets the props you pass it, not the slide's, so read the shared definition yourself (`ctx.data`, as here) or take it as props the slide binds. The child's `highlight`, `caption` and the rest change with your own props, through `handle.update`.
-- **Give its element a size.** A compact view fills the element it is mounted in, so give that element a width and a height of its own.
+- **Give its element a size.** A compact view fills the element it is mounted in, so give that element a width and a height of its own. A mounted `map` also needs that element positioned (`position: relative` or `absolute`), because its frame, body and caption are placed against the nearest positioned ancestor.
 - **The caption band comes from the current props.** A diagram or map mounted with `ctx.mount` has no step list (`ctx.stepProps` is `null` for a child), so unlike the same view on a slide it cannot see the captions of other steps. Its caption band is reserved when the props it has now carry a caption, and a caption turning empty or non-empty redraws the view. Keep a caption in every update to keep the drawing still.
 - **Not inside a chart's SVG.** A chart's `settle` clears the inline styles inside its SVG, which a compact view writes. Mount the view in an HTML element beside your SVG, as above, never in a node inside it.
 - **Pass your `info`** to `handle.update`, as with any child, so an abort reaches it. A flowing edge in the child stands still, whatever you do: compact views never flow.
