@@ -223,6 +223,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-edge-label-row { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; }
 .sd-diagram-edge-label-row[data-side="right"] { justify-content: center; align-items: flex-start; text-align: left; }
 .sd-diagram-edge-label { max-width: 100%; padding: 0 var(--sd-grid); overflow-wrap: anywhere; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
+/* A routed edge's label: one line centred on its lane (the box is one line high); text longer than the box overflows
+   along the lane, never wraps into the grid. */
+.sd-diagram-edge-label-row[data-lane] { justify-content: center; }
+.sd-diagram-edge-label-row[data-lane] .sd-diagram-edge-label { max-width: none; white-space: nowrap; }
 .sd-diagram-legend-row { height: 100%; display: flex; align-items: center; }
 .sd-diagram-legend { padding: 0 var(--sd-grid); white-space: nowrap; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); background: var(--sd-color-background); }
 

@@ -444,6 +444,17 @@ test("motion-budget: a compact diagram's build leaves out its text nodes and edg
   assert.match(problems[0].measured, /8200 ms/);
 });
 
+test("motion-budget: a routed edge draws like any other edge", async () => {
+  // As above: eight boxes pop in over 7400 ms, then a labelled edge, here routed over the grid, draws and its label
+  // fades (800 ms): 8200 ms. `route` is a known prop, so the schema passes.
+  const boxes = Array.from({ length: 8 }, (_, i) => `{ id: "n${i}", label: "N", shape: "box", col: ${i}, row: 0 }`).join(", ");
+  const problems = await validateSlideBody(`elements: [
+    { id: "loop", type: "diagram", from: "a", props: { cols: 8, rows: 1, nodes: [${boxes}], edges: [{ from: "n7", to: "n0", route: "over", label: "again" }] } },
+  ], steps: [{ id: "s0" }, { id: "a", transition: { stagger: 1000 } }]`);
+  assert.deepEqual(rules(problems), ["motion-budget"], show(problems));
+  assert.match(problems[0].measured, /8200 ms/);
+});
+
 test("chart-prop-unused: ticker without until is a warning", async () => {
   const problems = await validate(fixture("ticker-without-until"));
   assert.deepEqual(rules(problems), ["chart-prop-unused"], show(problems));

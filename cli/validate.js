@@ -275,7 +275,8 @@ function buildMs(type, props, own, tokens, transition) {
       return n > 0 ? (P.typing === true && p > 0 ? TYPE_MAX_MS : 0) + run(n) : 0;
     }
     case "diagram": {
-      // Groups fade, then the nodes pop in turn, then the edges draw in turn (a drawn edge's label fades after it).
+      // Groups fade, then the nodes pop in turn, then the edges draw in turn, straight or routed alike (a drawn
+      // edge's label fades after it).
       // A compact diagram draws no text node, no edge that touches one and no label.
       const compact = P.compact === true;
       const words = new Set(compact ? list("nodes").filter((n) => n?.shape === "text").map((n) => n?.id) : []);

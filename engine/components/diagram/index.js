@@ -9,7 +9,11 @@
 //   - edges: an svg line between the drawn shapes' borders with an arrowhead <marker> (one per element, its
 //     id derived from the element id so the markup is the same however a state was reached); an optional
 //     label in a top layer above the nodes, beside the midpoint (above a mostly horizontal edge, right of a
-//     mostly vertical one), over a background-colored backing;
+//     mostly vertical one), over a background-colored backing. An edge with a `route` is an svg path instead,
+//     around the grid along its lane (placeDiagram's points, routePath's rounded corners, a grid unit), with the
+//     same marker and the same shortened end; its label is one line centred on the lane's run (data-lane on its
+//     row), at least four label lines wide, overflowing along the lane rather than wrapping, and turned a quarter
+//     on a left lane (reading upward) or a right one (reading downward) by a transform attribute;
 //   - nodes: the label and sub as html in a foreignObject spanning the cell, so they wrap there; the label
 //     is measured (offsetWidth/offsetHeight, deterministic once the theme's fonts are loaded, which happens
 //     before mount) and the shape (box, pill, circle, or none for text) is drawn around it. A label too long
@@ -69,11 +73,20 @@
 // it, and so are more distinct kinds than the theme's categorical palette has colours. Overlapping sibling
 // groups still render; `validate` reports them.
 import { renderInline } from "../../core/inline.js";
-import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder } from "./place.js";
+import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder, routePath } from "./place.js";
 import { clearInlineStyle } from "../../core/animate.js";
 import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, motionMs, tweenColor } from "../../core/kit.js";
 
 const MARKER = { size: 6 }; // arrowhead length and width, in stroke widths (markerUnits="strokeWidth")
+
+/** `points` with the last segment `back` shorter (kept whole when it is not longer than that), as a straight edge stops. */
+function shortened(points, back) {
+  const [px, py] = points.at(-2);
+  const [qx, qy] = points.at(-1);
+  const len = Math.hypot(qx - px, qy - py);
+  if (!(len > back)) return points;
+  return [...points.slice(0, -1), [qx - ((qx - px) / len) * back, qy - ((qy - py) / len) * back]];
+}
 
 /** Throws on what would otherwise draw a blank or wrong diagram: a missing grid or nodes, an unknown id. */
 function assertProps(props) {
@@ -265,7 +278,9 @@ export default {
 
       // Edges: the line stops half an arrowhead short of the border; the marker's tip reaches it. A label
       // goes in the top layer beside the midpoint (above a mostly horizontal edge, right of a mostly vertical
-      // one), as wide as the edge (at least four label lines), over a background-colored backing.
+      // one), as wide as the edge (at least four label lines), over a background-colored backing. A routed edge
+      // is a path along its points, its last segment shortened the same way, its corners rounded by a grid unit;
+      // its label sits on the middle of the lane's run, one line, turned a quarter on a side lane.
       const back = (MARKER.size * rule) / 2;
       const edgeDefs = new Map((props.edges ?? []).map((e) => [edgeId(e), e]));
       for (const e of layout.edges) {
@@ -273,19 +288,33 @@ export default {
         const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
         const k = len > back ? (len - back) / len : 1;
         const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true) }, drawn.edges);
-        const line = svgEl("line", { class: "sd-diagram-line", x1: e.x1, y1: e.y1, x2: e.x1 + (e.x2 - e.x1) * k, y2: e.y1 + (e.y2 - e.y1) * k, "marker-end": `url(#${markerId})` }, g);
+        const line = e.points
+          ? svgEl("path", { class: "sd-diagram-line", d: routePath(shortened(e.points, back), grid), "marker-end": `url(#${markerId})` }, g)
+          : svgEl("line", { class: "sd-diagram-line", x1: e.x1, y1: e.y1, x2: e.x1 + (e.x2 - e.x1) * k, y2: e.y1 + (e.y2 - e.y1) * k, "marker-end": `url(#${markerId})` }, g);
         let tag = null;
         if (def?.label && !compact) {
-          const mx = (e.x1 + e.x2) / 2;
-          const my = (e.y1 + e.y2) / 2;
-          const horizontal = Math.abs(e.x2 - e.x1) >= Math.abs(e.y2 - e.y1);
-          const boxW = Math.min(w, Math.max(len, legendH * 4));
-          const boxH = legendH * 3;
-          const at = horizontal ? { x: mx - boxW / 2, y: my - grid - boxH } : { x: mx + grid, y: my - boxH / 2 };
           tag = svgEl("g", { class: "sd-diagram-edge-tag", "data-for": e.id }, drawn.tags);
-          const fo = svgEl("foreignObject", { class: "sd-diagram-edge-label-box", x: at.x, y: at.y, width: boxW, height: boxH }, tag);
-          const row = htmlEl("div", "sd-diagram-edge-label-row", fo);
-          row.dataset.side = horizontal ? "above" : "right";
+          let row;
+          if (e.points) {
+            // The run along the lane is the middle segment; the label's box is one line, centred on it.
+            const [[ax, ay], [bx, by]] = [e.points[1], e.points[2]];
+            const [cx, cy] = [(ax + bx) / 2, (ay + by) / 2];
+            const turn = e.route === "left" ? -90 : e.route === "right" ? 90 : 0; // reads upward on the left, downward on the right
+            const boxW = Math.min(turn ? h : w, Math.max(Math.hypot(bx - ax, by - ay), legendH * 4));
+            const fo = svgEl("foreignObject", { class: "sd-diagram-edge-label-box", x: cx - boxW / 2, y: cy - legendH / 2, width: boxW, height: legendH, ...(turn ? { transform: `rotate(${turn} ${cx} ${cy})` } : {}) }, tag);
+            row = htmlEl("div", "sd-diagram-edge-label-row", fo);
+            row.dataset.lane = e.route;
+          } else {
+            const mx = (e.x1 + e.x2) / 2;
+            const my = (e.y1 + e.y2) / 2;
+            const horizontal = Math.abs(e.x2 - e.x1) >= Math.abs(e.y2 - e.y1);
+            const boxW = Math.min(w, Math.max(len, legendH * 4));
+            const boxH = legendH * 3;
+            const at = horizontal ? { x: mx - boxW / 2, y: my - grid - boxH } : { x: mx + grid, y: my - boxH / 2 };
+            const fo = svgEl("foreignObject", { class: "sd-diagram-edge-label-box", x: at.x, y: at.y, width: boxW, height: boxH }, tag);
+            row = htmlEl("div", "sd-diagram-edge-label-row", fo);
+            row.dataset.side = horizontal ? "above" : "right";
+          }
           htmlEl("span", "sd-diagram-edge-label", row).textContent = def.label;
         }
         parts.push({ id: e.id, kind: "edge", g, line, tag, dashed: def?.dashed === true });
