@@ -83,6 +83,16 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-diagram-pad` | `16px` | Padding of a `diagram` group box around its members; each nesting level adds one more. |
 | `--sd-diagram-stripe` | `var(--sd-grid)` | Width of the stripe on a `diagram` card's left edge. |
 
+### Second views
+
+| Token | Value | Use |
+|---|---|---|
+| `--sd-inset-stroke` | `var(--sd-color-ink)` | Colour of the frame of a second view (a compact `diagram` or `map`, a map's inset). |
+| `--sd-inset-stroke-width` | `var(--sd-rule-width)` | Width of that frame. |
+| `--sd-inset-fill` | `var(--sd-color-background)` | Fill of that frame, and of a compact view's caption. |
+| `--sd-inset-radius` | `0px` | Corner radius of that frame. |
+| `--sd-compact-tint` | `20%` | Share of a colour mixed into the background for a lit part of a compact view. |
+
 ### Motion
 
 | Token | Value | Use |

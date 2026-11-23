@@ -67,6 +67,22 @@ test("academic-light declares the new optional tokens with today's values", () =
   assert.equal(academic["--sd-font-size-cover-figure"], academic["--sd-font-size-cover"]);
 });
 
+// The second-view frame and tint tokens: both themes define them, with the same values.
+const SECOND_VIEW_TOKENS = {
+  "--sd-inset-stroke": "var(--sd-color-ink)",
+  "--sd-inset-stroke-width": "var(--sd-rule-width)",
+  "--sd-inset-fill": "var(--sd-color-background)",
+  "--sd-inset-radius": "0px",
+  "--sd-compact-tint": "20%",
+};
+
+test("both themes define the second-view tokens", () => {
+  for (const [name, value] of Object.entries(SECOND_VIEW_TOKENS)) {
+    assert.equal(modern[name], value, `modern ${name}`);
+    assert.equal(academic[name], value, `academic-light ${name}`);
+  }
+});
+
 test("modern colour tokens: the approved values (tuned muted and alert), hex only", () => {
   const expected = {
     "--sd-color-background": "#ffffff", "--sd-color-surface": "#f4f4f5", "--sd-color-title": "#09090b",

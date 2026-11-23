@@ -215,6 +215,18 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 
 Keep the gap at least twice the pad, or neighbouring group boxes touch; `validate` reports that as `diagram-overlap`, reading both values from `tokens.css`. A theme without them gets 3 x and 1 x `--sd-space`. The compact pair is held to the same rule (`validate` checks a compact diagram against it), and a theme without it gets 1 x and 0.25 x `--sd-space`.
 
+### Second views
+
+A second view is a compact copy of a `diagram` or a `map`, or a map's inset. All of them share one frame look, owned by the theme; no component hard-codes a frame colour.
+
+| Token | Value | Use | Read by |
+| --- | --- | --- | --- |
+| `--sd-inset-stroke` | `var(--sd-color-ink)` | Colour of a second view's frame. Without it: ink. | `map` inset, `diagram` and `map` compact |
+| `--sd-inset-stroke-width` | `var(--sd-rule-width)` | Width of the frame. Without it: `--sd-rule-width`. | `map` inset, `diagram` and `map` compact |
+| `--sd-inset-fill` | `var(--sd-color-background)` | Fill of the frame, and of a compact view's caption. Without it: the background colour. | `map` inset, `diagram` and `map` compact |
+| `--sd-inset-radius` | `0px` | Corner radius of the frame. Without it: `0px`. | `map` inset, `diagram` and `map` compact |
+| `--sd-compact-tint` | `20%` | Share of a colour mixed into the background for a lit part of a compact view. Without it: `20%`. | `diagram`, `map` |
+
 ### Motion
 
 | Token | academic-light | modern | Use | Read by |
