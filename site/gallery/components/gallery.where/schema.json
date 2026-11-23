@@ -10,7 +10,7 @@
       "type": "string",
       "minLength": 1,
       "description": "Path to a CSV file, relative to the deck root, with one row per bar.",
-      "examples": ["data/story-estimates.csv"],
+      "examples": ["data/story-stages.csv"],
       "x-transition": "snap"
     },
     "x": {
@@ -24,7 +24,7 @@
       "type": "string",
       "minLength": 1,
       "description": "Column of the bars' values. The scale covers the `y` of every step, so a step that changes it moves the bars, never the axis. A blank cell is a missing bar.",
-      "examples": ["rate", "high"],
+      "examples": ["survey", "fit"],
       "x-transition": "tween"
     },
     "stage": {
