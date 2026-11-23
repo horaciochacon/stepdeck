@@ -3,5 +3,5 @@ export default {
   title: "Diagram fixture",
   lang: "en",
   theme: "academic-light",
-  slides: ["flow", "edges", "long", "nest", "badid"],
+  slides: ["flow", "edges", "long", "nest", "cards", "toomany", "badid"],
 };

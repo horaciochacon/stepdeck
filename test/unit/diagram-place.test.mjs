@@ -1,7 +1,7 @@
 // diagram: grid placement, group bounds, edge ends and problems (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placeDiagram, diagramProblems, edgeId } from "#engine/components/diagram/place.js";
+import { placeDiagram, diagramProblems, edgeId, kindOrder } from "#engine/components/diagram/place.js";
 
 const OPTS = { width: 1600, height: 600, gap: 48, pad: 16 };
 const contains = (outer, inner, margin) =>
@@ -269,4 +269,19 @@ test("gap below twice the pad is a diagram-overlap problem (when the sizes are k
   assert.deepEqual(p.map((x) => x.rule), ["diagram-overlap"]);
   assert.match(p[0].message, /24/);
   assert.match(p[0].message, /16/);
+});
+
+test("kindOrder: first appearance, text nodes skipped, shown ignored", () => {
+  const at = (id, shape, kind) => ({ id, label: id, shape, kind, col: 0, row: 0 });
+  const nodes = [at("n1", "box", "b"), at("n2", "card", "a"), at("n3", "pill", "b"), at("n4", "text", "c"), at("n5", "circle", "a"), at("n6", "box", undefined)];
+  assert.deepEqual(kindOrder(nodes), ["b", "a"]);
+  assert.deepEqual(kindOrder([]), []);
+  assert.deepEqual(kindOrder(undefined), []);
+});
+
+test("a card fills its cell: its drawn box is the cell, whatever size was measured", () => {
+  const props = { cols: 2, rows: 1, nodes: [{ id: "c", label: "C", shape: "card", col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 1, row: 0 }] };
+  const { cells, nodes } = placeDiagram(props, { ...OPTS, sizes: new Map([["c", { w: 60, h: 40 }], ["b", { w: 60, h: 40 }]]) });
+  assert.deepEqual(nodes.get("c"), cells.get("c"));
+  assert.equal(nodes.get("b").w, 60, "a box is still sized to its label");
 });

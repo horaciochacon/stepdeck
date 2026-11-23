@@ -6,7 +6,7 @@ inside their node.
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
 | `cols`, `rows` | integer >= 1 | (required) | snap | The grid. Cells share the element's size equally, with `--sd-diagram-gap` between them. |
-| `nodes` | `[{ id, label, sub?, shape, col, row, colspan?, rowspan? }]` | (required) | snap | `shape` is `box`, `pill`, `circle` (sized to its label, capped by the cell) or `text` (no outline). `col` and `row` are 0-based. |
+| `nodes` | `[{ id, label, sub?, shape, kind?, col, row, colspan?, rowspan? }]` | (required) | snap | `shape` is `box`, `pill`, `circle` (sized to its label, capped by the cell), `card` (fills its cell, with a stripe on its left edge) or `text` (no outline). `kind` colours the node from the categorical palette. `col` and `row` are 0-based. |
 | `edges` | `[{ id?, from, to, label?, dashed? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. |
 | `groups` | `[{ id, label?, contains, dashed? }]` | none | snap | A box around all its members (node and group ids, so groups nest). The label is drawn inside the box's top padding, above its members. |
 | `shown` | `string[]` | everything | draw | The ids visible (nodes, groups, edges by edge id). Anything not listed is hidden and keeps its place. |
@@ -35,11 +35,22 @@ Behaviour:
   group's box is the union of all its members' drawn shapes, shown or not (so it never resizes between
   steps), grown by the pad on every side; a labelled group's top padding also holds one label line, so
   nested labels stack and never meet. The grid is inset by how far the groups reach past their members.
+- **Cards and kinds.** A `card` is a rounded rectangle that is its cell (it is not sized to its label), with a
+  stripe `--sd-diagram-stripe` wide (a grid unit) on its left edge, clipped to its corners. The label is
+  left- and top-aligned at the note size, the sub under it at the label size in muted, both inside the card
+  padded by `--sd-diagram-pad`, with the stripe's width added on the left; a label too long for its card overflows
+  it, as elsewhere. A `kind` is any string: each distinct kind takes the next colour of
+  `ctx.palette("categorical")` in order of first appearance in `nodes`, whatever `shown` says, so every step
+  agrees. It colours a card's stripe (ink without a kind) and the outline of a box, pill or circle; a `text` node
+  ignores it. A dimmed node's stripe and outline turn `--sd-color-dim` with the rest of it. More kinds than the
+  palette has colours is an element error (``diagram has <n> kinds; the categorical palette has <m> colours``).
+  A node with a kind is drawn in a group `g.sd-diagram-paint` inside its `g.sd-diagram-node`, which carries
+  the colour as `--sd-kind` and `data-kind` on the node; a node without a kind is drawn as before.
 - **Edges** run between the borders of the drawn shapes of their ends, along the line between their
   centres (a circle's border is its circle). Edges may connect groups. Edge labels are drawn above the
   nodes, over a background backing.
-- **Spacing tokens.** `--sd-diagram-gap` (48px) and `--sd-diagram-pad` (16px) in the theme; a theme
-  without them gets 3 × and 1 × `--sd-space`. The gap must be at least twice the pad so neighbouring group
+- **Spacing tokens.** `--sd-diagram-gap` (48px), `--sd-diagram-pad` (16px) and `--sd-diagram-stripe` (a grid
+  unit) in the theme; a theme without them gets 3 × and 1 × `--sd-space`, and a grid unit for the stripe. The gap must be at least twice the pad so neighbouring group
   boxes never touch; `validate` checks the theme's values.
 - **Text.** Node labels are the note size, subs, edge labels and group labels the label size, all at least
   `--sd-min-audience-font`. A label too long for its node is never shrunk: it overflows the node (no

@@ -209,6 +209,7 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 | --- | --- | --- | --- |
 | `--sd-diagram-gap` | `48px` | Gap between the grid cells of a `diagram`. | `diagram`, `validate` |
 | `--sd-diagram-pad` | `16px` | Padding of a `diagram` group box around its members; each nesting level adds one more. | `diagram`, `validate` |
+| `--sd-diagram-stripe` | `var(--sd-grid)` | Width of the stripe on a `diagram` card's left edge. Without it: `--sd-grid`. | `diagram` |
 
 Keep the gap at least twice the pad, or neighbouring group boxes touch; `validate` reports that as `diagram-overlap`, reading both values from `tokens.css`. A theme without them gets 3 x and 1 x `--sd-space`.
 
