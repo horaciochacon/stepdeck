@@ -543,7 +543,7 @@ for (const theme of ["academic-light", "modern"]) {
         const px = (name) => parseFloat(tokens.getPropertyValue(name));
         const scale = canvas.getBoundingClientRect().width / 1920;
         const svg = el.querySelector("svg");
-        const out = { gap: px("--sd-diagram-gap"), pad: px("--sd-diagram-pad"), stripeToken: px("--sd-diagram-stripe"), w: Number(svg.getAttribute("width")), h: Number(svg.getAttribute("height")), cards: {} };
+        const out = { gap: px("--sd-diagram-gap"), pad: px("--sd-diagram-pad"), stripeToken: px("--sd-diagram-stripe"), strong: tokens.getPropertyValue("--sd-font-weight-strong").trim(), w: Number(svg.getAttribute("width")), h: Number(svg.getAttribute("height")), cards: {} };
         for (const id of ["ingest", "clean", "model", "plain"]) {
           const g = el.querySelector(`[data-id="${id}"]`);
           const shape = g.querySelector(".sd-diagram-shape");
@@ -560,6 +560,8 @@ for (const theme of ["academic-light", "modern"]) {
             subLeft: (sub.left - card.left) / scale,
             textTop: (text.top - card.top) / scale,
             textAlign: getComputedStyle(g.querySelector(".sd-diagram-label")).textAlign,
+            textWeight: getComputedStyle(g.querySelector(".sd-diagram-text")).fontWeight,
+            subWeight: g.querySelector(".sd-diagram-sub") ? getComputedStyle(g.querySelector(".sd-diagram-sub")).fontWeight : null,
             kind: g.dataset.kind ?? null,
             paint: g.querySelector(".sd-diagram-paint")?.getAttribute("style") ?? null,
           };
@@ -581,6 +583,8 @@ for (const theme of ["academic-light", "modern"]) {
         if (id !== "plain") assert.ok(Math.abs(c.subLeft - c.textLeft) < 1, `${id}: the sub is left-aligned with the label`);
         assert.ok(c.textTop <= r.pad + 1, `${id}: the label is top-aligned (${c.textTop})`);
         assert.equal(c.textAlign, "left");
+        assert.equal(c.textWeight, r.strong, `${id}: the label is in the strong weight`);
+        if (c.subWeight !== null) assert.notEqual(c.subWeight, r.strong, `${id}: the sub is not`);
       }
       for (const [id, i] of Object.entries(KIND_NODES)) {
         assert.equal(r.cards[id].stripe.fill, paletteRgb(theme, i), `${id}: kind ${i} takes palette colour ${i}`);

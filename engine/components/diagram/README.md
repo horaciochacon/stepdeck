@@ -37,9 +37,9 @@ Behaviour:
   nested labels stack and never meet. The grid is inset by how far the groups reach past their members.
 - **Cards and kinds.** A `card` is a rounded rectangle that is its cell (it is not sized to its label), with a
   stripe `--sd-diagram-stripe` wide (a grid unit) on its left edge, clipped to its corners. The label is
-  left- and top-aligned at the note size, the sub under it at the label size in muted, both inside the card
-  padded by `--sd-diagram-pad`, with the stripe's width added on the left; a label too long for its card overflows
-  it, as elsewhere. A `kind` is any string: each distinct kind takes the next colour of
+  left- and top-aligned at the note size in the strong weight, the sub under it at the label size in muted, both
+  inside the card padded by `--sd-diagram-pad`, with the stripe's width added on the left; a label too long for
+  its card overflows it, as elsewhere. A `kind` is any string: each distinct kind takes the next colour of
   `ctx.palette("categorical")` in order of first appearance in `nodes`, whatever `shown` says, so every step
   agrees. It colours a card's stripe (ink without a kind) and the outline of a box, pill or circle; a `text` node
   ignores it. A dimmed node's stripe and outline turn `--sd-color-dim` with the rest of it. More kinds than the
