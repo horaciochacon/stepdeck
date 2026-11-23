@@ -54,7 +54,7 @@ names() { grep -oE '^ *--[a-z0-9-]+ *:' "$1" | tr -d ' :' | sort -u; }
 diff <(names themes/modern/tokens.css) <(names themes/my-theme/tokens.css)
 ```
 
-The token groups are colors (`--sd-color-*`), fonts and sizes (`--sd-font-*`, `--sd-line-height*`, `--sd-measure`), the minimum audience font, spacing (`--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`) and motion (`--sd-duration`, `--sd-duration-fast`, `--sd-easing`, `--sd-stagger`, `--sd-enter`, `--sd-motion-distance`: the timing and feel of every entrance, exit and change). The [tokens section of the reference](../reference/themes.md#tokens) lists each one with what reads it. Some values in `core/stepdeck.css` are hard-coded rather than read from tokens (title line height 1.15, label weight 600, big-number suffix weight 500, and others); they are listed under [Values not taken from tokens](../reference/themes.md#values-not-taken-from-tokens), and a theme cannot change them.
+The token groups are colors (`--sd-color-*`), fonts and sizes (`--sd-font-*`, `--sd-line-height*`, `--sd-measure`), the minimum audience font, spacing (`--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, and for a compact diagram `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`) and motion (`--sd-duration`, `--sd-duration-fast`, `--sd-easing`, `--sd-stagger`, `--sd-enter`, `--sd-motion-distance`: the timing and feel of every entrance, exit and change). The [tokens section of the reference](../reference/themes.md#tokens) lists each one with what reads it. Some values in `core/stepdeck.css` are hard-coded rather than read from tokens (title line height 1.15, label weight 600, big-number suffix weight 500, and others); they are listed under [Values not taken from tokens](../reference/themes.md#values-not-taken-from-tokens), and a theme cannot change them.
 
 Put the tokens in a `:root { ... }` block. `catalog` reads token names and values only from `:root` blocks.
 
@@ -89,7 +89,7 @@ estimate/bars/one · font-too-small · 28px "0.0" (+1 more step) vs 30px (--min-
 
 ### Keep the diagram spacing valid
 
-`validate` reads `--sd-diagram-gap` and `--sd-diagram-pad` from `tokens.css` and checks every diagram with them. The gap must be at least twice the padding, or neighbouring group boxes touch:
+`validate` reads `--sd-diagram-gap` and `--sd-diagram-pad` from `tokens.css` and checks every diagram with them, except a compact one (`compact: true`), which it checks with `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`. In each pair the gap must be at least twice the padding, or neighbouring group boxes touch:
 
 ```
 concept/idea/exposure · diagram-overlap · grid gap 24px is less than twice the group padding 16px vs gap >= 32px · raise --sd-diagram-gap or lower --sd-diagram-pad in the theme (or the slide style)
@@ -282,7 +282,7 @@ Adding a theme does not change the default. Decks without `theme` use `DEFAULT_T
 | `--sd-color-background` as `#rgb` or `#rrggbb` | `validate` (`theme-background`) |
 | Ink and muted text at 4.5:1 on the background | `check` (`contrast`) |
 | `--min-audience-font` and its alias; no non-source size below it | `check` (`font-too-small`) |
-| `--sd-diagram-gap` at least twice `--sd-diagram-pad` | `validate` (`diagram-overlap`) |
+| `--sd-diagram-gap` at least twice `--sd-diagram-pad`, and `--sd-diagram-compact-gap` at least twice `--sd-diagram-compact-pad` | `validate` (`diagram-overlap`) |
 | Fonts vendored, relative URLs, `font-display: block`, licence alongside | `check` (`render-error`, `network-error`) |
 | `palettes.json` readable, defaults name palettes of the right kind | `validate` (`theme-palettes`); the kinds by hand |
 | Categorical palette passes on the background | `validate` (`palette-contrast`, `palette-cvd`) |
