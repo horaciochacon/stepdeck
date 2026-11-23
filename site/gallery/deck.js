@@ -3,9 +3,10 @@
 // written for the gallery, which show the named motions, a step's choreography and the slide devices (focus-dim,
 // the message line and badges, ghost placeholders); then the data-story slides, which play the chart moves
 // (forecast and sweep, the draw fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, a flight and
-// an inset, a time-lapse, points); last the custom components, each built only from what the engine hands every
-// component, with no import: gallery.slope (components/gallery.slope/), a slope chart, and gallery.swipe
-// (components/gallery.swipe/), a before/after swipe of a map raster.
+// an inset, a time-lapse, points), then the second views: a process diagram with cards and a flowing loop, its compact
+// copy lit on two result slides, a locator inset, and a compact map beside a chart; last the custom components, each
+// built only from what the engine hands every component, with no import: gallery.slope (components/gallery.slope/),
+// a slope chart, and gallery.swipe (components/gallery.swipe/), a before/after swipe of a map raster.
 // All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
 const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"];
@@ -29,6 +30,11 @@ const STORY = [
   ["map-flight-inset", "flight and inset", "map"],
   ["map-timelapse", "time-lapse", "map"],
   ["map-points", "sized points", "map"],
+  ["explain-process", "cards and a flowing loop", "diagram"],
+  ["explain-fit", "where we are", "diagram"],
+  ["explain-predict", "where we are, later", "diagram"],
+  ["map-locator", "locator inset", "map"],
+  ["map-compact", "compact map", "map"],
 ];
 // The deck's own components, each with the slide that shows it; their entries link the custom-components guide.
 const CUSTOM = [["custom-slope", "gallery.slope"], ["map-swipe", "gallery.swipe"]];

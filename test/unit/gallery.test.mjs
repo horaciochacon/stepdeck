@@ -2,7 +2,7 @@
 // validates: it is where every example.js runs as a slide (test/browser/gallery.test.mjs checks it in a browser).
 // After them come the motion slides, which show the motion vocabulary and the slide devices, the data-story slides,
 // which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, flight
-// and inset, time-lapse, points), and last the custom components built only from what the engine hands every component
+// and inset, time-lapse, points) and the second views (a process, its compact copy, a locator, a compact map), and last the custom components built only from what the engine hands every component
 // (gallery.slope, gallery.swipe).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -31,6 +31,11 @@ const STORY = {
   "map-flight-inset": "map",
   "map-timelapse": "map",
   "map-points": "map",
+  "explain-process": "diagram",
+  "explain-fit": "diagram",
+  "explain-predict": "diagram",
+  "map-locator": "map",
+  "map-compact": "map",
 };
 const CUSTOM = [
   { slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" },
