@@ -1,7 +1,7 @@
 // diagram: grid placement, group bounds, edge ends and problems (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placeDiagram, diagramProblems, edgeId, kindOrder } from "#engine/components/diagram/place.js";
+import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder } from "#engine/components/diagram/place.js";
 
 const OPTS = { width: 1600, height: 600, gap: 48, pad: 16 };
 const contains = (outer, inner, margin) =>
@@ -284,4 +284,102 @@ test("a card fills its cell: its drawn box is the cell, whatever size was measur
   const { cells, nodes } = placeDiagram(props, { ...OPTS, sizes: new Map([["c", { w: 60, h: 40 }], ["b", { w: 60, h: 40 }]]) });
   assert.deepEqual(nodes.get("c"), cells.get("c"));
   assert.equal(nodes.get("b").w, 60, "a box is still sized to its label");
+});
+
+const COMPACT = { width: 400, height: 200, gap: 16, pad: 6, compact: true };
+
+test("compact: shapes fill their cells; a circle is the cell's largest circle", () => {
+  const props = {
+    cols: 2,
+    rows: 1,
+    nodes: [
+      { id: "b", label: "Box", shape: "box", col: 0, row: 0 },
+      { id: "c", label: "Circle", shape: "circle", col: 1, row: 0 },
+    ],
+  };
+  const sizes = new Map([["b", { w: 10, h: 10 }], ["c", { w: 10, h: 10 }]]);
+  const { cells, nodes } = placeDiagram(props, { ...COMPACT, sizes });
+  const cellW = (400 - 16) / 2;
+  assert.deepEqual(nodes.get("b"), { x: 0, y: 0, w: cellW, h: 200 });
+  assert.deepEqual(cells.get("b"), nodes.get("b"));
+  // The cell is 192 x 200: the largest circle is 192 across, centred.
+  assert.deepEqual(nodes.get("c"), { x: cellW + 16, y: 4, w: cellW, h: cellW });
+});
+
+test("compact: text nodes and their edges are left out; a group keeps its other members", () => {
+  const props = {
+    cols: 3,
+    rows: 1,
+    nodes: [
+      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "t", label: "note", shape: "text", col: 1, row: 0 },
+      { id: "b", label: "B", shape: "box", col: 2, row: 0 },
+    ],
+    edges: [{ from: "a", to: "t" }, { from: "t", to: "b" }, { from: "a", to: "b" }],
+    groups: [{ id: "g", contains: ["t", "b"] }],
+  };
+  const full = placeDiagram(props, COMPACT);
+  assert.deepEqual([...full.cells.keys()], ["a", "b"]);
+  assert.deepEqual([...full.nodes.keys()], ["a", "b"]);
+  assert.deepEqual(full.edges.map((e) => e.id), ["a->b"]);
+  // The group is the box around `b` alone, as if `t` had never been a member.
+  const only = placeDiagram({ ...props, nodes: props.nodes.filter((n) => n.id !== "t"), groups: [{ id: "g", contains: ["b"] }] }, COMPACT);
+  assert.deepEqual(full.groups.get("g"), only.groups.get("g"));
+  // A group whose members are all text nodes is not drawn.
+  const none = placeDiagram({ ...props, groups: [{ id: "g", contains: ["t"] }] }, COMPACT);
+  assert.equal(none.groups.size, 0);
+});
+
+test("compact: group boxes have no legend line even when labelled", () => {
+  const props = {
+    cols: 1,
+    rows: 1,
+    nodes: [{ id: "a", label: "A", shape: "box", col: 0, row: 0 }],
+    groups: [{ id: "g", label: "Group", contains: ["a"] }],
+  };
+  const compact = placeDiagram(props, { ...COMPACT, legend: 40 });
+  const plain = placeDiagram({ ...props, groups: [{ id: "g", contains: ["a"] }] }, COMPACT);
+  assert.equal(compact.groups.get("g").label, undefined);
+  assert.deepEqual(compact.groups.get("g"), plain.groups.get("g"));
+  // The same labelled group in a normal diagram does reserve the line.
+  assert.ok(placeDiagram(props, { ...COMPACT, compact: false, legend: 40 }).groups.get("g").label);
+});
+
+test("compact: a tiny element gives no NaN and no negative size", () => {
+  const props = {
+    cols: 4,
+    rows: 2,
+    nodes: [
+      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "b", label: "B", shape: "circle", col: 3, row: 1 },
+      { id: "c", label: "C", shape: "card", col: 1, row: 0, colspan: 2 },
+    ],
+    edges: [{ from: "a", to: "b" }],
+    groups: [{ id: "inner", contains: ["a", "c"] }, { id: "outer", label: "All", contains: ["inner", "b"] }],
+  };
+  const out = placeDiagram(props, { width: 20, height: 10, gap: 16, pad: 6, compact: true, legend: 30 });
+  const numbers = [];
+  for (const m of [out.cells, out.nodes, out.groups]) for (const v of m.values()) numbers.push(v.x, v.y, v.w, v.h);
+  for (const e of out.edges) numbers.push(e.x1, e.y1, e.x2, e.y2);
+  assert.ok(numbers.length > 0);
+  assert.ok(numbers.every(Number.isFinite), JSON.stringify(numbers));
+  for (const m of [out.cells, out.nodes, out.groups]) for (const v of m.values()) assert.ok(v.w >= 0 && v.h >= 0, JSON.stringify(v));
+});
+
+test("diagramSpacing: compact reads the compact tokens", () => {
+  const modern = { "--sd-space": "16px", "--sd-diagram-gap": "48px", "--sd-diagram-pad": "16px", "--sd-diagram-compact-gap": "16px", "--sd-diagram-compact-pad": "6px" };
+  assert.deepEqual(diagramSpacing(modern, { compact: true }), { gap: 16, pad: 6 });
+  assert.deepEqual(diagramSpacing(modern), { gap: 48, pad: 16 });
+});
+
+test("diagramSpacing: compact falls back to the space token", () => {
+  assert.deepEqual(diagramSpacing({ "--sd-space": "16px" }, { compact: true }), { gap: 16, pad: 4 });
+  assert.deepEqual(diagramSpacing({ "--sd-space": "16px" }), { gap: 48, pad: 16 });
+});
+
+test("the gap problem of a compact diagram names the compact tokens", () => {
+  const compact = diagramProblems({ cols: 1, rows: 1, nodes: [], compact: true }, { gap: 10, pad: 6 });
+  assert.equal(compact.length, 1);
+  assert.match(compact[0].fix, /--sd-diagram-compact-gap/);
+  assert.match(diagramProblems({ cols: 1, rows: 1, nodes: [] }, { gap: 10, pad: 6 })[0].fix, /--sd-diagram-gap/);
 });

@@ -9,7 +9,7 @@
 //   their kind) and nodes without one. `shown` plays no part: a hidden node still holds its kind's place,
 //   so every step and a compact copy agree on which colour a kind has.
 //
-// placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null })
+// placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null, compact = false })
 //   -> { cells: Map<id, {x,y,w,h}>, nodes: Map<id, {x,y,w,h}>,
 //        groups: Map<id, {x,y,w,h,depth,label?:{x,y,w,h}}>, edges: [{ id, from, to, x1,y1,x2,y2 }] }
 //   Grid. `cols` x `rows` cells with `gap` between them fill the box, inset by how far the groups reach
@@ -30,6 +30,11 @@
 //   Edges. From the border of the source's drawn box to the border of the target's, along the line between
 //   their centres. A circle node's border is its circle (radius: half its box's smaller side); every
 //   other node and every group is its box. Coincident centres give a zero-length edge at the centre.
+//   Compact (`compact`: the diagram drawn small, with no text). `sizes` is ignored for every shape, so each
+//   drawn shape fills its cell (a circle: the largest circle in it, centred). `text` nodes are not placed:
+//   they are absent from `cells` and `nodes`, edges that touch one are absent from `edges`, and groups
+//   treat them as non-members. `legend` is 0, so no group has a `label` box. Cell sizes are never negative,
+//   so an element too small for its gaps and padding still gives finite boxes of size 0.
 //   Unknown ids (see diagramProblems) are skipped here: a group with no known member and an edge with an
 //   unknown end are left out, and a `contains` cycle is cut, so placement never throws or loops.
 //
@@ -39,7 +44,8 @@
 //   rule "diagram-overlap": sibling groups (same parent group, or both top-level) whose cell rectangles
 //                           intersect; a node that is not a member of a group but sits in the group's cell
 //                           rectangle (groups already in a sibling overlap are skipped); and gap < 2 x pad
-//                           when both numbers are given.
+//                           when both numbers are given. With `props.compact` the fix names the compact
+//                           tokens instead.
 //   `id` is the offending id (null for the gap rule); `message` names it. `validate` maps each item to a
 //   Problem (measured = message) and the component throws on the first "diagram-id" item.
 
@@ -102,6 +108,17 @@ function groupCells(props) {
   return out;
 }
 
+/** `props` without its `text` nodes and the edges that touch them (a compact copy has no text). */
+function withoutText(props) {
+  const text = new Set(list(props?.nodes).filter((n) => n?.shape === "text").map((n) => n?.id));
+  return {
+    ...props,
+    nodes: list(props?.nodes).filter((n) => n?.shape !== "text"),
+    edges: list(props?.edges).filter((e) => !text.has(e?.from) && !text.has(e?.to)),
+    groups: list(props?.groups).map((g) => ({ ...g, contains: list(g?.contains).filter((m) => !text.has(m)) })),
+  };
+}
+
 /** Point on the border of `box` (a circle when `round`) from its centre towards (tx, ty). */
 function borderPoint(box, round, tx, ty) {
   const cx = box.x + box.w / 2;
@@ -118,7 +135,12 @@ function borderPoint(box, round, tx, ty) {
   return [cx + ux * t, cy + uy * t];
 }
 
-export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null }) {
+export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null, compact = false }) {
+  if (compact) {
+    legend = 0;
+    sizes = null;
+    props = withoutText(props);
+  }
   const cols = Math.max(1, int(props?.cols, 1));
   const rows = Math.max(1, int(props?.rows, 1));
   const gc = groupCells(props ?? {});
@@ -151,8 +173,8 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     inset = Math.max(inset, r.side);
     insetTop = Math.max(insetTop, r.top);
   }
-  const cellW = (width - 2 * inset - (cols - 1) * gap) / cols;
-  const cellH = (height - insetTop - inset - (rows - 1) * gap) / rows;
+  const cellW = Math.max(0, (width - 2 * inset - (cols - 1) * gap) / cols);
+  const cellH = Math.max(0, (height - insetTop - inset - (rows - 1) * gap) / rows);
   const rect = ({ c0, r0, c1, r1 }) => ({
     x: inset + c0 * (cellW + gap),
     y: insetTop + r0 * (cellH + gap),
@@ -172,7 +194,10 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     shapes.set(n.id, n.shape);
     const size = n.shape === "card" ? null : sizes?.get?.(n.id);
     if (!size) {
-      nodes.set(n.id, cell);
+      if (compact && n.shape === "circle") {
+        const d = Math.min(cell.w, cell.h);
+        nodes.set(n.id, { x: cell.x + (cell.w - d) / 2, y: cell.y + (cell.h - d) / 2, w: d, h: d });
+      } else nodes.set(n.id, cell);
       continue;
     }
     let w = Math.min(size.w, cell.w);
@@ -217,6 +242,7 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
 }
 
 export function diagramProblems(props, { gap, pad } = {}) {
+  const compactTokens = props?.compact === true;
   const out = [];
   const nodes = list(props?.nodes);
   const groups = list(props?.groups);
@@ -335,7 +361,9 @@ export function diagramProblems(props, { gap, pad } = {}) {
       id: null,
       message: `grid gap ${gap}px is less than twice the group padding ${pad}px`,
       limit: `gap >= ${2 * pad}px`,
-      fix: "raise --sd-diagram-gap or lower --sd-diagram-pad in the theme (or the slide style)",
+      fix: compactTokens
+        ? "raise --sd-diagram-compact-gap or lower --sd-diagram-compact-pad in the theme (or the slide style)"
+        : "raise --sd-diagram-gap or lower --sd-diagram-pad in the theme (or the slide style)",
     });
   }
   return out;
@@ -343,15 +371,17 @@ export function diagramProblems(props, { gap, pad } = {}) {
 
 /**
  * Gap and group padding in px from theme token values (strings such as "48px"): --sd-diagram-gap and
- * --sd-diagram-pad, else 3 x and 1 x --sd-space. -> { gap, pad }, each a number or NaN when unknown.
+ * --sd-diagram-pad, else 3 x and 1 x --sd-space. With `compact`, --sd-diagram-compact-gap and
+ * --sd-diagram-compact-pad, else 1 x and 0.25 x --sd-space. -> { gap, pad }, each a number or NaN when unknown.
  */
-export function diagramSpacing(tokens) {
+export function diagramSpacing(tokens, { compact = false } = {}) {
   const px = (name) => {
     const m = /^\s*(-?\d+(?:\.\d+)?)px\s*$/.exec(String(tokens?.[name] ?? ""));
     return m ? Number(m[1]) : NaN;
   };
   const space = px("--sd-space");
-  const gap = px("--sd-diagram-gap");
-  const pad = px("--sd-diagram-pad");
-  return { gap: Number.isFinite(gap) ? gap : 3 * space, pad: Number.isFinite(pad) ? pad : space };
+  const [gapName, padName, gapFactor, padFactor] = compact ? ["--sd-diagram-compact-gap", "--sd-diagram-compact-pad", 1, 0.25] : ["--sd-diagram-gap", "--sd-diagram-pad", 3, 1];
+  const gap = px(gapName);
+  const pad = px(padName);
+  return { gap: Number.isFinite(gap) ? gap : gapFactor * space, pad: Number.isFinite(pad) ? pad : padFactor * space };
 }

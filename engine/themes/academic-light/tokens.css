@@ -73,9 +73,11 @@
   --sd-region-gap: 24px;
   --sd-canvas-margin: 96px;
   --sd-rule-width: 2px;
-  /* diagram: grid gap between cells and group padding around members (keep gap >= 2 x pad); the stripe on a card's left edge. */
+  /* diagram: grid gap between cells and group padding around members (keep gap >= 2 x pad; the compact pair is for a compact diagram); the stripe on a card's left edge. */
   --sd-diagram-gap: 48px;
   --sd-diagram-pad: 16px;
+  --sd-diagram-compact-gap: 16px;
+  --sd-diagram-compact-pad: 6px;
   --sd-diagram-stripe: var(--sd-grid);
 
   /* Motion: short and discrete (the audience may watch over a video call). */
