@@ -1,0 +1,23 @@
+{
+  "cols": 4,
+  "rows": 2,
+  "nodes": [
+    { "id": "survey", "label": "Survey", "sub": "yearly rounds", "shape": "card", "kind": "survey", "col": 0, "row": 0 },
+    { "id": "records", "label": "Records", "sub": "clinic counts", "shape": "card", "kind": "records", "col": 0, "row": 1 },
+    { "id": "fit", "label": "Fit", "sub": "one model per region", "shape": "card", "kind": "model", "col": 1, "row": 0, "rowspan": 2 },
+    { "id": "predict", "label": "Predict", "sub": "next five years", "shape": "card", "kind": "model", "col": 2, "row": 0, "rowspan": 2 },
+    { "id": "tables", "label": "Tables", "sub": "by region", "shape": "card", "kind": "output", "col": 3, "row": 0 },
+    { "id": "briefs", "label": "Briefs", "sub": "for each region", "shape": "card", "kind": "output", "col": 3, "row": 1 }
+  ],
+  "edges": [
+    { "id": "survey-fit", "from": "survey", "to": "fit" },
+    { "id": "records-fit", "from": "records", "to": "fit" },
+    { "id": "fit-predict", "from": "fit", "to": "predict" },
+    { "id": "predict-tables", "from": "predict", "to": "tables" },
+    { "id": "predict-briefs", "from": "predict", "to": "briefs" },
+    { "id": "again", "from": "tables", "to": "survey", "route": "over", "label": "next round", "flow": true }
+  ],
+  "groups": [
+    { "id": "model", "label": "Model", "contains": ["fit", "predict"] }
+  ]
+}
