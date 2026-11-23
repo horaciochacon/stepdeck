@@ -6,7 +6,8 @@
 // an inset, a time-lapse, points), then the second views: a process diagram with cards and a flowing loop, its compact
 // copy lit on two result slides, a locator inset, and a compact map beside a chart; last the custom components, each
 // built only from what the engine hands every component, with no import: gallery.slope (components/gallery.slope/),
-// a slope chart, and gallery.swipe (components/gallery.swipe/), a before/after swipe of a map raster.
+// a slope chart, gallery.swipe (components/gallery.swipe/), a before/after swipe of a map raster, and gallery.where
+// (components/gallery.where/), a bar chart that carries a compact diagram of the process, lit at the stage it names.
 // All content is synthetic. `entries` also feeds the landing page; test/unit/gallery.test.mjs checks it covers everything.
 const LAYOUTS = ["figure-notes", "full-bleed", "halves", "statement", "title"];
 const COMPONENTS = ["text", "chart.line", "chart.bar", "chart.points", "terminal", "markdown", "big-number", "list", "diagram", "chat", "timeline", "image", "map"];
@@ -37,7 +38,7 @@ const STORY = [
   ["map-compact", "compact map", "map"],
 ];
 // The deck's own components, each with the slide that shows it; their entries link the custom-components guide.
-const CUSTOM = [["custom-slope", "gallery.slope"], ["map-swipe", "gallery.swipe"]];
+const CUSTOM = [["custom-slope", "gallery.slope"], ["map-swipe", "gallery.swipe"], ["custom-where", "gallery.where"]];
 
 // "chart.line" -> "chart-line": the name as it appears in slide ids (slides/<id>.js) and reference pages.
 const dashed = (name) => name.replaceAll(".", "-");

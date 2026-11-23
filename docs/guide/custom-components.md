@@ -368,6 +368,8 @@ export default {
 - **Not inside a chart's SVG.** A chart's `settle` clears the inline styles inside its SVG, which a compact view writes. Mount the view in an HTML element beside your SVG, as above, never in a node inside it.
 - **Pass your `info`** to `handle.update`, as with any child, so an abort reaches it. A flowing edge in the child stands still, whatever you do: compact views never flow.
 
+The gallery has a whole component built this way, [`gallery.where`](../../site/gallery/components/gallery.where/index.js): a bar chart drawn with `ctx.chart` that carries a compact diagram in its top-right corner, from the same `data/process.json` the process slides bind, lit at the stage each step names. Its slide is `custom-where` in the [gallery](../../site/gallery/).
+
 ## Build a chart from the engine's pieces
 
 A chart is more than a drawing. Its axis has to stay put as steps change, its marks have to come and go cleanly, and a played step has to end where a jump does. The engine's own charts are made of pieces that a deck component gets as `ctx.chart`, so you do not rewrite them. This section builds a small dot plot, `my.dots`, in the order a chart is made: `frame`, then `extentOf` over `ctx.stepProps`, then `keyed`, the marks, `morph` and `settle`. Every piece is listed in the [component contract](../reference/component-contract.md#ctxchart).
@@ -816,6 +818,15 @@ The gallery has a chart built the same way, from `ctx.chart` alone, `gallery.slo
 | [`site/gallery/components/gallery.slope/example.js`](../../site/gallery/components/gallery.slope/example.js) | The gallery slide: the right end moves from 2010 to 2020 and 2030, then one region is highlighted. |
 | [`site/gallery/deck.js`](../../site/gallery/deck.js) | `components: ["gallery.slope"]`. |
 | [`test/browser/custom-slope.test.mjs`](../../test/browser/custom-slope.test.mjs) | Played equals jumped, a scale that never moves, labels that slide to their new rank, and the entrance drawn from a deck with a copied engine. |
+
+The gallery also has a chart that carries a second view, `gallery.where`:
+
+| File | What it shows |
+|---|---|
+| [`site/gallery/components/gallery.where/index.js`](../../site/gallery/components/gallery.where/index.js) | A bar chart with no `import` (`C.loadTable`, `C.frame`, `C.extentOf` over every step, `C.axis`, `C.keyed` then `C.settle`, one `C.morph` for a played change of `y`) and, in its top-right corner, `ctx.mount("diagram", copy, { ...process, compact: true, caption, highlight: [stage] })`: the copy is in an HTML element beside the chart's SVG, its caption is never empty so its grid never moves, and every `update` passes the parent's `info` on. |
+| [`site/gallery/components/gallery.where/schema.json`](../../site/gallery/components/gallery.where/schema.json) | A closed schema whose `process` prop takes the whole definition, bound as `"{{data/process.json#}}"`. |
+| [`site/gallery/slides/custom-where.js`](../../site/gallery/slides/custom-where.js) | The gallery slide: each step names a stage and a column, and the copy lights the stage while the bars move. |
+| [`test/browser/custom-where.test.mjs`](../../test/browser/custom-where.test.mjs) | Played equals jumped, the lit stage per step, the copy beside the chart's SVG and the same grid at every step, the bars moving through the heights between, and `check` clean under both themes. |
 
 The cookbook recipe [A custom component driven by `stage`](../../skill/references/cookbook.md#a-custom-component-driven-by-stage) shows the starter's example slide.
 
