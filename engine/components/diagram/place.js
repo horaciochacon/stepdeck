@@ -20,8 +20,9 @@
 //   and the same for rows. A node spanning colspan x rowspan cells covers the gaps between them.
 //   Lanes. An edge with a `route` (over, under, left, right) whose two ends are placed takes a lane on that side,
 //   outside the grid and outside how far the groups reach, whether it is shown or not, so nothing moves between
-//   steps. A lane is gap / 2 wide, plus one `legend` line when the edge has a label; a side's lanes stack outward
-//   in the order of `edges`, lane 0 nearest the grid, and the cells shrink by each side's lanes.
+//   steps. A lane is gap / 2 wide, plus one `legend` line when the edge has a label (in compact, a whole `gap`, so
+//   the line runs gap / 2 off the grid and its last leg is long enough for the arrowhead); a side's lanes stack
+//   outward in the order of `edges`, lane 0 nearest the grid, and the cells shrink by each side's lanes.
 //   Nodes. The cell (`cells`) is only the placement slot. The drawn box (`nodes`) is the node's measured
 //   size from `sizes` (Map<id, {w,h}>: label plus padding, measured by the component), capped at the cell
 //   and centred in it; a circle is square, its diameter capped by the cell's smaller side. Without a size
@@ -40,9 +41,9 @@
 //   or right point), runs along the lane's middle and enters its target the same way: `points` is
 //   [exit, (exit.x, laneY), (entry.x, laneY), entry] over or under, [exit, (laneX, exit.y), (laneX, entry.y),
 //   entry] left or right, and (x1, y1), (x2, y2) are its first and last points. A self-loop (`from` === `to`)
-//   leaves a quarter of the side before its middle and comes back a quarter after it (left to right over or
-//   under, top to bottom on a side; on a circle, half the radius either side, on the circle), so it reads as a
-//   loop.
+//   leaves a quarter of the way along the side facing its lane and comes back three quarters of the way along
+//   (left to right over or under, top to bottom on a side; on a circle, half the radius either side of its
+//   point, on the circle), so it reads as a loop.
 //   Compact (`compact`: the diagram drawn small, with no text). `sizes` is ignored for every shape, so each
 //   drawn shape fills its cell (a circle: the largest circle in it, centred). `text` nodes are not placed:
 //   they are absent from `cells` and `nodes`, edges that touch one are absent from `edges` (and reserve no
@@ -241,13 +242,14 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     insetTop = Math.max(insetTop, r.top);
   }
   // Lanes: each routed edge whose two ends are placed, shown or not, takes a lane on its side, half the gap wide
-  // (plus one legend line when labelled); a side's lanes stack outward in edge order, lane 0 nearest the grid.
+  // (plus one legend line when labelled; a whole gap in compact); a side's lanes stack outward in edge order, lane 0
+  // nearest the grid.
   const placed = (id) => (typeof id === "string" && nodeIds.has(id)) || gc.has(id);
   const band = { over: 0, under: 0, left: 0, right: 0 };
   const lanes = new Map(); // edge index -> { side, mid: from the band's inner edge out to the lane's middle }
   for (const [i, e] of list(props?.edges).entries()) {
     if (!ROUTES.includes(e?.route) || !placed(e.from) || !placed(e.to)) continue;
-    const w = gap / 2 + (e.label ? legend : 0);
+    const w = (compact ? gap : gap / 2) + (e.label ? legend : 0);
     lanes.set(i, { side: e.route, mid: band[e.route] + w / 2 });
     band[e.route] += w;
   }
@@ -318,7 +320,7 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     if (!a || !b) continue;
     const lane = lanes.get(i);
     if (lane) {
-      // A self-loop leaves a quarter of the side before its middle and comes back a quarter after it.
+      // A self-loop leaves a quarter of the way along the side and comes back three quarters of the way along.
       const self = e.from === e.to;
       const exit = sidePoint(a, round(e.from), lane.side, self ? -1 : 0);
       const entry = sidePoint(b, round(e.to), lane.side, self ? 1 : 0);

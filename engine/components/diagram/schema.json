@@ -57,7 +57,7 @@
           "to": { "type": "string", "description": "Id of the target node or group (the arrowhead end)." },
           "label": { "type": "string", "description": "Optional plain-text label beside the midpoint; on a routed edge, one line centred on its lane (turned a quarter on a left or right lane)." },
           "dashed": { "type": "boolean", "description": "Draw the line dashed." },
-          "route": { "enum": ["over", "under", "left", "right"], "description": "Draw the edge around the grid instead of straight: it leaves its source from the middle of the side facing that way, runs along a lane outside the grid on that side and enters its target the same way, with rounded corners. For a loop back (\"next round\") or a side loop. A self-loop (`from` equal to `to`) leaves a quarter of the side before its middle and comes back a quarter after it. Each routed edge, shown or not, reserves its own lane, so the cells shrink." }
+          "route": { "enum": ["over", "under", "left", "right"], "description": "Draw the edge around the grid instead of straight: it leaves its source from the middle of the side facing that way, runs along a lane outside the grid on that side and enters its target the same way, with rounded corners. For a loop back (\"next round\") or a side loop. A self-loop (`from` equal to `to`) leaves a quarter of the way along the side facing its lane and comes back three quarters of the way along. Each routed edge, shown or not, reserves its own lane, so the cells shrink." }
         }
       },
       "examples": [[{ "from": "data", "to": "model" }, { "from": "model", "to": "result", "label": "predicts", "dashed": true }, { "id": "again", "from": "result", "to": "data", "route": "over", "label": "next round" }]],

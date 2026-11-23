@@ -57,19 +57,21 @@ Behaviour:
   for a loop back ("next round") or a side loop in a vertical diagram. It leaves its source at the middle of the
   side facing that way (a circle at its top, bottom, left or right point), runs out to a lane outside the grid
   on that side, along the lane, and back into its target's middle on the same side, its corners rounded by a
-  grid unit (`--sd-grid`, at most half of either segment). It is a `path.sd-diagram-line`, with the same
-  arrowhead marker and the same shortened end as a straight edge's `line.sd-diagram-line`; it draws on from
-  source to target the same way (a dashed one fades). Every routed edge, shown or not, reserves its own lane,
-  so nothing moves between steps: half `--sd-diagram-gap` wide, plus one label line when it has a label,
-  stacked outward in the order of `edges` (the first nearest the grid), outside how far the groups reach; the
-  cells shrink by the lanes on each side. A label sits on the middle of the lane's run, one line over the
-  background backing, as wide as the run and at least four label lines: across on an over or under lane,
-  turned a quarter on a side lane (reading upward on the left, downward on the right). A longer label is not
-  wrapped: it runs past its box along the lane, so `check` reports it when it leaves the region (a turned one
-  only once it is well past it: look at a screenshot). A self-loop
-  (`from` equal to `to`) leaves a quarter of the side before its middle and comes back a quarter after it (left
-  to right over or under, top to bottom on a side). In a compact diagram a lane is half the compact gap and has
-  no label line, and an edge left out (it touches a `text` node) reserves none. A diagram without routed edges
+  grid unit (`--sd-grid`, at most half of either segment). It is a `path.sd-diagram-line` with the same
+  arrowhead marker as a straight edge's `line.sd-diagram-line`, and like it stops half an arrowhead short of the
+  target, so the arrowhead's tip touches the target's border; it draws on from source to target the same way
+  (a dashed one fades). Every routed edge, shown or not, reserves its own lane, so nothing moves between steps:
+  half `--sd-diagram-gap` wide, plus one label line when it has a label, stacked outward in the order of `edges`
+  (the first nearest the grid), outside how far the groups reach; the cells shrink by the lanes on each side. A
+  label sits on the middle of the lane's run, one line over the background backing, as wide as the run and at
+  least four label lines: across on an over or under lane, turned a quarter on a side lane (reading upward on
+  the left, downward on the right). A longer label is not wrapped: it runs past its box along the lane, so
+  `check` reports it when it leaves the region (a turned one only once it is well past it: look at a
+  screenshot). A self-loop (`from` equal to `to`) leaves a quarter of the way along the side facing its lane and
+  comes back three quarters of the way along (left to right over or under, top to bottom on a side). In a
+  compact diagram a lane is one whole compact gap (not half) with no label line, so its line runs half a compact
+  gap off the cells, clear of their outlines, and its last leg is long enough for the arrowhead's tip to reach
+  the target's border; an edge left out (it touches a `text` node) reserves none. A diagram without routed edges
   reserves no lane.
 - **Compact.** `compact: true` draws the same definition small, for a "you are here" copy beside a slide's own
   figure: bind `cols`, `rows`, `nodes`, `edges` and `groups` of both views to one data file, so every id and every

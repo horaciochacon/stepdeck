@@ -500,7 +500,7 @@ test("routed: a self-loop and an edge to a group give finite points", () => {
     assert.ok(e.points.flat().every(Number.isFinite), `${e.id}: ${JSON.stringify(e.points)}`);
   }
   const by = Object.fromEntries(edges.map((e) => [e.id, e]));
-  // A self-loop leaves a quarter of the side before its middle and comes back a quarter after it.
+  // A self-loop leaves a quarter of the way along the side and comes back three quarters of the way along.
   const a = nodes.get("a");
   assert.deepEqual(by.self.points[0], [a.x + a.w / 2 - a.w / 4, a.y], "a self-loop leaves its top a quarter left of the middle");
   assert.deepEqual(by.self.points.at(-1), [a.x + a.w / 2 + a.w / 4, a.y], "and comes back a quarter right of it");
@@ -522,7 +522,7 @@ test("routed: a self-loop and an edge to a group give finite points", () => {
   assert.deepEqual(by.fromgroup.points[0], [g.x + g.w / 2, g.y], "an edge from a group leaves its box's top middle");
 });
 
-test("routed in compact: the lane is half the compact gap with no label line, points are finite, and an edge left out reserves no lane", () => {
+test("routed in compact: the lane is one compact gap with no label line, points are finite, and an edge left out reserves no lane", () => {
   const props = {
     cols: 3,
     rows: 1,
@@ -533,11 +533,14 @@ test("routed in compact: the lane is half the compact gap with no label line, po
     ],
     edges: [{ from: "b", to: "a", route: "over", label: "again" }, { from: "t", to: "b", route: "under" }],
   };
+  // A compact lane is a whole compact gap (16), so its line runs half a gap off the grid and the last leg is long
+  // enough for the arrowhead (a full-size lane is half the gap).
   const { cells, edges } = placeDiagram(props, { ...COMPACT, legend: 40 });
-  assert.equal(cells.get("a").y, 8, "one lane above, half the compact gap, with no label line");
-  assert.equal(cells.get("a").h, 200 - 8, "no lane below: the edge from the text node is left out");
+  assert.equal(cells.get("a").y, 16, "one lane above, one compact gap, with no label line");
+  assert.equal(cells.get("a").h, 200 - 16, "no lane below: the edge from the text node is left out");
   assert.deepEqual(edges.map((e) => e.id), ["b->a"]);
-  assert.equal(edges[0].points[1][1], 4, "the line runs along the lane's middle");
+  assert.equal(edges[0].points[1][1], 8, "the line runs along the lane's middle, half a compact gap off the grid");
+  assert.equal(edges[0].points.at(-1)[1] - edges[0].points[1][1], 8, "the last leg is half a compact gap long");
   assert.ok(edges[0].points.flat().every(Number.isFinite));
   // A tiny element still gives finite points.
   const tiny = placeDiagram(props, { ...COMPACT, width: 10, height: 6 });
