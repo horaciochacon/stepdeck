@@ -55,11 +55,11 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-letter-spacing-cover` | `-0.05em` | Cover title tracking. Optional: falls back to `normal`. |
 | `--sd-measure` | `34em` | Comfortable line length for long text. |
 
-The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, `--sd-diagram-compact-gap`, `--sd-diagram-compact-pad`) and so are the second-view tokens (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`, `--sd-compact-tint`). See that README for the table.
+The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, `--sd-diagram-compact-gap`, `--sd-diagram-compact-pad`) and so are the second-view tokens (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`, `--sd-compact-tint`) and the period of a flowing edge (`--sd-flow-period`, in the Motion table below). See that README for the table.
 
 ### Motion
 
-`modern` moves a little more than `academic-light`: elements rise into place by default, further, with a slightly longer gap between them. The durations and the easing are the same in both themes.
+`modern` moves a little more than `academic-light`: elements rise into place by default, further, with a slightly longer gap between them. The durations, the easing and the flow period are the same in both themes.
 
 | Token | Value | Use |
 |---|---|---|
@@ -69,6 +69,7 @@ The minimum audience font, spacing and canvas tokens are the same as in `academi
 | `--sd-stagger` | `80ms` | The gap between the elements that enter on one step, and between the items of a build. (`academic-light`: 60ms.) |
 | `--sd-enter` | `rise` | How an element enters when its component has no build of its own. (`academic-light`: `fade`.) |
 | `--sd-motion-distance` | `24px` | How far a `rise` travels. (`academic-light`: 16px.) |
+| `--sd-flow-period` | `1600ms` | Ambient motion: how long one dash and one gap of a flowing `diagram` edge (`flow: true`) take to pass, at a constant speed, while the page animates. |
 
 ### Tuned values
 
