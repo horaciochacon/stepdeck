@@ -1240,6 +1240,8 @@ test("a compact routed edge: the arrowhead's tip on the target's border, the lan
       const clear = geo.cellsTop - geo.shapeStroke / 2 - (geo.lane[1] + geo.lineStroke / 2);
       assert.ok(clear >= geo.lineStroke, `${id}: ${clear}px between the lane's line and the cells (at least ${geo.lineStroke})`);
       // The whole arrowhead shows above clean: both sides of its base are painted, the tip sits on the border.
+      // Here the tip sits on a half pixel, so the base is sampled 3 units each side of it, 2 inside its edges: at
+      // 4 units, rounding put the right-hand sample on the edge's anti-aliased pixel, whose shade differs by rasteriser.
       const tipX = geo.screen[0];
       const tipY = geo.screen[1] + BACK * geo.scale;
       const clip = { x: Math.round(tipX - 16), y: Math.round(tipY - 20), width: 32, height: 24 };
@@ -1254,7 +1256,7 @@ test("a compact routed edge: the arrowhead's tip on the target's border, the lan
         const g = c.getContext("2d");
         g.drawImage(img, 0, 0);
         return pts.map(([x, y]) => [...g.getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3));
-      }, [shot.toString("base64"), [[-4, -10], [4, -10], [-9, -14], [9, -14]].map(([dx, dy]) => [tipX - clip.x + dx * geo.scale, tipY - clip.y + dy * geo.scale])]);
+      }, [shot.toString("base64"), [[-3, -10], [3, -10], [-9, -14], [9, -14]].map(([dx, dy]) => [tipX - clip.x + dx * geo.scale, tipY - clip.y + dy * geo.scale])]);
       assert.ok(painted(px[0]) && painted(px[1]), `${id}: the arrowhead's base spans both sides of the leg, above clean (${JSON.stringify(px)})`);
       assert.ok(!painted(px[2]) && !painted(px[3]), `${id}: nothing is painted beside it further up (${JSON.stringify(px)})`);
     }
