@@ -455,6 +455,21 @@ test("motion-budget: a routed edge draws like any other edge", async () => {
   assert.match(problems[0].measured, /8200 ms/);
 });
 
+test("motion-budget: a labelled flowing edge fades in with its label, as a dashed one does", async () => {
+  // As above: eight boxes pop in over 7400 ms. A labelled edge then draws and its label fades after it (800 ms, 8200 ms
+  // in all); a flowing edge is drawn dashed, so, like a dashed one, it fades in with its label (400 ms, 7800 ms).
+  const boxes = Array.from({ length: 8 }, (_, i) => `{ id: "n${i}", label: "N", shape: "box", col: ${i}, row: 0 }`).join(", ");
+  const edge = (more) => `[{ from: "n0", to: "n1", label: "one"${more} }]`;
+  const problems = await validateSlideBody(`elements: [
+    { id: "drawn", type: "diagram", from: "a", props: { cols: 8, rows: 1, nodes: [${boxes}], edges: ${edge("")} } },
+    { id: "flowing", type: "diagram", from: "b", props: { cols: 8, rows: 1, nodes: [${boxes}], edges: ${edge(", flow: true")} } },
+    { id: "dashed", type: "diagram", from: "c", props: { cols: 8, rows: 1, nodes: [${boxes}], edges: ${edge(", dashed: true")} } },
+  ], steps: [{ id: "s0" }, { id: "a", transition: { stagger: 1000 } }, { id: "b", transition: { stagger: 1000 } }, { id: "c", transition: { stagger: 1000 } }]`);
+  assert.deepEqual(rules(problems), ["motion-budget"], show(problems));
+  assert.equal(problems[0].element, "drawn");
+  assert.match(problems[0].measured, /8200 ms/);
+});
+
 test("chart-prop-unused: ticker without until is a warning", async () => {
   const problems = await validate(fixture("ticker-without-until"));
   assert.deepEqual(rules(problems), ["chart-prop-unused"], show(problems));
