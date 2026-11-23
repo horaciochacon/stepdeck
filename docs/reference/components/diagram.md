@@ -98,7 +98,8 @@ Ids are shared by nodes, groups and edges: one id may name one thing only, becau
 | `id` | non-empty string | yes | Unique id, used by edges, groups, `shown` and `highlight`. |
 | `label` | string | yes | The node's text, inline Markdown. It wraps inside the node. |
 | `sub` | string | no | A second line under the label, inline Markdown, smaller and muted. |
-| `shape` | `box` \| `pill` \| `circle` \| `text` | yes | The outline: a rectangle with small rounded corners, a fully rounded pill, a circle, or no outline at all. |
+| `shape` | `box` \| `pill` \| `circle` \| `card` \| `text` | yes | The outline: a rectangle with small rounded corners, a fully rounded pill, a circle, a card (see [Cards and kinds](#cards-and-kinds)), or no outline at all. |
+| `kind` | non-empty string | no | A kind that colours the node from the theme's categorical palette (see [Cards and kinds](#cards-and-kinds)). A `text` node ignores it. |
 | `col` | integer >= 0 | yes | 0-based column of the node's first cell. |
 | `row` | integer >= 0 | yes | 0-based row of the node's first cell. |
 | `colspan` | integer >= 1 | no | Columns the node covers (default 1). |
@@ -122,6 +123,16 @@ Ids are shared by nodes, groups and edges: one id may name one thing only, becau
 | `label` | string | no | Inline Markdown, drawn on one line inside the box's top padding, above the members. |
 | `contains` | string array, at least one | yes | Ids of the member nodes and groups. Listing a group makes groups nest. |
 | `dashed` | boolean | no | Draw the box dashed. |
+
+### Cards and kinds
+
+A `card` is a rounded rectangle that fills its cell: unlike a box, pill or circle it is not sized to its label. A stripe on its left edge, `--sd-diagram-stripe` wide (a grid unit) and clipped to the card's rounded corners, carries its kind's colour (ink when it has no kind). The label is left- and top-aligned at the note size in the strong weight, the sub under it at the label size in muted. The label area is the cell inset by `--sd-diagram-pad` on every side, plus the stripe's width on the left. A label too long for its card overflows it and is never shrunk, as it does in other nodes.
+
+`kind` is an optional string on any node. Each distinct kind takes the next colour of the theme's categorical palette (`ctx.palette("categorical")`) in order of first appearance in `nodes`, whatever `shown` says, so every step agrees on which colour a kind has. On a card the colour is the stripe; on a box, pill or circle it is the outline; a `text` node ignores its kind and takes no place in the order. Groups and edges have no kind. A dimmed node's stripe and outline go to `--sd-color-dim` like the rest of it, and the change tweens with the other colours.
+
+More distinct kinds than the palette has colours is an element error (see [Element errors](#element-errors)).
+
+A node with a kind is drawn in an inner group (`g.sd-diagram-paint`) that holds its shape, stripe and label and carries the colour as the custom property `--sd-kind`; its `g.sd-diagram-node` gets `data-kind`. The motion never touches the inner group, so the colour survives every step. A node without a kind has no such group.
 
 ## Reveal and highlight parts by step
 
@@ -150,7 +161,7 @@ A label too long for its node is never shrunk and never clipped. It wraps inside
 Placement is explicit: nothing is laid out automatically.
 
 - **Grid.** With no groups, the cells fill the element: `cellW = (width - (cols - 1) x gap) / cols`, and column `c` starts at `c x (cellW + gap)`. Rows work the same way. A node with a span covers the gaps between its cells. With groups, the grid is first inset by how far the groups reach past their members.
-- **Nodes.** The cell is only the node's slot. The drawn shape is sized to its label plus `--sd-diagram-pad`, centred in the cell and capped at the cell's size. A `text` node is just its text. A circle's diameter covers its label's diagonal plus the padding, capped by the cell's smaller side.
+- **Nodes.** The cell is only the node's slot. The drawn shape is sized to its label plus `--sd-diagram-pad`, centred in the cell and capped at the cell's size. A `text` node is just its text, and a `card` is its cell. A circle's diameter covers its label's diagonal plus the padding, capped by the cell's smaller side.
 - **Groups.** A group's box is the union of all its members' drawn shapes, grown by the pad on every side. A labelled group's top padding also holds one label line, so nested labels stack and never meet. A child group sits at least one pad inside its parent.
 - **Edges.** An edge runs between the borders of its ends' drawn shapes, along the line between their centres. A circle's border is its circle; every other node and every group is its rectangle. The arrowhead appears at the `to` end. A label sits above a mostly horizontal edge, or to the right of a mostly vertical one, in a layer above the nodes and on a background-colored backing.
 
@@ -160,8 +171,9 @@ Placement is explicit: nothing is laid out automatically.
 | --- | --- | --- |
 | `--sd-diagram-gap` | 48px | Space between grid cells. |
 | `--sd-diagram-pad` | 16px | Padding between a node's label and its outline, and between a group's box and its members. |
+| `--sd-diagram-stripe` | `var(--sd-grid)` (8px) | Width of the stripe on a card's left edge. |
 
-A theme without these tokens gets 3 x and 1 x `--sd-space`. The gap must be at least twice the pad so that neighbouring group boxes never touch; `validate` checks the theme's values (see [Errors and problems](#errors-and-problems)). Colors, stroke widths and font sizes all come from theme tokens through `core/stepdeck.css`. See [Themes](../themes.md).
+A theme without the gap and pad tokens gets 3 x and 1 x `--sd-space`, and one without the stripe token a stripe of `--sd-grid`. The gap must be at least twice the pad so that neighbouring group boxes never touch; `validate` checks the theme's values (see [Errors and problems](#errors-and-problems)). Colors, stroke widths and font sizes all come from theme tokens through `core/stepdeck.css`. See [Themes](../themes.md).
 
 ### Size
 
@@ -193,6 +205,7 @@ The component throws on props that would draw a blank or wrong diagram. The erro
 | ``diagram needs `cols`, an integer >= 1`` (or `rows`) | `cols` or `rows` is missing, not an integer, or below 1. |
 | ``diagram needs a non-empty `nodes` array`` | `nodes` is missing or empty. |
 | `diagram: <message> (<limit>)` | The first `diagram-id` problem in the props (see below). |
+| `diagram has <n> kinds; the categorical palette has <m> colours` | The nodes use more distinct `kind` values than the theme's categorical palette has colours. |
 
 ### What `validate` checks
 

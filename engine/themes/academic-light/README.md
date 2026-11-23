@@ -81,6 +81,7 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-rule-width` | `2px` | Hairline width for rules and borders. |
 | `--sd-diagram-gap` | `48px` | Gap between the grid cells of a `diagram`. Keep it at least twice `--sd-diagram-pad`, so neighbouring group boxes never touch (`validate` flags it). |
 | `--sd-diagram-pad` | `16px` | Padding of a `diagram` group box around its members; each nesting level adds one more. |
+| `--sd-diagram-stripe` | `var(--sd-grid)` | Width of the stripe on a `diagram` card's left edge. |
 
 ### Motion
 

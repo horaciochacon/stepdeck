@@ -17,6 +17,7 @@ import {
   htmlAfterJump,
   sampleFrames,
   tokenRgb,
+  paletteRgb,
   colorMove,
 } from "./helpers.mjs";
 
@@ -26,6 +27,7 @@ const pages = deckPages("test/fixtures/decks/diagram/");
 const motion = deckPages("test/fixtures/decks/motion/"); // modern theme: --sd-duration 400ms, --sd-stagger 80ms
 const focus = deckPages("test/fixtures/decks/focus/"); // modern theme: --sd-duration-fast 200ms; steps all, a, b, end
 const FLOW = ["start", "model", "result", "all", "focus"];
+const CARDS = ["start", "more", "focus"];
 
 // What a viewer sees of each part: { id: "visible" | "hidden" }, read from computed style.
 const parts = (page, el = "flow") =>
@@ -39,12 +41,14 @@ test("jump equals played", async () => {
   await withPage({ root, url: pages.url("flow", "step=start") }, async (page, ctx) => {
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "flow", steps: FLOW, id: "flow" });
     await expectJumpEqualsPlayed(ctx, page, { pages, slide: "edges", steps: ["nodes", "edge"], id: "pair" });
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "cards", steps: CARDS, id: "cards" });
   });
 });
 
 test("backward equals jump", async () => {
   await withPage({ root, url: pages.url("flow", "step=start") }, async (page, ctx) => {
     await expectBackwardEqualsJump(ctx, page, { pages, slide: "flow", steps: FLOW, id: "flow" });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "cards", steps: CARDS, id: "cards" });
   });
 });
 
@@ -54,6 +58,8 @@ test("interrupt mid-motion equals jump", async () => {
     await expectInterruptEqualsJump(ctx, page, { pages, slide: "flow", from: "model", via: "result", to: "start", id: "flow" });
     await expectInterruptEqualsJump(ctx, page, { pages, slide: "flow", from: "all", via: "focus", to: "result", id: "flow" });
     await expectInterruptEqualsJump(ctx, page, { pages, slide: "edges", from: "nodes", via: "edge", to: "nodes", id: "pair" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "cards", from: "start", via: "more", to: "focus", id: "cards", keep: ".sd-diagram-paint" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "cards", from: "more", via: "focus", to: "start", id: "cards", keep: ".sd-diagram-paint" });
   });
 });
 
@@ -226,6 +232,15 @@ test("text is at least 28px", async () => {
     assert.equal(sizes.text.length, 4);
     for (const [k, v] of Object.entries(sizes)) if (k !== "min") assert.ok(v.length >= 1 && v.every((s) => s >= 28), `${k} ${v}`);
   });
+  await withPage({ root, url: pages.url("cards", "step=more") }, async (page) => {
+    const sizes = await page.evaluate(() => {
+      const px = (sel) => [...document.querySelectorAll(`[data-el="cards"] ${sel}`)].map((n) => parseFloat(getComputedStyle(n).fontSize));
+      return { text: px(".sd-diagram-text"), sub: px(".sd-diagram-sub") };
+    });
+    assert.equal(sizes.text.length, 8);
+    assert.equal(sizes.sub.length, 4);
+    for (const [k, v] of Object.entries(sizes)) assert.ok(v.every((s) => s >= 28), `${k} ${v}`);
+  });
   await withPage({ root, url: pages.url("edges", "step=edge") }, async (page) => {
     const edge = await page.evaluate(() => [...document.querySelectorAll('[data-el="pair"] .sd-diagram-edge-label')].map((n) => parseFloat(getComputedStyle(n).fontSize)));
     assert.ok(edge.length === 1 && edge[0] >= 28, `edge label ${edge}`);
@@ -330,7 +345,7 @@ test("nested labelled groups: legends clear of each other and of the pills; chec
 });
 
 test("check is clean on the diagram slides", async () => {
-  for (const slide of ["flow", "edges", "long", "nest"]) {
+  for (const slide of ["flow", "edges", "long", "nest", "cards"]) {
     const problems = await check(deck, { slide });
     assert.deepEqual(problems.map(formatProblem), [], slide);
   }
@@ -511,3 +526,147 @@ test("the parts' start state is written before update awaits; a shown element wi
     assert.ok(r.elapsed >= 870 && r.elapsed < 3000, `two pops: 600 ms each, 300 ms apart (${r.elapsed.toFixed(0)} ms)`);
   });
 });
+
+// Cards and kinds. The fixture's kinds are source, step, model (first appearance order); the text node's kind
+// takes no colour.
+const KIND_NODES = { ingest: 0, clean: 1, model: 2 }; // the cards, by kind index
+const KIND_OUTLINES = { box: 0, pill: 1, dot: 2 };
+
+for (const theme of ["academic-light", "modern"]) {
+  test(`cards (${theme}): stripe in the kind's palette colour, label left-aligned, card fills its cell`, async () => {
+    await withPage({ root, url: pages.url("cards", `step=more&theme=${theme}`) }, async (page, ctx) => {
+      const ink = await tokenRgb(page, "--sd-color-ink");
+      const r = await page.evaluate(() => {
+        const el = document.querySelector('[data-el="cards"]');
+        const canvas = document.querySelector(".sd-canvas");
+        const tokens = getComputedStyle(canvas);
+        const px = (name) => parseFloat(tokens.getPropertyValue(name));
+        const scale = canvas.getBoundingClientRect().width / 1920;
+        const svg = el.querySelector("svg");
+        const out = { gap: px("--sd-diagram-gap"), pad: px("--sd-diagram-pad"), stripeToken: px("--sd-diagram-stripe"), w: Number(svg.getAttribute("width")), h: Number(svg.getAttribute("height")), cards: {} };
+        for (const id of ["ingest", "clean", "model", "plain"]) {
+          const g = el.querySelector(`[data-id="${id}"]`);
+          const shape = g.querySelector(".sd-diagram-shape");
+          const stripe = g.querySelector(".sd-diagram-stripe");
+          const box = shape.getBBox();
+          const stripeBox = stripe.getBBox();
+          const text = g.querySelector(".sd-diagram-text").getBoundingClientRect();
+          const sub = g.querySelector(".sd-diagram-sub").getBoundingClientRect();
+          const card = shape.getBoundingClientRect();
+          out.cards[id] = {
+            box: [box.x, box.y, box.width, box.height],
+            stripe: { fill: getComputedStyle(stripe).fill, x: stripeBox.x, w: stripeBox.width, h: stripeBox.height },
+            textLeft: (text.left - card.left) / scale,
+            subLeft: (sub.left - card.left) / scale,
+            textTop: (text.top - card.top) / scale,
+            textAlign: getComputedStyle(g.querySelector(".sd-diagram-label")).textAlign,
+            kind: g.dataset.kind ?? null,
+            paint: g.querySelector(".sd-diagram-paint")?.getAttribute("style") ?? null,
+          };
+        }
+        out.noteHasPaint = el.querySelector('[data-id="note"] .sd-diagram-paint') !== null;
+        out.noteKind = el.querySelector('[data-id="note"]').dataset.kind ?? null;
+        return out;
+      });
+      assert.equal(r.stripeToken, 8, "the theme's stripe is one grid unit");
+      const cellW = (r.w - 3 * r.gap) / 4;
+      const cellH = (r.h - r.gap) / 2;
+      const cols = { ingest: 0, clean: 1, model: 2, plain: 3 };
+      for (const [id, c] of Object.entries(r.cards)) {
+        const want = [cols[id] * (cellW + r.gap), 0, cellW, cellH];
+        c.box.forEach((v, i) => assert.ok(Math.abs(v - want[i]) < 0.5, `${id}: the card is its cell (${c.box} vs ${want})`));
+        assert.ok(Math.abs(c.stripe.x - c.box[0]) < 0.5 && Math.abs(c.stripe.w - r.stripeToken) < 0.5 && Math.abs(c.stripe.h - c.box[3]) < 0.5, `${id}: the stripe is on the left edge, full height`);
+        const inset = r.pad + r.stripeToken;
+        assert.ok(c.textLeft <= inset + 1 && c.textLeft >= inset - 1, `${id}: the label starts at the pad plus the stripe (${c.textLeft})`);
+        if (id !== "plain") assert.ok(Math.abs(c.subLeft - c.textLeft) < 1, `${id}: the sub is left-aligned with the label`);
+        assert.ok(c.textTop <= r.pad + 1, `${id}: the label is top-aligned (${c.textTop})`);
+        assert.equal(c.textAlign, "left");
+      }
+      for (const [id, i] of Object.entries(KIND_NODES)) {
+        assert.equal(r.cards[id].stripe.fill, paletteRgb(theme, i), `${id}: kind ${i} takes palette colour ${i}`);
+        assert.match(r.cards[id].paint, /--sd-kind:/);
+      }
+      assert.equal(r.cards.plain.stripe.fill, ink, "a card without a kind has an ink stripe");
+      assert.equal(r.cards.plain.kind, null);
+      assert.equal(r.cards.plain.paint, null);
+      assert.equal(r.noteHasPaint, false, "a text node ignores its kind");
+      assert.equal(r.noteKind, null);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("kinds colour the outline of boxes, pills and circles; a dimmed node goes to the dim colour, stripe included", async () => {
+  const paint = (page) =>
+    page.evaluate(() => {
+      const q = (id, sel) => getComputedStyle(document.querySelector(`[data-el="cards"] [data-id="${id}"] ${sel}`));
+      return {
+        outline: Object.fromEntries(["box", "pill", "dot", "note", "ingest", "clean"].map((id) => [id, q(id, ".sd-diagram-shape").stroke])),
+        stripe: Object.fromEntries(["ingest", "clean", "model", "plain"].map((id) => [id, q(id, ".sd-diagram-stripe").fill])),
+      };
+    });
+  await withPage({ root, url: pages.url("cards", "step=more") }, async (page, ctx) => {
+    const ink = await tokenRgb(page, "--sd-color-ink");
+    const now = await paint(page);
+    for (const [id, i] of Object.entries(KIND_OUTLINES)) assert.equal(now.outline[id], paletteRgb("academic-light", i), `${id}: outline in its kind's colour`);
+    assert.equal(now.outline.note, "none", "a text node still has no outline");
+    assert.equal(now.outline.ingest, ink, "a card keeps its ink outline: its kind colours the stripe");
+    assert.deepEqual(ctx.errors, []);
+  });
+  await withPage({ root, url: pages.url("cards", "step=focus") }, async (page, ctx) => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const now = await paint(page);
+    // Lit: clean (a card) and box.
+    assert.equal(now.stripe.clean, paletteRgb("academic-light", 1), "a lit card keeps its kind's stripe");
+    assert.equal(now.outline.box, paletteRgb("academic-light", 0), "a lit box keeps its kind's outline");
+    // Dimmed: the stripe and the outline all go to the dim colour.
+    for (const id of ["ingest", "model", "plain"]) assert.equal(now.stripe[id], dim, `${id}: the dimmed stripe is the dim colour`);
+    for (const id of ["pill", "dot", "ingest"]) assert.equal(now.outline[id], dim, `${id}: the dimmed outline is the dim colour`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a card's stripe tweens to the dim colour over --sd-duration-fast, like its outline", async () => {
+  await withPage({ root, url: pages.url("cards", "step=more&motion=full") }, async (page, ctx) => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const r = await sampleFrames(page, "cards", "focus", "cards", () => {
+      const q = (s) => getComputedStyle(document.querySelector(`[data-el="cards"] ${s}`));
+      return { color: q('[data-id="ingest"] .sd-diagram-stripe').fill, outline: q('[data-id="ingest"] .sd-diagram-shape').stroke };
+    });
+    const stripe = colorMove(r.frames);
+    assert.equal(stripe.to, dim);
+    assert.ok(stripe.moved >= 2, `the stripe was seen part-way (${stripe.moved} frames)`);
+    assert.ok(stripe.arrived >= 120 && stripe.arrived < 1500, `not a snap, not slow (arrived at ${stripe.arrived.toFixed(0)} ms)`);
+    assert.equal(r.end.style, null);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a kind's colour is written once, on the paint group, and motion leaves it alone", async () => {
+  await withPage({ root, url: pages.url("cards", "step=start&motion=full") }, async (page, ctx) => {
+    // Style attributes inside the element, by the node they belong to (the focus step reorders the nodes).
+    const kindStyles = () =>
+      page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el="cards"] [style]')].map((n) => [`${n.closest("[data-id]")?.dataset.id}: ${n.getAttribute("class")}`, n.getAttribute("style")])));
+    const before = await kindStyles();
+    assert.equal(Object.keys(before).length, 6, `the six kinded nodes carry a style, and nothing else does (${Object.keys(before)})`);
+    assert.ok(Object.entries(before).every(([k, v]) => k.endsWith(": sd-diagram-paint") && v.startsWith("--sd-kind:")), JSON.stringify(before));
+    await goTo(page, "cards", "more");
+    await goTo(page, "cards", "focus");
+    assert.deepEqual(await kindStyles(), before, "the same paint groups with the same colours after played steps");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+for (const theme of ["academic-light", "modern"]) {
+  test(`kinds beyond the palette are an element error (${theme})`, async () => {
+    await withPage({ root, url: pages.url("toomany", `theme=${theme}`) }, async (page) => {
+      const errors = await page.evaluate(() => window.STEPDECK.errors);
+      assert.equal(errors.length, 1, JSON.stringify(errors));
+      assert.match(errors[0], /^toomany\/over: .*has \d+ kinds; the categorical palette has \d+ colours/);
+      const [, kinds, colours] = /has (\d+) kinds; the categorical palette has (\d+) colours/.exec(errors[0]);
+      assert.equal(Number(kinds), Number(colours) + 1, "one kind more than the palette has colours");
+      assert.match((await page.textContent('[data-el="over"] .sd-error')) ?? "", /kinds/);
+      assert.match(await page.textContent('[data-el="ok"]'), /carries on/);
+    });
+  });
+}

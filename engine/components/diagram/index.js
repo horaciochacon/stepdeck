@@ -14,7 +14,14 @@
 //     is measured (offsetWidth/offsetHeight, deterministic once the theme's fonts are loaded, which happens
 //     before mount) and the shape (box, pill, circle, or none for text) is drawn around it. A label too long
 //     for its cell is never shrunk: the foreignObject does not clip, so `check` sees text that leaves the
-//     region.
+//     region. A `card` is not measured: its rounded rect is its cell, with a stripe (--sd-diagram-stripe
+//     wide) on the left edge, clipped to the card's corners, and the label left- and top-aligned beside it.
+//   - kinds: a node with a `kind` (a text node ignores it) takes the next colour of ctx.palette("categorical")
+//     in order of first appearance in `nodes` (kindOrder), shown or not. Its g gets data-kind and an inner
+//     g.sd-diagram-paint holding the shape, the stripe and the label, with the colour as --sd-kind in its style
+//     attribute, written at build time; CSS paints the stripe, or a box, pill or circle's outline, from it. The
+//     motion never touches the paint group (it fades the node's g and tweens the shape and the stripe), so
+//     clearing the motion's inline styles never wipes the colour. A node without a kind has no such group.
 // `shown` hides the parts it does not list (visibility, so nothing moves) and `highlight` dims the parts it
 // does not list: their outlines and lines turn the theme's --sd-color-dim (a node or group is filled with the
 // background color, opacity stays 1) and their text turns muted, so contrast holds. The focused parts are drawn
@@ -29,9 +36,9 @@
 // is the same whether a state was jumped to or played. With info.animate it then plays the change from the
 // previous state: newly shown groups fade in (ctx.motion.in "fade") and newly shown nodes pop in ("pop",
 // staggered by --sd-stagger), then newly shown edges draw from source to target (dashed ones fade); a
-// highlight change tweens the outline, fill and text colors over --sd-duration-fast. All the rest takes the theme's timing. All motion
-// is bound to info.signal (an abort snaps to the end state) and the inline styles it used are removed
-// afterwards.
+// highlight change tweens the outline, fill, stripe and text colors over --sd-duration-fast. All the rest takes
+// the theme's timing. All motion is bound to info.signal (an abort snaps to the end state) and the inline styles
+// it used are removed afterwards.
 //
 // The diagram owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it plays
 // the same build from an empty "before" (nothing shown) to this step's state, while its box stays still, in
@@ -41,9 +48,10 @@
 // that moves instead) snaps to the end state.
 //
 // An id that names nothing (an edge end, a group member, `shown`, `highlight`) is an element error naming
-// it. Overlapping sibling groups still render; `validate` reports them.
+// it, and so are more distinct kinds than the theme's categorical palette has colours. Overlapping sibling
+// groups still render; `validate` reports them.
 import { renderInline } from "../../core/inline.js";
-import { placeDiagram, diagramProblems, diagramSpacing, edgeId } from "./place.js";
+import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder } from "./place.js";
 import { clearInlineStyle } from "../../core/animate.js";
 import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, tweenColor } from "../../core/kit.js";
 
@@ -70,6 +78,7 @@ export default {
     const gap = Number.isFinite(spacing.gap) ? spacing.gap : 0;
     const pad = Number.isFinite(spacing.pad) ? spacing.pad : 0;
     const grid = num(T["--sd-grid"], pad / 2);
+    const stripeW = num(T["--sd-diagram-stripe"], grid);
     const rule = num(T["--sd-rule-width"], 1);
     const legendH = Math.ceil(num(T["--sd-font-size-label"], 0) * num(T["--sd-line-height-tight"], 1));
     const markerId = `sd-diagram-arrow-${String(el.dataset?.el ?? "el").replace(/[^\w-]/g, "_")}`;
@@ -95,6 +104,7 @@ export default {
     /** Where a node's label may lay out inside its cell (it wraps at this width and is centred in it). */
     const labelArea = (shape, cell) => {
       if (shape === "text") return cell;
+      if (shape === "card") return { x: cell.x + pad + stripeW, y: cell.y + pad, w: cell.w - 2 * pad - stripeW, h: cell.h - 2 * pad };
       if (shape === "circle") {
         const side = Math.max(1, (Math.min(cell.w, cell.h) - 2 * pad) / Math.SQRT2);
         return { x: cell.x + (cell.w - side) / 2, y: cell.y + (cell.h - side) / 2, w: side, h: side };
@@ -102,7 +112,15 @@ export default {
       return { x: cell.x + pad, y: cell.y + pad, w: cell.w - 2 * pad, h: cell.h - 2 * pad };
     };
 
-    function build(props, w, h) {
+    /** Kind -> colour: each distinct kind takes the next colour of the categorical palette; too few is an error. */
+    function kindColors(props) {
+      const kinds = kindOrder(props.nodes);
+      const colors = ctx.palette?.("categorical")?.colors ?? [];
+      if (kinds.length > colors.length) throw new Error(`diagram has ${kinds.length} kinds; the categorical palette has ${colors.length} colours`);
+      return new Map(kinds.map((kind, i) => [kind, colors[i]]));
+    }
+
+    function build(props, w, h, kindColor) {
       svg.replaceChildren();
       sizeSvg(svg, w, h);
       const defs = svgEl("defs", {}, svg);
@@ -126,29 +144,41 @@ export default {
       for (const def of props.nodes) {
         const cell = cells.get(def.id);
         if (!cell) continue;
-        const g = svgEl("g", { class: "sd-diagram-node", "data-part": "node", "data-id": def.id, "data-shape": def.shape }, drawn.nodes);
+        const kind = def.shape !== "text" && kindColor.has(def.kind) ? def.kind : null;
+        const g = svgEl("g", { class: "sd-diagram-node", "data-part": "node", "data-id": def.id, "data-shape": def.shape, ...(kind ? { "data-kind": kind } : {}) }, drawn.nodes);
+        // A kinded node paints inside its own group, so the colour is not on a node the motion touches.
+        const paint = kind ? svgEl("g", { class: "sd-diagram-paint", style: `--sd-kind: ${kindColor.get(kind)}` }, g) : g;
         const area = labelArea(def.shape, cell);
-        const fo = svgEl("foreignObject", { class: "sd-diagram-label-box", x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }, g);
+        const fo = svgEl("foreignObject", { class: "sd-diagram-label-box", x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }, paint);
         const content = htmlEl("div", "sd-diagram-label-content", htmlEl("div", "sd-diagram-label", fo));
         const text = htmlEl("div", "sd-diagram-text", content);
         text.innerHTML = renderInline(def.label);
         if (def.sub) htmlEl("div", "sd-diagram-sub", content).innerHTML = renderInline(def.sub);
-        nodeParts.push({ def, g, text, content });
+        nodeParts.push({ def, g, paint, text, content });
       }
       const sizes = new Map();
       for (const { def, content } of nodeParts) {
-        if (content.offsetWidth > 0) sizes.set(def.id, shapeSize(def.shape, content.offsetWidth, content.offsetHeight));
+        if (def.shape !== "card" && content.offsetWidth > 0) sizes.set(def.id, shapeSize(def.shape, content.offsetWidth, content.offsetHeight));
       }
       const layout = placeDiagram(props, { ...opts, sizes });
-      for (const { def, g, text } of nodeParts) {
+      for (const [i, { def, g, paint, text }] of nodeParts.entries()) {
         const box = layout.nodes.get(def.id);
         const r = Math.min(box.w, box.h) / 2;
+        const rounded = def.shape === "pill" ? r : def.shape === "box" || def.shape === "card" ? grid : 0;
         const shape =
           def.shape === "circle"
             ? svgEl("circle", { class: "sd-diagram-shape", cx: box.x + box.w / 2, cy: box.y + box.h / 2, r })
-            : svgEl("rect", { class: "sd-diagram-shape", x: box.x, y: box.y, width: box.w, height: box.h, rx: def.shape === "pill" ? r : def.shape === "box" ? grid : 0 });
-        g.prepend(shape);
-        parts.push({ id: def.id, kind: "node", g, shape, text });
+            : svgEl("rect", { class: "sd-diagram-shape", x: box.x, y: box.y, width: box.w, height: box.h, rx: rounded });
+        paint.prepend(shape);
+        let stripe = null;
+        if (def.shape === "card") {
+          // The stripe is clipped to the card's rounded corners by a copy of the card's rect.
+          const clip = `${markerId}-card-${i}`;
+          svgEl("rect", { x: box.x, y: box.y, width: box.w, height: box.h, rx: rounded }, svgEl("clipPath", { id: clip }, defs));
+          stripe = svgEl("rect", { class: "sd-diagram-stripe", x: box.x, y: box.y, width: Math.min(stripeW, box.w), height: box.h, "clip-path": `url(#${clip})` });
+          shape.after(stripe);
+        }
+        parts.push({ id: def.id, kind: "node", g, shape, stripe, text });
       }
 
       // Groups, outermost first so inner boxes and labels draw on top. The legend sits inside the group's
@@ -216,9 +246,10 @@ export default {
       assertProps(props);
       const { w, h } = measure();
       const next = JSON.stringify([w, h, props.cols, props.rows, props.nodes, props.edges ?? [], props.groups ?? []]);
+      const kindColor = kindColors(props);
       const rebuilt = next !== signature;
       if (rebuilt) {
-        build(props, w, h);
+        build(props, w, h, kindColor);
         signature = next;
       }
       const shown = Array.isArray(props.shown) ? new Set(props.shown) : null;
@@ -257,7 +288,7 @@ export default {
         // entrance builds from nothing: no part is shown yet.
         const paintOf = (p) => {
           const cs = getComputedStyle(dimmable(p));
-          return { stroke: cs.stroke, fill: cs.fill, text: p.text ? getComputedStyle(p.text).color : null };
+          return { stroke: cs.stroke, fill: cs.fill, stripe: p.stripe ? getComputedStyle(p.stripe).fill : null, text: p.text ? getComputedStyle(p.text).color : null };
         };
         const snapshot = () =>
           new Map(parts.map((p) => [p.id, { visible: p.g.dataset.visible === "true", dim: p.g.dataset.dim === "true", paint: paintOf(p) }]));
@@ -300,8 +331,10 @@ export default {
         const fadeDim = ({ p, from, to }) => {
           const shape = styleOf(dimmable(p));
           const text = p.text ? styleOf(p.text) : null;
+          const stripe = p.stripe ? styleOf(p.stripe) : null;
           return Promise.all([
             ...["stroke", "fill"].filter((k) => from[k] !== to[k]).map((k) => tweenColor(ctx, from[k], to[k], (c) => { shape[k] = c; }, fast)),
+            ...(stripe && from.stripe !== to.stripe ? [tweenColor(ctx, from.stripe, to.stripe, (c) => { stripe.fill = c; }, fast)] : []),
             ...(text && from.text !== to.text ? [tweenColor(ctx, from.text, to.text, (c) => { text.color = c; }, fast)] : []),
           ]);
         };

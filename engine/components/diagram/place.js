@@ -4,6 +4,11 @@
 // edgeId(edge) -> string
 //   An edge's id: `edge.id`, else "<from>-><to>".
 //
+// kindOrder(nodes) -> string[]
+//   The distinct `kind` values of `nodes` in order of first appearance, skipping `text` nodes (they ignore
+//   their kind) and nodes without one. `shown` plays no part: a hidden node still holds its kind's place,
+//   so every step and a compact copy agree on which colour a kind has.
+//
 // placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null })
 //   -> { cells: Map<id, {x,y,w,h}>, nodes: Map<id, {x,y,w,h}>,
 //        groups: Map<id, {x,y,w,h,depth,label?:{x,y,w,h}}>, edges: [{ id, from, to, x1,y1,x2,y2 }] }
@@ -14,7 +19,7 @@
 //   Nodes. The cell (`cells`) is only the placement slot. The drawn box (`nodes`) is the node's measured
 //   size from `sizes` (Map<id, {w,h}>: label plus padding, measured by the component), capped at the cell
 //   and centred in it; a circle is square, its diameter capped by the cell's smaller side. Without a size
-//   the drawn box is the whole cell.
+//   the drawn box is the whole cell, and so it is for a `card`, whatever size was measured.
 //   Groups. `depth` is a group's nesting height: 0 when it holds only nodes, 1 + the largest depth of its
 //   child groups otherwise. The box is the union of all its members' drawn boxes (nodes, and child group
 //   boxes, recursively), shown or not, so a group never resizes between steps; grown by `pad` on the sides
@@ -41,6 +46,15 @@
 export const edgeId = (edge) => edge?.id ?? `${edge?.from}->${edge?.to}`;
 
 const list = (v) => (Array.isArray(v) ? v : []);
+
+/** The distinct kinds of `nodes`, first appearance first; text nodes and nodes without a kind take no place. */
+export function kindOrder(nodes) {
+  const kinds = [];
+  for (const n of list(nodes)) {
+    if (n?.shape !== "text" && typeof n?.kind === "string" && n.kind !== "" && !kinds.includes(n.kind)) kinds.push(n.kind);
+  }
+  return kinds;
+}
 const quote = (ids) => ids.map((s) => `'${s}'`).join(", ");
 const int = (v, fallback) => (Number.isInteger(v) ? v : fallback);
 
@@ -156,7 +170,7 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     const cell = rect(cellsOf(n));
     cells.set(n.id, cell);
     shapes.set(n.id, n.shape);
-    const size = sizes?.get?.(n.id);
+    const size = n.shape === "card" ? null : sizes?.get?.(n.id);
     if (!size) {
       nodes.set(n.id, cell);
       continue;

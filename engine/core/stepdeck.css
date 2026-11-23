@@ -186,6 +186,10 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-node { transform-box: fill-box; transform-origin: center; }
 .sd-diagram-node .sd-diagram-shape { fill: var(--sd-color-surface); stroke: var(--sd-color-ink); stroke-width: var(--sd-rule-width); }
 .sd-diagram-node[data-shape="text"] .sd-diagram-shape { fill: none; stroke: none; }
+/* A kind (--sd-kind, on the node's paint group) colours a box, pill or circle's outline and a card's stripe; a node
+   without one is ink. The dim rules below come later, so a dimmed node goes to the dim colour, stripe included. */
+.sd-diagram-node[data-kind]:not([data-shape="card"]) .sd-diagram-shape { stroke: var(--sd-kind, var(--sd-color-ink)); }
+.sd-diagram-stripe { fill: var(--sd-kind, var(--sd-color-ink)); stroke: none; }
 .sd-diagram-group .sd-diagram-shape { fill: none; stroke: var(--sd-color-muted); stroke-width: var(--sd-rule-width); }
 .sd-diagram-group[data-dashed="true"] .sd-diagram-shape,
 .sd-diagram-edge[data-dashed="true"] .sd-diagram-line { stroke-dasharray: calc(var(--sd-grid) * 1.5) var(--sd-grid); }
@@ -195,10 +199,14 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* A text node has no shape to dim. */
 .sd-diagram-node[data-dim="true"]:not([data-shape="text"]) .sd-diagram-shape,
 .sd-diagram-group[data-dim="true"] .sd-diagram-shape { stroke: var(--sd-color-dim, var(--sd-color-rule)); fill: var(--sd-color-background); }
+.sd-diagram-node[data-dim="true"] .sd-diagram-stripe { fill: var(--sd-color-dim, var(--sd-color-rule)); }
 .sd-diagram-edge[data-dim="true"] .sd-diagram-line { stroke: var(--sd-color-dim, var(--sd-color-rule)); }
 .sd-diagram-node[data-dim="true"] .sd-diagram-text { color: var(--sd-color-muted); }
 .sd-diagram-label { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
 .sd-diagram-label-content { max-width: 100%; display: flex; flex-direction: column; align-items: center; gap: calc(var(--sd-grid) / 2); }
+/* A card's label is left- and top-aligned in the area beside the stripe. */
+.sd-diagram-node[data-shape="card"] .sd-diagram-label { justify-content: flex-start; align-items: flex-start; text-align: left; }
+.sd-diagram-node[data-shape="card"] .sd-diagram-label-content { align-items: flex-start; }
 .sd-diagram-text, .sd-timeline-text { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height-tight); color: var(--sd-color-ink); }
 .sd-diagram-sub, .sd-timeline-sub { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
 .sd-diagram-edge-label-row { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; }

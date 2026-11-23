@@ -96,7 +96,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `active` emphasises one item and dims the rest. `rule: true` draws an accent rule on the left.
 
 **`diagram`** (`catalog diagram`). Nodes, arrows and nested groups on an explicit grid.
-- Each node sits in a cell (`col`, `row`, 0-based). Its `shape` is `box`, `pill`, `circle` or `text`.
+- Each node sits in a cell (`col`, `row`, 0-based). Its `shape` is `box`, `pill`, `circle`, `card` (fills its cell, stripe on its left edge) or `text`. An optional `kind` string colours it from the categorical palette, one colour per distinct kind in order of first appearance (a card's stripe, a box, pill or circle's outline); more kinds than the palette has colours is an element error.
 - An edge's id is its `id`, else `"<from>-><to>"`. Its `label` sits beside the arrow.
 - A group's `contains` lists node and group ids, so groups nest. A group's box covers all its members, shown or not, so it never resizes between steps.
 - `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else: outlines and lines turn a neutral grey, labels turn muted.
