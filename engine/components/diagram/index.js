@@ -13,7 +13,11 @@
 //     around the grid along its lane (placeDiagram's points, routePath's rounded corners, a grid unit), with the
 //     same marker and the same shortened end; its label is one line centred on the lane's run (data-lane on its
 //     row), at least four label lines wide, overflowing along the lane rather than wrapping, and turned a quarter
-//     on a left lane (reading upward) or a right one (reading downward) by a transform attribute;
+//     on a left lane (reading upward) or a right one (reading downward) by a transform attribute. An edge with
+//     `flow` gets data-flow="true" on its g (an edge without it has no such attribute): CSS draws it dashed and,
+//     under the shell's html.sd-ambient, marches its dashes (a keyframe animation of stroke-dashoffset), except when
+//     it is dimmed or the diagram is compact. That is ambient motion, not step state: it writes no markup and no
+//     update waits on it;
 //   - nodes: the label and sub as html in a foreignObject spanning the cell, so they wrap there; the label
 //     is measured (offsetWidth/offsetHeight, deterministic once the theme's fonts are loaded, which happens
 //     before mount) and the shape (box, pill, circle, or none for text) is drawn around it. A label too long
@@ -55,7 +59,7 @@
 // Every update first writes the state straight into the DOM (data attributes), so the DOM after settled()
 // is the same whether a state was jumped to or played. With info.animate it then plays the change from the
 // previous state: newly shown groups fade in (ctx.motion.in "fade") and newly shown nodes pop in ("pop",
-// staggered by --sd-stagger), then newly shown edges draw from source to target (dashed ones fade); a
+// staggered by --sd-stagger), then newly shown edges draw from source to target (dashed and flowing ones fade); a
 // highlight change tweens the outline, fill, stripe and text colors over --sd-duration-fast (in compact, a node
 // that becomes lit or stops being lit tweens too; its outline's width does not move); a caption change fades the
 // old caption out and the new one in, each over half of --sd-duration. All the rest takes the theme's timing. All
@@ -287,7 +291,8 @@ export default {
         const def = edgeDefs.get(e.id);
         const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
         const k = len > back ? (len - back) / len : 1;
-        const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true) }, drawn.edges);
+        const flow = def?.flow === true;
+        const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true), ...(flow ? { "data-flow": "true" } : {}) }, drawn.edges);
         const line = e.points
           ? svgEl("path", { class: "sd-diagram-line", d: routePath(shortened(e.points, back), grid), "marker-end": `url(#${markerId})` }, g)
           : svgEl("line", { class: "sd-diagram-line", x1: e.x1, y1: e.y1, x2: e.x1 + (e.x2 - e.x1) * k, y2: e.y1 + (e.y2 - e.y1) * k, "marker-end": `url(#${markerId})` }, g);
@@ -317,7 +322,8 @@ export default {
           }
           htmlEl("span", "sd-diagram-edge-label", row).textContent = def.label;
         }
-        parts.push({ id: e.id, kind: "edge", g, line, tag, dashed: def?.dashed === true });
+        // Drawn dashed (a flowing edge is too): it fades in rather than drawing on.
+        parts.push({ id: e.id, kind: "edge", g, line, tag, dashed: def?.dashed === true || flow });
       }
 
       // The caption: one line over its band, inside the frame, above everything. renderState writes its text.

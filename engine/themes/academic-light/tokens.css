@@ -95,4 +95,6 @@
   --sd-stagger: 60ms;
   --sd-enter: fade;
   --sd-motion-distance: 16px;
+  /* Ambient motion: how long one dash and one gap of a flowing diagram edge take to pass. */
+  --sd-flow-period: 1600ms;
 }

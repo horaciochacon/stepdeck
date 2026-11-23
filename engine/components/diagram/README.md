@@ -7,7 +7,7 @@ inside their node.
 |---|---|---|---|---|
 | `cols`, `rows` | integer >= 1 | (required) | snap | The grid. Cells share the element's size equally, with `--sd-diagram-gap` between them. |
 | `nodes` | `[{ id, label, sub?, shape, kind?, col, row, colspan?, rowspan? }]` | (required) | snap | `shape` is `box`, `pill`, `circle` (sized to its label, capped by the cell), `card` (fills its cell, with a stripe on its left edge) or `text` (no outline). `kind` colours the node from the categorical palette. `col` and `row` are 0-based. |
-| `edges` | `[{ id?, from, to, label?, dashed?, route? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. `route` (`over`, `under`, `left`, `right`) draws it around the grid in a lane on that side. |
+| `edges` | `[{ id?, from, to, label?, dashed?, route?, flow? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. `route` (`over`, `under`, `left`, `right`) draws it around the grid in a lane on that side. `flow` draws it dashed, its dashes marching from source to target while the page animates. |
 | `groups` | `[{ id, label?, contains, dashed? }]` | none | snap | A box around all its members (node and group ids, so groups nest). The label is drawn inside the box's top padding, above its members. |
 | `shown` | `string[]` | everything | draw | The ids visible (nodes, groups, edges by edge id). Anything not listed is hidden and keeps its place. |
 | `highlight` | `string[]` | none | fade | The ids emphasised; the outlines and lines of the rest turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and their text turns muted. |
@@ -20,15 +20,15 @@ Behaviour:
 - **Entrance.** The diagram builds its own entrance (`"x-enter": "own"` in its schema): when the element appears on an
   animated step, its box stays still and its parts build from nothing to the state of that step, in order. The groups
   fade in, then the nodes pop in (the shared `pop` motion), one after another, `--sd-stagger` apart; then the edges draw
-  from source to target and their labels fade in (dashed edges fade). It waits for its stagger slot like any entering
-  element, and its parts are hidden the moment it shows. With `enter: "none"`, or a box motion such as `enter: "rise"`,
-  the diagram shows its state at once (the box moves instead).
+  from source to target and their labels fade in (dashed and flowing edges fade). It waits for its stagger slot like
+  any entering element, and its parts are hidden the moment it shows. With `enter: "none"`, or a box motion such as
+  `enter: "rise"`, the diagram shows its state at once (the box moves instead).
 - **Change motion** (forward by exactly one step only; any other move renders directly): while the diagram stays shown,
   newly shown groups fade in and nodes pop in, staggered by `--sd-stagger` over `--sd-duration` (or the step's
-  `transition`), then newly shown edges draw from source to target and their label fades in (dashed edges fade). A
-  highlight change tweens the outline, fill and text colors over `--sd-duration-fast` (in compact, a node's outline
-  width snaps). A caption change fades the old caption out and the new one in, each over half of `--sd-duration`.
-  Going back hides parts again with no motion.
+  `transition`), then newly shown edges draw from source to target and their label fades in (dashed and flowing edges
+  fade). A highlight change tweens the outline, fill and text colors over `--sd-duration-fast` (in compact, a node's
+  outline width snaps). A caption change fades the old caption out and the new one in, each over half of
+  `--sd-duration`. Going back hides parts again with no motion.
 - **Idempotent.** Every `update` writes the state from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping.
 - **Placement.** Explicit only. The grid cell is a node's slot; the drawn shape is sized to its label
@@ -60,8 +60,8 @@ Behaviour:
   grid unit (`--sd-grid`, at most half of either segment). It is a `path.sd-diagram-line` with the same
   arrowhead marker as a straight edge's `line.sd-diagram-line`, and like it stops half an arrowhead short of the
   target, so the arrowhead's tip touches the target's border; it draws on from source to target the same way
-  (a dashed one fades). Every routed edge, shown or not, reserves its own lane, so nothing moves between steps:
-  half `--sd-diagram-gap` wide, plus one label line when it has a label, stacked outward in the order of `edges`
+  (a dashed or flowing one fades). Every routed edge, shown or not, reserves its own lane, so nothing moves between
+  steps: half `--sd-diagram-gap` wide, plus one label line when it has a label, stacked outward in the order of `edges`
   (the first nearest the grid), outside how far the groups reach; the cells shrink by the lanes on each side. A
   label sits on the middle of the lane's run, one line over the background backing, as wide as the run and at
   least four label lines: across on an over or under lane, turned a quarter on a side lane (reading upward on
@@ -73,6 +73,16 @@ Behaviour:
   gap off the cells, clear of their outlines, and its last leg is long enough for the arrowhead's tip to reach
   the target's border; an edge left out (it touches a `text` node) reserves none. A diagram without routed edges
   reserves no lane.
+- **Flowing edges.** `flow: true` on an edge, straight or routed, draws it dashed (the dashed edge's pattern) and,
+  while it is shown and not dimmed, marches its dashes from source to target without end. This is ambient motion:
+  a CSS keyframe animation of `stroke-dashoffset` over the theme's `--sd-flow-period` (1600ms), which runs only
+  under the root class `sd-ambient`. The shell keeps that class on `<html>` while the page animates, so under
+  `?capture`, in a presenter preview frame, with reduced motion (unless `?motion=full`) and while the page is
+  hidden the edge stands still, dashed. A dimmed flowing edge stands still, and so does every flowing edge of a
+  compact diagram (a copy that stays on screen for whole slides should not pull the eye from the slide's figure).
+  The edge's `g` gets `data-flow="true"` (an edge without `flow` has no such attribute); the flow writes no other
+  markup and no inline style, so the markup at a step is the same played or jumped, and no update waits on it. A
+  flowing edge enters as a dashed one does: it fades in, then flows.
 - **Compact.** `compact: true` draws the same definition small, for a "you are here" copy beside a slide's own
   figure: bind `cols`, `rows`, `nodes`, `edges` and `groups` of both views to one data file, so every id and every
   kind colour agree. No label, sub, group legend or edge label is created (the only text is the `caption`), every
