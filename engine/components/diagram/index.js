@@ -27,18 +27,36 @@
 // background color, opacity stays 1) and their text turns muted, so contrast holds. The focused parts are drawn
 // after (above) the dimmed ones in each layer, in an order that depends on the state alone.
 //
+// Compact (`compact: true`, a second view): the same definition drawn small, shapes only. No label, legend or
+// edge label is created (no foreignObject but the caption's); placeDiagram's compact placement makes every shape
+// fill its cell and leaves out `text` nodes and the edges that touch them. The svg gets data-compact="true"; its
+// first child is rect.sd-second-view-frame at the element's edge (inset by half the frame's stroke, so the stroke
+// stays inside the element); the drawing sits in a g.sd-diagram-body translated into the frame's content box (the
+// element inset by the compact pad) below the caption's band. The band (one label line plus the compact pad) is
+// reserved when this step or any step of the slide (ctx.stepProps; the current props alone without it) has a
+// compact caption, so a caption that comes or goes moves nothing; the caption is html (div.sd-second-view-caption,
+// inline Markdown) in a foreignObject over the band. With a highlight, a lit node takes its kind's colour (the
+// accent without one) as a double-width outline over a tint of it, every other part dims as above. Chrome reports
+// a CSS color-mix() as color(srgb ...), which tweenColor cannot read, so the tint is computed here at build time
+// (the colour mixed into --sd-color-background by --sd-compact-tint, 20% when a theme lacks it) and written as
+// --sd-kind-tint beside --sd-kind on the paint group; the accent's tint, for a node without a kind, is
+// --sd-accent-tint on the body group. Neither group is ever touched by the motion.
+//
 // Gap and group padding come from the theme tokens --sd-diagram-gap and --sd-diagram-pad, read through
-// ctx.tokens (diagramSpacing: 3 x and 1 x --sd-space when a theme lacks them). A labelled group's top padding
-// grows by one label line (--sd-font-size-label x --sd-line-height-tight). Colors and font sizes
-// are set by CSS (core/stepdeck.css) from tokens; nothing here sets a color or a font size.
+// ctx.tokens (diagramSpacing: 3 x and 1 x --sd-space when a theme lacks them); a compact diagram uses
+// --sd-diagram-compact-gap and --sd-diagram-compact-pad (1 x and 0.25 x --sd-space). A labelled group's top
+// padding grows by one label line (--sd-font-size-label x --sd-line-height-tight). Colors and font sizes
+// are set by CSS (core/stepdeck.css) from tokens; nothing here sets a color or a font size but the tints above.
 //
 // Every update first writes the state straight into the DOM (data attributes), so the DOM after settled()
 // is the same whether a state was jumped to or played. With info.animate it then plays the change from the
 // previous state: newly shown groups fade in (ctx.motion.in "fade") and newly shown nodes pop in ("pop",
 // staggered by --sd-stagger), then newly shown edges draw from source to target (dashed ones fade); a
-// highlight change tweens the outline, fill, stripe and text colors over --sd-duration-fast. All the rest takes
-// the theme's timing. All motion is bound to info.signal (an abort snaps to the end state) and the inline styles
-// it used are removed afterwards.
+// highlight change tweens the outline, fill, stripe and text colors over --sd-duration-fast (in compact, a node
+// that becomes lit or stops being lit tweens too; its outline's width does not move); a caption change fades the
+// old caption out and the new one in, each over half of --sd-duration. All the rest takes the theme's timing. All
+// motion is bound to info.signal (an abort snaps to the end state) and the inline styles it used are removed
+// afterwards.
 //
 // The diagram owns its entrance (`"x-enter": "own"` in schema.json). With info.entrance.motion "draw" it plays
 // the same build from an empty "before" (nothing shown) to this step's state, while its box stays still, in
@@ -53,7 +71,7 @@
 import { renderInline } from "../../core/inline.js";
 import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder } from "./place.js";
 import { clearInlineStyle } from "../../core/animate.js";
-import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, tweenColor } from "../../core/kit.js";
+import { num, svgEl as svgNode, xhtmlEl, sizeSvg, measureWidth, measureHeight, canAnimate, motion, motionMs, tweenColor } from "../../core/kit.js";
 
 const MARKER = { size: 6 }; // arrowhead length and width, in stroke widths (markerUnits="strokeWidth")
 
@@ -74,12 +92,19 @@ export default {
     const htmlEl = (tag, cls, parent) => xhtmlEl(doc, tag, cls, parent);
 
     const T = ctx.tokens ?? {};
+    const finite = (v) => (Number.isFinite(v) ? v : 0);
     const spacing = diagramSpacing(T);
-    const gap = Number.isFinite(spacing.gap) ? spacing.gap : 0;
-    const pad = Number.isFinite(spacing.pad) ? spacing.pad : 0;
+    const gap = finite(spacing.gap);
+    const pad = finite(spacing.pad);
+    const compactSpacing = diagramSpacing(T, { compact: true });
+    const compactGap = finite(compactSpacing.gap);
+    const compactPad = finite(compactSpacing.pad);
     const grid = num(T["--sd-grid"], pad / 2);
     const stripeW = num(T["--sd-diagram-stripe"], grid);
     const rule = num(T["--sd-rule-width"], 1);
+    const frameW = num(T["--sd-inset-stroke-width"], rule);
+    const tintShare = num(T["--sd-compact-tint"], 20) / 100;
+    // One label line: a group's legend, and a compact diagram's caption.
     const legendH = Math.ceil(num(T["--sd-font-size-label"], 0) * num(T["--sd-line-height-tight"], 1));
     const markerId = `sd-diagram-arrow-${String(el.dataset?.el ?? "el").replace(/[^\w-]/g, "_")}`;
 
@@ -87,6 +112,8 @@ export default {
     let signature = null;
     let parts = []; // [{ id, kind, g, shape, line, text }]
     let layers = null; // the svg groups the parts are drawn in, by kind: { group, node, edge, tag }
+    let caption = null; // a compact diagram's caption (a div), when its band is reserved
+    let captionText = null; // the caption source the div holds
     const touched = new Set(); // nodes whose inline style the motion wrote
 
     const measure = () => ({ w: measureWidth(el, ctx), h: measureHeight(el, ctx) });
@@ -120,34 +147,75 @@ export default {
       return new Map(kinds.map((kind, i) => [kind, colors[i]]));
     }
 
-    function build(props, w, h, kindColor) {
+    /** `color` mixed into the theme's background by --sd-compact-tint, as rgb(); null when either is unknown. */
+    function tintOf(color) {
+      const bg = T["--sd-color-background"];
+      const d3 = ctx.d3;
+      if (!d3 || !d3.color(bg ?? "") || !d3.color(color ?? "")) return null;
+      return d3.interpolateRgb(bg, color)(tintShare);
+    }
+
+    /** Whether a compact caption is drawn at these props: compact, with some text. */
+    const captioned = (p) => p?.compact === true && typeof p.caption === "string" && p.caption.trim() !== "";
+
+    /** Writes the caption's text (inline Markdown), when the div does not hold it already. */
+    function writeCaption(text) {
+      if (!caption || text === captionText) return;
+      captionText = text;
+      caption.innerHTML = renderInline(text);
+    }
+
+    /**
+     * Draws the diagram afresh. `compact`: the second view (see the header); `band`: the height of its caption's
+     * band, 0 for none.
+     */
+    function build(props, w, h, kindColor, { compact, band }) {
       svg.replaceChildren();
+      // The svg's own attributes are written afresh, in one order, so its markup never depends on an earlier build.
+      for (const { name } of [...svg.attributes]) if (name !== "class") svg.removeAttribute(name);
       sizeSvg(svg, w, h);
+      if (compact) {
+        svg.dataset.compact = "true";
+        svgEl("rect", { class: "sd-second-view-frame", x: frameW / 2, y: frameW / 2, width: Math.max(0, w - frameW), height: Math.max(0, h - frameW) }, svg);
+      }
       const defs = svgEl("defs", {}, svg);
       const marker = svgEl("marker", { id: markerId, viewBox: "0 0 10 10", refX: 5, refY: 5, markerWidth: MARKER.size, markerHeight: MARKER.size, markerUnits: "strokeWidth", orient: "auto-start-reverse" }, defs);
       svgEl("path", { class: "sd-diagram-arrowhead", d: "M0,0 L10,5 L0,10 z" }, marker);
+      // A compact drawing sits in the frame's content box, below the caption's band.
+      const accentTint = compact ? tintOf(T["--sd-color-accent"]) : null;
+      const body = compact
+        ? svgEl("g", { class: "sd-diagram-body", transform: `translate(${compactPad} ${compactPad + band})`, ...(accentTint ? { style: `--sd-accent-tint: ${accentTint}` } : {}) }, svg)
+        : svg;
       // Edge labels are the top layer, so a node never covers them.
       const drawn = {
-        groups: svgEl("g", { class: "sd-diagram-groups" }, svg),
-        edges: svgEl("g", { class: "sd-diagram-edges" }, svg),
-        nodes: svgEl("g", { class: "sd-diagram-nodes" }, svg),
-        tags: svgEl("g", { class: "sd-diagram-edge-labels" }, svg),
+        groups: svgEl("g", { class: "sd-diagram-groups" }, body),
+        edges: svgEl("g", { class: "sd-diagram-edges" }, body),
+        nodes: svgEl("g", { class: "sd-diagram-nodes" }, body),
+        tags: svgEl("g", { class: "sd-diagram-edge-labels" }, body),
       };
       layers = { group: drawn.groups, node: drawn.nodes, edge: drawn.edges, tag: drawn.tags };
       parts = [];
-      const opts = { width: w, height: h, gap, pad, legend: legendH };
+      const opts = compact
+        ? { width: Math.max(0, w - 2 * compactPad), height: Math.max(0, h - 2 * compactPad - band), gap: compactGap, pad: compactPad, compact: true }
+        : { width: w, height: h, gap, pad, legend: legendH };
 
       // Nodes, in two passes: the labels are laid out in their cells, then all measured at once (deterministic:
       // the theme's fonts are loaded before mount), then the shapes are drawn at that size, centred in the cell.
-      const { cells } = placeDiagram(props, opts);
+      // A compact diagram has no labels: its shapes fill their cells.
+      const first = placeDiagram(props, opts);
       const nodeParts = [];
       for (const def of props.nodes) {
-        const cell = cells.get(def.id);
+        const cell = first.cells.get(def.id);
         if (!cell) continue;
         const kind = def.shape !== "text" && kindColor.has(def.kind) ? def.kind : null;
         const g = svgEl("g", { class: "sd-diagram-node", "data-part": "node", "data-id": def.id, "data-shape": def.shape, ...(kind ? { "data-kind": kind } : {}) }, drawn.nodes);
         // A kinded node paints inside its own group, so the colour is not on a node the motion touches.
-        const paint = kind ? svgEl("g", { class: "sd-diagram-paint", style: `--sd-kind: ${kindColor.get(kind)}` }, g) : g;
+        const tint = compact && kind ? tintOf(kindColor.get(kind)) : null;
+        const paint = kind ? svgEl("g", { class: "sd-diagram-paint", style: `--sd-kind: ${kindColor.get(kind)}${tint ? `; --sd-kind-tint: ${tint}` : ""}` }, g) : g;
+        if (compact) {
+          nodeParts.push({ def, g, paint, text: null, content: null });
+          continue;
+        }
         const area = labelArea(def.shape, cell);
         const fo = svgEl("foreignObject", { class: "sd-diagram-label-box", x: area.x, y: area.y, width: Math.max(1, area.w), height: Math.max(1, area.h) }, paint);
         const content = htmlEl("div", "sd-diagram-label-content", htmlEl("div", "sd-diagram-label", fo));
@@ -158,9 +226,9 @@ export default {
       }
       const sizes = new Map();
       for (const { def, content } of nodeParts) {
-        if (def.shape !== "card" && content.offsetWidth > 0) sizes.set(def.id, shapeSize(def.shape, content.offsetWidth, content.offsetHeight));
+        if (content && def.shape !== "card" && content.offsetWidth > 0) sizes.set(def.id, shapeSize(def.shape, content.offsetWidth, content.offsetHeight));
       }
-      const layout = placeDiagram(props, { ...opts, sizes });
+      const layout = compact ? first : placeDiagram(props, { ...opts, sizes });
       for (const [i, { def, g, paint, text }] of nodeParts.entries()) {
         const box = layout.nodes.get(def.id);
         const r = Math.min(box.w, box.h) / 2;
@@ -207,7 +275,7 @@ export default {
         const g = svgEl("g", { class: "sd-diagram-edge", "data-part": "edge", "data-id": e.id, "data-dashed": String(def?.dashed === true) }, drawn.edges);
         const line = svgEl("line", { class: "sd-diagram-line", x1: e.x1, y1: e.y1, x2: e.x1 + (e.x2 - e.x1) * k, y2: e.y1 + (e.y2 - e.y1) * k, "marker-end": `url(#${markerId})` }, g);
         let tag = null;
-        if (def?.label) {
+        if (def?.label && !compact) {
           const mx = (e.x1 + e.x2) / 2;
           const my = (e.y1 + e.y2) / 2;
           const horizontal = Math.abs(e.x2 - e.x1) >= Math.abs(e.y2 - e.y1);
@@ -221,6 +289,14 @@ export default {
           htmlEl("span", "sd-diagram-edge-label", row).textContent = def.label;
         }
         parts.push({ id: e.id, kind: "edge", g, line, tag, dashed: def?.dashed === true });
+      }
+
+      // The caption: one line over its band, inside the frame, above everything. renderState writes its text.
+      caption = null;
+      captionText = null;
+      if (band > 0) {
+        const fo = svgEl("foreignObject", { class: "sd-second-view-caption-box", x: compactPad, y: compactPad, width: Math.max(1, w - 2 * compactPad), height: Math.max(1, band - compactPad) }, svg);
+        caption = htmlEl("div", "sd-second-view-caption", fo);
       }
     }
 
@@ -245,13 +321,18 @@ export default {
     function renderState(props) {
       assertProps(props);
       const { w, h } = measure();
-      const next = JSON.stringify([w, h, props.cols, props.rows, props.nodes, props.edges ?? [], props.groups ?? []]);
+      // `compact` is structure (a step that turns it on or off rebuilds); the caption is state, but whether its
+      // band is reserved is structure, the same at every step of the slide.
+      const compact = props.compact === true;
+      const band = compact && [props, ...(ctx.stepProps ?? [])].some(captioned) ? legendH + compactPad : 0;
+      const next = JSON.stringify([w, h, props.cols, props.rows, props.nodes, props.edges ?? [], props.groups ?? [], compact, band]);
       const kindColor = kindColors(props);
       const rebuilt = next !== signature;
       if (rebuilt) {
-        build(props, w, h, kindColor);
+        build(props, w, h, kindColor, { compact, band });
         signature = next;
       }
+      writeCaption(captioned(props) ? props.caption : "");
       const shown = Array.isArray(props.shown) ? new Set(props.shown) : null;
       const highlight = Array.isArray(props.highlight) && props.highlight.length ? new Set(props.highlight) : null;
       svg.dataset.highlight = String(highlight !== null);
@@ -290,9 +371,15 @@ export default {
           const cs = getComputedStyle(dimmable(p));
           return { stroke: cs.stroke, fill: cs.fill, stripe: p.stripe ? getComputedStyle(p.stripe).fill : null, text: p.text ? getComputedStyle(p.text).color : null };
         };
+        // How a part looks: dimmed, plain, or (a node of a highlighted compact diagram) lit.
+        const lookOf = (p, dim) => (dim ? "dim" : p.kind === "node" && svg.dataset.compact === "true" && svg.dataset.highlight === "true" ? "lit" : "plain");
         const snapshot = () =>
-          new Map(parts.map((p) => [p.id, { visible: p.g.dataset.visible === "true", dim: p.g.dataset.dim === "true", paint: paintOf(p) }]));
+          new Map(parts.map((p) => {
+            const dim = p.g.dataset.dim === "true";
+            return [p.id, { visible: p.g.dataset.visible === "true", dim, look: lookOf(p, dim), paint: paintOf(p) }];
+          }));
         const before = animate && !draw ? snapshot() : null;
+        const captionFrom = captionText;
         let rebuilt;
         try {
           ({ rebuilt } = renderState(props));
@@ -300,6 +387,7 @@ export default {
           clearInline();
         }
         if (!animate || (!draw && rebuilt)) return;
+        const captionTo = captionText;
 
         const opts = motion(info, ctx);
         const fast = motion(info, ctx, { fast: true }); // a focus change
@@ -316,10 +404,20 @@ export default {
             // The start state, written now: nothing of the part paints before its slot.
             styleOf(p.g).opacity = "0";
             if (p.tag) styleOf(p.tag).opacity = "0";
-          } else if (b.visible && a.dim !== b.dim) {
+          } else if (b.visible && a.look !== b.look) {
             fades.push({ p, from: a.paint, to: b.paint });
           }
         }
+        // A caption change: the old caption fades out, the text swaps, the new one fades in, each over half the
+        // step's duration. The old text is put back before the first await, so no frame shows the new one early.
+        const recaption = !draw && caption !== null && captionTo !== captionFrom;
+        const crossfade = async () => {
+          const style = styleOf(caption);
+          const half = { ...opts, duration: (opts.duration ?? motionMs(info, ctx)) / 2 };
+          await ctx.animate.tween(1, 0, (v) => { style.opacity = String(v); }, half);
+          writeCaption(captionTo);
+          await ctx.animate.tween(0, 1, (v) => { style.opacity = String(v); }, half);
+        };
 
         // Hand a part's start state to the motion in one synchronous block: it saves the (now empty) inline
         // opacity, writes the start again, and puts the saved state back at the end.
@@ -352,6 +450,7 @@ export default {
         };
 
         try {
+          if (recaption) writeCaption(captionFrom);
           const groups = Promise.all(appearing.group.map((p) => play(p.g, "fade", opts)));
           // A drawn entrance builds in order, groups before nodes; a later step moves them together.
           if (draw) await groups;
@@ -359,9 +458,11 @@ export default {
             groups,
             ctx.animate.stagger(appearing.node, (p, _i, o) => play(p.g, "pop", o), opts),
             ...fades.map(fadeDim),
+            recaption ? crossfade() : null,
           ]);
           await ctx.animate.stagger(appearing.edge, (p, _i, o) => drawEdge(p, o), opts);
         } finally {
+          writeCaption(captionTo);
           clearInline();
         }
       },

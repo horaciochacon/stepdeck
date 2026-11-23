@@ -2,9 +2,14 @@
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/diagram.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withPage } from "../../cli/browser.js";
+import { deckTarget, withPage } from "../../cli/browser.js";
 import { check } from "../../cli/check.js";
+import { dump } from "../../cli/dump.js";
+import { copyEngine } from "../../cli/engine.js";
 import { formatProblem } from "../../cli/problems.js";
 import {
   deckPages,
@@ -674,3 +679,331 @@ for (const theme of ["academic-light", "modern"]) {
     });
   });
 }
+
+// Compact views of the shared process definition (data/process.json): cards of two kinds (input, step) and one
+// without a kind (report), a labelled group, an edge label, and a text node (note) with a dashed edge to it. The
+// compact slide's steps: the full view, compact with a caption, clean lit, report lit as the caption changes, the
+// text node lit.
+const COMPACT = ["full", "plain", "lit", "next", "note"];
+// Inline styles a compact view writes at build time: each kind's colour and tint, and the accent's tint.
+const KEEP = ".sd-diagram-paint, .sd-diagram-body";
+
+/** What each part of a diagram paints: a node's shape (stroke, its width, fill) and stripe, an edge's line, a group's box. */
+const looks = (page, el = "process") =>
+  page.evaluate((el) => {
+    const out = {};
+    for (const g of document.querySelectorAll(`[data-el="${el}"] [data-part]`)) {
+      const cs = getComputedStyle(g.querySelector(".sd-diagram-shape, .sd-diagram-line"));
+      const stripe = g.querySelector(".sd-diagram-stripe");
+      out[g.dataset.id] = { stroke: cs.stroke, width: cs.strokeWidth, fill: cs.fill, stripe: stripe ? getComputedStyle(stripe).fill : null, dim: g.dataset.dim };
+    }
+    return out;
+  }, el);
+const rgbOf = (s) => s.match(/[\d.]+/g).slice(0, 3).map(Number);
+/** `share` of colour `c` mixed into `bg`, in sRGB, as `rgb(...)`. */
+const mixRgb = (bg, c, share) => `rgb(${rgbOf(bg).map((v, i) => Math.round(v + (rgbOf(c)[i] - v) * share)).join(", ")})`;
+const near = (a, b) => rgbOf(a).every((v, i) => Math.abs(v - rgbOf(b)[i]) <= 1);
+const canvasPx = (page, name) => page.evaluate((name) => parseFloat(getComputedStyle(document.querySelector(".sd-canvas")).getPropertyValue(name)), name);
+
+test("compact draws no label text, only the caption", async () => {
+  await withPage({ root, url: pages.url("compact", "step=plain") }, async (page, ctx) => {
+    const read = () =>
+      page.evaluate(() => {
+        const el = document.querySelector('[data-el="process"]');
+        const svg = el.querySelector("svg");
+        const ids = (part) => [...el.querySelectorAll(`[data-part="${part}"]`)].map((g) => g.dataset.id).sort();
+        return {
+          compact: svg.getAttribute("data-compact"),
+          first: svg.firstElementChild.getAttribute("class"),
+          text: el.textContent.replace(/\s+/g, " ").trim(),
+          labels: el.querySelectorAll(".sd-diagram-label-box, .sd-diagram-legend-box, .sd-diagram-edge-label-box").length,
+          objects: [...el.querySelectorAll("foreignObject")].map((f) => f.querySelector(".sd-second-view-caption") !== null),
+          nodes: ids("node"),
+          edges: ids("edge"),
+          groups: ids("group"),
+        };
+      });
+    const r = await read();
+    assert.equal(r.compact, "true");
+    assert.equal(r.first, "sd-second-view-frame", "the frame is the svg's first child, under everything");
+    assert.equal(r.text, "The process", "the caption is the element's only text");
+    assert.equal(r.labels, 0, "no node, group or edge label is created");
+    assert.deepEqual(r.objects, [true], "one foreignObject: the caption's");
+    assert.deepEqual(r.nodes, ["clean", "collect", "fit", "report"], "the text node is left out");
+    assert.deepEqual(r.edges, ["clean->fit", "collect->clean", "fit->report"], "and so is the edge that touches it");
+    assert.deepEqual(r.groups, ["prep"]);
+    await ctx.open(pages.url("compact", "step=full"));
+    const full = await read();
+    assert.equal(full.compact, null, "the full view has no data-compact");
+    assert.ok(full.labels >= 6, `the full view has its labels (${full.labels})`);
+    assert.deepEqual(full.nodes, ["clean", "collect", "fit", "note", "report"]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+for (const theme of ["academic-light", "modern"]) {
+  test(`compact (${theme}): lit nodes take their kind colour and a tint; the rest are dim`, async () => {
+    await withPage({ root, url: pages.url("compact", `step=lit&theme=${theme}`) }, async (page, ctx) => {
+      const [bg, accent, dim] = [await tokenRgb(page, "--sd-color-background"), await tokenRgb(page, "--sd-color-accent"), await tokenRgb(page, "--sd-color-dim")];
+      const rule = await canvasPx(page, "--sd-rule-width");
+      const share = (await canvasPx(page, "--sd-compact-tint")) / 100;
+      assert.equal(share, 0.2);
+      const kind = paletteRgb(theme, 1); // clean's kind, "step", is the second kind in order of appearance
+      let at = await looks(page);
+      assert.equal(at.clean.stroke, kind, "a lit card's outline takes its kind's colour");
+      assert.equal(at.clean.width, `${2 * rule}px`, "at twice the rule width");
+      assert.ok(near(at.clean.fill, mixRgb(bg, kind, share)), `its fill is a tint of that colour (${at.clean.fill} vs ${mixRgb(bg, kind, share)})`);
+      assert.notEqual(at.clean.fill, bg);
+      assert.notEqual(at.clean.fill, kind);
+      assert.equal(at.clean.stripe, kind, "its stripe keeps the kind's colour");
+      for (const id of ["collect", "fit", "report"]) assert.deepEqual([at[id].stroke, at[id].fill, at[id].stripe, at[id].width], [dim, bg, dim, `${rule}px`], `${id}: dim on the background`);
+      for (const id of ["collect->clean", "clean->fit", "fit->report", "prep"]) assert.equal(at[id].stroke, dim, `${id}: dim`);
+      await ctx.open(pages.url("compact", `step=next&theme=${theme}`));
+      at = await looks(page);
+      assert.equal(at.report.stroke, accent, "a lit node without a kind takes the accent");
+      assert.equal(at.report.width, `${2 * rule}px`);
+      assert.ok(near(at.report.fill, mixRgb(bg, accent, share)), `on a tint of the accent (${at.report.fill})`);
+      assert.equal(at.report.stripe, accent, "its stripe too");
+      assert.deepEqual([at.clean.stroke, at.clean.fill, at.clean.stripe], [dim, bg, dim], "clean is dim again");
+      assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("compact: with no highlight every node keeps its normal look", async () => {
+  await withPage({ root, url: pages.url("compact", "step=full") }, async (page, ctx) => {
+    const full = await looks(page);
+    await ctx.open(pages.url("compact", "step=plain"));
+    const plain = await looks(page);
+    assert.equal(await page.evaluate(() => document.querySelector('[data-el="process"] svg').dataset.highlight), "false");
+    assert.deepEqual(Object.keys(plain).sort(), ["clean", "clean->fit", "collect", "collect->clean", "fit", "fit->report", "prep", "report"]);
+    for (const [id, look] of Object.entries(plain)) assert.deepEqual(look, full[id], `${id}: painted as in the full view`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact: a node that becomes lit tweens its outline and fill over --sd-duration-fast, like a dimmed one", async () => {
+  await withPage({ root, url: pages.url("compact", "step=plain&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "compact", "lit", "process", (el) => {
+      const q = (id) => getComputedStyle(el.querySelector(`[data-id="${id}"] .sd-diagram-shape`));
+      return { color: q("clean").fill, stroke: q("clean").stroke, dimFill: q("fit").fill };
+    });
+    const fill = colorMove(r.frames);
+    const stroke = colorMove(r.frames.map((f) => ({ ms: f.ms, color: f.stroke })));
+    const dimmed = colorMove(r.frames.map((f) => ({ ms: f.ms, color: f.dimFill })));
+    for (const [name, m] of [["the lit fill", fill], ["the lit outline", stroke], ["the dimmed fill", dimmed]]) {
+      assert.notEqual(m.from, m.to, `${name} changes`);
+      assert.ok(m.moved >= 2, `${name} was seen part-way (${m.moved} frames)`);
+      assert.ok(m.arrived >= 120 && m.arrived < 1500, `${name}: not a snap, not slow (arrived at ${m.arrived.toFixed(0)} ms)`);
+    }
+    assert.equal(await page.evaluate(() => document.querySelectorAll('[data-el="process"] .sd-diagram-shape[style]').length), 0, "no inline style is left");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact: highlighting a text node is no error; every drawn node dims", async () => {
+  await withPage({ root, url: pages.url("compact", "step=note") }, async (page, ctx) => {
+    const dim = await tokenRgb(page, "--sd-color-dim");
+    const at = await looks(page);
+    assert.equal(await page.evaluate(() => document.querySelector('[data-el="process"] svg').dataset.highlight), "true");
+    for (const [id, look] of Object.entries(at)) {
+      assert.equal(look.dim, "true", `${id} dims: nothing it draws is lit`);
+      assert.equal(look.stroke, dim, `${id}: dim`);
+    }
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact: a caption change crossfades and ends as a jump", async () => {
+  await withPage({ root, url: pages.url("compact", "step=lit") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "compact", steps: COMPACT, id: "process" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "lit", via: "next", to: "note", id: "process", keep: KEEP });
+    const opacity = (p) => p.evaluate(() => Number(getComputedStyle(document.querySelector('[data-el="process"] .sd-second-view-caption')).opacity));
+    const moves = await expectAnimatedStepMoves(ctx, page, { pages, slide: "compact", from: "lit", to: "next", id: "process", probe: opacity });
+    assert.ok(moves.mid > 0 && moves.mid < 1, `the caption is part-way through its fade (${moves.mid})`);
+    assert.equal(moves.end, 1);
+    // The old caption fades out, the text swaps, the new one fades in: --sd-duration (400 ms) in two halves.
+    await ctx.open(pages.url("compact", "step=lit&motion=full"));
+    const r = await sampleFrames(page, "compact", "next", "process", (el) => {
+      const c = el.querySelector(".sd-second-view-caption");
+      return { text: c.textContent, opacity: Number(getComputedStyle(c).opacity), inline: c.getAttribute("style") };
+    });
+    assert.ok(r.frames.some((f) => f.text === "The process" && f.opacity > 0 && f.opacity < 0.5), "the old caption fades out");
+    assert.ok(r.frames.some((f) => f.text === "Next: the report" && f.opacity > 0 && f.opacity < 1), "the new caption fades in");
+    const swap = r.frames.find((f) => f.text === "Next: the report");
+    assert.ok(swap.ms >= 150, `the text swaps half-way, not at once (${swap.ms.toFixed(0)} ms)`);
+    const done = r.frames.find((f) => f.text === "Next: the report" && f.opacity === 1);
+    assert.ok(done.ms >= 330 && done.ms < 3000, `the crossfade takes --sd-duration (in at ${done.ms.toFixed(0)} ms)`);
+    assert.ok(r.frames.every((f) => f.text === "The process" || f.ms >= swap.ms), "the old text never comes back");
+    assert.deepEqual([r.end.text, r.end.opacity, r.end.inline], ["Next: the report", 1, null]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a step that turns compact on draws the compact view: jump equals played, backward and interrupted", async () => {
+  await withPage({ root, url: pages.url("compact", "step=full") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "compact", steps: ["full", "plain"], id: "process" });
+    assert.equal(await page.evaluate(() => document.querySelector('[data-el="process"] svg').dataset.compact), "true", "played into the compact view");
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "compact", steps: ["full", "plain", "lit"], id: "process" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "full", via: "plain", to: "lit", id: "process", keep: KEEP });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact", from: "full", via: "plain", to: "full", id: "process", keep: KEEP });
+  });
+});
+
+for (const theme of ["academic-light", "modern"]) {
+  test(`compact (${theme}): the frame takes the inset tokens and stays inside the element; the caption sits in its band`, async () => {
+    await withPage({ root, url: pages.url("compact", `step=plain&theme=${theme}`) }, async (page, ctx) => {
+      const [stroke, fill] = [await tokenRgb(page, "--sd-inset-stroke"), await tokenRgb(page, "--sd-inset-fill")];
+      const r = await page.evaluate(() => {
+        const canvas = document.querySelector(".sd-canvas");
+        const tokens = getComputedStyle(canvas);
+        const scale = canvas.getBoundingClientRect().width / 1920;
+        const svg = document.querySelector('[data-el="process"] svg');
+        const frame = svg.querySelector("rect.sd-second-view-frame");
+        const cs = getComputedStyle(frame);
+        const caption = svg.querySelector(".sd-second-view-caption");
+        const top = svg.getBoundingClientRect().top;
+        const shapes = [...svg.querySelectorAll('[data-part] .sd-diagram-shape')].map((s) => (s.getBoundingClientRect().top - top) / scale);
+        const attr = (n) => Number(frame.getAttribute(n));
+        return {
+          sw: parseFloat(tokens.getPropertyValue("--sd-inset-stroke-width")),
+          label: parseFloat(tokens.getPropertyValue("--sd-font-size-label")),
+          stroke: cs.stroke, width: parseFloat(cs.strokeWidth), fill: cs.fill,
+          box: [attr("x"), attr("y"), attr("width"), attr("height")],
+          svg: [Number(svg.getAttribute("width")), Number(svg.getAttribute("height"))],
+          captionSize: parseFloat(getComputedStyle(caption).fontSize),
+          captionBottom: (caption.getBoundingClientRect().bottom - top) / scale,
+          shapesTop: Math.min(...shapes),
+        };
+      });
+      assert.equal(r.stroke, stroke, "the frame's stroke is --sd-inset-stroke");
+      assert.equal(r.width, r.sw, "its width is --sd-inset-stroke-width");
+      assert.equal(r.fill, fill, "its fill is --sd-inset-fill");
+      const [x, y, w, h] = r.box;
+      assert.deepEqual([x, y, x + w + r.sw / 2, y + h + r.sw / 2], [r.sw / 2, r.sw / 2, r.svg[0], r.svg[1]], "inset by half its stroke, so the stroke stays inside the element");
+      assert.equal(r.captionSize, r.label, "the caption is at the label size");
+      assert.ok(r.captionBottom <= r.shapesTop + 0.5, `the grid starts below the caption's band (${r.captionBottom} vs ${r.shapesTop})`);
+      assert.deepEqual(ctx.errors, []);
+    });
+  });
+}
+
+test("the caption carries the frame's fill", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    await withPage({ root, url: pages.url("compact", `step=plain&theme=${theme}`) }, async (page) => {
+      const fill = await tokenRgb(page, "--sd-inset-fill");
+      const bg = await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="process"] .sd-second-view-caption')).backgroundColor);
+      assert.equal(bg, fill, `${theme}: the caption's background is --sd-inset-fill`);
+    });
+  }
+});
+
+test("compact-shared: the big and the compact view bound to one file agree", async () => {
+  await withPage({ root, url: pages.url("compact-shared", "step=fit") }, async (page, ctx) => {
+    const views = await page.evaluate(() =>
+      Object.fromEntries(["big", "small"].map((id) => {
+        const el = document.querySelector(`[data-el="${id}"]`);
+        const nodes = {};
+        for (const g of el.querySelectorAll('[data-part="node"]')) {
+          const paint = g.querySelector(".sd-diagram-paint");
+          nodes[g.dataset.id] = { shape: g.dataset.shape, kind: g.dataset.kind ?? null, color: paint ? getComputedStyle(paint).getPropertyValue("--sd-kind").trim() : null };
+        }
+        const stripe = el.querySelector('[data-id="fit"] .sd-diagram-stripe');
+        return [id, { compact: el.querySelector("svg").getAttribute("data-compact"), nodes, fitStripe: getComputedStyle(stripe).fill }];
+      })));
+    assert.equal(views.big.compact, null);
+    assert.equal(views.small.compact, "true");
+    const drawn = Object.keys(views.big.nodes).filter((id) => views.big.nodes[id].shape !== "text").sort();
+    assert.deepEqual(Object.keys(views.small.nodes).sort(), drawn, "the same node ids, the text node aside");
+    for (const id of drawn) assert.deepEqual(views.small.nodes[id], views.big.nodes[id], `${id}: the same kind in the same colour`);
+    assert.equal(drawn.filter((id) => views.big.nodes[id].color).length, 3, "three cards carry a kind");
+    assert.equal(views.small.fitStripe, views.big.fitStripe, "the lit card's stripe is the full view's");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a compact copy that enters on a later step builds its parts inside its frame and ends as a jump", async () => {
+  const steps = ["start", "fit", "report"];
+  await withPage({ root, url: pages.url("compact-shared", "step=start") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "compact-shared", steps, id: "small" });
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "compact-shared", steps, id: "small" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "compact-shared", from: "start", via: "fit", to: "report", id: "small", keep: KEEP });
+    await ctx.open(pages.url("compact-shared", "step=start&motion=full"));
+    const r = await sampleFrames(page, "compact-shared", "fit", "small", (el) => {
+      const seen = (n) => (getComputedStyle(n).visibility === "visible" ? Number(getComputedStyle(n).opacity) : 0);
+      return {
+        frame: el.querySelector("rect.sd-second-view-frame") !== null,
+        caption: seen(el.querySelector(".sd-second-view-caption")),
+        nodes: [...el.querySelectorAll('[data-part="node"]')].map(seen),
+        inline: el.querySelectorAll("[style]:not(.sd-diagram-paint, .sd-diagram-body)").length,
+      };
+    });
+    const shown = r.frames.filter((f) => f.visible);
+    assert.ok(shown.length > 0 && shown.every((f) => f.frame), "the frame is there from the first frame shown");
+    assert.ok(shown.every((f) => f.caption === 1), "the caption shows at once: it is not a part of the build");
+    assert.ok(shown.some((f) => f.nodes.some((o) => o > 0 && o < 1)), "the nodes build in");
+    assert.ok(shown[0].nodes.every((o) => o < 0.5), `no node shows built at the first frame (${shown[0].nodes})`);
+    assert.equal(r.end.inline, 0, "no motion style is left");
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("compact draws under a theme without the new tokens", async () => {
+  // A test-only theme in a temporary engine copy next to the diagram fixture deck; nothing is added under engine/themes/.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-compact-bare-")));
+  try {
+    const dir = join(tmp, "deck");
+    copyEngine(join(dir, "stepdeck"));
+    cpSync(deck, dir, { recursive: true });
+    const themes = join(dir, "stepdeck/themes");
+    cpSync(join(themes, "modern"), join(themes, "compact-bare"), { recursive: true });
+    const file = join(themes, "compact-bare/tokens.css");
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^\s*--sd-(inset|compact|diagram-compact)-[\w-]+:[^;]*;\n/gm, ""));
+    assert.doesNotMatch(readFileSync(file, "utf8"), /--sd-(inset|compact|diagram-compact)-/, "the theme has none of the new tokens");
+    const target = deckTarget(dir);
+    await withPage({ root: target.root, url: target.url({ slide: "compact", step: "lit", query: { theme: "compact-bare" } }) }, async (page, ctx) => {
+      const [ink, bg] = [await tokenRgb(page, "--sd-color-ink"), await tokenRgb(page, "--sd-color-background")];
+      const rule = await canvasPx(page, "--sd-rule-width");
+      const r = await page.evaluate(() => {
+        const svg = document.querySelector('[data-el="process"] svg');
+        const frame = getComputedStyle(svg.querySelector("rect.sd-second-view-frame"));
+        const box = svg.querySelector("rect.sd-second-view-frame").getBBox();
+        const clean = getComputedStyle(svg.querySelector('[data-id="clean"] .sd-diagram-shape'));
+        return { compact: svg.dataset.compact, stroke: frame.stroke, width: parseFloat(frame.strokeWidth), fill: frame.fill, w: box.width, h: box.height, clean: { stroke: clean.stroke, fill: clean.fill }, caption: svg.querySelector(".sd-second-view-caption").textContent };
+      });
+      assert.equal(r.compact, "true");
+      assert.deepEqual([r.stroke, r.width, r.fill], [ink, rule, bg], "the frame falls back to ink, the rule width and the background");
+      assert.ok(r.w > 0 && r.h > 0, "the frame is drawn");
+      const kind = paletteRgb("modern", 1);
+      assert.equal(r.clean.stroke, kind);
+      assert.ok(near(r.clean.fill, mixRgb(bg, kind, 0.2)), `the tint falls back to 20% (${r.clean.fill})`);
+      assert.equal(r.caption, "The process");
+      assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("check is clean on the compact slides, played, in both themes", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    for (const slide of ["compact", "compact-shared"]) {
+      const problems = await check(deck, { slide, played: true, theme });
+      assert.deepEqual(problems.map(formatProblem), [], `${slide} (${theme})`);
+    }
+  }
+});
+
+test("dump reports the caption as the compact element's text", async () => {
+  const out = await dump(deck, { slide: "compact" });
+  const text = Object.fromEntries(out.map((d) => [d.stepId, d.elements.find((e) => e.id === "process").text]));
+  assert.match(text.full, /Collect/, "the full view's text is its labels");
+  assert.equal(text.plain, "The process");
+  assert.equal(text.lit, "The process");
+  assert.equal(text.next, "Next: the report");
+});

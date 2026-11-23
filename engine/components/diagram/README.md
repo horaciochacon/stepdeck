@@ -11,6 +11,8 @@ inside their node.
 | `groups` | `[{ id, label?, contains, dashed? }]` | none | snap | A box around all its members (node and group ids, so groups nest). The label is drawn inside the box's top padding, above its members. |
 | `shown` | `string[]` | everything | draw | The ids visible (nodes, groups, edges by edge id). Anything not listed is hidden and keeps its place. |
 | `highlight` | `string[]` | none | fade | The ids emphasised; the outlines and lines of the rest turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and their text turns muted. |
+| `compact` | boolean | `false` | snap | Draw the same definition small, as a second view: shapes only, no label text, inside the theme's second-view frame. |
+| `caption` | string | none | fade | With `compact`, one line of inline Markdown at the label size in a band at the top. Without `compact` it draws nothing (`validate` warns). |
 
 Behaviour:
 - **Driven by props only.** Set `shown` and `highlight` per step with `set` (or `advance` over a list of
@@ -24,8 +26,9 @@ Behaviour:
 - **Change motion** (forward by exactly one step only; any other move renders directly): while the diagram stays shown,
   newly shown groups fade in and nodes pop in, staggered by `--sd-stagger` over `--sd-duration` (or the step's
   `transition`), then newly shown edges draw from source to target and their label fades in (dashed edges fade). A
-  highlight change tweens the outline, fill and text colors over `--sd-duration-fast`. Going back hides parts again
-  with no motion.
+  highlight change tweens the outline, fill and text colors over `--sd-duration-fast` (in compact, a node's outline
+  width snaps). A caption change fades the old caption out and the new one in, each over half of `--sd-duration`.
+  Going back hides parts again with no motion.
 - **Idempotent.** Every `update` writes the state from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping.
 - **Placement.** Explicit only. The grid cell is a node's slot; the drawn shape is sized to its label
@@ -49,9 +52,27 @@ Behaviour:
 - **Edges** run between the borders of the drawn shapes of their ends, along the line between their
   centres (a circle's border is its circle). Edges may connect groups. Edge labels are drawn above the
   nodes, over a background backing.
+- **Compact.** `compact: true` draws the same definition small, for a "you are here" copy beside a slide's own
+  figure: bind `cols`, `rows`, `nodes`, `edges` and `groups` of both views to one data file, so every id and every
+  kind colour agree. No label, sub, group legend or edge label is created (the only text is the `caption`), every
+  shape fills its cell (a circle is the largest circle in it), and `text` nodes and the edges that touch them are
+  left out. The svg gets `data-compact="true"`; its first child is `rect.sd-second-view-frame`, the theme's
+  second-view frame (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`) at
+  the element's edge, inset by half its stroke so the stroke stays inside the element. The drawing sits in the
+  frame inset by `--sd-diagram-compact-pad`, with `--sd-diagram-compact-gap` between cells, below the caption's
+  band (one label line plus the compact pad, reserved when any step of the slide has a compact caption, so
+  nothing moves when the caption comes or goes). The caption (`div.sd-second-view-caption` in a foreignObject)
+  is one line in ink on the frame's fill; a caption too long for the width overflows, never shrinks. With no
+  `highlight` every part keeps its normal look. With one, a lit node takes its kind's colour (the accent without
+  a kind) as an outline twice `--sd-rule-width` wide, its stripe too, over a tint of that colour (the share
+  `--sd-compact-tint` of it mixed into the background); every other part dims as above, and a lit edge or group
+  keeps its look. Highlighting an id the compact view does not draw (a `text` node) is no error: nothing is lit.
+  A step that turns `compact` on or off rebuilds the drawing; a caption change crossfades.
 - **Spacing tokens.** `--sd-diagram-gap` (48px), `--sd-diagram-pad` (16px) and `--sd-diagram-stripe` (a grid
-  unit) in the theme; a theme without them gets 3 × and 1 × `--sd-space`, and a grid unit for the stripe. The gap must be at least twice the pad so neighbouring group
-  boxes never touch; `validate` checks the theme's values.
+  unit) in the theme; a theme without them gets 3 × and 1 × `--sd-space`, and a grid unit for the stripe. A
+  compact diagram uses `--sd-diagram-compact-gap` (16px) and `--sd-diagram-compact-pad` (6px) instead, else 1 ×
+  and 0.25 × `--sd-space`. The gap must be at least twice the pad so neighbouring group boxes never touch;
+  `validate` checks the theme's values, the compact pair for a compact diagram.
 - **Text.** Node labels are the note size, subs, edge labels and group labels the label size, all at least
   `--sd-min-audience-font`. A label too long for its node is never shrunk: it overflows the node (no
   clipping), so `check` reports it if it leaves the region. Labels that collide inside one diagram are not
@@ -60,6 +81,6 @@ Behaviour:
   id or a group that contains itself is an element error naming the id, and a `diagram-id` problem in
   `validate`. Sibling groups that share cells, and a gap below twice the pad, are `diagram-overlap`
   problems in `validate`, and so is a node sitting in a group's cells without being a member; the diagram
-  still renders.
+  still renders. A `caption` without `compact: true` is a `diagram-caption-unused` warning.
 
 See `example.js` for a slide that uses it.

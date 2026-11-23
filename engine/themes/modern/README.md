@@ -55,7 +55,7 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-letter-spacing-cover` | `-0.05em` | Cover title tracking. Optional: falls back to `normal`. |
 | `--sd-measure` | `34em` | Comfortable line length for long text. |
 
-The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`) and so are the second-view tokens (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`, `--sd-compact-tint`). See that README for the table.
+The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, `--sd-diagram-compact-gap`, `--sd-diagram-compact-pad`) and so are the second-view tokens (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`, `--sd-compact-tint`). See that README for the table.
 
 ### Motion
 
