@@ -4,9 +4,12 @@
 //   STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node --test test/browser/map.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withPage } from "../../cli/browser.js";
+import { deckTarget, withPage } from "../../cli/browser.js";
+import { copyEngine } from "../../cli/engine.js";
 import { d3 } from "../../engine/core/d3.js";
 import { DEFAULT_PROJECTION, applyView, boundaries, landCells, projection, view } from "../../engine/core/map.js";
 import { pngPixels } from "../../cli/png.js";
@@ -1538,4 +1541,76 @@ test("timelapse: frames slow to arrive hold the run, never fail it", async () =>
     assert.deepEqual(await canvasPixels(page, "map"), jumped.pixels, "pixels too");
     assert.deepEqual(ctx.errors, []);
   });
+});
+
+// --- the frame look the inset shares with the second views ------------------------------------------------------------
+
+/** The inset frame's painted look at the `inset` step, with the theme's ink, accent and rule width beside it. */
+async function frameLook(page) {
+  const frame = await page.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector('[data-el="map"] rect.sd-map-inset-frame'));
+    return { stroke: cs.stroke, width: cs.strokeWidth, fill: cs.fill };
+  });
+  const width = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.width = "var(--sd-rule-width)";
+    document.querySelector(".sd-canvas").appendChild(probe);
+    const w = getComputedStyle(probe).width;
+    probe.remove();
+    return w;
+  });
+  return { ...frame, ink: await tokenRgb(page, "--sd-color-ink"), accent: await tokenRgb(page, "--sd-color-accent"), rule: width };
+}
+
+test("the map inset frame looks as before: ink, rule width, no fill, in both themes", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    await withPage({ root, url: pages.url("inset", `step=inset&theme=${theme}`) }, async (page, ctx) => {
+      const look = await frameLook(page);
+      assert.equal(look.stroke, look.ink, `${theme}: the frame is ink`);
+      assert.equal(look.width, look.rule, `${theme}: the frame is one rule wide`);
+      assert.equal(look.fill, "none", `${theme}: the frame is not filled`);
+      assert.deepEqual(await errorsOf(page), []);
+      assert.deepEqual(ctx.errors, []);
+    });
+  }
+});
+
+test("a theme that sets --sd-inset-stroke recolours the map inset frame; one without the tokens keeps today's look", async () => {
+  // Test-only themes in a temporary engine copy next to the map fixture deck; nothing is added under engine/themes/.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-frame-")));
+  try {
+    const dir = join(tmp, "deck");
+    copyEngine(join(dir, "stepdeck"));
+    cpSync(join(root, DECK), dir, { recursive: true });
+    const themes = join(dir, "stepdeck/themes");
+    const variant = (name, edit) => {
+      cpSync(join(themes, "modern"), join(themes, name), { recursive: true });
+      const file = join(themes, name, "tokens.css");
+      writeFileSync(file, edit(readFileSync(file, "utf8")));
+    };
+    variant("frame-accent", (css) => css.replace(/--sd-inset-stroke:[^;]*;/, "--sd-inset-stroke: var(--sd-color-accent);"));
+    variant("frame-bare", (css) => css.replace(/^\s*--sd-(inset|compact)-[\w-]+:[^;]*;\n/gm, ""));
+    assert.match(readFileSync(join(themes, "frame-accent/tokens.css"), "utf8"), /--sd-inset-stroke: var\(--sd-color-accent\);/, "the accent theme sets the stroke");
+    assert.doesNotMatch(readFileSync(join(themes, "frame-bare/tokens.css"), "utf8"), /--sd-(inset|compact)-/, "the bare theme has none of the tokens");
+    const target = deckTarget(dir);
+    const look = async (theme) => {
+      let got;
+      await withPage({ root: target.root, url: target.url({ slide: "inset", step: "inset", query: { theme } }) }, async (page, ctx) => {
+        got = await frameLook(page);
+        assert.deepEqual(await errorsOf(page), []);
+        assert.deepEqual(ctx.errors, []);
+      });
+      return got;
+    };
+    const accent = await look("frame-accent");
+    assert.notEqual(accent.accent, accent.ink);
+    assert.equal(accent.stroke, accent.accent, "the frame takes the theme's stroke");
+    assert.equal(accent.width, accent.rule, "and keeps the rest of the look");
+    const bare = await look("frame-bare");
+    assert.equal(bare.stroke, bare.ink, "a theme without the tokens: ink");
+    assert.equal(bare.width, bare.rule, "a theme without the tokens: one rule wide");
+    assert.equal(bare.fill, "none");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });

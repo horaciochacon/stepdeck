@@ -79,6 +79,13 @@
   --sd-diagram-compact-gap: 16px;
   --sd-diagram-compact-pad: 6px;
   --sd-diagram-stripe: var(--sd-grid);
+  /* Second views (a compact diagram or map, a map's inset): one frame look, and the share of a colour mixed into the
+     background for a lit part of a compact view. */
+  --sd-inset-stroke: var(--sd-color-ink);
+  --sd-inset-stroke-width: var(--sd-rule-width);
+  --sd-inset-fill: var(--sd-color-background);
+  --sd-inset-radius: 0px;
+  --sd-compact-tint: 20%;
 
   /* Motion: short and discrete (the audience may watch over a video call). */
   --sd-duration: 400ms;
