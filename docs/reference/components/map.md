@@ -414,7 +414,7 @@ areas/map: data/rates.csv: key '07' matches no region
 
 **A run longer than 20 s.** Split it across steps (`frame: "2005"`, then `frame: "2018"`), or lower `pace`.
 
-**An inset of the whole map from a step.** A step's `set` is a merge patch, where `null` deletes a key, so `set: { map: { inset: { view: null } } }` leaves an inset without a `view`, and `validate` reports `'view' missing`. Give such an inset in the element's own props, or in a `replace`; from a step, an inset can look at regions or a `{ bounds }` box.
+**A zoom inset without a view.** An inset's `view` that is `null` or absent is the whole map. A step's `set` is a merge patch, where `null` deletes a key, so `set: { map: { inset: { view: null } } }` leaves the inset without a `view`, which is the same: the inset looks at the whole map. That is what a locator (`locator: true`) is for, but a zoom inset (no `locator`) of the whole map repeats the map, smaller, with a box around all of it, which is rarely what you want: give a zoom inset regions or a `{ bounds }` box.
 
 **An inset in the legend's corner.** The two do not move apart: keep them in different corners.
 
