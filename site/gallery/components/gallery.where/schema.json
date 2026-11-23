@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gallery.where",
+  "description": "A bar chart that carries a small copy of a process in its top-right corner, lit at the stage the step names. The bars are drawn with ctx.chart, and the copy is the built-in `diagram` mounted with ctx.mount, compact, from the same process definition the deck's process slides use. Built only from what the engine hands every component, with no import. The value scale is the same on every step; a played change of `y` morphs the bars, and `stage` lights another node of the copy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["data", "x", "y", "stage", "process"],
+  "properties": {
+    "data": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to a CSV file, relative to the deck root, with one row per bar.",
+      "examples": ["data/story-estimates.csv"],
+      "x-transition": "snap"
+    },
+    "x": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Column naming each bar: its label under the bar, and its key from step to step.",
+      "examples": ["region"],
+      "x-transition": "snap"
+    },
+    "y": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Column of the bars' values. The scale covers the `y` of every step, so a step that changes it moves the bars, never the axis. A blank cell is a missing bar.",
+      "examples": ["rate", "high"],
+      "x-transition": "tween"
+    },
+    "stage": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The id of the process node the chart belongs to: the compact copy lights it, and its caption names it. It must be a node id of `process`.",
+      "examples": ["fit"],
+      "x-transition": "fade"
+    },
+    "process": {
+      "type": "object",
+      "description": "The process definition the compact copy draws: a `diagram`'s `cols`, `rows`, `nodes`, `edges` and `groups`. Bind it as a whole, `{{data/process.json#}}`, to the same file the deck's full diagram binds, so the two cannot drift.",
+      "required": ["cols", "rows", "nodes"],
+      "properties": {
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 },
+        "nodes": { "type": "array", "items": { "type": "object" } },
+        "edges": { "type": "array" },
+        "groups": { "type": "array" }
+      },
+      "additionalProperties": false,
+      "examples": [{ "cols": 2, "rows": 1, "nodes": [{ "id": "fit", "label": "Fit", "shape": "card", "col": 0, "row": 0 }, { "id": "predict", "label": "Predict", "shape": "card", "col": 1, "row": 0 }] }],
+      "x-transition": "snap"
+    }
+  }
+}

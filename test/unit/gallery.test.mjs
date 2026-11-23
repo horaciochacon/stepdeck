@@ -3,7 +3,7 @@
 // After them come the motion slides, which show the motion vocabulary and the slide devices, the data-story slides,
 // which play the chart moves (forecast, fan, estimates, pairs, strips, waterfall, pyramid) and the map's (rasters, flight
 // and inset, time-lapse, points) and the second views (a process, its compact copy, a locator, a compact map), and last the custom components built only from what the engine hands every component
-// (gallery.slope, gallery.swipe).
+// (gallery.slope, gallery.swipe, gallery.where).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -40,6 +40,7 @@ const STORY = {
 const CUSTOM = [
   { slide: "custom-slope", kind: "custom", name: "gallery.slope", doc: "docs/guide/custom-components.md" },
   { slide: "map-swipe", kind: "custom", name: "gallery.swipe", doc: "docs/guide/custom-components.md" },
+  { slide: "custom-where", kind: "custom", name: "gallery.where", doc: "docs/guide/custom-components.md" },
 ];
 
 test("every built-in component and layout has exactly one gallery entry, and every motion, story and custom slide one", () => {
@@ -80,7 +81,7 @@ test("the deck lists the cover, then the layouts, the components, the motion sli
 
 // The demos' point: a chart or a map built only from what the engine hands every component (ctx.chart, ctx.map and the
 // rest) needs no import, so it runs wherever the engine's files live, in this repository or in a deck's stepdeck/ copy.
-for (const name of ["gallery.slope", "gallery.swipe"]) {
+for (const name of ["gallery.slope", "gallery.swipe", "gallery.where"]) {
   test(`the ${name} demo imports nothing and stays short`, () => {
     const source = readFileSync(join(gallery, "components", name, "index.js"), "utf8");
     assert.doesNotMatch(source, /^\s*import[\s{*"']/m, "no import statement");

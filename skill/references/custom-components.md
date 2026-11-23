@@ -98,6 +98,12 @@ export default {
 - **Every element mounts with its step-0 props**, hidden ones too. The first `update` is a full render: `prev: null`, `animate: false`.
 - **Calls never overlap.** One instance never has two `update` calls in flight.
 - **Errors stay in the element.** A throw or rejection in `mount` or `update` fails that element only. Its box shows the message, and `check` reports `render-error`.
+- **A compact view mounted with `ctx.mount("diagram" | "map", el, props)`** (the second-view convention: `compact: true` and a `caption`) follows two rules. Take the shared definition as a prop the slide binds whole (`"{{data/process.json#}}"`), as the gallery's `gallery.where` does (`site/gallery/components/gallery.where/`).
+  - **Mount it in an HTML element of your own beside your SVG, never inside it.** A chart's `settle` clears every `[style]` under its own SVG, and a compact view writes inline styles. Give that element a size.
+  - **Keep its caption non-empty on every step, or always absent.** A child has no step list (`ctx.stepProps` is `null`), so its caption band comes from its current props only: a caption that is empty on one step and not on another redraws the copy and moves its grid. Pass your `info` to `handle.update`, and call it in every `update` (the engine never updates a child), so played equals jumped. A compact diagram never flows.
+- **Ambient motion** (endless, such as a marching dash) is CSS only, under `html.sd-ambient`, switched by an attribute you write from your props, and never waited on: no timer, no `requestAnimationFrame`, no `getAnimations`, `animationend` or `.finished`.
+  - Add your own `<style>` once, in `mount`, through `el.ownerDocument`, with every selector under `html.sd-ambient` and your own class (a slide's scoped `style` cannot select `<html>`).
+  - The shell keeps `sd-ambient` on `<html>` only while the page animates (off in `?capture`, a preview frame, reduced motion and a hidden page), so a still frame must say the same.
 
 ### `ctx`
 
