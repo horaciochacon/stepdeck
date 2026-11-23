@@ -217,7 +217,34 @@ Each rule exists so that a step reached by playing looks exactly like the same s
 | Use `el.ownerDocument`, not the global `document`. | The renderer takes a `document` argument, and tests and the CLI run components in other documents. Every built-in creates nodes through `el.ownerDocument`. |
 | No network. | Read deck files through `ctx.data` and `ctx.assetUrl`. Presentation makes no remote requests: the CLI's browser blocks every request to another origin and `check` reports it as `network-error`; `validate` reports remote URLs in props and styles as `remote-url`. |
 | Settle. | `mount` and `update` must settle within 10 s, or within what `info.expect` declared (see below). |
+| Keep ambient motion ambient. | Endless motion is CSS only, under `html.sd-ambient`, switched by an attribute from the props, and never waited on (see [Ambient motion](#ambient-motion)). |
 | Use theme values. | Colors from `var(--sd-color-*)` and `ctx.palette()`, sizes from `--sd-font-size-*` and `--sd-space`, never literals. `check` measures your text like any other: size, contrast, overlap and staying inside the region. |
+
+## Second views
+
+A second view is a small copy of a component's figure, drawn from the same props and kept in a corner while another figure carries the slide: a "you are here" for a process or a map. The built-in `diagram` and `map` follow this convention, and a custom component may follow it too. Nothing in the engine enforces it: it is what makes the views of different components read alike.
+
+- **`compact: true`.** A component that offers a small overview accepts `compact`, a boolean that defaults to `false`. Compact, it draws at a small size with no text except an optional **`caption`**: one line at the label size, from inline Markdown. It draws from the same props as the full view, and every id means the same in both, so a step's `highlight`, `shown` or `view` reads the same on a figure and on its second view.
+- **`inset: { view, at, … }`.** A component with a `view` may offer an `inset`: a second view inside its own figure that shares its layers and its highlight. The built-in `map` has one, with a `locator` mode that draws the overview with a box marking where the main figure is.
+- **One frame look.** A second view is drawn in a frame that belongs to the theme: `--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill` and `--sd-inset-radius` (and `--sd-compact-tint`, the share of a colour mixed into the background for a lit part). Read them as `var(--sd-inset-stroke, var(--sd-color-ink))`, or from `ctx.tokens`, and never write a frame colour of your own. The built-ins' frame and caption carry the hook classes `sd-second-view-frame` and `sd-second-view-caption`, styled in `core/stepdeck.css` from these tokens. See [Themes](themes.md#second-views).
+- **One definition for two views.** Two views share their definition through bindings to one data file: a binding that is the whole string resolves to the raw array or object (see [Data and bindings](../guide/data-and-bindings.md#bind-a-value-into-a-prop)), and `validate` resolves bindings before it checks a prop, so a slide binds every structural prop of both views to the same file and nothing else is needed. The guide [Show where we are](../guide/second-views.md) shows the pattern.
+- **A component that mounts a second view** with `ctx.mount("diagram", el, props)` passes `compact: true` and a `caption` in the props it gives the child, in an HTML element of its own beside its drawing, never inside a chart's own SVG (a chart's `settle` clears the inline styles inside that SVG). The child has no step list (`ctx.stepProps` is `null` for it), so its caption band follows the props it gets now. See [Mount a compact view](../guide/custom-components.md#mount-a-compact-view).
+
+A second view is checked like any element. Its only text is the caption, which `check` measures as usual. A caption too long for its frame is never shrunk: it overflows, and `check` catches it in a `box` only when it leaves the canvas or overlaps other text, so look at a screenshot.
+
+## Ambient motion
+
+Most motion in stepdeck is a step's: it plays once, when a step moves forward by one, and ends in the state a jump would draw. **Ambient motion** is the other kind: motion that has no end state and belongs to no step, such as the dashes of a flowing `diagram` edge (`flow: true`) marching from source to target for as long as the edge is on screen. It follows its own rule, so that it can never break the one above:
+
+- **CSS only.** It is a keyframe animation, nothing else: no timer, no `requestAnimationFrame` loop, no Web Animations call. The built-in animates `stroke-dashoffset`. Because it is CSS, it writes no inline style and no markup of its own.
+- **Switched on by an attribute your component writes from its props.** The diagram writes `data-flow="true"` on a flowing edge. That attribute is part of the step's state, so the markup at a step is the same played or jumped, and `check --played` sees no difference.
+- **Under the root class `sd-ambient`.** The shell sets this class on `<html>` exactly while the page animates, and the CSS rule that runs the animation starts with `html.sd-ambient`. It follows the boot's own animate condition: it is off with `?capture`, in a presenter preview frame, under reduced motion (unless `?motion=full`) and while the page is hidden, and it comes back when the page is shown again. Screenshots, `shoot`, previews and reduced motion therefore show a still frame.
+- **A still frame says the same.** A flowing edge is drawn dashed, so it says the same thing standing still. Design the still look first.
+- **Nothing waits on it.** It has no end, so `update()` resolves as it does without it, and the watchdog is not involved. Never wait for a CSS animation (`getAnimations`, `animationend`, `.finished`): `STEPDECK.settled()` would never come.
+- **The theme owns the pace.** The period is a theme token, `--sd-flow-period` (1600ms in both built-in themes), read in the CSS with a fallback.
+- **Stand still where it competes.** A flowing edge that `highlight` has dimmed stands still, and so does every flowing edge in a compact diagram: a copy that stays on screen for whole slides should not pull the eye from the slide's own figure.
+
+A custom component can follow the same rule. Write the attribute from its props, and put the keyframes in a `<style>` element your component adds to its own element, with every rule under `html.sd-ambient`. A slide's scoped `style` cannot do it: every selector in it is prefixed with the slide, so it cannot select `<html>`. The motion guide has the author's view: [Ambient motion](../guide/animation-and-motion.md#ambient-motion).
 
 ## Errors and the watchdog
 
@@ -762,6 +789,7 @@ The starter's schema:
 
 - [Writing a custom component](../guide/custom-components.md): the tutorial.
 - [Animation and motion](../guide/animation-and-motion.md): when steps animate.
+- [Show where we are](../guide/second-views.md): second views, built from a shared definition.
 - [Deck and slide spec](deck-and-slide.md): elements, steps, `advance` and `transition`.
 - [Built-in components](components/index.md): what the 13 built-ins render.
 - [skill/references/custom-components.md](../../skill/references/custom-components.md): the agent version.

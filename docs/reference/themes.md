@@ -227,6 +227,8 @@ A second view is a compact copy of a `diagram` or a `map`, or a map's inset. All
 | `--sd-inset-radius` | `0px` | Corner radius of the frame. Without it: `0px`. | `map` inset, `diagram` and `map` compact |
 | `--sd-compact-tint` | `20%` | Share of a colour mixed into the background for a lit part of a compact view. Without it: `20%`. | `diagram`, `map` |
 
+Keep `--sd-inset-fill` close to the background colour. `check`'s contrast test measures text against the slide background, not against a sibling frame, so text that sits near a frame whose fill is far from the background can pass the check and still read badly.
+
 ### Motion
 
 | Token | academic-light | modern | Use | Read by |

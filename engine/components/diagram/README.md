@@ -66,8 +66,8 @@ Behaviour:
   label sits on the middle of the lane's run, one line over the background backing, as wide as the run and at
   least four label lines: across on an over or under lane, turned a quarter on a side lane (reading upward on
   the left, downward on the right). A longer label is not wrapped: it runs past its box along the lane, so
-  `check` reports it when it leaves the region (a turned one only once it is well past it: look at a
-  screenshot). A self-loop (`from` equal to `to`) leaves a quarter of the way along the side facing its lane and
+  `check` reports it when it leaves the region (a label turned on a side lane is not reported: `check` allows it
+  about half its length past the region, so look at a screenshot). A self-loop (`from` equal to `to`) leaves a quarter of the way along the side facing its lane and
   comes back three quarters of the way along (left to right over or under, top to bottom on a side). In a
   compact diagram a lane is one whole compact gap (not half) with no label line, so its line runs half a compact
   gap off the cells, clear of their outlines, and its last leg is long enough for the arrowhead's tip to reach
@@ -91,8 +91,10 @@ Behaviour:
   second-view frame (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`) at
   the element's edge, inset by half its stroke so the stroke stays inside the element. The drawing sits in the
   frame inset by `--sd-diagram-compact-pad`, with `--sd-diagram-compact-gap` between cells, below the caption's
-  band (one label line plus the compact pad, reserved when any step of the slide has a compact caption, so
-  nothing moves when the caption comes or goes). The caption (`div.sd-second-view-caption` in a foreignObject)
+  band (one label line plus the compact pad, reserved when the diagram's current props or any step of the slide
+  has a compact caption, so on a slide nothing moves when the caption comes or goes; a diagram mounted by a custom
+  component with `ctx.mount` has no step list, so its band follows its current props alone, and a caption turning
+  empty or non-empty redraws it). The caption (`div.sd-second-view-caption` in a foreignObject)
   is one line in ink on the frame's fill; a caption too long for the width overflows, never shrinks. With no
   `highlight` every part keeps its normal look. With one, a lit node takes its kind's colour (the accent without
   a kind) as an outline twice `--sd-rule-width` wide, its stripe too, over a tint of that colour (the share

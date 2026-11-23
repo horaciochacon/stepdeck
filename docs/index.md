@@ -41,8 +41,9 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | [Quickstart](guide/quickstart.md) | Install, create a deck with `new`, serve and present it. |
 | [Your first deck](guide/first-deck.md) | Walk through the starter deck and turn it into your own slides. |
 | [The step model](guide/step-model.md) | Steps as patches, `set`/`replace`/`show`/`hide`/`only`, and the `from`, `at` and `advance` shortcuts. |
-| [Animation and motion](guide/animation-and-motion.md) | The named motions elements enter and leave with, how one step's entrances follow each other, the theme's motion tokens, focus-dim, the message line, badges and ghost placeholders; when motion plays, why a jump and a played step end in the same state, and reduced motion. |
+| [Animation and motion](guide/animation-and-motion.md) | The named motions elements enter and leave with, how one step's entrances follow each other, the theme's motion tokens, focus-dim, the message line, badges and ghost placeholders; when motion plays, why a jump and a played step end in the same state, ambient motion (a flowing edge) and reduced motion. |
 | [Data and bindings](guide/data-and-bindings.md) | Data files in `data/`, bindings with a JSON pointer and an optional format, CSV column types. |
+| [Show where we are](guide/second-views.md) | Second views: a compact `diagram` or `map` that shares its definition with the full one through one data file, in a corner box beside the slide's own figure, and a locator inset on a map that zooms. |
 | [From your analysis code to a map slide](guide/maps-from-your-code.md) | Where a map's files come from: what your R or Python code makes and what stepdeck does with it, the exact file shapes, writer functions to copy into your code, writing boundaries, `stepdeck boundaries`, the slide and the checks. |
 | [Layouts and themes](guide/layouts-and-themes.md) | Choosing a layout, placing elements in regions, region variables, theme tokens and palettes. |
 | [Presenting](guide/presenting.md) | Serving a deck, keys, the presenter view, URL hashes and query flags. |
@@ -61,7 +62,7 @@ An agent works from the skill, the catalog that `catalog <deck>` generates at `<
 | [CLI](reference/cli.md) | Every command, option, output format and exit code. |
 | [Rules](reference/rules.md) | Every `validate` and `check` rule, with what triggers it and how to fix it. |
 | [Runtime API](reference/runtime-api.md) | `boot()`, `window.STEPDECK`, query flags and the shells. |
-| [Component contract](reference/component-contract.md) | `mount`, `update`, the `info` argument and `ctx`. |
+| [Component contract](reference/component-contract.md) | `mount`, `update`, the `info` argument and `ctx`; second views and ambient motion. |
 
 One page per built-in component, in the order of `components/index.json`:
 
@@ -75,11 +76,11 @@ One page per built-in component, in the order of `components/index.json`:
 | [markdown](reference/components/markdown.md) | A block of Markdown. |
 | [big-number](reference/components/big-number.md) | One number with a format, label and optional interval, counting up. |
 | [list](reference/components/list.md) | A numbered, lettered, bulleted or checklist list revealed item by item. |
-| [diagram](reference/components/diagram.md) | Nodes, edges and groups on a grid. |
+| [diagram](reference/components/diagram.md) | Nodes (boxes, pills, circles, cards coloured by kind), edges (straight, routed around the grid, flowing) and groups on a grid, and a compact copy for a second view. |
 | [chat](reference/components/chat.md) | A conversation shown as bubbles or a card. |
 | [timeline](reference/components/timeline.md) | Stops along a line with a progress fill. |
 | [image](reference/components/image.md) | An image file from the deck, with alt text and an optional caption. |
-| [map](reference/components/map.md) | Regions from a GeoJSON file with layers of data over them (a choropleth from a CSV, rasters, points), highlights, names, a legend, flights, a zoom inset and time-lapses. Its files come from your own code: see [From your analysis code to a map slide](guide/maps-from-your-code.md). |
+| [map](reference/components/map.md) | Regions from a GeoJSON file with layers of data over them (a choropleth from a CSV, rasters, points), highlights, names, a legend, flights, a zoom or locator inset, a compact copy for a second view and time-lapses. Its files come from your own code: see [From your analysis code to a map slide](guide/maps-from-your-code.md). |
 
 ## Concepts
 

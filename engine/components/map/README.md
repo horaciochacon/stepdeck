@@ -21,7 +21,7 @@ analysis code to a map slide".
 | `shown` | string[] | none | fade | The layers on screen, by id. A layer that appears fades in with its legend row; one that leaves fades out. |
 | `highlight` | string[] | none | fade | Regions and points (by id) outlined in ink; every other region of an areas layer and every other point turns `--sd-color-dim`. |
 | `view` | region id \| string[] \| `{ bounds }` \| `null` | `null` | tween | Where the map looks: fitted to a region or a list of them, or to `{ bounds: [west, south, east, north] }` in degrees; `null` is the whole map. A change flies the map there. |
-| `inset` | `{ view, at, scale, locator }` \| `null` | none | fade | A second, zoomed view of the same shown layers in a corner of the element, with a box on the map, two dashed leaders and a scale bar. `view` is as the map's own (a change flies the inset alone); `at` is `"top-right"` (default), `"top-left"`, `"bottom-right"` or `"bottom-left"`; `scale` (default `true`) shows the scale bar; `locator` (default `false`) makes it an overview with the box inside it. |
+| `inset` | `{ view, at, scale, locator }` \| `null` | none | fade | A second, zoomed view of the same shown layers in a corner of the element, with a box on the map, two dashed leaders and a scale bar. `view` is optional and as the map's own (it defaults to the whole map; a change flies the inset alone); `at` is `"top-right"` (default), `"top-left"`, `"bottom-right"` or `"bottom-left"`; `scale` (default `true`) shows the scale bar; `locator` (default `false`) makes it an overview with the box inside it. |
 | `frame` | string \| number | the first frame | tween | The time-lapse frame on screen, by its label (compared as text). One value for the map: every time-lapse layer on it has the same labels. A change runs through the frames in between. |
 | `pace` | number, 100–2000 | `700` | snap | A run's ms per frame moved. |
 | `numbers` | `{ key, label, format }[]` | none | fade | The frame numbers the corner panel shows under the frame's label: a key of the frames' `numbers`, its label, and a d3-format specifier (as `big-number`'s). |
@@ -143,7 +143,9 @@ Behaviour:
   `div.sd-map-compact-body`, which holds the canvases and the SVG. The body is the element less the compact pad
   (`--sd-diagram-compact-pad`, the compact diagram's, 6px in both built-in themes; a quarter of `--sd-space` in a
   theme without it) on every side, and less the caption's band at the top: one label line plus the pad, reserved when
-  any step of the slide has a caption, so nothing moves when it comes or goes. The projection is fitted to the body,
+  the map's current props or any step of the slide has a caption, so on a slide nothing moves when it comes or goes (a map
+  mounted by a custom component with `ctx.mount` has no step list, so its band follows its current props alone, and a
+  caption turning empty or non-empty redraws it). The projection is fitted to the body,
   so the geometry in every signature is the body's size. A highlighted region's land takes a tint of the accent
   (`--sd-compact-tint` of it mixed into the background, 20% in both built-in themes and in a theme without it) under
   its ink outline; the other regions keep the surface colour, and an areas layer dims them as at full size. On a played
