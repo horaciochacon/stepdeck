@@ -1204,3 +1204,71 @@ test("straight edges keep their markup: a line, never a path", async () => {
     assert.deepEqual(ctx.errors, []);
   });
 });
+
+// A compact routed edge (the routes-compact slide: a loop over the top from report back to clean, in a medium copy,
+// 560 x 200 with a caption, and a small one, 320 x 120): its lane keeps the line clear of the cards and its last leg
+// is long enough for the arrowhead's tip to reach the target's border, as at full size.
+test("a compact routed edge: the arrowhead's tip on the target's border, the lane clear of the cells", async () => {
+  await withPage({ root, url: pages.url("routes-compact", "step=plain") }, async (page, ctx) => {
+    const bg = await tokenRgb(page, "--sd-color-background");
+    const back = bg.match(/\d+/g).map(Number);
+    const painted = (p) => p.some((v, i) => Math.abs(v - back[i]) > 60);
+    for (const id of ["medium", "small"]) {
+      const geo = await page.evaluate((id) => {
+        const el = document.querySelector(`[data-el="${id}"]`);
+        const path = el.querySelector('[data-id="again"] .sd-diagram-line');
+        const total = path.getTotalLength();
+        const at = (len) => { const p = path.getPointAtLength(len); return [p.x, p.y]; };
+        const target = el.querySelector('[data-id="clean"] .sd-diagram-shape');
+        const t = target.getBBox();
+        const shapes = [...el.querySelectorAll('[data-part="node"] .sd-diagram-shape')];
+        const m = path.getScreenCTM();
+        const end = at(total);
+        const screen = new DOMPoint(end[0], end[1]).matrixTransform(m);
+        return {
+          end, lane: at(total / 2), target: { x: t.x, y: t.y, w: t.width },
+          cellsTop: Math.min(...shapes.map((s) => s.getBBox().y)),
+          shapeStroke: Math.max(...shapes.map((s) => parseFloat(getComputedStyle(s).strokeWidth))),
+          lineStroke: parseFloat(getComputedStyle(path).strokeWidth),
+          screen: [screen.x, screen.y], scale: m.a,
+        };
+      }, id);
+      // The path ends half an arrowhead above clean's top middle, so the tip lands on its border.
+      assert.ok(Math.abs(geo.end[0] - (geo.target.x + geo.target.w / 2)) <= 0.5, `${id}: the loop enters clean's top middle (${geo.end[0]})`);
+      assert.ok(Math.abs(geo.end[1] - (geo.target.y - BACK)) <= 0.5, `${id}: it stops half an arrowhead above clean's top (${geo.end[1]} vs ${geo.target.y - BACK})`);
+      // The lane's line, with its stroke, stays at least a stroke width clear of the cells' outlines.
+      const clear = geo.cellsTop - geo.shapeStroke / 2 - (geo.lane[1] + geo.lineStroke / 2);
+      assert.ok(clear >= geo.lineStroke, `${id}: ${clear}px between the lane's line and the cells (at least ${geo.lineStroke})`);
+      // The whole arrowhead shows above clean: both sides of its base are painted, the tip sits on the border.
+      const tipX = geo.screen[0];
+      const tipY = geo.screen[1] + BACK * geo.scale;
+      const clip = { x: Math.round(tipX - 16), y: Math.round(tipY - 20), width: 32, height: 24 };
+      const shot = await page.screenshot({ clip });
+      const px = await page.evaluate(async ([b64, pts]) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        return pts.map(([x, y]) => [...g.getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3));
+      }, [shot.toString("base64"), [[-4, -10], [4, -10], [-9, -14], [9, -14]].map(([dx, dy]) => [tipX - clip.x + dx * geo.scale, tipY - clip.y + dy * geo.scale])]);
+      assert.ok(painted(px[0]) && painted(px[1]), `${id}: the arrowhead's base spans both sides of the leg, above clean (${JSON.stringify(px)})`);
+      assert.ok(!painted(px[2]) && !painted(px[3]), `${id}: nothing is painted beside it further up (${JSON.stringify(px)})`);
+    }
+    assert.deepEqual(await page.evaluate(() => window.STEPDECK.errors), []);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a compact routed edge: jump equals played, and check is clean in both themes", async () => {
+  await withPage({ root, url: pages.url("routes-compact", "step=plain") }, async (page, ctx) => {
+    for (const id of ["medium", "small"]) await expectJumpEqualsPlayed(ctx, page, { pages, slide: "routes-compact", steps: ["plain", "lit"], id });
+  });
+  for (const theme of ["academic-light", "modern"]) {
+    const problems = await check(deck, { slide: "routes-compact", played: true, theme });
+    assert.deepEqual(problems.map(formatProblem), [], theme);
+  }
+});
