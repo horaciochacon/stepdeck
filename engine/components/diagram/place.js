@@ -11,11 +11,17 @@
 //
 // placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null, compact = false })
 //   -> { cells: Map<id, {x,y,w,h}>, nodes: Map<id, {x,y,w,h}>,
-//        groups: Map<id, {x,y,w,h,depth,label?:{x,y,w,h}}>, edges: [{ id, from, to, x1,y1,x2,y2 }] }
+//        groups: Map<id, {x,y,w,h,depth,label?:{x,y,w,h}}>,
+//        edges: [{ id, from, to, x1,y1,x2,y2 }, or for a routed edge { id, from, to, route, x1,y1,x2,y2, points }] }
 //   Grid. `cols` x `rows` cells with `gap` between them fill the box, inset by how far the groups reach
-//   past their members (see Groups; 0 with no groups). With no groups:
+//   past their members (see Groups; 0 with no groups) and by the lanes (see Lanes; 0 with no routed edge).
+//   With neither:
 //     cellW = (width - (cols-1)*gap) / cols,   x(col) = col * (cellW + gap)
 //   and the same for rows. A node spanning colspan x rowspan cells covers the gaps between them.
+//   Lanes. An edge with a `route` (over, under, left, right) whose two ends are placed takes a lane on that side,
+//   outside the grid and outside how far the groups reach, whether it is shown or not, so nothing moves between
+//   steps. A lane is gap / 2 wide, plus one `legend` line when the edge has a label; a side's lanes stack outward
+//   in the order of `edges`, lane 0 nearest the grid, and the cells shrink by each side's lanes.
 //   Nodes. The cell (`cells`) is only the placement slot. The drawn box (`nodes`) is the node's measured
 //   size from `sizes` (Map<id, {w,h}>: label plus padding, measured by the component), capped at the cell
 //   and centred in it; a circle is square, its diameter capped by the cell's smaller side. Without a size
@@ -30,13 +36,25 @@
 //   Edges. From the border of the source's drawn box to the border of the target's, along the line between
 //   their centres. A circle node's border is its circle (radius: half its box's smaller side); every
 //   other node and every group is its box. Coincident centres give a zero-length edge at the centre.
+//   A routed edge leaves its source at the middle of the side facing its lane (a circle at its top, bottom, left
+//   or right point), runs along the lane's middle and enters its target the same way: `points` is
+//   [exit, (exit.x, laneY), (entry.x, laneY), entry] over or under, [exit, (laneX, exit.y), (laneX, entry.y),
+//   entry] left or right, and (x1, y1), (x2, y2) are its first and last points. A self-loop (`from` === `to`)
+//   leaves a quarter of the side before its middle and comes back a quarter after it (left to right over or
+//   under, top to bottom on a side; on a circle, half the radius either side, on the circle), so it reads as a
+//   loop.
 //   Compact (`compact`: the diagram drawn small, with no text). `sizes` is ignored for every shape, so each
 //   drawn shape fills its cell (a circle: the largest circle in it, centred). `text` nodes are not placed:
-//   they are absent from `cells` and `nodes`, edges that touch one are absent from `edges`, and groups
-//   treat them as non-members. `legend` is 0, so no group has a `label` box. Cell sizes are never negative,
-//   so an element too small for its gaps and padding still gives finite boxes of size 0.
+//   they are absent from `cells` and `nodes`, edges that touch one are absent from `edges` (and reserve no
+//   lane), and groups treat them as non-members. `legend` is 0, so no group has a `label` box and no lane a
+//   label line. Cell sizes are never negative, so an element too small for its gaps and padding still gives
+//   finite boxes of size 0.
 //   Unknown ids (see diagramProblems) are skipped here: a group with no known member and an edge with an
 //   unknown end are left out, and a `contains` cycle is cut, so placement never throws or loops.
+//
+// routePath(points, radius) -> string
+//   The svg path data of a routed edge: the points joined by straight segments, each corner rounded by a
+//   quadratic curve of radius min(radius, half of each segment that meets there).
 //
 // diagramProblems(props, { gap, pad } = {}) -> [{ rule, id, message, limit, fix }]
 //   rule "diagram-id":      an id in edges (from, to), groups[].contains, shown or highlight that names
@@ -52,6 +70,8 @@
 export const edgeId = (edge) => edge?.id ?? `${edge?.from}->${edge?.to}`;
 
 const list = (v) => (Array.isArray(v) ? v : []);
+/** The sides a routed edge's lane may take (an edge's `route`). */
+const ROUTES = ["over", "under", "left", "right"];
 
 /** The distinct kinds of `nodes`, first appearance first; text nodes and nodes without a kind take no place. */
 export function kindOrder(nodes) {
@@ -135,6 +155,53 @@ function borderPoint(box, round, tx, ty) {
   return [cx + ux * t, cy + uy * t];
 }
 
+/**
+ * The middle of `box`'s side facing `side` (over, under, left, right); for a circle (`round`), its point there.
+ * `shift` -1 or 1 moves the point a quarter of the side back or on along it (x for over and under, y for left and
+ * right; on a circle, half the radius, the point staying on the circle), so a self-loop leaves and comes back apart.
+ */
+function sidePoint(box, round, side, shift = 0) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const r = Math.min(box.w, box.h) / 2;
+  const along = side === "over" || side === "under" ? box.w : box.h;
+  const t = shift === 0 ? 0 : shift * (round ? r / 2 : along / 4);
+  const depth = round ? (t === 0 ? r : Math.sqrt(r * r - t * t)) : 0;
+  if (side === "over") return [cx + t, round ? cy - depth : box.y];
+  if (side === "under") return [cx + t, round ? cy + depth : box.y + box.h];
+  if (side === "left") return [round ? cx - depth : box.x, cy + t];
+  return [round ? cx + depth : box.x + box.w, cy + t];
+}
+
+/**
+ * The svg path data of a routed edge: `points` joined by straight segments, each corner rounded by a quadratic
+ * curve of radius min(`radius`, half of each segment that meets there); a corner on a zero-length segment stays
+ * square. Coordinates are written to a hundredth of a pixel.
+ */
+export function routePath(points, radius) {
+  const pts = list(points);
+  if (pts.length === 0) return "";
+  const cap = Number.isFinite(radius) ? Math.max(0, radius) : 0;
+  const n = (v) => String(Math.round(v * 100) / 100);
+  const at = ([x, y]) => `${n(x)},${n(y)}`;
+  let d = `M${at(pts[0])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [p, q, s] = [pts[i - 1], pts[i], pts[i + 1]];
+    const into = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const out = Math.hypot(s[0] - q[0], s[1] - q[1]);
+    const r = Math.min(cap, into / 2, out / 2);
+    if (!(r > 0)) {
+      d += ` L${at(q)}`;
+      continue;
+    }
+    const a = [q[0] - ((q[0] - p[0]) / into) * r, q[1] - ((q[1] - p[1]) / into) * r];
+    const b = [q[0] + ((s[0] - q[0]) / out) * r, q[1] + ((s[1] - q[1]) / out) * r];
+    d += ` L${at(a)} Q${at(q)} ${at(b)}`;
+  }
+  if (pts.length > 1) d += ` L${at(pts.at(-1))}`;
+  return d;
+}
+
 export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes = null, compact = false }) {
   if (compact) {
     legend = 0;
@@ -173,11 +240,23 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
     inset = Math.max(inset, r.side);
     insetTop = Math.max(insetTop, r.top);
   }
-  const cellW = Math.max(0, (width - 2 * inset - (cols - 1) * gap) / cols);
-  const cellH = Math.max(0, (height - insetTop - inset - (rows - 1) * gap) / rows);
+  // Lanes: each routed edge whose two ends are placed, shown or not, takes a lane on its side, half the gap wide
+  // (plus one legend line when labelled); a side's lanes stack outward in edge order, lane 0 nearest the grid.
+  const placed = (id) => (typeof id === "string" && nodeIds.has(id)) || gc.has(id);
+  const band = { over: 0, under: 0, left: 0, right: 0 };
+  const lanes = new Map(); // edge index -> { side, mid: from the band's inner edge out to the lane's middle }
+  for (const [i, e] of list(props?.edges).entries()) {
+    if (!ROUTES.includes(e?.route) || !placed(e.from) || !placed(e.to)) continue;
+    const w = gap / 2 + (e.label ? legend : 0);
+    lanes.set(i, { side: e.route, mid: band[e.route] + w / 2 });
+    band[e.route] += w;
+  }
+
+  const cellW = Math.max(0, (width - band.left - band.right - 2 * inset - (cols - 1) * gap) / cols);
+  const cellH = Math.max(0, (height - band.over - band.under - insetTop - inset - (rows - 1) * gap) / rows);
   const rect = ({ c0, r0, c1, r1 }) => ({
-    x: inset + c0 * (cellW + gap),
-    y: insetTop + r0 * (cellH + gap),
+    x: band.left + inset + c0 * (cellW + gap),
+    y: band.over + insetTop + r0 * (cellH + gap),
     w: (c1 - c0) * cellW + (c1 - c0 - 1) * gap,
     h: (r1 - r0) * cellH + (r1 - r0 - 1) * gap,
   });
@@ -229,11 +308,27 @@ export function placeDiagram(props, { width, height, gap, pad, legend = 0, sizes
 
   const boxOf = (id) => groups.get(id) ?? nodes.get(id) ?? null;
   const round = (id) => !groups.has(id) && shapes.get(id) === "circle";
+  // A lane's line: the y of an over or under lane's middle, the x of a left or right one.
+  const laneAt = ({ side, mid }) =>
+    side === "over" ? band.over - mid : side === "under" ? height - band.under + mid : side === "left" ? band.left - mid : width - band.right + mid;
   const edges = [];
-  for (const e of list(props?.edges)) {
+  for (const [i, e] of list(props?.edges).entries()) {
     const a = boxOf(e?.from);
     const b = boxOf(e?.to);
     if (!a || !b) continue;
+    const lane = lanes.get(i);
+    if (lane) {
+      // A self-loop leaves a quarter of the side before its middle and comes back a quarter after it.
+      const self = e.from === e.to;
+      const exit = sidePoint(a, round(e.from), lane.side, self ? -1 : 0);
+      const entry = sidePoint(b, round(e.to), lane.side, self ? 1 : 0);
+      const at = laneAt(lane);
+      const points = lane.side === "over" || lane.side === "under"
+        ? [exit, [exit[0], at], [entry[0], at], entry]
+        : [exit, [at, exit[1]], [at, entry[1]], entry];
+      edges.push({ id: edgeId(e), from: e.from, to: e.to, route: lane.side, x1: exit[0], y1: exit[1], x2: entry[0], y2: entry[1], points });
+      continue;
+    }
     const [x1, y1] = borderPoint(a, round(e.from), b.x + b.w / 2, b.y + b.h / 2);
     const [x2, y2] = borderPoint(b, round(e.to), a.x + a.w / 2, a.y + a.h / 2);
     edges.push({ id: edgeId(e), from: e.from, to: e.to, x1, y1, x2, y2 });

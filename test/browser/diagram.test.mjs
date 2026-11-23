@@ -1007,3 +1007,200 @@ test("dump reports the caption as the compact element's text", async () => {
   assert.equal(text.lit, "The process");
   assert.equal(text.next, "Next: the report");
 });
+
+// Routed edges (the routes slide): a labelled loop over the top from report back to plan (again), a self-loop over
+// fit (refit), labelled side loops on the left (notes: plan to draft) and on the right (keep: report to archive), an
+// under edge into a circle (redo: draft to clean) and a dashed under edge into a group (feed: archive to prep).
+const ROUTES = ["start", "again", "refit", "notes", "keep", "redo", "feed", "focus"];
+const BACK = 6; // half an arrowhead: 6 stroke widths of 2px, halved
+
+test("routed edges draw on from source to target and end at the target's side", async () => {
+  await withPage({ root, url: pages.url("routes", "step=start&motion=full") }, async (page, ctx) => {
+    const r = await sampleFrames(page, "routes", "again", "routes", (el) => {
+      const path = el.querySelector('[data-id="again"] .sd-diagram-line');
+      const g = path.closest("[data-part]");
+      const seen = getComputedStyle(g).visibility === "visible" ? Number(getComputedStyle(g).opacity) : 0;
+      const { strokeDasharray: dash, strokeDashoffset: off } = path.style;
+      return { seen, drawn: seen === 0 ? 0 : dash !== "" && off !== "" ? 1 - Number(off) / path.getTotalLength() : 1, marker: getComputedStyle(path).markerEnd };
+    });
+    const drawing = r.frames.filter((f) => f.drawn > 0 && f.drawn < 1);
+    assert.ok(drawing.length >= 3, `the routed edge was seen part-drawn (${drawing.length} frames)`);
+    assert.ok(drawing.every((f) => f.marker === "none"), "no arrowhead while the line is on its way");
+    for (let i = 1; i < r.frames.length; i++) assert.ok(r.frames[i].drawn >= r.frames[i - 1].drawn - 1e-6, "the line only grows");
+    assert.equal(r.end.drawn, 1);
+    assert.match(r.end.marker, /^url\(/, "the arrowhead lands at the end");
+    assert.ok(r.settledMs >= 350 && r.settledMs < 6000, `one draw over --sd-duration (${r.settledMs.toFixed(0)} ms)`);
+
+    // Where the path starts and ends: on the source's side and half an arrowhead short of the target's.
+    const geo = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="routes"]');
+      const path = el.querySelector('[data-id="again"] .sd-diagram-line');
+      const box = (id) => { const b = el.querySelector(`[data-id="${id}"] .sd-diagram-shape`).getBBox(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
+      const total = path.getTotalLength();
+      const at = (len) => { const p = path.getPointAtLength(len); return [p.x, p.y]; };
+      const tip = at(total);
+      const m = path.getScreenCTM();
+      const screen = new DOMPoint(tip[0], tip[1]).matrixTransform(m);
+      return { tag: path.localName, start: at(0), end: tip, beforeEnd: at(total - 2), report: box("report"), plan: box("plan"), screen: [screen.x, screen.y], scale: m.a, style: path.getAttribute("style") };
+    });
+    assert.equal(geo.tag, "path");
+    assert.equal(geo.style, null, "no inline style is left on the path");
+    const near = (a, b, d, what) => assert.ok(Math.abs(a - b) <= d, `${what}: ${a} vs ${b}`);
+    near(geo.start[0], geo.report.x + geo.report.w / 2, 0.5, "it leaves report's top middle (x)");
+    near(geo.start[1], geo.report.y, 0.5, "(y)");
+    near(geo.end[0], geo.plan.x + geo.plan.w / 2, 0.5, "it enters plan's top middle (x)");
+    near(geo.end[1], geo.plan.y - BACK, 0.5, "half an arrowhead above plan's top (y)");
+    assert.ok(geo.beforeEnd[1] < geo.end[1] && Math.abs(geo.beforeEnd[0] - geo.end[0]) < 0.01, "the last stretch runs straight down into plan");
+
+    // The arrowhead points down into plan: both sides of its base, just above its tip's line, are painted.
+    const tipX = geo.screen[0];
+    const tipY = geo.screen[1] + BACK * geo.scale; // the arrowhead's tip, on plan's border
+    const clip = { x: Math.round(tipX - 12), y: Math.round(tipY - 20), width: 24, height: 24 };
+    const shot = await page.screenshot({ clip });
+    const bg = await tokenRgb(page, "--sd-color-background");
+    const px = await page.evaluate(async ([b64, pts]) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d");
+      g.drawImage(img, 0, 0);
+      return pts.map(([x, y]) => [...g.getImageData(Math.round(x), Math.round(y), 1, 1).data].slice(0, 3));
+    }, [shot.toString("base64"), [[-4, -10], [4, -10], [-8, -16], [8, -16]].map(([dx, dy]) => [tipX - clip.x + dx * geo.scale, tipY - clip.y + dy * geo.scale])]);
+    const back = bg.match(/\d+/g).map(Number);
+    const painted = (p) => p.some((v, i) => Math.abs(v - back[i]) > 60);
+    assert.ok(painted(px[0]) && painted(px[1]), `the arrowhead's base spans both sides of the line, above its tip (${JSON.stringify(px)})`);
+    assert.ok(!painted(px[2]) && !painted(px[3]), `and nothing is painted beside the line further up (${JSON.stringify(px)})`);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("routed edges leave and enter on their route's side, around the grid", async () => {
+  await withPage({ root, url: pages.url("routes", "step=focus") }, async (page, ctx) => {
+    const r = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="routes"]');
+      const box = (id) => { const b = el.querySelector(`[data-id="${id}"] .sd-diagram-shape`).getBBox(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
+      const ends = (id) => { const p = el.querySelector(`[data-id="${id}"] .sd-diagram-line`); const t = p.getTotalLength(); const [a, b] = [p.getPointAtLength(0), p.getPointAtLength(t)]; return { tag: p.localName, start: [a.x, a.y], end: [b.x, b.y], marker: p.getAttribute("marker-end") }; };
+      const shapes = ["plan", "collect", "fit", "draft", "clean", "merge", "archive", "report"].map(box);
+      return {
+        ids: Object.fromEntries(["refit", "notes", "keep", "redo", "feed"].map((id) => [id, ends(id)])),
+        fit: box("fit"), plan: box("plan"), draft: box("draft"), report: box("report"), archive: box("archive"), clean: box("clean"),
+        prep: (() => { const b = el.querySelector('[data-id="prep"] .sd-diagram-shape').getBBox(); return { x: b.x, y: b.y, w: b.width, h: b.height }; })(),
+        grid: { x0: Math.min(...shapes.map((b) => b.x)), x1: Math.max(...shapes.map((b) => b.x + b.w)) },
+      };
+    });
+    const near = (a, b, what, d = 0.5) => assert.ok(Math.abs(a - b) <= d, `${what}: ${a} vs ${b}`);
+    for (const [id, e] of Object.entries(r.ids)) {
+      assert.equal(e.tag, "path", id);
+      assert.match(e.marker, /^url\(#.+\)$/, `${id} takes the arrowhead marker`);
+    }
+    // The self-loop leaves fit's top a quarter left of the middle and comes back down a quarter right of it.
+    near(r.ids.refit.start[0], r.fit.x + r.fit.w / 4, "refit leaves fit's top a quarter in");
+    near(r.ids.refit.start[1], r.fit.y, "refit (y)");
+    near(r.ids.refit.end[0], r.fit.x + (3 * r.fit.w) / 4, "refit comes back a quarter from the right");
+    near(r.ids.refit.end[1], r.fit.y - BACK, "refit comes back down onto fit's top");
+    // Left: from plan's left middle to draft's left middle; right: from report's right middle to archive's.
+    near(r.ids.notes.start[0], r.plan.x, "notes leaves plan's left side");
+    near(r.ids.notes.start[1], r.plan.y + r.plan.h / 2, "notes (y)");
+    near(r.ids.notes.end[0], r.draft.x - BACK, "notes enters draft's left side");
+    near(r.ids.keep.start[0], r.report.x + r.report.w, "keep leaves report's right side");
+    near(r.ids.keep.end[0], r.archive.x + r.archive.w + BACK, "keep enters archive's right side");
+    near(r.ids.keep.end[1], r.archive.y + r.archive.h / 2, "keep (y)");
+    // Under: into the circle's bottom point, and into the group's bottom middle.
+    near(r.ids.redo.end[0], r.clean.x + r.clean.w / 2, "redo enters clean's bottom point (x)");
+    near(r.ids.redo.end[1], r.clean.y + r.clean.h + BACK, "redo (y)");
+    near(r.ids.feed.end[0], r.prep.x + r.prep.w / 2, "feed enters the group's bottom middle (x)");
+    near(r.ids.feed.end[1], r.prep.y + r.prep.h + BACK, "feed (y)");
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("a routed label sits on its lane, turned on a side lane", async () => {
+  await withPage({ root, url: pages.url("routes", "step=feed") }, async (page, ctx) => {
+    const r = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="routes"]');
+      const svg = el.querySelector("svg");
+      const inv = svg.getScreenCTM().inverse();
+      const user = (x, y) => { const p = new DOMPoint(x, y).matrixTransform(inv); return [p.x, p.y]; };
+      const out = {};
+      for (const id of ["again", "notes", "keep"]) {
+        const label = el.querySelector(`[data-for="${id}"] .sd-diagram-edge-label`);
+        const rect = label.getBoundingClientRect();
+        const [x0, y0] = user(rect.left, rect.top);
+        const [x1, y1] = user(rect.right, rect.bottom);
+        const path = el.querySelector(`[data-id="${id}"] .sd-diagram-line`);
+        const mid = path.getPointAtLength(path.getTotalLength() / 2);
+        const at = document.elementFromPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
+        out[id] = {
+          centre: [(x0 + x1) / 2, (y0 + y1) / 2], w: x1 - x0, h: y1 - y0, mid: [mid.x, mid.y],
+          transform: el.querySelector(`[data-for="${id}"] foreignObject`).getAttribute("transform"),
+          top: label.contains(at), text: label.textContent, lines: label.getClientRects().length,
+        };
+      }
+      return out;
+    });
+    // The loop over the top: a horizontal label centred on the lane's middle.
+    const again = r.again;
+    assert.equal(again.text, "next round");
+    assert.equal(again.transform, null, "an over lane's label is not turned");
+    assert.ok(again.w > again.h, `it reads across (${again.w} x ${again.h})`);
+    assert.ok(Math.abs(again.centre[1] - again.mid[1]) <= 1, `centred on the lane's line (${again.centre[1]} vs ${again.mid[1]})`);
+    // The side loops: turned a quarter, upward on the left, downward on the right, centred on the lane's line.
+    for (const [id, turn] of [["notes", -90], ["keep", 90]]) {
+      const l = r[id];
+      assert.match(l.transform ?? "", new RegExp(`^rotate\\(${turn} `), `${id}: turned ${turn}`);
+      assert.ok(l.h > l.w, `${id}: it reads along the lane (${l.w} x ${l.h})`);
+      assert.ok(Math.abs(l.centre[0] - l.mid[0]) <= 1, `${id}: centred on the lane's line (${l.centre[0]} vs ${l.mid[0]})`);
+    }
+    for (const [id, l] of Object.entries(r)) {
+      assert.ok(l.top, `${id}: the label is the topmost element at its centre, over its backing`);
+      assert.equal(l.lines, 1, `${id}: one line`);
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
+test("routes: jump equals played", async () => {
+  await withPage({ root, url: pages.url("routes", "step=start") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "routes", steps: ROUTES, id: "routes" });
+  });
+});
+
+test("routes: backward equals jump", async () => {
+  await withPage({ root, url: pages.url("routes", "step=start") }, async (page, ctx) => {
+    await expectBackwardEqualsJump(ctx, page, { pages, slide: "routes", steps: ROUTES, id: "routes" });
+  });
+});
+
+test("routes: interrupt mid-motion equals jump", async () => {
+  await withPage({ root, url: pages.url("routes", "step=start") }, async (page, ctx) => {
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "routes", from: "start", via: "again", to: "notes", id: "routes" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "routes", from: "refit", via: "notes", to: "start", id: "routes" });
+    await expectInterruptEqualsJump(ctx, page, { pages, slide: "routes", from: "feed", via: "focus", to: "keep", id: "routes" });
+  });
+});
+
+test("check is clean on routes, played, in both themes", async () => {
+  for (const theme of ["academic-light", "modern"]) {
+    const problems = await check(deck, { slide: "routes", played: true, theme });
+    assert.deepEqual(problems.map(formatProblem), [], theme);
+  }
+});
+
+test("straight edges keep their markup: a line, never a path", async () => {
+  await withPage({ root, url: pages.url("routes", "step=focus") }, async (page, ctx) => {
+    const tags = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('[data-el="routes"] [data-part="edge"]')].map((g) => {
+      const line = g.querySelector(".sd-diagram-line");
+      return [g.dataset.id, [line.localName, line.hasAttribute("d"), line.hasAttribute("x1"), [...g.attributes].map((a) => a.name).join(" ")]];
+    })));
+    for (const id of ["plan->collect", "collect->fit", "fit->report", "clean->merge"]) assert.deepEqual(tags[id], ["line", false, true, "class data-part data-id data-dashed data-visible data-dim"], id);
+    for (const id of ["refit", "again", "notes", "keep", "redo", "feed"]) assert.deepEqual(tags[id].slice(0, 3), ["path", true, false], id);
+    for (const slide of ["flow", "edges", "cards"]) {
+      await ctx.open(pages.url(slide, ""));
+      assert.equal(await page.evaluate(() => document.querySelectorAll("path.sd-diagram-line").length), 0, `${slide}: no routed edge, no path`);
+    }
+    assert.deepEqual(ctx.errors, []);
+  });
+});

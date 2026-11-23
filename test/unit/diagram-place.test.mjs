@@ -1,7 +1,7 @@
 // diagram: grid placement, group bounds, edge ends and problems (pure functions, no DOM).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder } from "#engine/components/diagram/place.js";
+import { placeDiagram, diagramProblems, diagramSpacing, edgeId, kindOrder, routePath } from "#engine/components/diagram/place.js";
 
 const OPTS = { width: 1600, height: 600, gap: 48, pad: 16 };
 const contains = (outer, inner, margin) =>
@@ -382,4 +382,181 @@ test("the gap problem of a compact diagram names the compact tokens", () => {
   assert.equal(compact.length, 1);
   assert.match(compact[0].fix, /--sd-diagram-compact-gap/);
   assert.match(diagramProblems({ cols: 1, rows: 1, nodes: [] }, { gap: 10, pad: 6 })[0].fix, /--sd-diagram-gap/);
+});
+
+// Routed edges: a lane outside the grid on the side the edge names, half the gap wide (plus one legend line when
+// the edge has a label), stacked outward in edge order.
+const pair = (route, extra = {}) => ({
+  cols: 2,
+  rows: 1,
+  nodes: [{ id: "a", label: "A", shape: "box", col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 1, row: 0 }],
+  edges: [{ from: "a", to: "b", route, ...extra }],
+});
+const column = (route, shape = "box") => ({
+  cols: 1,
+  rows: 2,
+  nodes: [{ id: "a", label: "A", shape, col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 0, row: 1 }],
+  edges: [{ from: "a", to: "b", route }],
+});
+
+test("routed: lanes are reserved on each side used, shown or not, and shrink the cells", () => {
+  const props = {
+    cols: 4,
+    rows: 2,
+    nodes: [
+      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "b", label: "B", shape: "box", col: 0, row: 1 },
+      { id: "c", label: "C", shape: "box", col: 3, row: 0 },
+      { id: "d", label: "D", shape: "box", col: 3, row: 1 },
+    ],
+    edges: [{ from: "a", to: "b" }],
+  };
+  const plain = placeDiagram(props, OPTS);
+  const sides = placeDiagram({ ...props, edges: [...props.edges, { from: "a", to: "b", id: "l", route: "left" }, { from: "c", to: "d", id: "r", route: "right", label: "back" }], shown: [] }, { ...OPTS, legend: 20 });
+  const lanes = 48 / 2 + (48 / 2 + 20);
+  assert.equal(sides.cells.get("a").w, plain.cells.get("a").w - lanes / 4, "the cells give up the two lanes, over cols");
+  assert.equal(sides.cells.get("a").h, plain.cells.get("a").h, "no lane above or below");
+  assert.equal(sides.cells.get("a").x, 24, "the grid starts after the left lane");
+  assert.equal(sides.cells.get("c").x + sides.cells.get("c").w, 1600 - 44, "and ends before the right one");
+  // No routed edge: no lane at all, so a diagram without one keeps its cells.
+  assert.deepEqual([...placeDiagram({ ...props, edges: [{ from: "a", to: "b", label: "x" }] }, { ...OPTS, legend: 20 }).cells], [...plain.cells]);
+  // Over and under lanes take height instead.
+  const ou = placeDiagram({ ...props, edges: [{ from: "a", to: "c", route: "over" }, { from: "b", to: "d", route: "under" }] }, OPTS);
+  assert.equal(ou.cells.get("a").h, plain.cells.get("a").h - (24 + 24) / 2, "a lane above and one below, over rows");
+  assert.equal(ou.cells.get("a").w, plain.cells.get("a").w);
+  assert.equal(ou.cells.get("a").y, 24);
+});
+
+test("routed: lanes stack outward in edge order; a labelled lane is one legend line wider", () => {
+  const props = {
+    ...pair("over"),
+    edges: [{ id: "inner", from: "a", to: "b", route: "over" }, { id: "outer", from: "b", to: "a", route: "over", label: "again" }],
+  };
+  const { cells, edges } = placeDiagram(props, { ...OPTS, legend: 20 });
+  // Lane 0 (24 wide) is nearest the grid, lane 1 (24 + 20) outside it: the grid starts 68 down.
+  assert.equal(cells.get("a").y, 68);
+  const laneY = (e) => e.points[1][1];
+  assert.equal(laneY(edges[0]), 68 - 12, "lane 0's middle");
+  assert.equal(laneY(edges[1]), 68 - 24 - 22, "lane 1's middle, one lane further out");
+  assert.deepEqual(edges.map((e) => e.route), ["over", "over"]);
+  // The same edges in the other order swap lanes.
+  const swapped = placeDiagram({ ...props, edges: [...props.edges].reverse() }, { ...OPTS, legend: 20 });
+  assert.equal(laneY(swapped.edges[0]), 68 - 22, "the labelled edge, now first, is nearest");
+  assert.equal(laneY(swapped.edges[1]), 68 - 44 - 12);
+});
+
+test("routed: over leaves the top middle, runs on the lane, enters the target's top middle", () => {
+  const [e] = placeDiagram(pair("over"), OPTS).edges;
+  // The lane (24) is above the grid; cells are 776 x 576 from y 24.
+  assert.deepEqual(e.points, [[388, 24], [388, 12], [1212, 12], [1212, 24]]);
+  assert.deepEqual([e.x1, e.y1, e.x2, e.y2], [388, 24, 1212, 24], "the ends are the first and last points");
+  assert.equal(e.route, "over");
+});
+
+test("routed: under, left and right leave and enter on their own side", () => {
+  const [under] = placeDiagram(pair("under"), OPTS).edges;
+  assert.deepEqual(under.points, [[388, 576], [388, 588], [1212, 588], [1212, 576]]);
+  // A column of two cells, 1576 x 276, below each other, with the lane on the left or on the right.
+  const [left] = placeDiagram(column("left"), OPTS).edges;
+  assert.deepEqual(left.points, [[24, 138], [12, 138], [12, 462], [24, 462]]);
+  const [right] = placeDiagram(column("right"), OPTS).edges;
+  assert.deepEqual(right.points, [[1576, 138], [1588, 138], [1588, 462], [1576, 462]]);
+});
+
+test("routed: a circle node leaves from its circle's point, not its box's side", () => {
+  // The circle's box is its whole cell (1576 x 276): radius 138 around (812, 138), so its left point is x 674.
+  const { nodes, edges } = placeDiagram(column("left", "circle"), OPTS);
+  const c = nodes.get("a");
+  assert.deepEqual([c.x, c.w], [24, 1576]);
+  assert.deepEqual(edges[0].points[0], [812 - 138, 138]);
+  assert.deepEqual(edges[0].points.at(-1), [24, 462], "the box target enters at its side");
+  // With the lane on the right the cell starts at x 0: the circle is around (788, 138).
+  const [right] = placeDiagram(column("right", "circle"), OPTS).edges;
+  assert.deepEqual(right.points[0], [788 + 138, 138]);
+});
+
+test("routed: a self-loop and an edge to a group give finite points", () => {
+  const props = {
+    cols: 3,
+    rows: 1,
+    nodes: [
+      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "b", label: "B", shape: "circle", col: 1, row: 0 },
+      { id: "c", label: "C", shape: "box", col: 2, row: 0 },
+    ],
+    groups: [{ id: "g", label: "G", contains: ["b", "c"] }],
+    edges: [
+      { id: "self", from: "a", to: "a", route: "over" },
+      { id: "round", from: "b", to: "b", route: "under", label: "again" },
+      { id: "togroup", from: "a", to: "g", route: "under" },
+      { id: "fromgroup", from: "g", to: "a", route: "over" },
+      { id: "samecolumn", from: "c", to: "c", route: "left" },
+    ],
+  };
+  const { groups, nodes, edges } = placeDiagram(props, { ...OPTS, legend: 20 });
+  assert.equal(edges.length, 5);
+  for (const e of edges) {
+    assert.equal(e.points.length, 4, e.id);
+    assert.ok(e.points.flat().every(Number.isFinite), `${e.id}: ${JSON.stringify(e.points)}`);
+  }
+  const by = Object.fromEntries(edges.map((e) => [e.id, e]));
+  // A self-loop leaves a quarter of the side before its middle and comes back a quarter after it.
+  const a = nodes.get("a");
+  assert.deepEqual(by.self.points[0], [a.x + a.w / 2 - a.w / 4, a.y], "a self-loop leaves its top a quarter left of the middle");
+  assert.deepEqual(by.self.points.at(-1), [a.x + a.w / 2 + a.w / 4, a.y], "and comes back a quarter right of it");
+  assert.ok(by.self.points[1][1] < a.y && by.self.points[1][1] === by.self.points[2][1], "over its lane");
+  // On a circle the two ends are half the radius either side of the bottom point, on the circle.
+  const b = nodes.get("b");
+  const [cx, cy, r] = [b.x + b.w / 2, b.y + b.h / 2, Math.min(b.w, b.h) / 2];
+  const [out, back] = [by.round.points[0], by.round.points.at(-1)];
+  assert.deepEqual([out[0], back[0]], [cx - r / 2, cx + r / 2]);
+  for (const p of [out, back]) {
+    assert.ok(Math.abs(Math.hypot(p[0] - cx, p[1] - cy) - r) < 1e-9, `on the circle: ${p}`);
+    assert.ok(p[1] > cy, "below its centre");
+  }
+  // On a side lane: from a quarter above the middle to a quarter below.
+  const c = nodes.get("c");
+  assert.deepEqual([by.samecolumn.points[0], by.samecolumn.points.at(-1)], [[c.x, c.y + c.h / 4], [c.x, c.y + (3 * c.h) / 4]]);
+  const g = groups.get("g");
+  assert.deepEqual(by.togroup.points.at(-1), [g.x + g.w / 2, g.y + g.h], "an edge to a group enters its box's bottom middle");
+  assert.deepEqual(by.fromgroup.points[0], [g.x + g.w / 2, g.y], "an edge from a group leaves its box's top middle");
+});
+
+test("routed in compact: the lane is half the compact gap with no label line, points are finite, and an edge left out reserves no lane", () => {
+  const props = {
+    cols: 3,
+    rows: 1,
+    nodes: [
+      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "t", label: "note", shape: "text", col: 1, row: 0 },
+      { id: "b", label: "B", shape: "circle", col: 2, row: 0 },
+    ],
+    edges: [{ from: "b", to: "a", route: "over", label: "again" }, { from: "t", to: "b", route: "under" }],
+  };
+  const { cells, edges } = placeDiagram(props, { ...COMPACT, legend: 40 });
+  assert.equal(cells.get("a").y, 8, "one lane above, half the compact gap, with no label line");
+  assert.equal(cells.get("a").h, 200 - 8, "no lane below: the edge from the text node is left out");
+  assert.deepEqual(edges.map((e) => e.id), ["b->a"]);
+  assert.equal(edges[0].points[1][1], 4, "the line runs along the lane's middle");
+  assert.ok(edges[0].points.flat().every(Number.isFinite));
+  // A tiny element still gives finite points.
+  const tiny = placeDiagram(props, { ...COMPACT, width: 10, height: 6 });
+  assert.ok(tiny.edges[0].points.flat().every(Number.isFinite), JSON.stringify(tiny.edges[0].points));
+});
+
+test("routed: an edge with an unknown end reserves no lane", () => {
+  const props = { ...pair("over"), edges: [{ from: "a", to: "ghost", route: "over" }] };
+  const { cells, edges } = placeDiagram(props, OPTS);
+  assert.deepEqual(edges, []);
+  assert.equal(cells.get("a").y, 0);
+});
+
+test("routePath: straight segments with rounded corners, radius capped at half a segment", () => {
+  // The first corner rounds by the full radius (8); the last segment is 5 long, so the second corner by 2.5.
+  assert.equal(routePath([[0, 0], [0, -40], [30, -40], [30, -35]], 8), "M0,0 L0,-32 Q0,-40 8,-40 L27.5,-40 Q30,-40 30,-37.5 L30,-35");
+  assert.equal(routePath([[0, 0], [100, 0], [100, 10]], 8), "M0,0 L95,0 Q100,0 100,5 L100,10");
+  assert.equal(routePath([[0, 0], [100, 0]], 8), "M0,0 L100,0", "two points: one straight segment");
+  // A zero-length segment (a self-loop's run) leaves its corners square, with no NaN.
+  assert.equal(routePath([[5, 10], [5, 2], [5, 2], [5, 10]], 8), "M5,10 L5,2 L5,2 L5,10");
+  assert.equal(routePath([[0.123456, 1], [2, 1]], 8), "M0.12,1 L2,1", "coordinates are written to a hundredth");
 });

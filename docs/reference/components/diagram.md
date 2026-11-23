@@ -114,8 +114,9 @@ Ids are shared by nodes, groups and edges: one id may name one thing only, becau
 | `id` | non-empty string | no | The edge's id. Defaults to `"<from>-><to>"`, for example `"data->model"`. Give an explicit id when two edges join the same pair, or the second one is a duplicate id. |
 | `from` | string | yes | Id of the source node or group. |
 | `to` | string | yes | Id of the target node or group. The arrowhead is at this end. |
-| `label` | string | no | Plain text beside the arrow's midpoint. |
+| `label` | string | no | Plain text beside the arrow's midpoint. On a routed edge, one line on its lane. |
 | `dashed` | boolean | no | Draw the line dashed. |
+| `route` | `over` \| `under` \| `left` \| `right` | no | Draw the edge around the grid, in a lane on that side, instead of straight. See [Routed edges](#routed-edges). |
 
 ### Groups
 
@@ -173,7 +174,7 @@ All state lives in `shown` and `highlight`. Change them per step with `set`, as 
 | Node `label` | Inline Markdown (`renderInline` in `core/inline.js`) | `--sd-font-size-note` |
 | Node `sub` | Inline Markdown | `--sd-font-size-label`, muted |
 | Group `label` | Inline Markdown, one line (no wrapping) | `--sd-font-size-label`, muted |
-| Edge `label` | Plain text: Markdown characters show as typed | `--sd-font-size-label`, muted |
+| Edge `label` | Plain text: Markdown characters show as typed (one line on a routed edge's lane) | `--sd-font-size-label`, muted |
 | `caption` (compact only) | Inline Markdown, one line (no wrapping) | `--sd-font-size-label`, ink |
 
 Inline Markdown means bold, italic, `code`, links, images and line breaks; block syntax such as lists does not apply. Raw HTML is escaped. The sandbox example uses code spans for file names (``label: "`data/`"``).
@@ -184,10 +185,27 @@ A label too long for its node is never shrunk and never clipped. It wraps inside
 
 Placement is explicit: nothing is laid out automatically.
 
-- **Grid.** With no groups, the cells fill the element: `cellW = (width - (cols - 1) x gap) / cols`, and column `c` starts at `c x (cellW + gap)`. Rows work the same way. A node with a span covers the gaps between its cells. With groups, the grid is first inset by how far the groups reach past their members.
+- **Grid.** With no groups and no routed edges, the cells fill the element: `cellW = (width - (cols - 1) x gap) / cols`, and column `c` starts at `c x (cellW + gap)`. Rows work the same way. A node with a span covers the gaps between its cells. With groups, the grid is first inset by how far the groups reach past their members, and with routed edges by their lanes (see [Routed edges](#routed-edges)).
 - **Nodes.** The cell is only the node's slot. The drawn shape is sized to its label plus `--sd-diagram-pad`, centred in the cell and capped at the cell's size. A `text` node is just its text, and a `card` is its cell. A circle's diameter covers its label's diagonal plus the padding, capped by the cell's smaller side.
 - **Groups.** A group's box is the union of all its members' drawn shapes, grown by the pad on every side. A labelled group's top padding also holds one label line, so nested labels stack and never meet. A child group sits at least one pad inside its parent.
-- **Edges.** An edge runs between the borders of its ends' drawn shapes, along the line between their centres. A circle's border is its circle; every other node and every group is its rectangle. The arrowhead appears at the `to` end. A label sits above a mostly horizontal edge, or to the right of a mostly vertical one, in a layer above the nodes and on a background-colored backing.
+- **Edges.** An edge runs between the borders of its ends' drawn shapes, along the line between their centres. A circle's border is its circle; every other node and every group is its rectangle. The arrowhead appears at the `to` end. A label sits above a mostly horizontal edge, or to the right of a mostly vertical one, in a layer above the nodes and on a background-colored backing. An edge with a `route` goes around the grid instead (see [Routed edges](#routed-edges)).
+
+### Routed edges
+
+`route: "over"`, `"under"`, `"left"` or `"right"` on an edge draws it around the grid instead of from centre to centre: a loop back from the last stage to the first ("next round") over the top of a process, or a side loop in a vertical diagram.
+
+```js
+edges: [
+  { from: "plan", to: "collect" }, { from: "collect", to: "report" },
+  { id: "again", from: "report", to: "plan", route: "over", label: "next round" },
+],
+```
+
+- **The path.** The edge leaves its source at the middle of the side facing its route (a circle at its top, bottom, left or right point), runs straight out to its lane, along the lane's middle, and straight back into its target's middle on the same side. Its corners are rounded by a grid unit (`--sd-grid`), at most half of either segment that meets there. It is a `path.sd-diagram-line` (a straight edge stays a `line.sd-diagram-line`), with the same arrowhead marker; like a straight edge it stops half an arrowhead short of the target, so the arrowhead's tip touches it. An edge may run to or from a group (its box's side). A self-loop (`from` equal to `to`) leaves a quarter of the side before its middle and comes back a quarter after it: left to right over or under, top to bottom on a side, and on a circle half its radius either side, so it reads as a loop.
+- **Lanes.** Every routed edge reserves its own lane on its side, whether it is shown or not, so nothing moves between steps. A lane is half `--sd-diagram-gap` wide, plus one label line (`--sd-font-size-label` x `--sd-line-height-tight`) when the edge has a label. A side's lanes stack outward in the order of `edges`, the first nearest the grid, outside how far the groups reach; the cells shrink by the lanes on each side, so a diagram with routed edges has smaller cells than the same diagram without them. A diagram without routed edges reserves no lane. An edge with an unknown end reserves none.
+- **The label** sits on the middle of the lane's run, centred on the line, one line high, over the background backing, in the top layer: across on an over or under lane, turned a quarter on a side lane (reading upward on the left, downward on the right). Its box is as long as the run, and at least four label lines. A longer label does not wrap into the grid: it runs past its box along the lane, and `check` reports it when it leaves the region or the canvas (on a side lane, see [Not detected](#not-detected)). Lane spacing does not grow with a label's length, so keep routed labels short.
+- **In a compact diagram** a lane is half `--sd-diagram-compact-gap` and has no label line (compact draws no label), and an edge left out because it touches a `text` node reserves no lane.
+- **Motion.** A routed edge draws on from source to target, like a straight one; a dashed one fades in.
 
 ### Spacing tokens
 
@@ -216,7 +234,7 @@ The engine animates only a forward move of exactly one step. A jump, a backward 
 On an animated step (the entrance, or a step while the diagram stays visible), the motion runs in this order:
 
 1. At the same time (in the entrance, the groups first, then the nodes): newly shown groups fade in (the shared `fade` motion); newly shown nodes pop in (the shared `pop` motion: they fade in while scaling up from 0.92), one after another, `--sd-stagger` apart (80ms in `modern`, 60ms in `academic-light`, or the step's `transition.stagger`); parts whose highlight changed tween their outline, fill and label text color, in RGB over `--sd-duration-fast`.
-2. Then newly shown edges, staggered: a solid edge draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed edge fades in with its label instead of drawing.
+2. Then newly shown edges, staggered: a solid edge, straight or routed, draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed edge fades in with its label instead of drawing.
 
 In a compact diagram a node that becomes lit, or stops being lit, tweens its outline and fill colours with the others; the outline's width changes at once. A caption change fades the old caption out and the new one in, each over half of `--sd-duration` (or of the step's `transition.duration`), at the same time as step 1.
 
@@ -270,6 +288,8 @@ A `diagram-id` problem is also an element error at runtime. A `diagram-overlap` 
 
   Keep every `col` below `cols` and every `row` below `rows`, including spans.
 - **Two nodes in the same cell.** Nodes that share a cell are not reported; their shapes draw on top of each other.
+- **A routed edge through other nodes.** A routed edge's straight runs to and from its lane are not checked against the nodes they cross: route `over` only between nodes in the top row (or groups that reach it), `under` in the bottom row, `left` and `right` in the first and last columns.
+- **A turned label past the region's top or bottom.** `check` allows text the overhang of its line box above and below; on a side lane's turned label that allowance is about half the label's length, so such a label can leave the region, or the canvas, by up to that much without `text-outside-region` or `text-outside-canvas` (an overlap with other text is still reported). Keep side-lane labels short and look at a screenshot.
 - **Labels that collide inside the diagram.** See [Text](#text).
 
 After `validate`, run `check --played` and look at `shoot` screenshots, as described in [Checking a deck](../../guide/checking-a-deck.md).

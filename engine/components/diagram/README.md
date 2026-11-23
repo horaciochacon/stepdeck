@@ -7,7 +7,7 @@ inside their node.
 |---|---|---|---|---|
 | `cols`, `rows` | integer >= 1 | (required) | snap | The grid. Cells share the element's size equally, with `--sd-diagram-gap` between them. |
 | `nodes` | `[{ id, label, sub?, shape, kind?, col, row, colspan?, rowspan? }]` | (required) | snap | `shape` is `box`, `pill`, `circle` (sized to its label, capped by the cell), `card` (fills its cell, with a stripe on its left edge) or `text` (no outline). `kind` colours the node from the categorical palette. `col` and `row` are 0-based. |
-| `edges` | `[{ id?, from, to, label?, dashed? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. |
+| `edges` | `[{ id?, from, to, label?, dashed?, route? }]` | none | snap | An arrow from a node or group to another. Its id is `id`, else `"<from>-><to>"`. `label` is plain text beside the midpoint. `route` (`over`, `under`, `left`, `right`) draws it around the grid in a lane on that side. |
 | `groups` | `[{ id, label?, contains, dashed? }]` | none | snap | A box around all its members (node and group ids, so groups nest). The label is drawn inside the box's top padding, above its members. |
 | `shown` | `string[]` | everything | draw | The ids visible (nodes, groups, edges by edge id). Anything not listed is hidden and keeps its place. |
 | `highlight` | `string[]` | none | fade | The ids emphasised; the outlines and lines of the rest turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and their text turns muted. |
@@ -37,7 +37,8 @@ Behaviour:
   cols`, and a node's cell starts at `col·(cellW + gap)`; spans cover the gaps between their cells. A
   group's box is the union of all its members' drawn shapes, shown or not (so it never resizes between
   steps), grown by the pad on every side; a labelled group's top padding also holds one label line, so
-  nested labels stack and never meet. The grid is inset by how far the groups reach past their members.
+  nested labels stack and never meet. The grid is inset by how far the groups reach past their members, and
+  by the lanes of routed edges (see below).
 - **Cards and kinds.** A `card` is a rounded rectangle that is its cell (it is not sized to its label), with a
   stripe `--sd-diagram-stripe` wide (a grid unit) on its left edge, clipped to its corners. The label is
   left- and top-aligned at the note size in the strong weight, the sub under it at the label size in muted, both
@@ -52,6 +53,24 @@ Behaviour:
 - **Edges** run between the borders of the drawn shapes of their ends, along the line between their
   centres (a circle's border is its circle). Edges may connect groups. Edge labels are drawn above the
   nodes, over a background backing.
+- **Routed edges.** An edge with `route: "over"`, `"under"`, `"left"` or `"right"` goes around the grid instead,
+  for a loop back ("next round") or a side loop in a vertical diagram. It leaves its source at the middle of the
+  side facing that way (a circle at its top, bottom, left or right point), runs out to a lane outside the grid
+  on that side, along the lane, and back into its target's middle on the same side, its corners rounded by a
+  grid unit (`--sd-grid`, at most half of either segment). It is a `path.sd-diagram-line`, with the same
+  arrowhead marker and the same shortened end as a straight edge's `line.sd-diagram-line`; it draws on from
+  source to target the same way (a dashed one fades). Every routed edge, shown or not, reserves its own lane,
+  so nothing moves between steps: half `--sd-diagram-gap` wide, plus one label line when it has a label,
+  stacked outward in the order of `edges` (the first nearest the grid), outside how far the groups reach; the
+  cells shrink by the lanes on each side. A label sits on the middle of the lane's run, one line over the
+  background backing, as wide as the run and at least four label lines: across on an over or under lane,
+  turned a quarter on a side lane (reading upward on the left, downward on the right). A longer label is not
+  wrapped: it runs past its box along the lane, so `check` reports it when it leaves the region (a turned one
+  only once it is well past it: look at a screenshot). A self-loop
+  (`from` equal to `to`) leaves a quarter of the side before its middle and comes back a quarter after it (left
+  to right over or under, top to bottom on a side). In a compact diagram a lane is half the compact gap and has
+  no label line, and an edge left out (it touches a `text` node) reserves none. A diagram without routed edges
+  reserves no lane.
 - **Compact.** `compact: true` draws the same definition small, for a "you are here" copy beside a slide's own
   figure: bind `cols`, `rows`, `nodes`, `edges` and `groups` of both views to one data file, so every id and every
   kind colour agree. No label, sub, group legend or edge label is created (the only text is the `caption`), every
