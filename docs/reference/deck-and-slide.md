@@ -415,7 +415,7 @@ A slide's `section: "Methods"` string is shortcut for a `text` element with the 
 | element `box` | `spec-invalid` (missing key, `w` or `h` not > 0), `unknown-key` (extra key) |
 | element `from`, `at` | `step-ref` |
 | element `advance` | `step-ref` (`start`), `advance-overflow`, `spec-invalid` (empty `values`), `unknown-key` (extra key) |
-| element `props`, at every step | `props-not-object`, `unknown-prop`, `prop-invalid`, `binding-file`, `binding-pointer`, `binding-format`, `file-missing`, `path-case`, `data-invalid`, `missing-column`, `remote-url`, `hex-color`, `diagram-id`, `diagram-overlap` |
+| element `props`, at every step | `props-not-object`, `unknown-prop`, `prop-invalid`, `binding-file`, `binding-pointer`, `binding-format`, `file-missing`, `path-case`, `data-invalid`, `missing-column`, `remote-url`, `hex-color`, `diagram-id`, `diagram-overlap`, `diagram-caption-unused` |
 | element `enter`, `exit`, `collapse`, `ghost` | `spec-invalid` (value only; an unknown motion name gets a did-you-mean, as a name or in an object), `unknown-key` (a key of an `enter`/`exit` object other than `motion`, `delay`, `duration`), `exit-delay-ignored` (warning) |
 | element entering on a step | `motion-budget` (warning): its stagger hold plus its entrance reach 8000 ms |
 | element `ghost` with `collapse: true` | `ghost-collapse` |

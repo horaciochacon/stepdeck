@@ -1,0 +1,20 @@
+{
+  "cols": 4,
+  "rows": 2,
+  "nodes": [
+    { "id": "collect", "label": "Collect", "sub": "two rounds", "shape": "card", "kind": "input", "col": 0, "row": 0 },
+    { "id": "clean", "label": "Clean", "sub": "fill gaps", "shape": "card", "kind": "step", "col": 1, "row": 0 },
+    { "id": "fit", "label": "Fit", "sub": "one model", "shape": "card", "kind": "step", "col": 2, "row": 0 },
+    { "id": "report", "label": "Report", "shape": "card", "col": 3, "row": 0 },
+    { "id": "note", "label": "Checked by hand", "shape": "text", "col": 2, "row": 1 }
+  ],
+  "edges": [
+    { "from": "collect", "to": "clean" },
+    { "from": "clean", "to": "fit" },
+    { "from": "fit", "to": "report", "label": "writes" },
+    { "from": "note", "to": "fit", "dashed": true }
+  ],
+  "groups": [
+    { "id": "prep", "label": "Preparation", "contains": ["collect", "clean"] }
+  ]
+}

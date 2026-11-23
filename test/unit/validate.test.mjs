@@ -383,15 +383,11 @@ test("diagram: sibling groups that share a cell are diagram-overlap", async () =
 
 test("diagram: a compact diagram is checked with the compact spacing", async () => {
   // A test-only theme in a temporary engine copy: its compact gap (10px) is under twice its compact pad (6px),
-  // while its normal gap and pad are fine. Until the schema knows `compact`, the copy's schema is given it.
+  // while its normal gap and pad are fine.
   const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-compact-")));
   try {
     const engine = join(tmp, "stepdeck");
     copyEngine(engine);
-    const schemaFile = join(engine, "components/diagram/schema.json");
-    const schema = JSON.parse(readFileSync(schemaFile, "utf8"));
-    schema.properties.compact ??= { type: "boolean", "x-transition": "snap" };
-    writeFileSync(schemaFile, JSON.stringify(schema));
     const theme = join(engine, "themes/tight-compact");
     cpSync(join(engine, "themes/academic-light"), theme, { recursive: true });
     const tokens = readFileSync(join(theme, "tokens.css"), "utf8");
@@ -415,6 +411,37 @@ test("diagram: a compact diagram is checked with the compact spacing", async () 
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("diagram-caption-unused: a caption without compact is a warning; a compact diagram's caption is not", async () => {
+  const problems = await validate(fixture("diagram-caption-unused"));
+  assert.deepEqual(rules(problems), ["diagram-caption-unused"], show(problems));
+  const p = problems[0];
+  assert.equal(p.severity, "warning");
+  assert.equal(p.slide, "s");
+  assert.equal(p.element, "full", "the compact copy's caption is used");
+  assert.match(p.measured, /`caption` does nothing without `compact: true`/);
+  assert.match(p.fix, /compact: true/);
+  assert.deepEqual(errors(problems), [], "a warning only: the deck still builds");
+});
+
+test("motion-budget: a compact diagram's build leaves out its text nodes and edge labels", async () => {
+  // academic-light: --sd-duration 400ms; each step staggers its parts 1000 ms apart. Each element enters alone on
+  // its step (slot 0). Eight boxes pop in over 7400 ms; a labelled edge then draws and its label fades (800 ms),
+  // 8200 ms in all, but a compact copy draws no label (400 ms, 7800 ms). Two boxes and six text nodes would pop in
+  // over 7400 ms and two edges draw after; a compact copy draws only the boxes and the edge between them (1800 ms).
+  const boxes = Array.from({ length: 8 }, (_, i) => `{ id: "n${i}", label: "N", shape: "box", col: ${i}, row: 0 }`).join(", ");
+  const words = Array.from({ length: 6 }, (_, i) => `{ id: "t${i}", label: "T", shape: "text", col: ${i + 2}, row: 0 }`).join(", ");
+  const problems = await validateSlideBody(`elements: [
+    { id: "full", type: "diagram", from: "a", props: { cols: 8, rows: 1, nodes: [${boxes}], edges: [{ from: "n0", to: "n1", label: "one" }] } },
+    { id: "small", type: "diagram", from: "b", props: { cols: 8, rows: 1, compact: true, nodes: [${boxes}], edges: [{ from: "n0", to: "n1", label: "one" }] } },
+    { id: "words", type: "diagram", from: "c", props: { cols: 8, rows: 1, compact: true,
+      nodes: [{ id: "a", label: "A", shape: "box", col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 1, row: 0 }, ${words}],
+      edges: [{ from: "a", to: "b" }, { from: "t0", to: "b" }] } },
+  ], steps: [{ id: "s0" }, { id: "a", transition: { stagger: 1000 } }, { id: "b", transition: { stagger: 1000 } }, { id: "c", transition: { stagger: 1000 } }]`);
+  assert.deepEqual(rules(problems), ["motion-budget"], show(problems));
+  assert.equal(problems[0].element, "full");
+  assert.match(problems[0].measured, /8200 ms/);
 });
 
 test("chart-prop-unused: ticker without until is a warning", async () => {

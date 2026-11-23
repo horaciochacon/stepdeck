@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "diagram",
-  "description": "Nodes, arrows and nested groups on an explicit grid, appearing by step. Each node sits in a cell (`col`, `row`, optional spans); edges run between nodes or groups; groups draw a box around all their members. `shown` lists the ids visible at a step (hidden parts keep their place) and `highlight` dims everything else. Set the state props per step with `advance` or `set` on the slide.",
+  "description": "Nodes, arrows and nested groups on an explicit grid, appearing by step. Each node sits in a cell (`col`, `row`, optional spans); edges run between nodes or groups; groups draw a box around all their members. `shown` lists the ids visible at a step (hidden parts keep their place) and `highlight` dims everything else. With `compact` the same definition draws small, shapes only, with one optional `caption`. Set the state props per step with `advance` or `set` on the slide.",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -89,8 +89,20 @@
     "highlight": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Ids emphasised (nodes, groups, edges); everything else turns the theme's dim color. The change tweens the colors. An unknown id is an error.",
+      "description": "Ids emphasised (nodes, groups, edges); everything else turns the theme's dim color. The change tweens the colors. An unknown id is an error. In a compact diagram a lit node also takes its kind's colour (the accent without a kind) as a wider outline, on a tint of it.",
       "examples": [["model"], ["model", "model->result"]],
+      "x-transition": "fade"
+    },
+    "compact": {
+      "type": "boolean",
+      "description": "Draw the same definition small, as a second view: shapes only, no label text, each shape filling its cell, inside the theme's second-view frame, with the compact gap and pad. `text` nodes and the edges that touch them are left out. Ids mean the same as in the full view, so `shown` and `highlight` read the same on both.",
+      "examples": [true],
+      "x-transition": "snap"
+    },
+    "caption": {
+      "type": "string",
+      "description": "One line of inline Markdown at the label size, in its own band at the top of a compact diagram (it is drawn only with `compact: true`; it never wraps or shrinks). A change crossfades.",
+      "examples": ["You are here"],
       "x-transition": "fade"
     }
   }

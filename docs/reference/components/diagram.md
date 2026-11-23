@@ -86,6 +86,8 @@ Both slides pass `validate` and `check --played`. For more nesting, see `example
 | `groups` | array of group objects | no | none | snap | Boxes drawn around their members. See [Groups](#groups). |
 | `shown` | string array | no | everything | draw | The ids visible at this step: nodes, groups and edges (by edge id). When set, anything not listed is hidden but keeps its place. |
 | `highlight` | string array | no | none | fade | The ids emphasised. Everything else dims: shapes and lines turn the theme's dim color and their text turns muted. An empty array means no highlight. |
+| `compact` | boolean | no | `false` | snap | Draw the same definition small, as a second view: shapes only, no label text, inside the theme's second-view frame. See [Compact](#compact). |
+| `caption` | string | no | none | fade | With `compact: true`, one line of inline Markdown at the label size in a band at the top. Without `compact` it draws nothing, and `validate` warns (`diagram-caption-unused`). |
 
 The schema sets `additionalProperties: false` on the props and on every node, edge and group object, so a misspelled key is a `validate` error, `unknown-prop`, with a path such as `prop 'nodes.0.colour'`. A wrong type or a value outside an enum (for example `shape: "square"`) is `prop-invalid`.
 
@@ -134,7 +136,28 @@ More distinct kinds than the palette has colours is an element error (see [Eleme
 
 A node with a kind is drawn in an inner group (`g.sd-diagram-paint`) that holds its shape, stripe and label and carries the colour as the custom property `--sd-kind`; its `g.sd-diagram-node` gets `data-kind`. The motion never touches the inner group, so the colour survives every step. A node without a kind has no such group.
 
-## Reveal and highlight parts by step
+## Compact
+
+`compact: true` draws the same definition small: a "you are here" copy of a process diagram, in a corner `box` beside a slide's own figure, with the current stage lit. Ids mean the same as in the full view, so `shown` and `highlight` read the same on both. To share the definition, put `cols`, `rows`, `nodes`, `edges` and `groups` in one data file and bind both views to it (see [Data and bindings](../../guide/data-and-bindings.md)); kinds then take the same colours in both, because each kind's colour follows its first appearance in `nodes`.
+
+```js
+const process = {
+  cols: "{{data/process.json#/cols}}", rows: "{{data/process.json#/rows}}",
+  nodes: "{{data/process.json#/nodes}}", edges: "{{data/process.json#/edges}}", groups: "{{data/process.json#/groups}}",
+};
+// in a slide's elements:
+{ id: "where", type: "diagram", box: { x: 1264, y: 600, w: 560, h: 280 },
+  props: { ...process, compact: true, caption: "You are here", highlight: ["fit"] } },
+```
+
+- **Shapes only.** No label, sub, group legend or edge label is created, so `check`, `dump` and the accessibility tree see only the caption. Every shape fills its cell (a circle is the largest circle in it); a card keeps its stripe. A `text` node carries only words, so it and the edges that touch it are left out; highlighting one is no error, and nothing is lit.
+- **The frame.** The svg gets `data-compact="true"` and, as its first child, `rect.sd-second-view-frame`: the theme's second-view frame (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`; see [Themes](../themes.md)), drawn at the element's edge and inset by half its stroke so the stroke stays inside the element.
+- **Spacing.** The drawing sits inside the frame, inset by `--sd-diagram-compact-pad`, with `--sd-diagram-compact-gap` between cells (see [Spacing tokens](#spacing-tokens)). Groups have no legend line.
+- **The caption** takes its own band at the top, inside the frame: one label line plus the compact pad, reserved when any step of the slide has a compact caption, so nothing moves when it comes or goes. It is `div.sd-second-view-caption`, at `--sd-font-size-label` in ink, on one line, on the frame's fill (`--sd-inset-fill`, carried by the caption itself so `check`'s contrast test sees it). A caption too long for the width is never shrunk: it overflows. In a region, `check` reports it (`text-outside-region`); in a `box`, it catches it only when it leaves the canvas or overlaps other text, so look at a screenshot.
+- **Lighting.** With no `highlight`, every part keeps its normal look. With one, a lit node takes its kind's colour (the accent when it has no kind) as an outline twice `--sd-rule-width` wide, and a card's stripe that colour too, over a tint of it: `--sd-compact-tint` (20% in both built-in themes) of the colour mixed into the background. Every other part dims as at full size. A lit edge or group keeps its look (they have no kind).
+- **Steps.** `compact` is structure: a step that turns it on or off rebuilds the drawing, at once. The caption is state: a change crossfades (see [Motion](#motion)).
+
+
 
 All state lives in `shown` and `highlight`. Change them per step with `set`, as in the examples above, or with `advance` over a list of `shown` arrays. See the [step model](../../guide/step-model.md).
 
@@ -151,6 +174,7 @@ All state lives in `shown` and `highlight`. Change them per step with `set`, as 
 | Node `sub` | Inline Markdown | `--sd-font-size-label`, muted |
 | Group `label` | Inline Markdown, one line (no wrapping) | `--sd-font-size-label`, muted |
 | Edge `label` | Plain text: Markdown characters show as typed | `--sd-font-size-label`, muted |
+| `caption` (compact only) | Inline Markdown, one line (no wrapping) | `--sd-font-size-label`, ink |
 
 Inline Markdown means bold, italic, `code`, links, images and line breaks; block syntax such as lists does not apply. Raw HTML is escaped. The sandbox example uses code spans for file names (``label: "`data/`"``).
 
@@ -172,14 +196,16 @@ Placement is explicit: nothing is laid out automatically.
 | `--sd-diagram-gap` | 48px | Space between grid cells. |
 | `--sd-diagram-pad` | 16px | Padding between a node's label and its outline, and between a group's box and its members. |
 | `--sd-diagram-stripe` | `var(--sd-grid)` (8px) | Width of the stripe on a card's left edge. |
+| `--sd-diagram-compact-gap` | 16px | Space between grid cells of a compact diagram. |
+| `--sd-diagram-compact-pad` | 6px | A compact diagram's group padding, and the inset of its drawing inside the frame. |
 
-A theme without the gap and pad tokens gets 3 x and 1 x `--sd-space`, and one without the stripe token a stripe of `--sd-grid`. The gap must be at least twice the pad so that neighbouring group boxes never touch; `validate` checks the theme's values (see [Errors and problems](#errors-and-problems)). Colors, stroke widths and font sizes all come from theme tokens through `core/stepdeck.css`. See [Themes](../themes.md).
+A theme without the gap and pad tokens gets 3 x and 1 x `--sd-space`, one without the compact pair 1 x and 0.25 x `--sd-space`, and one without the stripe token a stripe of `--sd-grid`. The gap must be at least twice the pad so that neighbouring group boxes never touch; `validate` checks the theme's values (see [Errors and problems](#errors-and-problems)). Colors, stroke widths and font sizes all come from theme tokens through `core/stepdeck.css`. See [Themes](../themes.md).
 
 ### Size
 
 A `diagram` fills the region it is in, in any layout: `core/stepdeck.css` gives every diagram element `flex: 1 1 0`. It shares the region with its siblings, so a source line in the same region takes its own height and the diagram takes the rest (in the kit's `concept` slide, the diagram is 1728 x 730 canvas pixels in `full-bleed` main, next to a source line). You can also give the element a `box` to set its size directly. See [Layouts and themes](../../guide/layouts-and-themes.md).
 
-The component reads the element's size when it renders. If `cols`, `rows`, `nodes`, `edges`, `groups` or the element's size change, it rebuilds the whole drawing.
+The component reads the element's size when it renders. If `cols`, `rows`, `nodes`, `edges`, `groups`, `compact` or the element's size change, it rebuilds the whole drawing.
 
 ## Motion
 
@@ -191,6 +217,8 @@ On an animated step (the entrance, or a step while the diagram stays visible), t
 
 1. At the same time (in the entrance, the groups first, then the nodes): newly shown groups fade in (the shared `fade` motion); newly shown nodes pop in (the shared `pop` motion: they fade in while scaling up from 0.92), one after another, `--sd-stagger` apart (80ms in `modern`, 60ms in `academic-light`, or the step's `transition.stagger`); parts whose highlight changed tween their outline, fill and label text color, in RGB over `--sd-duration-fast`.
 2. Then newly shown edges, staggered: a solid edge draws its line from source to target, its arrowhead appears once the line arrives, and then its label fades in. A dashed edge fades in with its label instead of drawing.
+
+In a compact diagram a node that becomes lit, or stops being lit, tweens its outline and fill colours with the others; the outline's width changes at once. A caption change fades the old caption out and the new one in, each over half of `--sd-duration` (or of the step's `transition.duration`), at the same time as step 1.
 
 Each motion lasts the theme's `--sd-duration` (400ms in both built-in themes), or the step's `transition.duration` (see [Setting a duration on a step](../../guide/animation-and-motion.md#setting-a-duration-on-a-step)) if set; the highlight color tween lasts `--sd-duration-fast` (200ms in both themes) instead, or the step's `transition.duration`. Only parts that change visibility or highlight move. A step that also rebuilds the drawing (see [Size](#size)) plays no motion.
 
@@ -218,7 +246,8 @@ The component throws on props that would draw a blank or wrong diagram. The erro
 | `diagram-id` | A group contains itself, directly or through other groups. | `group 'x' contains itself (x -> y -> x)` |
 | `diagram-overlap` | Sibling groups (same parent group, or both top-level) share grid cells. | `sibling groups 'g' and 'h' share cells (from col 0, row 0)` |
 | `diagram-overlap` | A node that is not a member of a group sits inside that group's cells. | `node 'n' sits in the cells of group 'g' but is not a member` |
-| `diagram-overlap` | The theme's `--sd-diagram-gap` is less than twice its `--sd-diagram-pad`. | `grid gap 20px is less than twice the group padding 16px` |
+| `diagram-overlap` | The theme's `--sd-diagram-gap` is less than twice its `--sd-diagram-pad` (for a compact diagram, `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`). | `grid gap 20px is less than twice the group padding 16px` |
+| `diagram-caption-unused` (warning) | `caption` is set and `compact` is not `true`, so the caption draws nothing. | `` `caption` does nothing without `compact: true` `` |
 
 Here is `validate` on a scratch slide with several of these mistakes:
 

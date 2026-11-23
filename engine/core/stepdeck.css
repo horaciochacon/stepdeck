@@ -202,6 +202,16 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-diagram-node[data-dim="true"] .sd-diagram-stripe { fill: var(--sd-color-dim, var(--sd-color-rule)); }
 .sd-diagram-edge[data-dim="true"] .sd-diagram-line { stroke: var(--sd-color-dim, var(--sd-color-rule)); }
 .sd-diagram-node[data-dim="true"] .sd-diagram-text { color: var(--sd-color-muted); }
+/* A compact diagram (a second view, shapes only): with a highlight, a lit node takes its kind's colour (the accent
+   without one) as an outline twice the rule width over a tint of that colour, and a card's stripe that colour too; the
+   rest dims as above. The component computes the tints (--sd-kind-tint on a kinded node's paint group, --sd-accent-tint
+   on the drawing), because the highlight tween cannot read a computed color-mix(); the color-mix is the same colour. */
+.sd-diagram[data-compact="true"][data-highlight="true"] .sd-diagram-node[data-dim="false"] .sd-diagram-shape {
+  stroke: var(--sd-kind, var(--sd-color-accent));
+  stroke-width: calc(var(--sd-rule-width) * 2);
+  fill: var(--sd-kind-tint, var(--sd-accent-tint, color-mix(in srgb, var(--sd-kind, var(--sd-color-accent)) var(--sd-compact-tint, 20%), var(--sd-color-background))));
+}
+.sd-diagram[data-compact="true"][data-highlight="true"] .sd-diagram-node[data-dim="false"] .sd-diagram-stripe { fill: var(--sd-kind, var(--sd-color-accent)); }
 .sd-diagram-label { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
 .sd-diagram-label-content { max-width: 100%; display: flex; flex-direction: column; align-items: center; gap: calc(var(--sd-grid) / 2); }
 /* A card's label is left- and top-aligned in the area beside the stripe. */

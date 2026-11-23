@@ -25,7 +25,8 @@
 //             point at files that exist in that exact case, and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
 //             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
-//             theme's tokens.css), and every element goes through chartProblems (core/chart-rules.js:
+//             theme's tokens.css, the compact pair for a compact diagram) and not set `caption` without
+//             `compact: true` (diagram-caption-unused, a warning), and every element goes through chartProblems (core/chart-rules.js:
 //             chart-prop-unused, a warning; chart-orient, an error); a `map` that matches its schema goes through
 //             mapProblems (core/map-rules.js, with each layer's raster JSON and the headers of its PNGs read from the
 //             deck: map-layer, map-frame, map-raster, errors; map-prop-unused, a warning). A map's layers name CSV
@@ -273,11 +274,14 @@ function buildMs(type, props, own, tokens, transition) {
     }
     case "diagram": {
       // Groups fade, then the nodes pop in turn, then the edges draw in turn (a drawn edge's label fades after it).
+      // A compact diagram draws no text node, no edge that touches one and no label.
+      const compact = P.compact === true;
+      const words = new Set(compact ? list("nodes").filter((n) => n?.shape === "text").map((n) => n?.id) : []);
       const shown = (id) => !Array.isArray(P.shown) || P.shown.includes(id);
       const groups = list("groups").some((g) => shown(g?.id)) ? p : 0;
-      const nodes = list("nodes").filter((n) => shown(n?.id)).length;
-      const edges = list("edges").filter((e) => shown(e?.id ?? `${e?.from}->${e?.to}`));
-      const labelled = edges.some((e) => e?.label && e.dashed !== true);
+      const nodes = list("nodes").filter((n) => shown(n?.id) && !words.has(n?.id)).length;
+      const edges = list("edges").filter((e) => shown(e?.id ?? `${e?.from}->${e?.to}`) && !words.has(e?.from) && !words.has(e?.to));
+      const labelled = !compact && edges.some((e) => e?.label && e.dashed !== true);
       return groups + run(nodes) + run(edges.length, labelled ? 2 * p : p);
     }
     case "timeline":
@@ -848,6 +852,10 @@ async function validateSlide(spec, env) {
     if (validate(resolved)) {
       if (type === "diagram") {
         for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
+        if (resolved.caption !== undefined && resolved.compact !== true) {
+          const item = { rule: "diagram-caption-unused", message: "`caption` does nothing without `compact: true`", limit: "`caption` together with `compact: true`", fix: "set `compact: true`, or remove `caption`" };
+          report(`${id}|${item.rule}`, componentProblem({ slide, element: id, step }, item), "warning");
+        }
       }
       for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
       if (type === "map") {
