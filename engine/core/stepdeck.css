@@ -327,8 +327,12 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
    element's edge. It is a `rect` in a diagram's SVG and a `div` over a map's element; the caption in its top band is
    HTML and carries the frame's fill itself (a contrast check reads only the backgrounds of a text's ancestors). */
 rect.sd-second-view-frame { fill: var(--sd-inset-fill, var(--sd-color-background)); stroke: var(--sd-inset-stroke, var(--sd-color-ink)); stroke-width: var(--sd-inset-stroke-width, var(--sd-rule-width)); rx: var(--sd-inset-radius, 0px); ry: var(--sd-inset-radius, 0px); }
-div.sd-second-view-frame { position: absolute; inset: 0; box-sizing: border-box; border: var(--sd-inset-stroke-width, var(--sd-rule-width)) solid var(--sd-inset-stroke, var(--sd-color-ink)); background: var(--sd-inset-fill, var(--sd-color-background)); border-radius: var(--sd-inset-radius, 0px); pointer-events: none; }
-.sd-second-view-caption { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); color: var(--sd-color-ink); white-space: nowrap; background: var(--sd-inset-fill, var(--sd-color-background)); }
+/* "Under" does not depend on DOM order (a canvas layer inserts itself at the element's first child): the frame sits at
+   z-index -1 and the element that holds it makes its own stacking context, so the frame is above the element's own
+   background and below everything it draws. */
+.sd-el:has(> .sd-second-view-frame) { isolation: isolate; }
+div.sd-second-view-frame { position: absolute; z-index: -1; inset: 0; box-sizing: border-box; border: var(--sd-inset-stroke-width, var(--sd-rule-width)) solid var(--sd-inset-stroke, var(--sd-color-ink)); background: var(--sd-inset-fill, var(--sd-color-background)); border-radius: var(--sd-inset-radius, 0px); pointer-events: none; }
+.sd-second-view-caption { font-family: var(--sd-font-body); font-size: var(--sd-font-size-label); color: var(--sd-color-ink); line-height: var(--sd-line-height-tight); margin: 0; white-space: nowrap; background: var(--sd-inset-fill, var(--sd-color-background)); }
 
 /* map component (components/map/): canvases under an SVG of labels, each label at its region on a 4 px halo of the
    background colour; the legend in the corner `legend` names (data-at), on a panel of the background colour so its text
