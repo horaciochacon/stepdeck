@@ -207,6 +207,7 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 /* A card's label is left- and top-aligned in the area beside the stripe. */
 .sd-diagram-node[data-shape="card"] .sd-diagram-label { justify-content: flex-start; align-items: flex-start; text-align: left; }
 .sd-diagram-node[data-shape="card"] .sd-diagram-label-content { align-items: flex-start; }
+.sd-diagram-node[data-shape="card"] .sd-diagram-text { font-weight: var(--sd-font-weight-strong, 600); }
 .sd-diagram-text, .sd-timeline-text { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height-tight); color: var(--sd-color-ink); }
 .sd-diagram-sub, .sd-timeline-sub { max-width: 100%; overflow-wrap: anywhere; font-size: var(--sd-font-size-label); line-height: var(--sd-line-height-tight); color: var(--sd-color-muted); }
 .sd-diagram-edge-label-row { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; text-align: center; }
