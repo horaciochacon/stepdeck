@@ -381,6 +381,42 @@ test("diagram: sibling groups that share a cell are diagram-overlap", async () =
   assert.match(problems[0].measured, /wide/);
 });
 
+test("diagram: a compact diagram is checked with the compact spacing", async () => {
+  // A test-only theme in a temporary engine copy: its compact gap (10px) is under twice its compact pad (6px),
+  // while its normal gap and pad are fine. Until the schema knows `compact`, the copy's schema is given it.
+  const tmp = realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-compact-")));
+  try {
+    const engine = join(tmp, "stepdeck");
+    copyEngine(engine);
+    const schemaFile = join(engine, "components/diagram/schema.json");
+    const schema = JSON.parse(readFileSync(schemaFile, "utf8"));
+    schema.properties.compact ??= { type: "boolean", "x-transition": "snap" };
+    writeFileSync(schemaFile, JSON.stringify(schema));
+    const theme = join(engine, "themes/tight-compact");
+    cpSync(join(engine, "themes/academic-light"), theme, { recursive: true });
+    const tokens = readFileSync(join(theme, "tokens.css"), "utf8");
+    const tight = tokens.replace(/--sd-diagram-compact-gap:\s*[^;]+;/, "--sd-diagram-compact-gap: 10px;");
+    assert.notEqual(tight, tokens, "academic-light declares --sd-diagram-compact-gap");
+    writeFileSync(join(theme, "tokens.css"), tight);
+    const props = {
+      cols: 2, rows: 1,
+      nodes: [{ id: "a", label: "A", shape: "box", col: 0, row: 0 }, { id: "b", label: "B", shape: "box", col: 1, row: 0 }],
+      edges: [{ from: "a", to: "b" }],
+    };
+    const slide = { id: "s", title: "Compact spacing", elements: [{ id: "full", type: "diagram", props }, { id: "small", type: "diagram", props: { ...props, compact: true } }] };
+    mkdirSync(join(tmp, "slides"));
+    writeFileSync(join(tmp, "slides/s.js"), `export default ${JSON.stringify(slide)};\n`);
+    writeFileSync(join(tmp, "deck.js"), `export default ${JSON.stringify({ title: "compact", lang: "en", theme: "tight-compact", slides: ["s"] })};\n`);
+    const problems = await validate(tmp);
+    assert.deepEqual(rules(problems), ["diagram-overlap"], show(problems));
+    assert.equal(problems[0].element, "small");
+    assert.match(problems[0].measured, /grid gap 10px is less than twice the group padding 6px/);
+    assert.match(problems[0].fix, /--sd-diagram-compact-gap/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test("chart-prop-unused: ticker without until is a warning", async () => {
   const problems = await validate(fixture("ticker-without-until"));
   assert.deepEqual(rules(problems), ["chart-prop-unused"], show(problems));

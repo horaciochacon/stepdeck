@@ -325,6 +325,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
 
   // Theme, palette and the palette check (g).
   let spacing = {}; // diagram grid gap and group padding (px) from the theme tokens, when known
+  let compactSpacing = {}; // the same for a compact diagram (the compact tokens)
   let themeTokens = {}; // the theme's tokens.css custom properties (motion timing for the motion budget)
   const theme = typeof deck.theme === "string" ? deck.theme : DEFAULT_THEME;
   const themeDir = join(engine, "themes", theme);
@@ -348,6 +349,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
     const tokens = readFileSync(join(themeDir, "tokens.css"), "utf8");
     themeTokens = tokenValues(tokens);
     spacing = diagramSpacing(themeTokens);
+    compactSpacing = diagramSpacing(themeTokens, { compact: true });
     const background = /--sd-color-background\s*:\s*([^;]+);/.exec(tokens)?.[1].trim();
     if (!background || !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(background)) {
       add({ rule: "theme-background", measured: `--sd-color-background: ${background ?? "missing"}`, limit: "a hex color", fix: `declare --sd-color-background as a hex color in themes/${theme}/tokens.css` });
@@ -471,7 +473,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   const load = createDataLoader({ root: deckRoot, read: (p) => readFile(p) });
   const layouts = new Map();
 
-  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, ownsFor, knownComponents, deckComponents, builtinSet, layouts, spacing, tokens: themeTokens, rasters: new Map() };
+  const env = { deckRoot, engine, exact, add, ajv, slideSchema, load, fmt, validatorFor, ownsFor, knownComponents, deckComponents, builtinSet, layouts, spacing, compactSpacing, tokens: themeTokens, rasters: new Map() };
   for (const id of selected) {
     const where = exact(join(deckRoot, "slides"), `${id}.js`);
     if (!where.ok) {
@@ -845,7 +847,7 @@ async function validateSlide(spec, env) {
     }
     if (validate(resolved)) {
       if (type === "diagram") {
-        for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
+        for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
       }
       for (const item of chartProblems(type, resolved)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
       if (type === "map") {
