@@ -276,7 +276,7 @@ function buildMs(type, props, own, tokens, transition) {
     }
     case "diagram": {
       // Groups fade, then the nodes pop in turn, then the edges draw in turn, straight or routed alike (a drawn
-      // edge's label fades after it).
+      // edge's label fades after it; a dashed or flowing edge fades in, its label with it).
       // A compact diagram draws no text node, no edge that touches one and no label.
       const compact = P.compact === true;
       const words = new Set(compact ? list("nodes").filter((n) => n?.shape === "text").map((n) => n?.id) : []);
@@ -284,7 +284,7 @@ function buildMs(type, props, own, tokens, transition) {
       const groups = list("groups").some((g) => shown(g?.id)) ? p : 0;
       const nodes = list("nodes").filter((n) => shown(n?.id) && !words.has(n?.id)).length;
       const edges = list("edges").filter((e) => shown(e?.id ?? `${e?.from}->${e?.to}`) && !words.has(e?.from) && !words.has(e?.to));
-      const labelled = !compact && edges.some((e) => e?.label && e.dashed !== true);
+      const labelled = !compact && edges.some((e) => e?.label && e.dashed !== true && e.flow !== true);
       return groups + run(nodes) + run(edges.length, labelled ? 2 * p : p);
     }
     case "timeline":
