@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shell fixture page</title>
+<link rel="icon" href="data:,">
+<!-- Fixture: the motion deck in the reveal shell (the engine is the repository's engine/ folder). -->
+<script>
+  if (new URLSearchParams(location.search).has("capture")) document.documentElement.classList.add("capture");
+</script>
+<script type="importmap">{ "imports": { "stepdeck/": "../../../../engine/" } }</script>
+</head>
+<body>
+<script type="module">
+  import { boot } from "stepdeck/core/stepdeck.js";
+  boot({ shell: "reveal" });
+</script>
+</body>
+</html>

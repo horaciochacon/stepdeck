@@ -9,8 +9,10 @@ import { memoAsync } from "./kit.js";
 
 // Undeclared columns are numbers only when every non-empty value looks like this: optional
 // minus, no leading zero (so codes such as "080101" stay strings), optional decimals, no
-// exponent, no thousands separators.
+// exponent, no thousands separators. An integer too large to be exact as a number (an id such as
+// "9007199254740993", above 2^53) keeps the column as strings too.
 const GUESS_NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?$/;
+const guessedNumber = (v) => GUESS_NUMBER.test(v) && (v.includes(".") || Number.isSafeInteger(Number(v)));
 // Declared number columns are more lenient: a code like "080101" is accepted if asked for.
 const DECLARED_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
@@ -92,8 +94,8 @@ function convert(value, type, column, row) {
  * parseCSV(text, types?) -> object[]
  *
  * `types` maps column -> "string" | "number" | "date" and always wins. Undeclared columns are
- * numbers only when every non-empty value matches /^-?\d+(\.\d+)?$/ with no leading zero;
- * otherwise (or when the column has no values at all) they stay strings.
+ * numbers only when every non-empty value matches /^-?\d+(\.\d+)?$/ with no leading zero and every integer among
+ * them is a safe integer (exact as a number); otherwise (or when the column has no values at all) they stay strings.
  * Empty cells: `null` in number and date columns, "" in string columns.
  * A declared number or date column with an unparsable cell throws (no guessing).
  * A row with more cells than the header throws; a shorter row is padded with empty cells.
@@ -118,7 +120,7 @@ export function parseCSV(text, types = {}) {
   const colType = header.map((name, c) => {
     if (Object.hasOwn(types, name)) return types[name];
     const values = body.map((cells) => cells[c] ?? "").filter((v) => v !== "");
-    return values.length > 0 && values.every((v) => GUESS_NUMBER.test(v)) ? "number" : "string";
+    return values.length > 0 && values.every(guessedNumber) ? "number" : "string";
   });
 
   return body.map((cells, k) => {

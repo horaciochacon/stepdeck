@@ -154,9 +154,54 @@ test("expandSugar returns one patch per step index", () => {
   assert.equal(patches.length, 5);
   assert.deepEqual(patches[0].hide, ["e"]);
   assert.deepEqual(patches[2].show, ["e"]);
-  assert.deepEqual(patches[1].set, { t: { n: 5 } });
-  assert.deepEqual(patches[2].set, { t: { n: 6 } });
-  assert.equal(patches[3].set, undefined);
+  assert.deepEqual(patches[1].assign, { t: { n: 5 } });
+  assert.deepEqual(patches[2].assign, { t: { n: 6 } });
+  assert.equal(patches[3].assign, undefined);
+  assert.equal(patches[1].set, undefined);
+});
+
+test("advance assigns each value whole: an object is not merged, and null is a value", () => {
+  const view = { region: "PE" };
+  const s = {
+    id: "s",
+    elements: [el("m", { props: { view: { region: "PE", zoom: 2 } }, advance: { prop: "view", values: [view, { bbox: [1, 2, 3, 4] }, null, "x"] } })],
+    steps: [{}, {}, {}, {}],
+  };
+  assert.deepEqual(stateAt(s, 0).elements.m.props, { view: { region: "PE" } });
+  assert.deepEqual(stateAt(s, 1).elements.m.props, { view: { bbox: [1, 2, 3, 4] } });
+  assert.deepEqual(stateAt(s, 2).elements.m.props, { view: null });
+  assert.deepEqual(stateAt(s, 3).elements.m.props, { view: "x" });
+  // The state never aliases the slide's own values.
+  stateAt(s, 0).elements.m.props.view.region = "changed";
+  assert.equal(view.region, "PE");
+});
+
+test("advance: an explicit set merges into the assigned value, and a replace in the same step drops it", () => {
+  const s = {
+    id: "s",
+    elements: [el("m", { props: { keep: 1 }, advance: { prop: "view", values: [{ a: 1 }, { b: 2 }, { c: 3 }] } })],
+    steps: [{}, { set: { m: { view: { extra: true } } } }, { replace: { m: { other: 1 } } }],
+  };
+  assert.deepEqual(stateAt(s, 1).elements.m.props, { keep: 1, view: { b: 2, extra: true } });
+  assert.deepEqual(stateAt(s, 2).elements.m.props, { other: 1 });
+});
+
+test("a set patch never changes the slide definition or an earlier state", () => {
+  const s = {
+    id: "s",
+    elements: [el("a", { props: { o: { k: 1, deep: { x: [1, 2] } } } })],
+    steps: [{}, { set: { a: { o: { deep: { y: 1 }, k: null } } } }, { only: { a: { o: { z: 1 } } } }],
+  };
+  const before = structuredClone(s);
+  const first = stateAt(s, 0);
+  const snapshot = structuredClone(first);
+  const last = stateAt(s, 2);
+  assert.deepEqual(last.elements.a.props, { o: { deep: { x: [1, 2], y: 1 }, z: 1 } });
+  last.elements.a.props.o.deep.x.push(3);
+  last.elements.a.props.o.deep.y = 2;
+  assert.deepEqual(s, before);
+  assert.deepEqual(first, snapshot);
+  assert.deepEqual(stateAt(s, 1).elements.a.props, { o: { deep: { x: [1, 2], y: 1 } } });
 });
 
 test("title string becomes a title element that a step can set", () => {
@@ -251,6 +296,7 @@ function replay(slide, k) {
   for (let i = 0; i <= k; i++) {
     for (const p of [sugar[i], slide.steps?.[i] ?? {}]) {
       for (const [id, props] of Object.entries(p.replace ?? {})) state.get(id).props = structuredClone(props);
+      for (const [id, values] of Object.entries(p.assign ?? {})) Object.assign(state.get(id).props, structuredClone(values));
       for (const [id, patch] of Object.entries(p.set ?? {})) state.get(id).props = mergePatch(state.get(id).props, patch);
       for (const id of p.show ?? []) state.get(id).visible = true;
       for (const id of p.hide ?? []) state.get(id).visible = false;

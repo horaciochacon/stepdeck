@@ -64,9 +64,6 @@ import { initialElements } from "./fold.js";
 import { CANVAS, DEFAULT_LAYOUT, inLayer } from "./constants.js";
 import { motionIn, motionOut, prepareIn, restoreInline } from "./motion.js";
 
-/** The element definitions the frame lays out (slide `title` and `section` sugar included), in order. */
-export const frameElements = initialElements;
-
 /**
  * The slide as a layout with these `regions` shows it: when the regions are known and have no "title" region, the
  * kicker is dropped quietly (validate warns kicker-no-region): the slide loses its `section`, and every step loses
@@ -200,7 +197,8 @@ export function renderSlideFrame(slide, layoutCss, themeTokens, { regions, hooks
   }
 
   const known = Array.isArray(regions) ? regions : null;
-  const defs = frameElements(placedSlide(slide, known));
+  // The element definitions the frame lays out (slide `title` and `section` sugar included), in order.
+  const defs = initialElements(placedSlide(slide, known));
   const regionEls = new Map();
   const hookOf = (name) => (Object.hasOwn(hooks ?? {}, name) ? hooks[name] : null);
   const region = (name) => {

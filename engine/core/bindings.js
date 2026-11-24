@@ -107,14 +107,27 @@ async function resolveString(str, load, fmt, escape = (v) => v) {
  * Raw values from a whole-string binding are the cached objects: treat them as read-only.
  */
 export function resolveBindings(props, load, fmt) {
-  if (typeof props === "string") return resolveString(props, load, fmt);
-  if (Array.isArray(props)) return Promise.all(props.map((p) => resolveBindings(p, load, fmt)));
-  if (props !== null && typeof props === "object") {
-    return Promise.all(
-      Object.entries(props).map(async ([k, v]) => [k, await resolveBindings(v, load, fmt)]),
-    ).then(Object.fromEntries);
+  return Promise.resolve(walk(props, load, fmt));
+}
+
+const isThenable = (v) => v !== null && typeof v === "object" && typeof v.then === "function";
+
+/**
+ * The resolved copy of `props` itself when nothing under it can be a binding (no string holds `{{`), else a
+ * promise of it: large inline data costs one synchronous walk, not a promise per value.
+ */
+function walk(props, load, fmt) {
+  if (typeof props === "string") return props.includes("{{") ? resolveString(props, load, fmt) : props;
+  if (Array.isArray(props)) {
+    const out = props.map((p) => walk(p, load, fmt));
+    return out.some(isThenable) ? Promise.all(out) : out;
   }
-  return Promise.resolve(props);
+  if (props !== null && typeof props === "object") {
+    const entries = Object.entries(props).map(([k, v]) => [k, walk(v, load, fmt)]);
+    if (!entries.some(([, v]) => isThenable(v))) return Object.fromEntries(entries);
+    return Promise.all(entries.map(async ([k, v]) => [k, await v])).then(Object.fromEntries);
+  }
+  return props;
 }
 
 /**

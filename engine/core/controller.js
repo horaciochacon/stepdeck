@@ -88,13 +88,25 @@
 //             Elsewhere (first goTo, jumps, backward, animate not requested) nothing is held and
 //             visibility snaps, as above. Each element's hold, box motion and update run inside its
 //             watchdog; the step settles when all of them have.
+//
+//             Reflow: a `collapse: true` element that appears or leaves changes the room its neighbours have.
+//             The controller measures the mount points of the visible elements before and after it applies such
+//             a visibility (on a jump: around all of them; on an animating step: around each held entrance, once
+//             the entering element's own update has started). An element whose size changed and that has no
+//             update of this goTo still to start gets one more update with the same props:
+//             { ...info, prev: the same props, changed: [], entered: false, entrance: null, animate: false }.
+//             It starts after the element's update in flight, if any, inside its own watchdog, and the goTo
+//             settles after it. So a figure lays itself out for the size it has, played or jumped. Mount points
+//             without a size (Node) never differ, so nothing is added there.
 //   finish()  ends the motion at once: the goTo being applied is superseded by the same target without animation
 //             (its updates see their signal abort and snap), and a newer queued target is made non-animated.
 //             Resolves when the latest target is applied; at once when idle. The shell calls it when the page
 //             is hidden, where the browser stops animation frames and throttles timers.
 //   settled() resolves when no goTo is in flight.
-//   pause()   aborts the in-flight goTo and calls instance.pause(). An element still held for its stagger
-//             slot is released by that abort only after pause() returns: it then gets setVisible, enterBox
+//   pause()   ends the motion as finish() does (the goTo being applied is superseded by the same target without
+//             animation, a newer queued target is made non-animated; neither is dropped) and calls
+//             instance.pause(). What is left of the target is applied after pause() returns, without motion:
+//             an element still held for its stagger slot is released by the abort and gets setVisible, enterBox
 //             and update (with the aborted signal, so everything snaps) after its instance's pause().
 //   destroy() aborts, drops pending targets and calls instance.destroy().
 //   state     null until the first goTo; then { step, stepId, elements, title, notes, transition }
@@ -257,7 +269,9 @@ export class SlideController {
   #registry;
   #ctxBase;
   #mountPoint;
-  #elements = new Map(); // id -> { instance, holder (ctx.mount children), applied: { props, visible } | null }
+  // id -> { instance, holder (ctx.mount children), el (its mount point), applied: { props, visible } | null,
+  //         waiting, reflow, call (see #apply) }
+  #elements = new Map();
   #failed = new Set();
   #mounting = null;
   #pending = null; // latest requested { index, animate }
@@ -415,7 +429,7 @@ export class SlideController {
           destroyRecord({ instance: null, holder }); // children the parent mounted before it threw
           throw err;
         }
-        const rec = { instance, holder, applied: null };
+        const rec = { instance, holder, el, applied: null, waiting: false, reflow: false, call: null };
         if (this.#destroyed) {
           destroyRecord(rec);
           return;
@@ -550,6 +564,50 @@ export class SlideController {
     this.state = { step: index, stepId: info0.step, ...st, elements };
 
     const calls = [];
+    // Reflow (see the header). rec.waiting: an update of this goTo is scheduled and has not started (it will
+    // measure when it does); rec.reflow: a reflow update is queued and has not started; rec.call: the element's
+    // latest call, which a reflow update starts after.
+    const sizes = () => this.#sizes(resolved);
+    const reflow = (before, except = null) => {
+      for (const [id, was] of before) {
+        const rec = this.#elements.get(id);
+        if (id === except || !rec || rec.waiting || rec.reflow || this.#failed.has(id)) continue;
+        const now = sizeOf(rec.el);
+        if (now.w === was.w && now.h === was.h) continue;
+        rec.reflow = true;
+        const call = (rec.call ?? Promise.resolve()).then(async () => {
+          rec.reflow = false;
+          if (this.#destroyed || this.#failed.has(id)) return;
+          const { props } = rec.applied;
+          const own = new AbortController();
+          const clock = deadline(this.#settleTimeout, () => own.abort(), this.#maxRun);
+          const info = {
+            ...info0,
+            expect: clock.expect,
+            signal: AbortSignal.any([signal, own.signal]),
+            prev: props,
+            changed: [],
+            entered: false,
+            entrance: null,
+            animate: false,
+          };
+          try {
+            await clock.race(Promise.resolve().then(() => rec.instance.update(props, info)));
+          } catch (error) {
+            this.#fail(id, error);
+          }
+        });
+        rec.call = call;
+        calls.push(call);
+      }
+    };
+    // The collapse elements whose visibility this loop applies itself (not the first goTo: there every element
+    // gets an update anyway).
+    const collapses = resolved.some(([id, e, , isError]) => {
+      const last = isError ? null : this.#elements.get(id).applied;
+      return last && e.collapse && last.visible !== e.visible && !moves.has(id);
+    });
+    const before = collapses ? sizes() : null;
     for (const [id, e, props, isError] of resolved) {
       if (isError) {
         this.#fail(id, props);
@@ -584,19 +642,39 @@ export class SlideController {
         entered: e.visible && (!last || !last.visible),
         entrance: move?.entrance ?? null,
       };
-      const update = () => rec.instance.update(props, info);
-      const run = move ? () => this.#play(id, e, move, update, info.signal, own.signal) : update;
-      calls.push(
-        (async () => {
-          try {
-            await clock.race(Promise.resolve().then(run));
-          } catch (error) {
-            this.#fail(id, error);
-          }
-        })(),
-      );
+      rec.waiting = true;
+      const update = () => {
+        rec.waiting = false;
+        return rec.instance.update(props, info);
+      };
+      const run = move ? () => this.#play(id, e, move, update, info.signal, own.signal, { sizes, reflow }) : update;
+      rec.call = (async () => {
+        try {
+          await clock.race(Promise.resolve().then(run));
+        } catch (error) {
+          this.#fail(id, error);
+        } finally {
+          rec.waiting = false;
+        }
+      })();
+      calls.push(rec.call);
     }
-    await Promise.all(calls);
+    if (before) reflow(before);
+    // A held entrance may add reflow updates while the step runs: wait until none is left.
+    for (let done = 0; done < calls.length; ) {
+      const batch = calls.slice(done);
+      done = calls.length;
+      await Promise.all(batch);
+    }
+  }
+
+  /** The mount-point sizes of the elements that are visible in `resolved` and have not failed, by id. */
+  #sizes(resolved) {
+    const sizes = new Map();
+    for (const [id, e, , isError] of resolved) {
+      if (!isError && e.visible && !this.#failed.has(id)) sizes.set(id, sizeOf(this.#elements.get(id).el));
+    }
+    return sizes;
   }
 
   /**
@@ -641,9 +719,11 @@ export class SlideController {
    * signal: once it fired the element has failed and gets no update.
    * - Entrance: held until its slot (released at once on abort), then setVisible, enterBox and update in
    *   one synchronous block, so the box's or the component's start state lands before the next paint.
+   *   A collapse element takes room as it appears: `layout` ({ sizes, reflow }, from #apply) measures the
+   *   other elements around it and updates the ones whose size changed, in the same block.
    * - Exit: exitBox (which hides the box when its motion ends), then update.
    */
-  async #play(id, e, move, update, signal, timedOut) {
+  async #play(id, e, move, update, signal, timedOut, layout) {
     const base = this.#ctxBase;
     const opts = { duration: move.duration, ease: move.ease, signal };
     if (move.exit) {
@@ -662,13 +742,29 @@ export class SlideController {
     }
     await wait(move.delay, signal);
     if (this.#destroyed) return;
+    const before = e.collapse ? layout.sizes() : null;
     base.setVisible?.(id, true, e.collapse);
-    if (timedOut.aborted) return;
+    if (timedOut.aborted) {
+      if (before) layout.reflow(before, id);
+      return;
+    }
     const box = move.box && base.enterBox ? attempt(() => base.enterBox(id, move.box, opts)) : undefined;
-    await Promise.all([box, attempt(update)]);
+    const updated = attempt(update);
+    if (before) layout.reflow(before, id);
+    await Promise.all([box, updated]);
   }
 
+  /**
+   * Ends the motion as finish() does, then pauses every component. Re-queuing the target (rather than only aborting)
+   * keeps one still resolving its bindings from being dropped, and keeps a queued one from animating on a slide
+   * that was left.
+   */
   pause() {
+    if (this.#pending) {
+      this.#pending = { ...this.#pending, animate: false };
+    } else if (this.#job) {
+      this.#pending = { index: this.#job.index, animate: false };
+    }
     this.#current?.abort();
     for (const [id, rec] of this.#elements) {
       try {

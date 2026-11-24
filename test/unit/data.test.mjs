@@ -24,6 +24,13 @@ test("unknown lang falls back to en", () => {
   assert.equal(makeFormat("fr")(",.1f")(1234.5), "1,234.5");
 });
 
+test("a regional tag formats as its language; an unknown region of an unknown language is en", () => {
+  assert.equal(makeFormat("es-PE")(",.1f")(1234.5), "1.234,5");
+  assert.equal(makeFormat("es-419")(",.1f")(1234.5), "1.234,5");
+  assert.equal(makeFormat("en-GB")(",.1f")(1234.5), "1,234.5");
+  assert.equal(makeFormat("fr-CA")(",.1f")(1234.5), "1,234.5");
+});
+
 test("negative numbers use the d3 minus sign (U+2212) in every locale", () => {
   assert.equal(makeFormat("en")(",.0f")(-5), "\u22125");
   assert.equal(makeFormat("es")(",.0f")(-1500), "\u22121.500");
@@ -58,6 +65,19 @@ test("a zero on its own and 0.5 are numbers, 007 and 00.5 are not", () => {
   assert.deepEqual(parseCSV("n\n0\n0.5"), [{ n: 0 }, { n: 0.5 }]);
   assert.deepEqual(parseCSV("n\n007"), [{ n: "007" }]);
   assert.deepEqual(parseCSV("n\n00.5"), [{ n: "00.5" }]);
+});
+
+test("an integer too large to be exact keeps its column as strings", () => {
+  const rows = parseCSV("id,v,d\n12345678901234567890,1,0.12345678901234567890\n9007199254740993,2,1.5\n7,3,2");
+  assert.deepEqual(rows, [
+    { id: "12345678901234567890", v: 1, d: 0.12345678901234568 },
+    { id: "9007199254740993", v: 2, d: 1.5 },
+    { id: "7", v: 3, d: 2 },
+  ]);
+  assert.deepEqual(parseCSV("n\n9007199254740991\n-9007199254740991"), [{ n: 9007199254740991 }, { n: -9007199254740991 }], "safe integers are numbers");
+  assert.deepEqual(parseCSV("n\n-9007199254740993"), [{ n: "-9007199254740993" }]);
+  // A declared type still wins.
+  assert.deepEqual(parseCSV("n\n9007199254740993", { n: "number" }), [{ n: 9007199254740992 }]);
 });
 
 test("exponents and plus signs are not guessed as numbers", () => {

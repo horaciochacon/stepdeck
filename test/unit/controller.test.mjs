@@ -1091,7 +1091,8 @@ test("finish: an in-flight animated goTo snaps to its target", async () => {
   };
   const seen = [];
   const tweening = recorder(log, {
-    onUpdate: (p, info) => animate.tween(0, p.v, (v) => seen.push(v), { duration: 5_000, signal: info.signal }),
+    // Only the animated move tweens: the first, non-animated goTo(0) settles at once instead of waiting 5 s.
+    onUpdate: (p, info) => (info.animate ? animate.tween(0, p.v, (v) => seen.push(v), { duration: 5_000, signal: info.signal }) : undefined),
   });
   const { c } = makeController(slide, { rec: tweening });
   await c.goTo(0);
@@ -1168,4 +1169,246 @@ test("finish: a newer queued target is made non-animated", async () => {
   assert.equal(c.state.step, 2);
   assert.equal(log[0].updates.at(-1).info.animate, false);
   assert.deepEqual(c.errors, []);
+});
+
+// ---------- pause ----------
+
+test("pause: a target still resolving its bindings is applied, not dropped", async () => {
+  const log = [];
+  const gate = deferred();
+  let gated = false;
+  Object.defineProperty(docs, "data/slow.json", { configurable: true, enumerable: true, get: () => (gated ? gate.promise : { n: 1 }) });
+  try {
+    const slide = {
+      id: "slow",
+      elements: [{ id: "a", type: "rec", props: { v: "{{data/slow.json#/n}}" } }],
+      steps: [{ id: "s0" }],
+    };
+    const { c, visibility } = makeController(slide, { rec: recorder(log) });
+    await c.mount();
+    gated = true;
+    const first = c.goTo(0);
+    await new Promise((r) => setTimeout(r, 20)); // the goTo is resolving the binding
+    c.pause();
+    gate.resolve({ n: 2 });
+    await first;
+    await c.settled();
+    assert.equal(c.state?.step, 0, "the target was applied");
+    assert.deepEqual(visibility.map((v) => v.id), ["a"]);
+    assert.equal(log[0].updates.length, 1);
+    assert.equal(log[0].updates[0].props.v, 2);
+    assert.equal(log[0].paused, true);
+    assert.deepEqual(c.errors, []);
+  } finally {
+    delete docs["data/slow.json"];
+  }
+});
+
+test("pause: a queued target is applied without animation", async () => {
+  const log = [];
+  const slide = {
+    id: "q",
+    elements: [{ id: "a", type: "rec", props: { v: 0 } }],
+    steps: [{ id: "s0" }, { id: "s1", set: { a: { v: 1 } } }, { id: "s2", set: { a: { v: 2 } } }],
+  };
+  const { c } = makeController(slide, {
+    // An animated update runs until its signal aborts.
+    rec: recorder(log, { onUpdate: (p, info) => (info.animate ? new Promise((r) => info.signal.addEventListener("abort", r)) : undefined) }),
+  });
+  await c.goTo(0);
+  c.goTo(1, { animate: true });
+  await new Promise((r) => setTimeout(r, 20));
+  const queued = c.goTo(2, { animate: true }); // waits behind the running step
+  c.pause();
+  await queued;
+  assert.equal(c.state.step, 2);
+  const last = log[0].updates.at(-1);
+  assert.equal(last.props.v, 2);
+  assert.equal(last.info.animate, false, "nothing animates on a paused slide");
+  assert.deepEqual(c.errors, []);
+});
+
+test("pause: idle changes nothing and an applied step is not applied again", async () => {
+  const log = [];
+  const { c } = makeController(twoElements, { rec: recorder(log) });
+  c.pause(); // before any goTo
+  await c.goTo(1);
+  const updates = log.map((r) => r.updates.length);
+  c.pause();
+  await c.settled();
+  assert.deepEqual(log.map((r) => r.updates.length), updates);
+  assert.equal(c.state.step, 1);
+});
+
+// ---------- reflow: a collapse element that appears or leaves ----------
+
+/**
+ * A slide whose `note` (collapse, from step 1) takes 180 px from `fig` while it shows; `other` keeps its size.
+ * Mount points are plain objects with offsetWidth/offsetHeight, as sizeOf reads them.
+ */
+function reflowController(modules, options = {}) {
+  const slide = {
+    id: "r",
+    elements: [
+      { id: "note", type: "rec", from: "s1", collapse: true, props: {} },
+      { id: "fig", type: "rec", props: { v: 1 } },
+      { id: "other", type: "rec", props: {} },
+    ],
+    steps: [{ id: "s0" }, { id: "s1" }, { id: "s2", set: { other: { k: 1 } } }],
+  };
+  const els = {
+    note: { id: "note", offsetWidth: 0, offsetHeight: 0 },
+    fig: { id: "fig", offsetWidth: 800, offsetHeight: 790 },
+    other: { id: "other", offsetWidth: 800, offsetHeight: 100 },
+  };
+  const ctxBase = {
+    setVisible: (id, visible) => {
+      if (id !== "note") return;
+      els.note.offsetHeight = visible ? 180 : 0;
+      els.fig.offsetHeight = visible ? 610 : 790;
+    },
+    load,
+    format: makeFormat("en"),
+    t: (key) => key,
+    tokens: { "--sd-duration": "40ms", "--sd-stagger": "20ms" },
+    palette: () => null,
+    ...options.ctxBase,
+  };
+  const c = new SlideController({ slide, registry: fakeRegistry(modules), ctxBase, mountPoint: (id) => els[id] });
+  return { c, els };
+}
+
+/** A recorder that also notes the height of its mount point at every update. */
+function sizeRecorder(log) {
+  return {
+    mount(el) {
+      const rec = { id: el.id, updates: [] };
+      log.push(rec);
+      return { async update(props, info) { rec.updates.push({ props, info, h: el.offsetHeight }); }, destroy() {} };
+    },
+  };
+}
+
+test("reflow: a jump over a collapse element updates the neighbour whose size changed, with changed: []", async () => {
+  const log = [];
+  const { c } = reflowController({ rec: sizeRecorder(log) });
+  const of = (id) => log.find((r) => r.id === id).updates;
+  await c.goTo(0);
+  assert.deepEqual([of("note").length, of("fig").length, of("other").length], [1, 1, 1]);
+  await c.goTo(1);
+  assert.equal(of("fig").length, 2, "fig was updated for its new size");
+  const { props, info, h } = of("fig")[1];
+  assert.equal(h, 610, "it measures the size it has now");
+  assert.deepEqual(props, { v: 1 });
+  assert.deepEqual(info.changed, []);
+  assert.equal(info.prev, props);
+  assert.equal(info.entered, false);
+  assert.equal(info.entrance, null);
+  assert.equal(info.animate, false);
+  assert.equal(info.step, "s1");
+  assert.equal(typeof info.expect, "function");
+  assert.equal(of("other").length, 1, "an element whose size did not change is left alone");
+  assert.equal(of("note").length, 2, "the element that appeared got its own update only");
+  await c.goTo(0); // the collapse element leaves: the same the other way
+  assert.equal(of("fig").length, 3);
+  assert.equal(of("fig")[2].h, 790);
+  assert.deepEqual(of("fig")[2].info.changed, []);
+  await c.goTo(2);
+  assert.equal(of("fig").length, 4);
+  assert.equal(of("other").length, 2, "an element with its own update of the step gets no second one");
+  assert.deepEqual(c.errors, []);
+});
+
+test("reflow: a played entrance of a collapse element updates the neighbour as a jump does", async () => {
+  const log = [];
+  const { c } = reflowController({ rec: sizeRecorder(log) });
+  const of = (id) => log.find((r) => r.id === id).updates;
+  await c.goTo(0);
+  await c.goTo(1, { animate: true });
+  assert.equal(of("fig").length, 2);
+  assert.equal(of("fig")[1].h, 610);
+  assert.deepEqual(of("fig")[1].info.changed, []);
+  assert.equal(of("fig")[1].info.animate, false);
+  assert.equal(of("note").length, 2);
+  assert.equal(of("note")[1].info.entered, true);
+  assert.equal(of("other").length, 1);
+  assert.deepEqual(c.errors, []);
+});
+
+test("reflow: the update starts after the element's update in flight, and the goTo settles after it", async () => {
+  const order = [];
+  const gate = deferred();
+  const slow = {
+    mount(el) {
+      return {
+        async update(props, info) {
+          order.push(`${el.id} start changed=${info.changed.join("+")} h=${el.offsetHeight}`);
+          if (el.id === "fig" && info.animate) await gate.promise;
+          order.push(`${el.id} end`);
+        },
+        destroy() {},
+      };
+    },
+  };
+  const slide = {
+    id: "r",
+    elements: [
+      { id: "fig", type: "rec", props: { v: 1 } },
+      { id: "first", type: "rec", from: "s1", props: {} },
+      { id: "note", type: "rec", from: "s1", collapse: true, props: {} },
+    ],
+    steps: [{ id: "s0" }, { id: "s1", set: { fig: { v: 2 } } }],
+  };
+  const els = { fig: { id: "fig", offsetWidth: 800, offsetHeight: 790 }, first: { id: "first", offsetWidth: 800, offsetHeight: 50 }, note: { id: "note", offsetWidth: 0, offsetHeight: 0 } };
+  const ctxBase = {
+    setVisible: (id, visible) => {
+      if (id === "note") els.fig.offsetHeight = visible ? 610 : 790;
+    },
+    load,
+    format: makeFormat("en"),
+    tokens: { "--sd-duration": "40ms", "--sd-stagger": "30ms" },
+  };
+  const c = new SlideController({ slide, registry: fakeRegistry({ rec: slow }), ctxBase, mountPoint: (id) => els[id] });
+  await c.goTo(0);
+  order.length = 0;
+  let settled = false;
+  const move = c.goTo(1, { animate: true }).then(() => (settled = true));
+  await new Promise((r) => setTimeout(r, 120)); // note (second slot, 30 ms) has appeared; fig is still animating
+  assert.deepEqual(order, ["fig start changed=v h=790", "first start changed= h=50", "first end", "note start changed= h=0", "note end"]);
+  assert.equal(settled, false);
+  gate.resolve();
+  await move;
+  assert.deepEqual(order.slice(5), ["fig end", "fig start changed= h=610", "fig end"]);
+  assert.deepEqual(c.errors, []);
+});
+
+test("reflow: a reflow update that throws is that element's error", async () => {
+  const mod = {
+    mount(el) {
+      return {
+        async update(props, info) {
+          if (el.id === "fig" && info.changed.length === 0 && info.prev) throw new Error("cannot lay out");
+        },
+        destroy() {},
+      };
+    },
+  };
+  const { c } = reflowController({ rec: mod });
+  await c.goTo(0);
+  await c.goTo(1);
+  assert.deepEqual(c.errors, ["r/fig: cannot lay out"]);
+});
+
+test("reflow: mount points without a size get no extra update", async () => {
+  const log = [];
+  const slide = {
+    id: "n",
+    elements: [{ id: "note", type: "rec", from: 1, collapse: true, props: {} }, { id: "fig", type: "rec", props: {} }],
+    steps: [{}, {}],
+  };
+  const { c } = makeController(slide, { rec: recorder(log) });
+  await c.goTo(0);
+  await c.goTo(1, { animate: true });
+  await c.goTo(0);
+  assert.deepEqual(log.map((r) => r.updates.length), [3, 1]);
 });

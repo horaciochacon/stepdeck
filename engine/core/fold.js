@@ -5,6 +5,8 @@
 //   { set: {id: mergePatch}, replace: {id: props}, show: [id], hide: [id],
 //     only: {id: mergePatch}, notes: string, transition: {stagger, duration} }
 // Inside one patch the operations apply in this order: replace, set, show, hide.
+// The `advance` sugar expands to one more operation, `assign: {id: {prop: value}}`, which only expandSugar writes:
+// props[prop] = value, whole (an object value is not merged and null is a value). It applies before `set`.
 // `only` is not part of the fold; it is applied on top of the folded state at its own step.
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -13,14 +15,22 @@ const clone = (v) => (v === undefined ? v : structuredClone(v));
 /** RFC 7396 JSON merge patch. Returns a new value; never mutates or aliases its inputs. */
 export function mergePatch(target, patch) {
   if (!isObject(patch)) return clone(patch);
-  const out = isObject(target) ? clone(target) : {};
+  return mergeInto(isObject(target) ? clone(target) : {}, patch);
+}
+
+/** Merges `patch` (an object) into `out`, which the caller owns and gets back; values from the patch are cloned. */
+function mergeInto(out, patch) {
   for (const [key, value] of Object.entries(patch)) {
     if (key === "__proto__") continue;
     if (value === null) delete out[key];
-    else out[key] = mergePatch(out[key], value);
+    else if (isObject(value)) out[key] = mergeInto(isObject(out[key]) ? out[key] : {}, value);
+    else out[key] = clone(value);
   }
   return out;
 }
+
+/** mergePatch for props the fold owns (already a private copy): merges in place instead of cloning them again. */
+const patchOwn = (props, patch) => (isObject(patch) ? mergeInto(isObject(props) ? props : {}, patch) : clone(patch));
 
 /** Number of states in a slide: steps.length, or 1 when there are no steps. */
 export function stepCount(slide) {
@@ -84,7 +94,7 @@ export function initialElements(slide) {
 }
 
 /**
- * Expands `from`, `at` and `advance` into one patch per step index.
+ * Expands `from`, `at` and `advance` into one patch per step index (`advance` as `assign`, see the header).
  * Visibility sugar only emits show/hide where it changes, so explicit patches
  * (applied after the sugar of the same step) keep winning until the sugar changes again.
  */
@@ -115,7 +125,7 @@ export function expandSugar(slide) {
       const { prop, values = [], start = 0 } = el.advance;
       const first = stepIndex(slide, start);
       for (let j = 0; j < values.length && first + j < n; j++) {
-        ((patches[first + j].set ??= {})[el.id] ??= {})[prop] = clone(values[j]);
+        ((patches[first + j].assign ??= {})[el.id] ??= {})[prop] = clone(values[j]);
       }
     }
   }
@@ -129,9 +139,14 @@ function applyPatch(state, patch, where) {
     return s;
   };
   for (const [id, props] of Object.entries(patch.replace ?? {})) need(id).props = clone(props);
+  for (const [id, values] of Object.entries(patch.assign ?? {})) {
+    const s = need(id);
+    if (!isObject(s.props)) s.props = {};
+    for (const [prop, value] of Object.entries(values)) if (prop !== "__proto__") s.props[prop] = clone(value);
+  }
   for (const [id, p] of Object.entries(patch.set ?? {})) {
     const s = need(id);
-    s.props = mergePatch(s.props, p);
+    s.props = patchOwn(s.props, p);
   }
   for (const id of patch.show ?? []) need(id).visible = true;
   for (const id of patch.hide ?? []) need(id).visible = false;
@@ -173,7 +188,7 @@ export function stateAt(slide, k) {
   for (const [id, p] of Object.entries(step.only ?? {})) {
     const s = state.get(id);
     if (!s) throw new Error(`unknown element '${id}' in slide '${slide.id}' step '${step.id ?? index}'`);
-    s.props = mergePatch(s.props, p);
+    s.props = patchOwn(s.props, p);
   }
 
   // A replace on the title (or the lede) drops its props: the accent (role) default comes back, so every step

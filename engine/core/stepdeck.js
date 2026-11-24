@@ -10,7 +10,8 @@
 //   errors       string[] (getter): boot errors plus the errors of the slide on screen.
 //                Element errors read "<slide>/<element>: <message>", slide errors "<slide>: <message>".
 //   settled()    Promise<void>; resolves when the pending navigation and every update finished.
-//   goTo(slide, step)  Promise<void>; shows that slide at that step (id or number). Never rejects.
+//   goTo(slide, step)  Promise<void>; shows that slide at that step (id or number; an all-digit string is the
+//                number). Never rejects.
 //                A hidden page (document.visibilityState "hidden") never animates: browsers deliver no animation
 //                frames to it, so motion there would stall. A goTo asked while hidden shows its end state at once,
 //                and hiding the page ends the motion in flight the same way (the slide's finish()).
@@ -19,7 +20,7 @@
 // Paths: the engine root comes from this module's URL (…/core/stepdeck.js -> …/). The deck root is
 // `deckUrl` resolved against the page (a trailing "/" is added), or the page's own directory. It must be
 // same-origin with the page (spec §3): another origin is refused with an on-canvas error, never imported.
-// boot imports <deck>/deck.js and <deck>/slides/<id>.js, reads
+// boot imports <deck>/deck.js and <deck>/slides/<id>.js, sets document.title to a non-empty deck.title, reads
 // <engine>/layouts/<layout>/{layout.css,schema.json} and <engine>/themes/<theme>/{tokens.css,palettes.json}, plus the
 // theme's optional theme.css (a missing one is no error).
 // Cascade layers: core/stepdeck.css is sd-core, layout CSS sd-layout, theme.css
@@ -51,7 +52,7 @@ import { t as translate } from "./i18n.js";
 import { renderSlideFrame, placedSlide } from "./layout.js";
 import { createBareShell } from "./shells/bare.js";
 import { parseStepRef } from "./fold.js";
-import { message } from "./kit.js";
+import { langKey, memoAsync, message } from "./kit.js";
 import { DEFAULT_LAYOUT, DEFAULT_THEME, LAYER_ORDER, THEME_NAME, inLayer } from "./constants.js";
 
 export const ENGINE_ROOT = new URL("../", import.meta.url);
@@ -129,7 +130,8 @@ function makePalette(palettes, deckPalette, lang) {
       name,
       kind: p.kind,
       colors: p.colors.map((c) => c.value),
-      names: p.colors.map((c) => c.names?.[lang] ?? c.names?.en ?? c.id),
+      // A regional tag reads its language's names (es-PE -> es), then English, then the id.
+      names: p.colors.map((c) => c.names?.[langKey(c.names ?? {}, lang)] ?? c.id),
       roles: Object.fromEntries(Object.entries(p.roles ?? {}).map(([role, id]) => [role, byId.get(id)])),
     };
   };
@@ -195,23 +197,19 @@ async function loadDeck({ deckRoot, flags, errors }) {
   });
   const load = createDataLoader({ root: deckRoot.href.replace(/\/$/, ""), read: (url) => fetch(url) });
   const layouts = new Map();
-  const layout = (name) => {
-    if (!layouts.has(name)) {
+  // A layout that failed to load is not kept (memoAsync), so the next slide that uses it tries again.
+  const layout = (name) =>
+    memoAsync(layouts, name, () => {
       const base = new URL(`layouts/${name}/`, ENGINE_ROOT);
-      layouts.set(
-        name,
-        Promise.all([fetchText(new URL("layout.css", base)), fetchJSON(new URL("schema.json", base))]).then(
-          ([css, schema]) => ({
-            css: inLayer("sd-layout", css),
-            regions: (schema.regions ?? []).map((r) => r.name),
-            hooks: schema.hooks ?? {},
-            kind: schema.kind ?? "content",
-          }),
-        ),
+      return Promise.all([fetchText(new URL("layout.css", base)), fetchJSON(new URL("schema.json", base))]).then(
+        ([css, schema]) => ({
+          css: inLayer("sd-layout", css),
+          regions: (schema.regions ?? []).map((r) => r.name),
+          hooks: schema.hooks ?? {},
+          kind: schema.kind ?? "content",
+        }),
       );
-    }
-    return layouts.get(name);
-  };
+    });
 
   // One shared sheet per theme: the tokens (unlayered), then theme.css in the sd-theme layer.
   const themeCss = `${LAYER_ORDER}\n${tokensCss}${themeRules.trim() ? `\n${inLayer("sd-theme", themeRules)}` : ""}`;
@@ -415,7 +413,9 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
         .then(() => host?.idle?.())
         .then(() => host?.current?.settled())
         .then(() => undefined),
-    goTo: (slide, step) => {
+    goTo: (slide, ref) => {
+      // An all-digit string is a step index, as in the URL (`?step=2`, `#/slide/2`): "2" and 2 are the same target.
+      const step = typeof ref === "string" && /^\d+$/.test(ref) ? Number(ref) : ref;
       // A host may refuse a target (reveal: unknown slide or step) after recording why.
       if (host?.navigated?.(slide, step ?? 0) === false) return Promise.resolve();
       // Same slide, no slide change queued: go straight to the controller, so a new step supersedes
@@ -487,24 +487,33 @@ export function boot({ shell = "bare", deckUrl, document: doc = globalThis.docum
       showFatal(`deck: cannot load ${deckRoot ? new URL("deck.js", deckRoot).href : "deck.js"}: ${message(e)}`);
       return;
     }
+    // The browser tab is named after the deck (both shells; a preview frame's title shows nowhere).
+    if (typeof env.deck.title === "string" && env.deck.title.trim() !== "") doc.title = env.deck.title;
     api.slides.push(...env.ids);
     for (const id of env.ids) api.steps[id] = stepIds(env.specs.get(id));
     if (env.ids.length === 0) return;
 
     let start = { slide: flags.slide ?? env.ids[0], step: flags.step ?? 0 };
     if (shell === "reveal") {
-      const { createRevealHost } = await import("./shells/reveal.js");
-      host = await createRevealHost({
-        document: doc,
-        engineRoot: ENGINE_ROOT,
-        env,
-        api,
-        mount: (id, attach) => mountSlide(env, id, { capture: flags.capture, attach, document: doc }),
-        preview,
-        motion,
-        errors: bootErrors,
-        start,
-      });
+      // A shell that cannot be built (a missing vendor file, reveal failing to initialize) is a fatal error on
+      // the canvas, not a blank page.
+      try {
+        const { createRevealHost } = await import("./shells/reveal.js");
+        host = await createRevealHost({
+          document: doc,
+          engineRoot: ENGINE_ROOT,
+          env,
+          api,
+          mount: (id, attach) => mountSlide(env, id, { capture: flags.capture, attach, document: doc }),
+          preview,
+          motion,
+          errors: bootErrors,
+          start,
+        });
+      } catch (e) {
+        showFatal(`stepdeck: cannot start the reveal shell: ${message(e)}`);
+        return;
+      }
       start = host.initial ?? start;
     }
     if (!env.ids.includes(start.slide)) {

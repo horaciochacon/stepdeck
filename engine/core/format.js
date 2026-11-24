@@ -4,6 +4,7 @@
 //
 // Note: d3-format renders negative numbers with a true minus sign (U+2212), in every locale.
 import { d3 } from "./d3.js";
+import { langKey } from "./kit.js";
 
 const LOCALES = {
   en: { decimal: ".", thousands: ",", grouping: [3], currency: ["$", ""] },
@@ -19,10 +20,10 @@ function localeFor(lang) {
 
 /**
  * makeFormat(lang) -> (spec) => (n) => string
- * Unknown languages fall back to `en`. An invalid spec throws (d3: "invalid format: <spec>").
+ * A regional tag uses its language (`es-PE` formats as `es`); unknown languages fall back to `en`. An invalid spec throws (d3: "invalid format: <spec>").
  */
 export function makeFormat(lang) {
-  const locale = localeFor(Object.hasOwn(LOCALES, lang) ? lang : "en");
+  const locale = localeFor(langKey(LOCALES, lang));
   const cache = new Map();
   return (spec) => {
     if (!cache.has(spec)) cache.set(spec, locale.format(spec));

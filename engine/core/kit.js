@@ -23,6 +23,16 @@ export function memoAsync(map, key, make) {
   return map.get(key);
 }
 
+/**
+ * The key of `table` for a language tag: the tag itself ("es"), else its primary subtag ("es-PE" -> "es"),
+ * else "en". Own keys only.
+ */
+export const langKey = (table, lang) => {
+  const tag = String(lang ?? "");
+  const primary = tag.split("-")[0];
+  return Object.hasOwn(table, tag) ? tag : Object.hasOwn(table, primary) ? primary : "en";
+};
+
 export const SVG_NS = "http://www.w3.org/2000/svg";
 export const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
@@ -83,8 +93,12 @@ export const canAnimate = (info) => info.animate === true && !info.signal?.abort
 export const motion = (info, ctx, opts) =>
   ctx?.motion?.timing ? ctx.motion.timing(info, opts) : { signal: info.signal, duration: info.transition?.duration };
 
-/** The transition's duration, else `factor` x the theme's --sd-duration (400 ms when unknown). */
-export const motionMs = (info, ctx, factor = 1) => info.transition?.duration ?? factor * num(ctx.tokens?.["--sd-duration"], 400);
+/**
+ * The step's duration in ms: the transition's, else `factor` x the theme's --sd-duration, read as ctx.motion.timing
+ * reads it (a token in ms or in s). Without ctx.motion: the transition's, else `factor` x 400.
+ */
+export const motionMs = (info, ctx, factor = 1) =>
+  ctx?.motion?.timing ? ctx.motion.timing(info, { factor }).duration : (info.transition?.duration ?? factor * 400);
 
 /** Text color between the muted (p = 0) and the full ink (p = 1) theme color. */
 export const inkMix = (p) => `color-mix(in srgb, var(--sd-color-ink) ${p * 100}%, var(--sd-color-muted))`;

@@ -163,16 +163,6 @@ export function clearInlineStyle(...nodes) {
   }
 }
 
-// Shared component motions. Not part of ctx.animate: they take the component's `animate` (ctx.animate),
-// so a test that stubs ctx.animate stubs them too.
-
-/** Rises `node` into place while fading it in. End state: opacity "1", no transform. */
-export const rise = (animate, node, opts) =>
-  animate.tween(0, 1, (t) => {
-    node.style.opacity = String(t);
-    node.style.transform = t >= 1 ? "" : `translateY(calc(var(--sd-space) * ${1 - t}))`;
-  }, opts);
-
 export const TYPE_MS_PER_CHAR = 28; // typing speed, capped at TYPE_MAX_MS
 export const TYPE_MAX_MS = 1400;
 /** How long typing `chars` characters takes. */

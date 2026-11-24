@@ -127,9 +127,10 @@ export async function createRevealHost({ document: doc, engineRoot, env, api, mo
     placeholder.className = "sd-placeholder";
     const h = doc.createElement("h2");
     // The raw title string, shown outside its element: plain text, without the accent phrase marks.
-    const title = info[0]?.title ?? (typeof spec?.title === "string" ? spec.title : null);
+    // A slide without a title (stateAt gives "") shows its id.
+    const title = info[0]?.title || (typeof spec?.title === "string" ? spec.title : "");
     const accent = info[0]?.elements ? info[0].elements.title?.props?.accent === true : true;
-    h.textContent = title === null ? id : accent ? stripAccent(title) : title;
+    h.textContent = (accent ? stripAccent(title) : title) || id;
     placeholder.appendChild(h);
     host.appendChild(placeholder);
     section.appendChild(host);

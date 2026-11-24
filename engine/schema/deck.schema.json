@@ -6,11 +6,11 @@
   "additionalProperties": false,
   "required": ["title", "slides"],
   "properties": {
-    "title": { "type": "string", "minLength": 1, "description": "Deck title." },
-    "lang": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$", "description": "Deck language; engine strings and number formats follow it. Built in: en, es." },
+    "title": { "type": "string", "minLength": 1, "description": "Deck title; the browser tab title once the deck has loaded." },
+    "lang": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]+)*$", "description": "Deck language; engine strings and number formats follow it. Built in: en, es; a regional tag such as es-PE uses its language, anything else falls back to en." },
     "theme": { "type": "string", "minLength": 1, "description": "Theme folder name under the engine's themes/, e.g. academic-light." },
     "palette": { "type": "string", "minLength": 1, "description": "Palette name; must belong to the theme's palettes.json." },
-    "sections": { "type": "boolean", "description": "Show the \"Section · n\" footer." },
+    "sections": { "type": "boolean", "description": "Reserved: accepted, but nothing reads it and it draws nothing. A slide's `section` is the label above its title." },
     "components": {
       "type": "array",
       "uniqueItems": true,
