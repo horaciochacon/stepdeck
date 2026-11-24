@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stepdeck talk</title>
 <link rel="icon" href="data:,">
-<!-- Reveal shell (spec §9). The import map points "stepdeck/" at the engine copied into this deck
-     (./stepdeck/). examples/spike/index.html is the same page with "../../engine/" (the repo's engine);
-     that line is the only difference. The deck is this page's folder (boot's default deckUrl "./"). -->
+<!-- The page you present from: it loads the deck in this folder (deck.js and slides/) into the reveal
+     shell. You rarely need to edit it; the slides are in slides/<id>.js and their order in deck.js.
+     The import map points "stepdeck/" at the engine copied into this deck (./stepdeck/), so the deck
+     runs offline from any static server. Open it with `stepdeck serve`, not from file://.
+     Docs: https://horaciochacon.github.io/stepdeck/site/docs/ -->
 <script>
   if (new URLSearchParams(location.search).has("capture")) document.documentElement.classList.add("capture");
 </script>

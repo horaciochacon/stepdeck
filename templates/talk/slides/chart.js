@@ -1,6 +1,11 @@
-// A figure that builds up over four steps (spec §6.2), on the `figure-notes` layout: the chart in
-// `main`, a note and a big number in `notes`, a source line in `footer`. Every figure comes from a
-// data file (data/make-data.mjs); none is typed by hand.
+// A figure that builds up over four steps, on the `figure-notes` layout: the chart in `main`, a note
+// and a big number in `notes`, a source line in `footer`. Each step patches the state before it
+// (`set` lasts, `only` holds for one step); `from` names the step an element first shows at.
+// The chart reads data/series.csv and the big number is bound to data/summary.json with
+// {{file#/pointer}}; data/make-data.mjs writes both. The title, the note and the annotation are
+// typed here: change them when the data changes, or bind them the same way.
+// `stepdeck catalog chart.line` lists the chart's props; the docs are at
+// https://horaciochacon.github.io/stepdeck/site/docs/
 export default {
   id: "chart",
   layout: "figure-notes",

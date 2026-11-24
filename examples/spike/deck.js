@@ -1,6 +1,7 @@
-// Spike deck (milestone M0): the hard cases that freeze the component contract.
+// The second example deck, on the academic-light theme: a line chart that morphs, a scripted terminal
+// and a deck component (demo.story).
 export default {
-  title: "stepdeck spike",
+  title: "stepdeck: a second example",
   lang: "en",
   theme: "academic-light",
   components: ["demo.story"],

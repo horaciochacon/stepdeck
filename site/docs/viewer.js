@@ -1,13 +1,17 @@
 // Docs viewer logic (GitHub Pages site). A pure module: no DOM access, nothing runs at import time.
 // site/docs/index.html?p=<repo path>.md fetches that file, renders it with the vendored marked and
-// rewrites its links so that every link lands on a page that renders, or on the file on GitHub.
+// rewrites its links so that every link lands on a page that renders, on the live gallery or example
+// deck, or on the file on GitHub. A ```mermaid flowchart is drawn by flowchart.js (source shown if it cannot).
 import { Marked } from "../../engine/vendor/marked/marked.esm.js";
+import { renderFlowchart } from "./flowchart.js";
 
 export const REPO_URL = "https://github.com/horaciochacon/stepdeck";
 const HOME = "docs/index.md";
 
 const ROOTS = ["docs/", "skill/", "engine/components/", "engine/layouts/", "engine/themes/", "templates/"];
-const FILES = ["README.md", "README.es.md", "CHANGELOG.md"];
+const FILES = ["README.md", "README.es.md", "CHANGELOG.md", "AGENTS.md"];
+// Folders the site serves live: a link to one of these opens the gallery or the deck, not its source tree.
+const LIVE = ["site/gallery", "examples/kit", "examples/spike"];
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const SAFE_PATH = /^[A-Za-z0-9._\/-]+$/;
 
@@ -55,8 +59,9 @@ function resolveAgainst(href, current) {
 
 /**
  * Where a link in the page `current` (a repository path) should go in the viewer: other pages and
- * #anchors stay in the page world, external and mailto: links are unchanged, anything else
- * (a folder, code, data) is the file on GitHub.
+ * #anchors stay in the page world, external and mailto: links are unchanged, the gallery and the
+ * example decks open live (relative to site/docs/), anything else (a folder, code, data) is the file
+ * on GitHub.
  */
 export function rewriteHref(href, current) {
   if (href === "" || href.startsWith("#") || isExternal(href)) return href;
@@ -70,6 +75,7 @@ export function rewriteHref(href, current) {
     if (doc !== null) return `?p=${doc}${hash}`;
   }
   const folder = rel.endsWith("/");
+  if (folder && LIVE.includes(path)) return `../../${path}/${hash}`;
   return `${REPO_URL}/${folder ? "tree" : "blob"}/main/${path}${folder && path ? "/" : ""}${hash}`;
 }
 
@@ -85,9 +91,25 @@ export function slug(text) {
   return text.toLowerCase().replace(/[^a-z0-9 -]/g, "").replace(/ /g, "-");
 }
 
+const escapeText = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/**
+ * The figure for a ```mermaid block of the page `current`: the drawing with its source folded below,
+ * or, when flowchart.js cannot draw it, the source with a link to the page on GitHub (which renders it).
+ */
+export function renderDiagram(source, current, id = "flow-1") {
+  const code = `<pre><code>${escapeText(source)}\n</code></pre>`;
+  const svg = renderFlowchart(source, { id });
+  if (svg === null) {
+    return `<figure class="flow flow-source">${code}<figcaption>Diagram source (<a href="${REPO_URL}/blob/main/${current}">rendered on GitHub</a>)</figcaption></figure>\n`;
+  }
+  return `<figure class="flow"><div class="flow-scroll">${svg}</div><details><summary>Diagram source</summary>${code}</details></figure>\n`;
+}
+
 /** Renders Markdown for the page `current`: { html, title } (title: the first # heading, or null). */
 export function renderMarkdown(text, current) {
   let title = null;
+  let diagrams = 0;
   const used = new Map();
   const marked = new Marked({
     gfm: true,
@@ -96,6 +118,9 @@ export function renderMarkdown(text, current) {
       else if (token.type === "image") token.href = rewriteSrc(token.href, current);
     },
     renderer: {
+      code({ text: source, lang }) {
+        return lang === "mermaid" ? renderDiagram(source, current, `flow-${++diagrams}`) : false;
+      },
       heading({ tokens, depth }) {
         const plain = this.parser.parseInline(tokens, this.parser.textRenderer);
         if (depth === 1 && title === null) title = plain;

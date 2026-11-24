@@ -5,7 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stepdeck</title>
 <meta name="description" content="Step-by-step HTML presentations, written as data, that agents can build.">
+<link rel="canonical" href="https://horaciochacon.github.io/stepdeck/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="stepdeck">
+<meta property="og:description" content="Step-by-step HTML presentations, written as data, that agents can build.">
+<meta property="og:url" content="https://horaciochacon.github.io/stepdeck/">
+<link rel="alternate" type="text/markdown" href="llms.txt" title="llms.txt">
 <link rel="icon" href="data:,">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="engine/themes/modern/fonts/geist/geist-variable.woff2">
 <link rel="stylesheet" href="site/site.css">
 </head>
 <body class="landing">
@@ -31,12 +38,16 @@
   <section class="cards" aria-label="Explore">
     <a class="card" href="site/gallery/">
       <h2>Gallery</h2>
-      <p>Every built-in layout and component, one slide each, then five slides on motion.</p>
+      <p>Every built-in layout and component, one slide each, then motion, data stories and custom components.</p>
     </a>
     <a class="card" href="site/docs/">
       <h2>Docs</h2>
       <p>Guides for authors and agent operators, and the reference.</p>
     </a>
+    <div class="card">
+      <h2><a href="site/docs/?p=docs/guide/for-agents.md">For agents</a></h2>
+      <p>How an agent builds and checks a deck, and the <a href="skill/SKILL.md">skill</a> it reads.</p>
+    </div>
     <a class="card" href="https://github.com/horaciochacon/stepdeck">
       <h2>GitHub</h2>
       <p>Source, issues and the changelog.</p>
@@ -58,7 +69,7 @@ node cli/index.js serve ../my-talk     # prints a URL; open it in Chrome</code><
     <h2>Example decks</h2>
     <ul class="plain">
       <li><a href="examples/kit/">examples/kit/</a> <span class="muted">The slide kit: every layout and component, building step by step.</span></li>
-      <li><a href="examples/spike/">examples/spike/</a> <span class="muted">The early spike: the hard cases that settled the component contract, with a custom component.</span></li>
+      <li><a href="examples/spike/">examples/spike/</a> <span class="muted">A second example on the academic-light theme: a chart that morphs, a scripted terminal and a deck component.</span></li>
     </ul>
   </section>
 

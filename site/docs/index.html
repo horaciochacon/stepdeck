@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stepdeck docs</title>
+<meta name="description" content="The stepdeck documentation: guides for authors and agent operators, and the reference for components, layouts, themes and the CLI.">
 <link rel="icon" href="data:,">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../engine/themes/modern/fonts/geist/geist-variable.woff2">
 <link rel="stylesheet" href="../site.css">
 <link rel="modulepreload" href="viewer.js">
+<link rel="modulepreload" href="flowchart.js">
 <link rel="modulepreload" href="../../engine/vendor/marked/marked.esm.js">
 </head>
 <body>
@@ -20,6 +23,7 @@
 </header>
 <main class="page" data-state="loading">
   <article class="prose" id="doc"><p class="muted">Loading…</p></article>
+  <noscript><p>This viewer needs JavaScript. The docs are plain Markdown files: start at <a href="../../docs/index.md">docs/index.md</a>.</p></noscript>
 </main>
 <script type="module">
 import { loadPage } from "./viewer.js";

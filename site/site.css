@@ -53,10 +53,34 @@ a:hover { text-decoration-thickness: 2px; }
 .prose blockquote { padding: 0.1rem 0 0.1rem 1.1rem; border-left: 3px solid var(--rule); color: var(--muted); }
 .prose blockquote > :last-child { margin-bottom: 0; }
 
-.prose table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 0.95rem; line-height: 1.5; }
+/* A table may be wider than the text column, up to the page width; past that it scrolls on its own.
+   Code wraps inside a cell, except in the first column (names). */
+.prose table { display: block; width: max-content; max-width: calc(min(100vw, 64rem) - 3rem); overflow-x: auto; border-collapse: collapse; font-size: 0.95rem; line-height: 1.5; }
 .prose th, .prose td { padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
 .prose th { border-bottom: 2px solid var(--rule); color: var(--title); font-weight: 600; }
-.prose td code, .prose th code { white-space: nowrap; }
+.prose td code, .prose th code { white-space: normal; }
+.prose td:first-child code { white-space: nowrap; }
+
+/* Flowcharts (site/docs/flowchart.js): the drawing at its natural size, in a frame that may be as wide
+   as the page and scrolls past that; the Mermaid source is folded below. */
+.prose figure.flow { margin: 0 0 1.1rem; }
+.flow-scroll { width: max-content; max-width: calc(min(100vw, 64rem) - 3rem); padding: 0.9rem; overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; }
+.flow-svg { display: block; font-family: var(--font); }
+.flow-node rect, .flow-node polygon { fill: var(--surface); stroke: #c8c8ce; }
+.flow-node[data-shape="decision"] polygon { fill: #fff; stroke: var(--muted); }
+.flow-node text { fill: var(--title); font-size: 13px; }
+.flow-edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.flow-dashed { stroke-dasharray: 5 4; }
+.flow-arrow { fill: var(--muted); }
+.flow-label rect { fill: #fff; }
+.flow-label text { fill: var(--muted); font-size: 12px; }
+.flow-group rect { fill: none; stroke: #c8c8ce; stroke-dasharray: 6 4; }
+.flow-group text { fill: var(--muted); font-size: 12px; font-weight: 600; }
+.flow details { margin-top: 0.4rem; }
+.flow summary, .flow figcaption { color: var(--muted); font-size: 0.85rem; }
+.flow summary { width: max-content; cursor: pointer; }
+.flow details pre { margin: 0.4rem 0 0; }
+.flow-source pre { margin-bottom: 0.4rem; }
 
 /* Landing page */
 .landing .page > section, .landing .page > figure { margin: 0 0 3rem; }
@@ -73,6 +97,7 @@ a:hover { text-decoration-thickness: 2px; }
 .card { display: block; padding: 1.1rem 1.25rem; color: var(--ink); text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; }
 .card:hover { border-color: var(--accent); }
 .card h2 { margin: 0 0 0.3rem; color: var(--accent); font-size: 1.15rem; }
+.card h2 a { color: inherit; text-decoration: none; }
 .card p { margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5; }
 
 .landing pre { margin: 0 0 1rem; }
