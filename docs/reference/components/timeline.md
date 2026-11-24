@@ -2,7 +2,7 @@
 
 `timeline` draws a horizontal track between labelled stops and fills it from the left. `progress` says how far the fill has gone; each stop lights up once the fill reaches it, and `current` emphasises one stop. It also works as the progress connector between two parts of a story. This page lists every prop, which stops are lit, the markup, how it moves and the errors it raises. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/timeline/schema.json`](../../../engine/components/timeline/schema.json), [`components/timeline/index.js`](../../../engine/components/timeline/index.js), [`components/timeline/stops.js`](../../../engine/components/timeline/stops.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/timeline/schema.json`](../../../engine/components/timeline/schema.json), [`components/timeline/index.js`](../../../engine/components/timeline/index.js), [`components/timeline/stops.js`](../../../engine/components/timeline/stops.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -56,7 +56,7 @@ At `now` only `Kick-off` is lit. At `pilot` the fill reaches `Pilot` (0.2 >= 0.2
 | `stops` | `[{ id?, label, sub?, at? }]`, at least 2 | yes | | snap | The stops along the track, left to right. |
 | `progress` | number, 0 to 1 | yes | | tween | How far the fill has gone, on the same 0 to 1 scale as a stop's `at`. It is a position on the track, not a count of stops. |
 | `dashed` | boolean | no | `false` | snap | Draw the unfilled track dashed. The fill stays solid. |
-| `orient` | `"horizontal"` | no | `"horizontal"` | snap | Accepted so a slide may state it. `horizontal` is the only allowed value and the component never reads the prop, so it changes nothing. |
+| `orient` | `"horizontal"` | no | `"horizontal"` | snap | A one-value prop: `horizontal` is the only allowed value and there is no vertical timeline. The component never reads the prop, so setting it changes nothing; leave it out. Any other value is a `validate` error (`prop-invalid`). |
 | `current` | string (a stop id) | no | none | fade | One stop to emphasise: a larger circle and a bold label. |
 
 Each stop:
@@ -64,7 +64,7 @@ Each stop:
 | Key | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `id` | string | no | Names the stop for `current`. Defaults to the stop's index as a string (`"0"`, `"1"`, ...). Ids must be unique. |
-| `label` | string | yes | The stop's name, inline Markdown (emphasis, code, links). Raw HTML is shown as text. |
+| `label` | string | yes | The stop's name, inline Markdown (emphasis, code, links; strikethrough and bare URLs work too). Raw HTML is shown as text. |
 | `sub` | string | no | A second line under the label, inline Markdown. |
 | `at` | number, 0 to 1 | no | Where the stop sits on the track. Defaults to `index / (stops - 1)`. Values must increase from stop to stop. |
 
@@ -131,11 +131,28 @@ Styles in `core/stepdeck.css`:
 
 The pixel values are those of `academic-light`; `modern`, the default theme, has the same sizes and its own colors; any theme changes them through its tokens. See [Layouts and themes](../../guide/layouts-and-themes.md). Use slide `style` with these classes to restyle one slide.
 
+### Make it larger
+
+The timeline has no size prop. It is as wide as its element (the region, or the element's `box`) and as tall as its content: the current stop's diameter plus the tallest label. Everything else comes from the tokens in the table above, so a larger timeline is a slide `style` that raises them:
+
+```js
+style: ':scope { --sd-grid: 16px; --sd-rule-width: 4px; } [data-el="tl"] { --sd-font-size-note: 48px; --sd-font-size-label: 36px; }',
+```
+
+| To change | Set | Where |
+| --- | --- | --- |
+| Stop radius (and the gap between the track and the labels) | `--sd-grid` | On `:scope` (the canvas). The component reads it from the canvas when the slide mounts, so setting it on the element alone leaves the radii as they were (only the CSS that uses it follows: the dash length and the gap between a label and its sub). On `:scope` it applies to the whole slide. |
+| Track, fill and stop outline thickness | `--sd-rule-width` | On `:scope` or on `[data-el="<id>"]`. |
+| Label and sub size | `--sd-font-size-note`, `--sd-font-size-label` | On `[data-el="<id>"]`, so other text on the slide keeps its size. |
+| Width | the region's width, or `box: { x, y, w, h }` on the element | The slide definition. |
+
+With the style above the stops are 24px and 36px in radius and the track 8px thick; a timeline with two-line labels grows from 119px to 197px high in `modern`.
+
 ## Motion
 
 The engine animates an update only when you move forward exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (`shoot`, `check`) draw the target state at once. So going back a step retracts the fill with no motion. See [Animation and motion](../../guide/animation-and-motion.md).
 
-**Entrance.** The timeline builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the build runs from an empty track: the fill runs from the start to `progress`, lighting each stop as it passes, then the `current` stop grows and its label fades in. The fill and the current stop are reset the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the track is drawn at once; with `enter: "none"` nothing moves.
+**Entrance.** The timeline builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the build runs from an empty track: the fill runs from the start to `progress`, lighting each stop as it passes, then the `current` stop grows and its label fades in. The fill and the current stop are reset the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the track is drawn at once; with `enter: "none"` nothing moves. `enter: "draw"` is the same as leaving `enter` unset; with `enter: { motion: "draw", duration: <ms> }` the build's motions last that long instead.
 
 While the timeline stays visible, when the update animates:
 
@@ -182,8 +199,8 @@ error: bad/one: timeline needs at least 2 stops (got 1)
 `validate` checks the schema at every step (`prop-invalid`), so it catches fewer than 2 stops, a missing `label`, a non-string `id`, and `progress` or `at` outside 0 to 1:
 
 ```text
-bad/one · prop-invalid · stops = [{"label":"A"}] vs must NOT have fewer than 2 items · change stops so it is NOT have fewer than 2 items (props of timeline)
-bad/one · prop-invalid · progress = 2 vs must be <= 1 · change progress so it is be <= 1 (props of timeline)
+bad/one · prop-invalid · stops = [{"label":"A"}] vs must NOT have fewer than 2 items · change stops so it does NOT have fewer than 2 items (props of timeline)
+bad/one · prop-invalid · progress = 2 vs must be <= 1 · make progress 1 or less (props of timeline)
 ```
 
 It does not catch an unknown `current`, duplicate ids or `at` values that do not increase: those pass `validate` and fail only in the browser. Run `dump` or `check` after `validate`. See the [CLI reference](../cli.md) and [Checking a deck](../../guide/checking-a-deck.md).

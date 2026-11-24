@@ -202,7 +202,7 @@ Components with an internal sequence (a terminal session, a list, a chat, a time
 advance: { prop, values, start = 0 }
 ```
 
-`props[prop] = values[j]` at step `start + j`. Before `start`, the element's own `props` hold, so always give the prop an initial value. After the last value, that value holds, because `set` folds.
+`props[prop] = values[j]` at step `start + j`. The value replaces the prop whole: an object is not merged into the one before, and `null` is a value like any other. Before `start`, the element's own `props` hold, so always give the prop an initial value. After the last value, that value holds, because the assignment folds like a `set`.
 
 From `examples/kit/slides/criteria.js`:
 

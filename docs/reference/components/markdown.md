@@ -1,6 +1,6 @@
 # markdown
 
-This page lists every prop and behaviour of the built-in `markdown` component: a block of Markdown text with headings, lists, emphasis, code, quotes, tables and links. It is for anyone who writes slides, by hand or through an agent. Use [`text`](text.md) for a single plain paragraph in a fixed role (body, source, note, label); use `markdown` when you need formatting or color words. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog markdown <deck>`.
+This page lists every prop and behaviour of the built-in `markdown` component: a block of Markdown text with headings, lists, emphasis, code, quotes, tables and links. It is for anyone who writes slides, by hand or through an agent. Use [`text`](text.md) for a single plain paragraph in a fixed role (body, source, note, label, lede, badge); use `markdown` when you need formatting or color words. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog markdown <deck>`.
 
 ## Use it
 
@@ -49,13 +49,15 @@ Data bindings are resolved by the engine before the component sees `md`, so a bi
 
 ## What it renders
 
-The element holds one `<div class="sd-markdown">`. Its contents come from `renderBlock` in `core/inline.js`, which parses `md` with a vendored copy of [marked](https://marked.js.org/) (`vendor/marked/`, MIT) in GitHub-flavoured mode. The same renderer, in its inline form, is used by `list`, `chat`, `diagram`, `timeline` and the `image` caption.
+The element holds one `<div class="sd-markdown">`. Its contents come from `renderBlock` in `core/inline.js`, which parses `md` with a vendored copy of [marked](https://marked.js.org/) (`vendor/marked/`, MIT) in GitHub-flavoured mode. The same renderer, in its inline form, is used by `list`, `chat`, `diagram`, `timeline`, the `image` caption and the compact `map` caption.
 
 | Markdown | Result |
 |---|---|
 | Paragraphs, `#` headings, `-` and `1.` lists, `>` quotes, tables | The matching HTML blocks. |
+| `---` on its own line | A horizontal rule. |
+| `- [ ]` and `- [x]` list items | Task items: no bullet, an empty box or a filled one in its place. |
 | `**bold**`, `*italic*`, `` `code` ``, fenced code blocks | `strong`, `em`, `code`, `pre`. |
-| `[text](url)`, `![alt](url)` | A link or an image, if the URL is allowed (see below). |
+| `[text](url)`, `![alt](url)` | A link or an image, if the URL is allowed (see below). For pictures prefer the `image` component: a relative image URL here is not resolved against the deck root. |
 | Raw HTML such as `<b>x</b>` or `<script>` | Escaped: it shows on the slide as literal text and nothing runs. A block of raw HTML becomes `<p class="sd-md-raw">`. |
 
 ### Allowed URLs
@@ -69,7 +71,7 @@ Links and images keep their URL only when it is one of:
 
 Any other scheme (`javascript:`, `data:`, and the same schemes disguised with HTML entities, tabs or spaces) is dropped. A link then renders as its text alone, and an image as its alt text. The URL is HTML-escaped in the attribute, so an entity in the source stays literal.
 
-The renderer allows `http` and `https`, but `validate` does not: any `http://` or `https://` URL in a prop is a `remote-url` error, because a deck must run with no network. A protocol-relative URL (`//host/...`) is also a `remote-url` error, even though the renderer would keep it. Copy the file into the deck and link to it with a relative path. Also note that an anchor whose name reads as a hex color, such as `#bad` or `#face`, is reported as `hex-color`.
+The renderer allows `http` and `https`, but `validate` does not: any `http://` or `https://` URL in a prop is a `remote-url` error, because a deck must run with no network. A protocol-relative URL (`//host/...`) is also a `remote-url` error, even though the renderer would keep it. A relative URL is written into the HTML as typed and the browser resolves it against the page, not the deck root. A picture `![alt](assets/photo.png)` loads when the deck is presented from its own `index.html`, but `check`, `dump` and `shoot` open the deck through `stepdeck/core/render.html`, where the same URL is a 404 (`network-error`) and the screenshot has no picture. `validate` does not check the file either. Use the [`image`](image.md) component for pictures: its `src` is resolved against the deck root and checked by `validate`. Also note that an anchor whose name reads as a hex color, such as `#bad` or `#face`, is reported as `hex-color`.
 
 ### Text size and styles
 
@@ -79,17 +81,20 @@ Styles are in `core/stepdeck.css` (the `.sd-markdown` rules); the token values a
 |---|---|---|
 | Body text | `--sd-font-size-body`, line height `--sd-line-height` | 40px, 1.3 |
 | `#` heading | `--sd-font-size-title`, weight `--sd-font-weight-title` | 64px, 600 |
-| `##` to `####` headings | 1.2 x `--sd-font-size-body` | 48px |
+| `##` to `######` headings | 1.2 x `--sd-font-size-body` (one size for all five levels, so none goes under the audience minimum) | 48px |
 | Inline and block code | `--sd-font-mono` at `--sd-font-size-label`, on `--sd-color-surface` | IBM Plex Mono, 28px |
 | Bold | `--sd-font-weight-strong` | 600 |
 | Links | `--sd-color-accent` | #0072b2 |
 | Quotes | left rule in `--sd-color-rule`, text in `--sd-color-muted` | |
+| Table | as wide as its content; cells padded by a quarter of `--sd-space` above and below and one `--sd-space` at the sides; a rule under every row (`--sd-rule-width`, `--sd-color-rule`); header cells in `--sd-font-weight-strong`. Cells are left-aligned unless the column's delimiter row says otherwise (`--:` right, `:-:` centre) | 4px 16px, 2px rule, 600 |
+| Horizontal rule | `--sd-rule-width`, `--sd-color-rule` | 2px |
+| Task item | a box of 0.7em in the bullet's place: outlined in `--sd-color-muted` when open, filled with `--sd-color-accent` when done | 28px |
 
 Blocks are spaced by `--sd-space`, and the first and last block sit flush with the element box.
 
 #### In the statement layout
 
-The `statement` layout enlarges every `markdown` (and `text`) element in its `main` region: font size `--sd-font-size-statement` (64px in both built-in themes), line height `--sd-line-height-tight` (1.15), centred, with balanced line breaks (`layouts/statement/layout.css`). Elements in `title` and `footer` keep their normal size. This is the usual way to show one large sentence with a few bold words, as in the kit example above. See [Layouts](../layouts.md).
+The `statement` layout enlarges every `markdown` (and `text`) element in its `main` region: font size `--sd-font-size-statement` (64px in both built-in themes), line height `--sd-line-height-tight` (1.15), centred, with balanced line breaks. These are the rules of the `.sd-statement` hook in `core/stepdeck.css`, which the layout puts on its `main` region (`"hooks": { "main": "statement" }` in `layouts/statement/schema.json`); the layout's own CSS only places the regions. Elements in `title` and `footer` keep their normal size. This is the usual way to show one large sentence with a few bold words, as in the kit example above. See [Layouts](../layouts.md).
 
 ## Name a palette color
 

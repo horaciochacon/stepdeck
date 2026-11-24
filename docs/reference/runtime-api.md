@@ -45,9 +45,9 @@ What `boot()` does, in order:
 3. Checks the shell name. An unknown name records `stepdeck: unknown shell '<x>' (available: bare, reveal)` in `STEPDECK.errors`, resolves `ready` and stops. Nothing is drawn: no stage, no canvas, no on-canvas message. Only `errors` tells you.
 4. For `bare`, creates the stage at once, so a deck that fails to load still shows its error.
 5. Resolves the deck folder and refuses one on another origin (see below).
-6. Imports `<deck>/deck.js` and every `<deck>/slides/<id>.js`, and fetches the theme (`tokens.css`, `palettes.json`) and `components/index.json` from the engine.
-7. Fills `STEPDECK.slides` and `STEPDECK.steps`.
-8. For `reveal`, imports `core/shells/reveal.js` and builds the reveal host.
+6. Imports `<deck>/deck.js` and every `<deck>/slides/<id>.js`, and fetches the theme (`tokens.css`, the optional `theme.css`, `palettes.json`) and `components/index.json` from the engine.
+7. Sets `document.title` to `deck.title` (when it is a non-empty string), then fills `STEPDECK.slides` and `STEPDECK.steps`.
+8. For `reveal`, imports `core/shells/reveal.js` and builds the reveal host. If that fails, the error is fatal (see [Boot errors](#boot-errors)).
 9. Picks the start slide and step, and navigates there. `ready` resolves when that navigation has finished.
 
 `boot()` returns the same object it puts on `window.STEPDECK`.
@@ -80,6 +80,7 @@ Boot errors stay in `STEPDECK.errors` for the life of the page. "Fatal" means no
 | `deck: theme '<t>' not found (<message>)` | No | `themes/<t>/tokens.css` could not be fetched. Slides render without theme tokens. |
 | `deck: palettes of theme '<t>' not found (<message>)` | No | `themes/<t>/palettes.json` could not be fetched. `ctx.palette()` returns `null`. |
 | `deck: components/index.json not found (<message>)` | No | The engine's built-in list is missing. |
+| `stepdeck: cannot start the reveal shell: <message>` | Yes | The reveal shell could not be built: `core/shells/reveal.js` or a vendored reveal file did not load, or reveal failed to initialize. The line is drawn on a bare stage. |
 | `stepdeck: unknown slide '<s>' (slides: a, b, …)` | Yes | The start slide (`?slide=`) is not in the deck. |
 | `stepdeck: <message>` | No | A navigation threw. |
 
@@ -149,12 +150,13 @@ Each `mount` and `update` call has a 10 second watchdog (`SETTLE_TIMEOUT_MS` in 
 
 ### `goTo(slide, step = 0)`
 
-Shows `slide` at `step`. `step` is a step id (a string) or an index (a number).
+Shows `slide` at `step`. `step` is a step id (a string) or an index (a number). A string of digits is an index too.
 
 ```js
 await STEPDECK.goTo("chart", "mark");  // by id
 await STEPDECK.goTo("chart", 2);       // the same step, by index
-await STEPDECK.goTo("plain", 1);       // a step without id: pass its index as a number
+await STEPDECK.goTo("plain", 1);       // a step without id: pass its index
+await STEPDECK.goTo("plain", "1");     // the same: an all-digit string is read as the number
 ```
 
 How it runs:
@@ -172,7 +174,7 @@ What an unknown target does depends on the shell:
 | Unknown step on the current slide | Error `<slide>: unknown step '<x>' in slide '<slide>'`. The slide stays at its current step. | Refused. Error `stepdeck: unknown step '<x>' in slide '<s>' (steps: …)`. Nothing moves. |
 | Unknown step on another slide | The current slide is destroyed; the new slide's layout is shown but no component is mounted; `state()` returns `null`; error `<slide>: unknown step …`. | Refused, as above. |
 
-**Pass an index as a number, never as a string of digits.** The controller reads a string as a step id, and step ids may not be all digits (`validate` rule `step-id-numeric`), so `goTo("plain", "2")` fails with `plain: unknown step '2' in slide 'plain'`. In the reveal shell it is worse: the shell accepts `"2"` as an index, moves reveal and writes the hash `#/plain/2`, but the controller rejects it, so the screen, `state()` and the hash disagree. To turn a query or hash value into a step ref, use [`parseStepRef`](#exports), which turns digits into a number.
+**A string of digits is an index.** `goTo("plain", "2")` is `goTo("plain", 2)` in both shells, the same as `?step=2` and `#/plain/2`: step ids may not be all digits (`validate` rule `step-id-numeric`), so nothing else could be meant. `goTo` converts it before the shell or the controller sees it. A slide's own `goTo(ref)` (from `mountSlide`) does not: there a string is always a step id. To turn a query or hash value into a step ref yourself, use [`parseStepRef`](#exports), which turns digits into a number and an empty value into step 0.
 
 ### `state()`
 
@@ -220,7 +222,7 @@ Returns the state of the slide on screen, or `null` when there is none (before t
 
 ## Step ids in different places
 
-The same step is written four ways, depending on where you read it.
+The same step is written several ways, depending on where you read it.
 
 | Where | Step with id `"compare"` at index 1 | Step without id at index 1 |
 |---|---|---|
@@ -229,7 +231,7 @@ The same step is written four ways, depending on where you read it.
 | `info.step` / `info.prevStep` in a component's `update` | `"compare"` | `1` (number) |
 | `stepdeck dump --json` `stepId` | `"compare"` | `"1"` (string, taken from `STEPDECK.steps`) |
 | Reveal hash | `#/chart/compare` | `#/plain/1` |
-| `STEPDECK.goTo` and `?step=` | `"compare"` or `1` | `1` as a number (`?step=1` is parsed to a number) |
+| `STEPDECK.goTo` and `?step=` | `"compare"` or `1` | `1`, or `"1"` (`goTo` and `?step=1` both read digits as the number) |
 
 `state().step` is always the index as a number.
 
@@ -312,7 +314,7 @@ The reveal shell is for presenting. reveal.js provides keyboard navigation, scal
 On start it:
 
 - injects `core/stepdeck.css`, `vendor/reveal/reveal.css` (no reveal theme) and `core/shells/reveal.css`, then imports the vendored reveal.js and its notes plugin;
-- builds one `<section data-sd-slide="<id>" data-notes="…">` per slide. Each holds a `div.sd-host` (the slide's canvas, or until it is mounted a placeholder with the slide title, which the overview shows) and one `span.fragment.sd-step` per step after step 0. Fragment index `f` is engine step `f + 1`;
+- builds one `<section data-sd-slide="<id>" data-notes="…">` per slide. Each holds a `div.sd-host` (the slide's canvas, or until it is mounted a placeholder with the slide title, or its id when it has no title, which the overview shows) and one `span.fragment.sd-step` per step after step 0. Fragment index `f` is engine step `f + 1`;
 - writes `data-notes` on the section and each fragment from the folded notes of that step, HTML-escaped;
 - initializes reveal with a 1920×1080 canvas, `hash`, `history` and `respondToHashChanges` off, `transition: "none"`, `controls: false` and `progress: true`.
 
@@ -378,14 +380,15 @@ It renders the slide's layout, loads every font face before any component measur
   root,             // the div.sd-canvas
   errors,           // getter: slide errors, then element errors
   goTo(ref, { animate }),  // applies a step; failures are recorded, never thrown
+  finish(),         // ends the motion in flight at once: the latest target is applied without animation
   settled(),        // resolves when the controller has nothing in flight; never rejects
   state(),          // { slide, ...controller state } or null
-  pause(),          // aborts the in-flight step and pauses every component
+  pause(),          // ends the motion as finish() does (the target is still applied, without animation) and pauses every component
   destroy(),        // destroys the controller and removes the canvas
 }
 ```
 
-`mountSlide` never throws. Anything that fails before the controller exists (unknown slide, a slide file that did not load, an unexpected exception) becomes an error canvas with the same shape, whose `state()` is `null` and whose `goTo` does nothing. A layout that cannot be loaded is recorded as `<id>: layout '<name>' not found (<message>)` and the slide renders without layout CSS.
+`mountSlide` never throws. Anything that fails before the controller exists (unknown slide, a slide file that did not load, an unexpected exception) becomes an error canvas with the same shape, whose `state()` is `null` and whose `goTo` and `finish` do nothing. `boot()` calls `finish()` on the slide on screen when the page is hidden. A layout that cannot be loaded is recorded as `<id>: layout '<name>' not found (<message>)` and the slide renders without layout CSS; the failure is not cached, so the next slide that uses the layout loads it again.
 
 ## Types and known differences
 

@@ -9,9 +9,9 @@ You need:
 | Tool | Version | Why |
 | --- | --- | --- |
 | Node | 20 or later (`engines` in `package.json`); 22.15 or later to run the test scripts | The CLI and the tests. The test scripts pass a glob (`'test/unit/**/*.test.mjs'`) to `node --test`, which Node 20 does not expand, and the no-Ajv test uses `registerHooks` from `node:module` (Node 22.15+). See [Testing](testing.md). |
-| npm | any recent | Installs the two dev dependencies, `ajv` and `marked`. In the CLI only `validate` uses Ajv; the unit tests (and one browser test) use it too, so run `npm install` before `npm test`. The runtime imports marked from `vendor/marked/`, never from `node_modules/`. |
+| npm | any recent | Installs `ajv` (a dependency) and `marked` (a dev dependency, used only by the test that compares it with the vendored copy). In the CLI only `validate` uses Ajv; the unit tests (and one browser test) use it too, so run `npm install` before `npm test`. The runtime imports marked from `vendor/marked/`, never from `node_modules/`. |
 | Chrome | current | `dump`, `check`, `shoot` and the browser tests drive the system Chrome through Playwright. `STEPDECK_CHANNEL` picks another channel; the default is `chrome`. |
-| Playwright | any | Not a dependency. Install it where Node can resolve it, or point `STEPDECK_PLAYWRIGHT` at a `playwright` package folder. |
+| Playwright | 1.58.0 in CI | Not a dependency. `npm run playwright` installs the version CI pins into `node_modules` without saving it (a later plain `npm install` removes it again); or point `STEPDECK_PLAYWRIGHT` at a `playwright` package folder. Another recent version usually works, but CI is the reference. |
 
 ```sh
 git clone <this repository> stepdeck
@@ -26,7 +26,7 @@ Check the setup with the unit tests, which need no browser:
 npm test
 ```
 
-All tests should pass in a few seconds (about 290 at the time of writing). In the CLI only `validate` imports Ajv, and it does so lazily, so `help`, `new` and the browser commands work even before `npm install`.
+All tests should pass in a few seconds; the last lines of the output give the totals. In the CLI only `validate` imports Ajv, and it does so lazily, so `help`, `new` and the browser commands work even before `npm install`.
 
 ## Repository tour
 
@@ -38,19 +38,19 @@ Node code outside the engine (`cli/`, `test/`) imports engine modules through th
 
 | Folder | What it owns | Copied into decks by `new` |
 | --- | --- | --- |
-| `engine/core/` | The runtime: the fold engine (`fold.js`), the per-slide controller (`controller.js`), the layout renderer (`layout.js`), `boot()` and `window.STEPDECK` (`stepdeck.js`), the shells (`shells/bare.js`, `shells/reveal.js` with `shells/reveal.css`, plus `core/render.html` for the bare shell), the data loader, bindings, formats, i18n, the component registry and shared component helpers (`animate.js`, `kit.js`, `chart.js`, `color.js`, `inline.js`, `d3.js`), constants and `stepdeck.css`. | yes |
+| `engine/core/` | The runtime: the fold engine (`fold.js`), the per-slide controller (`controller.js`), the layout renderer (`layout.js`), `boot()` and `window.STEPDECK` (`stepdeck.js`), the shells (`shells/bare.js`, `shells/reveal.js` with `shells/reveal.css`, plus `core/render.html` for the bare shell), the data loader, bindings, formats, i18n, the component registry and shared component helpers (`animate.js`, `motion.js`, `choreography.js`, `kit.js`, `accent.js`, `canvas.js`, `color.js`, `inline.js`, `d3.js`, the chart helpers `chart.js` and `chart-*.js`, and the map helpers `map.js` and `map-*.js`), constants and `stepdeck.css`. | yes |
 | `engine/components/` | The 13 built-in components, one folder each with `schema.json`, `index.js`, `README.md` and `example.js`. `components/index.json` lists them and sets their order. | yes |
 | `engine/layouts/` | The 5 built-in layouts, one folder each with `layout.css`, `schema.json`, `README.md` and `example.js`. | yes |
 | `engine/themes/` | The built-in themes: `modern` (the default) and `academic-light`. Each has `tokens.css`, an optional `theme.css`, `palettes.json`, `README.md` and vendored fonts with their licences. | yes |
 | `engine/schema/` | JSON schemas for the deck (`deck.schema.json`), slides (`slide.schema.json`) and layout descriptors (`layout.schema.json`), and `stepdeck.d.ts`: the deck spec and the component contract as TypeScript types. | yes |
 | `engine/vendor/` | Vendored reveal.js, d3 and marked, each with its licence file. | yes |
-| `cli/` | The command line (`index.js` is the `stepdeck` bin): `validate`, `check`, `dump`, `shoot`, `catalog`, `new`, `new-component`, `serve`, and their shared helpers (`engine.js`, `browser.js`, `problems.js`, `palettes.js`, `ajv.js`). Also `serve-site.js` (`npm run site`), which serves the repository under `/stepdeck/`, as GitHub Pages does, to preview the site locally. | no |
+| `cli/` | The command line (`index.js` is the `stepdeck` bin): `validate`, `check`, `dump`, `shoot`, `catalog`, `new`, `new-component`, `boundaries`, `serve`, and their shared helpers (`engine.js`, `browser.js`, `problems.js`, `palettes.js`, `ajv.js`, `png.js`). Also `serve-site.js` (`npm run site`), which serves the repository under `/stepdeck/`, as GitHub Pages does, to preview the site locally. | no |
 | `templates/` | `talk`, the starter deck that `new` copies, and `component`, the skeleton that `new-component` copies. | no (`talk` becomes the deck itself) |
-| `examples/` | Two decks that use `engine/` as their engine, with no copy: `spike` (line-chart morph, terminal with `advance`, the custom component `demo.story`) and `kit` (every layout and component of slide kit 1). | no |
+| `examples/` | Two decks that use `engine/` as their engine, with no copy: `spike`, the second example deck (line-chart morph, terminal with `advance`, the custom component `demo.story`) and `kit` (every layout and component of slide kit 1). | no |
 | `skill/` | The agent skill: `SKILL.md` and `references/`. `.claude-plugin/plugin.json` publishes it as a plugin. | no |
-| `test/` | `unit/` (plain `node:test`, no browser), `browser/` (Playwright) and `fixtures/` (`validate/`, `check/`, `decks/`). | no |
+| `test/` | `unit/` (plain `node:test`, no browser), `browser/` (Playwright) and `fixtures/` (`validate/`, `check/`, `decks/`, plus `boundaries/`, `fourth-layout/` and `no-title-layout/`). | no |
 | `docs/` | Guides, reference, concepts, these contributing pages, and design history in `docs/design/`. | no |
-| `site/` | The public site: `site.css` and `landing.js` for the landing page, `docs/` (the docs viewer, which renders the Markdown in `docs/` in the browser) and `gallery/` (a stepdeck deck with a slide for every layout and component). | no |
+| `site/` | The public site: `site.css` and `landing.js` for the landing page, `docs/` (the docs viewer, `viewer.js`, which renders the Markdown in `docs/` in the browser, and `flowchart.js`, which draws its mermaid flowcharts) and `gallery/` (a stepdeck deck with a slide for every layout and component). | no |
 | `index.html` | The landing page of the public site. | no |
 | `.github/` | `workflows/ci.yml`: a fast job (the unit tests and the site smoke test) that gates the Pages deploy, and the full browser suite on six parallel runners as the status check. Also `CONTRIBUTING.md` and `SECURITY.md` (what GitHub shows contributors and security reporters), the bug report form in `ISSUE_TEMPLATE/` and `pull_request_template.md`. | no |
 
@@ -95,7 +95,7 @@ node cli/index.js validate examples/spike       # validate: 5 slides, 0 errors, 
 node cli/index.js check examples/spike --played # check: 5 slides, 18 steps, 26 played arrivals compared, 0 problems
 ```
 
-A problem that appears after your change is a regression, either in your change or in a rule you added. `test/browser/kit.test.mjs` asserts that the kit deck stays clean under `validate`, `check` and `check --played`, and several browser tests use the spike deck.
+A problem that appears after your change is a regression, either in your change or in a rule you added. `test/browser/kit.test.mjs` asserts that the kit deck stays clean under `validate`, `check` and `check --played`, and several browser tests use the second example deck (`examples/spike`).
 
 To look at the result, `node cli/index.js shoot examples/kit` writes PNGs to `examples/kit/shots/960/`, and `node cli/index.js dump examples/kit --slide <id>` prints every element's box, text and visibility per step.
 
@@ -103,10 +103,10 @@ Before you finish, run both test suites:
 
 ```sh
 npm test
-npm run test:browser    # needs Chrome and Playwright
+npm run test:browser    # needs Chrome and Playwright (`npm run playwright` installs the version CI uses)
 ```
 
-How the tests are organized, and how to run one file, is in [Testing](testing.md).
+`npm run test:all` runs one after the other. How the tests are organized, and how to run one file, is in [Testing](testing.md).
 
 ```mermaid
 flowchart LR

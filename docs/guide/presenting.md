@@ -30,7 +30,7 @@ What `serve` does:
 | `--json` | Prints `{ "url", "root", "port" }` instead of the text lines. |
 | Stopping | Runs until Ctrl-C (`SIGINT`) or `SIGTERM`. |
 
-A deck made with `new` has the engine copied into `<deck>/stepdeck/`, so `serve` serves the deck folder itself. A deck inside this repository without an engine copy, such as `examples/kit`, is served from the repository root, and the `present:` URL ends with the deck's path (`http://127.0.0.1:8000/examples/kit/`). A deck outside the repository with no engine copy is refused:
+A deck made with `new` has the engine copied into `<deck>/stepdeck/`, so `serve` serves the deck folder itself. A deck inside this repository without an engine copy, such as `examples/kit`, is served from the repository root, and the `present:` URL ends with the deck's path (`http://127.0.0.1:8000/examples/kit/`). A folder with no `deck.js` is refused with `no deck.js in <dir>; pass the deck folder (the one holding deck.js)`. A deck outside the repository with no engine copy is refused:
 
 ```text
 stepdeck: deck at /…/talk has no engine copy; run `stepdeck new` or copy the engine to /…/talk/stepdeck/

@@ -2,7 +2,7 @@
 
 `chart.line` draws one or more lines from a CSV file over a numeric x. Each line is labelled directly at its end, and the chart is built for step-by-step reveals: series draw in, one series can be highlighted for a step, vertical annotations fade in, point markers and a forecast segment fade in, `until` sweeps the lines across the x axis with a counting ticker, `draws` paints a fan of uncertainty draws under the lines, and changing `y` morphs every line point by point. This page lists every prop, its default and transition, how the scales and colors are chosen, when the chart animates, how big it renders, the `anchor()` API, the markup, and the mistakes that are easy to make. It is for deck authors and for authors of custom components that mount a `chart.line` and need `anchor()`.
 
-Sources: [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`components/chart.line/parts.js`](../../../engine/components/chart.line/parts.js), [`components/chart.line/fan.js`](../../../engine/components/chart.line/fan.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/chart.line/schema.json`](../../../engine/components/chart.line/schema.json), [`components/chart.line/index.js`](../../../engine/components/chart.line/index.js), [`components/chart.line/parts.js`](../../../engine/components/chart.line/parts.js), [`components/chart.line/fan.js`](../../../engine/components/chart.line/fan.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/kit.js`](../../../engine/core/kit.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -56,8 +56,8 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 
 | Prop | Type | Required | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- | --- |
-| `data` | string | yes | | snap | Path to a CSV file, relative to the deck root. One row per series and x value. |
-| `x` | string | yes | | snap | Column holding the numeric x value. |
+| `data` | string | yes | | tween | Path to a CSV file, relative to the deck root. One row per series and x value. A change to another file morphs the lines like a change of `y` (points keyed by series and x). A `.json` file that holds an array of row objects loads too, but `validate` checks column names only in `.csv` files. |
+| `x` | string | yes | | snap | Column holding the numeric x value (a year, a day number, any quantity): the x axis is linear. There is no date or category axis: a column with no numbers (dates such as `2020-01-01`, month names) is an [element error](#errors), so add a numeric column. |
 | `y` | string | yes | | tween | Column holding the numeric y value. Changing it morphs each line point by point (keyed by series and x) while the y axis rescales. |
 | `axes` | `{ x?, y? }` | yes | | snap | Axis titles: `x` is drawn under the x axis, `y` above the plot. Both keys are optional, but the object is required (`{}` gives no titles). |
 | `series` | string | no | none | snap | Column naming the series of each row. Without it the chart draws one line, keyed `all`, and no series labels. |
@@ -65,7 +65,7 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 | `highlight` | string | no | none | fade | Series to emphasize. Every other series' line and band turn the theme's dim color (`--sd-color-dim`, opacity stays 1) and sit below the emphasized one, and their labels switch to the muted text color. |
 | `annotate` | `{ x, label? }[]` | no | none | fade | Vertical dashed rules at the given x values, each with an optional short label. |
 | `format` | `{ x?, y? }` | no | precision from the tick step | snap | d3-format specs for the tick labels, localized by the deck language. Without one, ticks use fixed precision derived from the tick step (`d3.precisionFixed`), so a step of 0.5 gives one decimal. |
-| `types` | `{ <column>: "string" \| "number" \| "date" }` | no | guessed | snap | CSV column types passed to the data loader. An undeclared column is a number only when every non-empty value looks like one. |
+| `types` | `{ <column>: "string" \| "number" \| "date" }` | no | guessed | snap | CSV column types passed to the data loader. An undeclared column is a number only when every non-empty value looks like one. `x`, `y` and the interval columns must be numbers: a `date` column stays an ISO string, which the chart cannot place on an axis. |
 | `interval` | `{ lower, upper }` | no | none | tween | A shaded band between two columns around each series, such as an uncertainty interval. Both keys are required. The band morphs with the lines. |
 | `points` | boolean | no | `false` | fade | A dot on every data point of every shown series. Dots after `forecast.from` are hollow. |
 | `forecast` | `{ from, label? }` | no | none | fade | From the x value `from` on, every line is dotted with hollow points and a lighter band, over a shaded region with a labelled divider. `from` is required; `label` replaces the default word. See [Forecast and points](#forecast-and-points). |
@@ -73,15 +73,15 @@ Use `only` for `highlight`, as above, so the emphasis lasts one step and the nex
 | `ticker` | boolean | no | `false` | snap | With `until`, a large label of the x the sweep has reached, in the plot's upper left. Without `until` it does nothing and `validate` warns (`chart-prop-unused`). See [Sweep](#sweep). |
 | `draws` | `{ data, id, shown, seed? }` | no | none | tween | A fan of uncertainty draws: `data` is a CSV with the chart's `x`, `y` and `series` columns and the draw column `id`; the first `shown` draws of a fixed order (`seed`, default 1) are painted under the lines. `data`, `id` and `shown` (an integer, at least 0) are required. See [The draw fan](#the-draw-fan). |
 
-The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval`, `forecast` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
+The schema has `additionalProperties: false` at every level, so any other prop (or any other key inside `axes`, `format`, `interval`, `forecast`, `draws` or an `annotate` entry) is a `validate` error. The transition column is the schema's `x-transition` annotation: it documents what the component code does; the engine does not read it.
 
 Rows whose x or y cell is empty, blank or not a number (such as `NA`) are left out of the line; the line joins the points on either side. The band is broken where `lower` or `upper` is missing in the same way. `annotate` entries whose `x` is not a finite number are dropped.
 
 ## Scales and ticks
 
 - **x domain**: the extent of the x column over every row. Rows with an x but a missing y still widen the x domain, so a trailing x with no y stretches the axis past the end of the line. If all x values are equal, the domain is widened to `[x, x + 1]`.
-- **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not, plus every `y` value of every draws file that a step of the slide with the same `y` names in `draws`. It always includes 0, and is rounded out with `nice(5)`. Because hidden series and draws not yet shown count, the y axis does not jump when a series or the fan appears; it changes only when `y`, `interval` or the data change.
-- **Ticks**: 5 y ticks and 6 x ticks (d3 tick counts, so the exact number can differ by one or two). Y ticks carry horizontal grid lines.
+- **y domain**: covers every `y` value in the data, plus every `interval.lower` and `interval.upper` value, for every series, shown or not, plus every `y` value of every draws file that a step of the slide with the same `y` names in `draws`. It always includes 0 (data that is all negative ends at 0, data that is all positive starts there), and is rounded out with `nice(5)`. Because hidden series and draws not yet shown count, the y axis does not jump when a series or the fan appears; it changes only when `y`, `interval`, `draws` or `data` change, and then it tweens.
+- **Ticks**: 5 y ticks and 6 x ticks (d3 tick counts, so the exact number can differ by one or two). Y ticks carry horizontal grid lines. When every x in the data is a whole number (years, days, counts), only whole-number x ticks are kept, so three years give `2020 2021 2022` and never a half year (which `format.x: "d"` would print as the same year twice). The ticks are round values of the domain, so the first x has a tick only when it is one (2015 to 2024 gives 2016, 2018, …, 2024).
 - **Margins** are computed from character counts, not measured text, so the layout never depends on font loading. The left margin fits the longest y tick label; the right margin fits the longest shown series name, and is never less than half the widest x tick label (the last tick is centred on the plot's end).
 
 ## Forecast and points
@@ -170,7 +170,7 @@ Series colors come from the theme's categorical palette (`ctx.palette("categoric
 
 Palette colors promise 3:1 contrast against the background, which is enough for a line. A series label is text, so it is drawn in its series color mixed toward black (toward white on a dark background) until it reaches 4.5:1, the contrast `check` requires of text. When `highlight` dims a series, its label uses `--sd-color-muted`, and its line and band use `--sd-color-dim`.
 
-Neutral colors and sizes come from theme tokens through `core/stepdeck.css`: ticks, axis titles, series labels and annotation labels use `--sd-font-size-label` (28px in academic-light); axis text and tick labels are `--sd-color-muted`; grid lines are `--sd-color-rule`; axis titles and annotation labels are `--sd-color-ink`. Lines are 5px wide; bands use 15% fill opacity. See [Themes](../themes.md).
+Neutral colors and sizes come from theme tokens through `core/stepdeck.css`: ticks, axis titles, series labels and annotation labels use `--sd-font-size-label` (28px in academic-light); axis text and tick labels are `--sd-color-muted`; grid lines are `--sd-color-grid` (`--sd-color-rule` in a theme without it); axis titles and annotation labels are `--sd-color-ink`. Lines are 5px wide; bands use 15% fill opacity. See [Themes](../themes.md).
 
 ## Motion
 
@@ -194,7 +194,7 @@ A point with no previous position (a new x value) starts at its final position r
 
 ## Sizing
 
-The chart measures its element's width and height on every update and fills that box. It takes the height the other elements in its region leave (`core/stepdeck.css` gives it `flex: 1 1 0`), so a source line can share the region. Measured with `dump`: alone in `figure-notes` main with a source line in `footer` it is 1096 x 754; in `full-bleed` main, with a title and a source line below it, it is 1728 x 730. A region with no set height gives it none: in `statement` main it is 1500 x 0. No `validate` or `check` rule flags a collapsed chart, so check the `box` in `dump` output or a `shoot` image. See the [Fill rules](../layouts.md#fill-rules) table.
+The chart measures its element's width and height on every update and fills that box. It takes the height the other elements in its region leave (`core/stepdeck.css` gives it `flex: 1 1 0`), so a source line can share the region. Measured with `dump`: alone in `figure-notes` main with a source line in `footer` it is 1096 x 754; in `full-bleed` main, with a title and a source line below it, it is 1728 x 730. A region with no set height gives it none: in `statement` main it is 1500 x 0. No `validate` rule flags a collapsed chart. `check` flags it only indirectly, as `text-outside-region` on the chart element (its labels spill out of the zero-height region), so check the `box` in `dump` output or a `shoot` image. See the [Fill rules](../layouts.md#fill-rules) table.
 
 To place a chart anywhere else, give the element a `box` (`{ x, y, w, h }` in canvas pixels), which sizes it directly.
 
@@ -244,14 +244,16 @@ A dimmed series' line has a `stroke` attribute and its band a `fill` attribute o
 
 ## Errors
 
-These fail the element: the message is shown on the slide, recorded in `STEPDECK.errors` as `<slide>/<element>: <message>`, and reported by `check` as `render-error`. They are shared with `chart.bar` (`core/chart.js`).
+These fail the element: the message is shown on the slide, recorded in `STEPDECK.errors` as `<slide>/<element>: <message>`, and reported by `check` as `render-error`. The table errors are shared with `chart.bar` and `chart.points` (`loadTable` in `core/chart.js`); the draws errors are `chart.line`'s own.
 
 | Message | Cause |
 | --- | --- |
 | ``chart.line needs a `data` path`` | `data` is missing or empty. |
-| `<data> is not a table (use a .csv file)` | `data` points to a JSON file. |
+| `<data> is not a table (use a .csv file)` | `data` points at a file that does not load as a list of rows, for example a JSON object. |
 | ``chart.line needs `<prop>` (a column name)`` | `x`, `y`, `series` (if given) or `interval.lower`/`upper` (when `interval` is set) is not a non-empty string. An empty `series: ""` fails here. |
 | `column '<c>' not found in <data> (columns: a, b, ...)` | `x`, `y`, `series`, `interval.lower` or `interval.upper` names a column the CSV lacks, or the draws file (`draws.data`) lacks `x`, `y`, `series` or `draws.id`. |
+| `<data> has no rows` | The CSV has a header and no rows (so its columns cannot be checked). |
+| ``chart.line needs a numeric `x`: column '<x>' of <data> has no numbers (…)`` | No row has a number in the `x` column: it holds dates, names or blanks. The x axis is linear; add a numeric column (the year, a day count). |
 | `` `draws.shown` is <n> but <data> has only <m> draws `` | `shown` is more than the number of draws in the draws file. |
 | `<data> has <m> draws (at most 2000)` | The draws file has more than 2000 draws. |
 | `<data> has <k> x values for series '<s>' (at most 500)` | A series of the draws file has more than 500 x values (`'all'` without `series`). |
@@ -284,4 +286,4 @@ A CSV that does not parse is `data-invalid`; a missing file is `file-missing`. A
 
 ## For agents
 
-The agent-facing summary is in [`skill/references/components.md`](../../../skill/references/components.md). `node cli/index.js catalog chart.line` prints the props from the schema, and `--json` adds the README and the example path.
+The agent-facing summary is in [`skill/references/components.md`](../../../skill/references/components.md). `node cli/index.js catalog chart.line` prints the props from the schema, and `--json` adds the README and each prop's schema.

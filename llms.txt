@@ -1,0 +1,25 @@
+# stepdeck
+
+> stepdeck is an engine for step-by-step HTML presentations. A slide is plain data (a layout, elements and steps) over built-in components: line, bar and points charts, a big number, a map, a diagram, a list, a chat, a timeline, a terminal session, text, markdown and images. A command-line tool validates the specs in Node, checks every step in headless Chrome and screenshots it, so an agent can build a deck without reading engine source. The files below are plain Markdown, in reading order.
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): the entry point. Two routes (make a deck, or change stepdeck) and the invariants of each.
+- [skill/SKILL.md](skill/SKILL.md): the whole workflow for making a deck: setup, catalog, slide spec, validate, check, shoot, look.
+
+## Skill references
+
+- [design.md](skill/references/design.md): design defaults: one claim per slide, what a step is for, which layout and component for which job, how much fits.
+- [step-model.md](skill/references/step-model.md): elements, steps, visibility, patches, `advance`, entrances and exits.
+- [components.md](skill/references/components.md): the built-in components, data bindings and data files.
+- [cookbook.md](skill/references/cookbook.md): complete slide specs that pass `validate` and `check --played`.
+- [themes-layouts.md](skill/references/themes-layouts.md): layouts and regions, slide `style`, theme tokens, palettes, adding a theme or a layout.
+- [checks.md](skill/references/checks.md): every `validate`, `check` and `catalog` rule, what it means and how to fix it, and the known limits.
+- [custom-components.md](skill/references/custom-components.md): when and how to write a deck component.
+
+## Docs
+
+- [docs/guide/for-agents.md](docs/guide/for-agents.md): how agents use stepdeck: installing the skill, the catalog, machine-readable outputs, exit codes.
+- [docs/reference/cli.md](docs/reference/cli.md): every command, option, output shape and exit code.
+- [docs/reference/rules.md](docs/reference/rules.md): the full list of rules the CLI reports.
+- [docs/index.md](docs/index.md): the index of all the documentation.

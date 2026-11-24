@@ -6,6 +6,7 @@
 
 [English](README.md)
 
+**Agentes de IA:** empiecen por [AGENTS.md](AGENTS.md).
 ![Una diapositiva con un gráfico y otra con un chat, construyéndose paso a paso](docs/media/demo.gif)
 
 [Sitio en vivo](https://horaciochacon.github.io/stepdeck/) · [Galería de cada layout y componente](https://horaciochacon.github.io/stepdeck/site/gallery/)
@@ -14,7 +15,7 @@ stepdeck es un motor de presentaciones HTML paso a paso. Las diapositivas son da
 
 Esta página es la puerta de entrada. Muestra lo que incluye, un inicio rápido y una diapositiva, y luego lleva a quienes escriben mazos, a quienes operan agentes y a quienes contribuyen a la página adecuada de [docs/](docs/index.md).
 
-**Estado.** Primera versión pública (0.1.0), con un [sitio de documentación](https://horaciochacon.github.io/stepdeck/site/docs/) y una [galería](https://horaciochacon.github.io/stepdeck/site/gallery/). El kit incluido tiene 13 componentes y 5 layouts. El tema por defecto es `modern`, y `academic-light` es la alternativa sobria; véase el [registro de cambios](CHANGELOG.md). La exportación a PDF no está implementada.
+**Estado.** La primera versión pública es la 0.1.0; `main` va por delante (véase *Unreleased* en el [registro de cambios](CHANGELOG.md)). En `main` el kit incluido tiene 13 componentes y 5 layouts. Hay un [sitio de documentación](https://horaciochacon.github.io/stepdeck/site/docs/) y una [galería](https://horaciochacon.github.io/stepdeck/site/gallery/). El tema por defecto es `modern`, y `academic-light` es la alternativa sobria. La exportación a PDF no está implementada.
 
 ## Qué incluye
 
@@ -31,7 +32,7 @@ Esta página es la puerta de entrada. Muestra lo que incluye, un inicio rápido 
 Necesitas:
 - Node 20 o posterior;
 - `npm install` en este repositorio, para Ajv (solo `validate` lo necesita);
-- Chrome y Playwright para los comandos de navegador (`check`, `dump`, `shoot`). Playwright no es una dependencia: instálalo donde Node lo encuentre, o define `STEPDECK_PLAYWRIGHT` con la carpeta de un paquete `playwright`.
+- Chrome y Playwright para los comandos de navegador (`check`, `dump`, `shoot`). Playwright no es una dependencia, y la CLI lo busca desde esta carpeta, no desde el mazo: ejecuta aquí `npm run playwright` (instala la versión que usa la CI y no toca `package.json`), o define `STEPDECK_PLAYWRIGHT` con la carpeta de un paquete `playwright`.
 
 Luego:
 
@@ -85,7 +86,7 @@ export default {
 };
 ```
 
-Cada paso parcha el estado del paso anterior, así que se puede llegar a cualquier paso directamente y se ve igual que reproducir hasta él. El número grande sale de un archivo de datos mediante un enlace `{{file#/pointer}}`, así que ninguna cifra se escribe a mano.
+Cada paso parcha el estado del paso anterior, así que se puede llegar a cualquier paso directamente y se ve igual que reproducir hasta él. El número grande sale de un archivo de datos mediante un enlace `{{file#/pointer}}`, en lugar de escribirse en la diapositiva.
 
 Construye la tuya en [Your first deck](docs/guide/first-deck.md) (tu primer mazo); las reglas de los pasos están en [The step model](docs/guide/step-model.md) (el modelo de pasos).
 
@@ -94,7 +95,7 @@ Construye la tuya en [Your first deck](docs/guide/first-deck.md) (tu primer mazo
 | Página | Para |
 |---|---|
 | [docs/index.md](docs/index.md) | El inicio de la documentación: todas las páginas, por público |
-| [Guías](docs/index.md#guides) | Quienes escriben mazos: inicio rápido, primer mazo, modelo de pasos, datos, layouts, presentar, revisar, componentes propios |
+| [Guías](docs/index.md#guides) | Quienes escriben mazos: inicio rápido, primer mazo, modelo de pasos, animación, datos, segundas vistas, mapas, layouts, presentar, revisar, componentes propios, agentes |
 | [Referencia](docs/index.md#reference) | Especificación del mazo y de la diapositiva, componentes, layouts, temas, CLI, reglas, API de ejecución, contrato de componentes |
 | [Conceptos](docs/concepts/architecture.md) | Cómo encajan las piezas: motor de acumulación de pasos, controlador de diapositiva, renderizador de layouts, registro, shells, CLI |
 | [Contribuir](docs/contributing/index.md) | Trabajar en el motor: preparación, pruebas, añadir componentes, layouts, temas y reglas |
@@ -104,7 +105,16 @@ La documentación en `docs/` y la skill están en inglés.
 
 ## Para agentes
 
-La [skill](skill/SKILL.md) enseña a un agente todo el flujo de trabajo sin leer el código del motor: catálogo, especificación de la diapositiva, `validate`, `check`, `shoot` o `dump`, mirar, corregir. Sus `references/` cubren el modelo de pasos, los componentes, los componentes propios, los temas y layouts, cada regla de revisión, y un recetario. La skill está en inglés. El repositorio es también un plugin de Claude Code (`.claude-plugin/plugin.json`), que carga la skill; cárgalo con `claude --plugin-dir /ruta/a/stepdeck`. Cualquier otro agente puede leer `skill/SKILL.md` directamente.
+[AGENTS.md](AGENTS.md) es el punto de entrada para un agente. Lleva a la [skill](skill/SKILL.md), que enseña todo el flujo de trabajo sin leer el código del motor: catálogo, especificación de la diapositiva, `validate`, `check`, `shoot` o `dump`, mirar, corregir. Las `references/` de la skill cubren el modelo de pasos, los componentes, los componentes propios, los temas y layouts, el diseño de diapositivas (`skill/references/design.md`), cada regla de revisión, y un recetario. La skill está en inglés.
+
+El repositorio es también un plugin de Claude Code (`.claude-plugin/plugin.json`), que carga la skill. Cárgalo desde un clon con `claude --plugin-dir /ruta/a/stepdeck`, o instálalo dentro de Claude Code:
+
+```text
+/plugin marketplace add horaciochacon/stepdeck
+/plugin install stepdeck@stepdeck
+```
+
+Cualquier otro agente puede leer `AGENTS.md` y `skill/SKILL.md` directamente.
 
 La documentación y la skill coinciden. Para usar agentes con stepdeck, empieza por [stepdeck for agents](docs/guide/for-agents.md) (stepdeck para agentes).
 
@@ -114,6 +124,7 @@ La documentación y la skill coinciden. Para usar agentes con stepdeck, empieza 
 - **Herramientas:** `cli/` (la línea de comandos), `templates/` (el mazo inicial y el esqueleto de componente), `skill/` (la skill para agentes; `.claude-plugin/` la publica como plugin).
 - **Sitio y ejemplos:** `index.html` (la página de inicio), `site/` (el visor de documentación y la galería), `examples/` (dos mazos de ejemplo).
 - **Documentación:** `docs/`.
+- **Entradas para agentes:** `AGENTS.md`, con `GEMINI.md` y `llms.txt` para las herramientas que buscan esos nombres.
 - **Desarrollo:** `test/` (pruebas unitarias y de navegador, fixtures), `.github/` (CI, notas de contribución y de seguridad, plantillas de issues y de pull requests).
 
 Las rutas entre comillas invertidas, como `core/fold.js` o `components/<name>/`, son relativas a `engine/`, que tiene la misma estructura que la carpeta `stepdeck/` de un mazo. El [recorrido por el repositorio](docs/contributing/index.md#repository-tour) describe cada carpeta, incluidas las generadas.

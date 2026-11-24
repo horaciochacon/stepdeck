@@ -1,0 +1,14 @@
+{
+  "name": "stepdeck",
+  "owner": {
+    "name": "horaciochacon"
+  },
+  "description": "stepdeck: step-by-step HTML presentations that agents can build.",
+  "plugins": [
+    {
+      "name": "stepdeck",
+      "source": "./",
+      "description": "Build, validate, check and screenshot step-by-step HTML presentations."
+    }
+  ]
+}

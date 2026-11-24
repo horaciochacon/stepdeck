@@ -33,7 +33,7 @@ When you add or update a vendored file:
 - Put the license file next to the code and add a row to `THIRD_PARTY_NOTICES.md`.
 - Import d3 through `core/d3.js`, which handles the UMD bundle in the browser and in Node. Never import `vendor/d3/d3.min.js` directly.
 
-The npm `devDependencies` (`ajv`, `marked`) are for development only. Ajv is never copied into decks, and `validate` imports it lazily, so every other command works without `npm install`.
+The package has one npm dependency, `ajv` (used by `validate`), and one `devDependency`, `marked` (for development only). Ajv is never copied into decks, and `validate` imports it lazily, so every other command works without `npm install`.
 
 ## Keep the runtime rules
 
@@ -48,20 +48,31 @@ These are the properties the engine and the checks rely on. A change that breaks
 A component's `update(props, info)` must leave the same markup whether it animated, was aborted mid-motion or jumped straight there. The built-ins say this in their headers (`text`: "Idempotent: update renders exactly the given props, whatever state came before"), and they follow one pattern:
 
 1. Render the target state.
-2. Animate only when `canAnimate(info)` (or `info.animate`) is true, passing `motion(info)` so an abort snaps to the end.
+2. Animate only when `canAnimate(info)` (or `info.animate`) is true, passing `motion(info, ctx)` so an abort snaps to the end. Never fade yourself in on `info.entered`: the box moves then (see [Animation and motion](../guide/animation-and-motion.md)).
 3. Clear any inline style that the motion wrote (`clearInlineStyle` from `core/animate.js`).
 
 From `components/text/index.js`:
 
 ```js
 async update(props, info) {
-  render(props);
-  const fade = info.animate && (info.entered || info.changed.includes("text"));
-  if (fade) {
-    await ctx.animate.fadeIn(p, motion(info));
+  const next = read(props);
+  // Only a change of `text`, on an element that was already visible, crossfades; `accent` alone swaps at
+  // once. Only a badge that stays a badge tweens its colours: a change of `role` swaps them with the class.
+  const playing = info.animate && !info.entered && !info.signal?.aborted;
+  const crossfade = playing && next.text !== shownText;
+  const recolor = playing && next.color !== shownColor && next.role === shownRole;
+  try {
+    if (crossfade || recolor) {
+      const t = motion(info, ctx, { fast: true });
+      // … fade the old text out, write the new one, fade it in; tween the badge colours
+    }
+  } finally {
+    // The final text and colours are written whatever happened, then no inline style is left behind
+    // but the badge's own two colours.
+    write(next);
+    clearInlineStyle(p);
+    paint(next.color);
   }
-  // Idempotent end state: no inline style left behind, whether the fade ran or not.
-  clearInlineStyle(p);
 },
 ```
 
@@ -72,7 +83,7 @@ async update(props, info) {
 Components do not reach for page globals, and core modules keep the ones they read to a few defaults:
 - Components create nodes from the element they are given (`const doc = el.ownerDocument;`), not from `document`.
 - Core functions that need a document take it as an option with `globalThis.document` as the default (`renderSlideFrame(..., { document })`, `boot({ document, location })`, `createBareShell({ document })`), so tests can pass their own.
-- Everything a component needs comes through `ctx` (`d3`, `data`, `assetUrl`, `format`, `t`, `capture`, `animate`, `tokens`, `palette`, `size`, `mount`). See the [component contract](../reference/component-contract.md).
+- Everything a component needs comes through `ctx` (`d3`, `data`, `assetUrl`, `format`, `t`, `capture`, `animate`, `motion`, `tokens`, `palette`, `chart`, `map`, `size`, `stepProps`, `mount`). See the [component contract](../reference/component-contract.md).
 
 The deliberate exceptions are `window.STEPDECK`, which `boot()` sets as the public API, and the UMD bundles (d3, reveal.js and its notes plugin), which assign themselves to `globalThis` when loaded as modules. `core/d3.js` and `core/shells/reveal.js` read those in one place each.
 
@@ -96,8 +107,8 @@ Before writing a small utility, look for it here. Several recent refactors (`ref
 | --- | --- |
 | `core/constants.js` | `CANVAS` (`{ w: 1920, h: 1080 }`), `DEFAULT_THEME` (`"modern"`), `DEFAULT_LAYOUT` (`"full-bleed"`), plus `HOOKS` and `LAYOUT_KINDS` (the published styling hooks and layout kinds; the schemas and `schema/stepdeck.d.ts` repeat them and a test keeps them equal), and `LAYERS`, `LAYER_ORDER` and `inLayer(layer, css)` (the cascade layers; every stylesheet the engine writes starts with `LAYER_ORDER`). Shared by the runtime and the CLI; never repeat these literals. |
 | `core/accent.js` | The accent phrase in titles: `parseAccent`, `stripAccent` (the raw title without its `*`, for anywhere it shows outside the element), `escapeAccent` (for bound values) and `accentMarks` (for `validate`). |
-| `core/kit.js` | Leaf helpers for the engine and components: `message(e)`, `escapeHtml`, `memoAsync` (a promise cache that evicts failures), `num`, `lerp`, `clamp01`, `SVG_NS`/`XHTML_NS`, element builders `el`, `svgEl`, `xhtmlEl`, `sizeSvg`, sizing `measureWidth`/`measureHeight`, motion `canAnimate(info)`, `motion(info, ctx, opts)` (the theme's timing through `ctx.motion.timing`), `motionMs(info, ctx, factor)`, `inkMix(p)` for muted-to-ink text color, and focus-dim `focusPaint(ctx, color, dimmed)` and `tweenColor(ctx, from, to, set, opts)`. |
-| `core/animate.js` | The abort-aware `ctx.animate` helpers (`fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`), plus `clearInlineStyle`, `rise`, `typeCount`, `typingMs` and the typing constants (`TYPE_MS_PER_CHAR` 28, `TYPE_MAX_MS` 1400). |
+| `core/kit.js` | Leaf helpers for the engine and components: `message(e)`, `escapeHtml`, `memoAsync` (a promise cache that evicts failures), `langKey(table, lang)` (the exact tag, then its primary subtag, then `en`), `num`, `lerp`, `clamp01`, `SVG_NS`/`XHTML_NS`, element builders `el`, `svgEl`, `xhtmlEl`, `sizeSvg`, sizing `measureWidth`/`measureHeight`, motion `canAnimate(info)`, `motion(info, ctx, opts)` (the theme's timing through `ctx.motion.timing`), `motionMs(info, ctx, factor)`, `inkMix(p)` for muted-to-ink text color, and focus-dim `focusPaint(ctx, color, dimmed)` and `tweenColor(ctx, from, to, set, opts)`. |
+| `core/animate.js` | The abort-aware `ctx.animate` helpers (`fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`), plus `clearInlineStyle`, `wait`, `typeCount`, `typingMs` and the typing constants (`TYPE_MS_PER_CHAR` 28, `TYPE_MAX_MS` 1400). |
 | `core/motion.js` | The named motions (`MOTION_NAMES`, `motionIn`, `motionOut`, `prepareIn`, `restoreInline`), `parseEase`, `timing(tokens, info, opts)` and `makeMotion(tokens)`, which is `ctx.motion`. Used by the controller, the frame (`core/layout.js`, box motion) and the components. |
 | `core/choreography.js` | Pure functions the controller uses for entrances and exits: `motionParts`, `resolveEntrance`, `resolveExit`, `slotDelays`. |
 | `core/chart.js` | `loadTable` (loads a CSV and checks named columns), `tickFormat`, `opacityAttr`, and `chartKit`: the frozen building blocks every component gets as `ctx.chart` (see the component contract). The pure maths is in `core/chart-layout.js` (no imports), the DOM marks, frame, joins and canvas layer in `core/chart-marks.js`, and the morph, entrance and undraw helpers in `core/chart-motion.js`. |
@@ -105,7 +116,7 @@ Before writing a small utility, look for it here. Several recent refactors (`ref
 | `core/inline.js` | `renderBlock(md)` and `renderInline(md)`: the one sanitizing Markdown renderer. Use it for any author text rendered as HTML; it escapes raw HTML and allows only http, https, mailto, relative and `#anchor` URLs. |
 | `core/registry.js` | `levenshtein` and `suggest(name, known)`, the did-you-mean helper used by the registry, `validate` and `catalog`. |
 | `core/fold.js` | `parseStepRef`, `initialElements` (the slide title and kicker sugar), `stepIndex`, `stepCount`. |
-| `cli/engine.js` | CLI only: `REPO` (the repository root), `ENGINE` (`<repo>/engine`), `copyEngine(dest)` and its `keepFile` filter, `hasEngineCopy`, `engineFor(deckDir)`, `readBuiltins`, `listDirs`, `importDeck`, `isObject`, `readJSON`, and the theme lookup shared by `validate` and `--theme` (`THEME_NAME`, `findTheme`, `assertTheme`, `exactCase`). |
+| `cli/engine.js` | CLI only: `REPO` (the repository root), `ENGINE` (`<repo>/engine`), `copyEngine(dest)` and its `keepFile` filter, `hasEngineCopy`, `engineFor(deckDir)`, `readBuiltins`, `listDirs`, `importDeck`, `isObject`, `readJSON`, `shellPath`, and the theme lookup shared by `validate` and `--theme` (`THEME_NAME`, `findTheme`, `assertTheme`, `exactCase`). |
 | `cli/problems.js` | CLI only: `problem(...)`, `componentProblem(...)`, `formatProblem`, `formatProblems`. |
 
 ## Word an error message
@@ -171,7 +182,7 @@ Structural CSS lives in `core/stepdeck.css`. Its first line states the rule: "On
 
 Prefer a token over a literal. The file still has a few hard-coded values, which are known debt rather than a pattern to copy: `line-height: 1.15` in the title and Markdown heading rules (there is `--sd-line-height-tight`), `font-weight: 600` and `500` in chart labels, terminal headings and the big-number suffix (there are `--sd-font-weight-title` and `--sd-font-weight-strong`), and pixel borders and radii such as `4px` and `12px`. Chart stroke widths in SVG are also literal. When you touch one of these rules, move it to a token if one fits.
 
-Motion in components is JavaScript (`ctx.animate`); `core/stepdeck.css` declares no CSS transitions or animations. Its only motion rule is the capture switch: `html.capture` sets `transition: none` and `animation: none` on every element.
+Step motion in components is JavaScript (`ctx.animate`, `ctx.motion`). `core/stepdeck.css` declares one CSS animation, the ambient flow of a `diagram` edge (`sd-flow`, under `html.sd-ambient`), and the capture switch: `html.capture` sets `transition: none` and `animation: none` on every element.
 
 ## Update the docs with the code
 

@@ -38,7 +38,7 @@ A slide is done when `validate`, `check` and `check --played` all exit 0 and the
 | Command | Runs in | Needs |
 | --- | --- | --- |
 | `validate` | Node | The repository's dependencies (Ajv): run `npm install` in the `stepdeck` folder once. Without them, validate stops with exit 2 and says so. |
-| `check`, `dump`, `shoot` | Chrome, driven by Playwright | Playwright, which is not a dependency of the repository. Install it where Node can resolve it (`npm install playwright`), or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder. The browser is your system Chrome; set `STEPDECK_CHANNEL` to use another Playwright channel. |
+| `check`, `dump`, `shoot` | Chrome, driven by Playwright | Playwright, which is not a dependency of the repository. The CLI resolves it from the `stepdeck` folder, not from the deck: run `npm run playwright` there (it installs without changing `package.json`), or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder. The browser is your system Chrome; set `STEPDECK_CHANNEL` to use another Playwright channel. |
 
 The browser commands serve the deck from a local server and block every request to another origin. They need a deck with its own engine copy (`my-talk/stepdeck/`, made by `new`), or a deck inside the stepdeck repository, such as `examples/kit`.
 
@@ -61,7 +61,7 @@ validate: 3 slides, 0 errors, 0 warnings
 Problems have a severity:
 
 - **error**: the deck is wrong. Any error makes validate exit 1.
-- **warning**: the deck works, but something is probably unintended. The warnings are `noop-step` (a step whose state equals the previous step's, so a click shows nothing new), `kicker-no-region` (a `section` on a layout with no `title` region), `lede-on-cover` (a `lede` on a cover layout), `title-accent` (an unmatched `*` in a title), `accent-empty` (`**` in a title), `exit-delay-ignored` (a `delay` in an `exit`, where it does nothing) and `motion-budget` (an element whose stagger hold plus entrance reaches 8000 ms, close to the 10 s an element has to settle). Warnings are printed with a `warning:` prefix, and validate still exits 0 when there are only warnings.
+- **warning**: the deck works, but something is probably unintended. The warnings are `noop-step` (a step whose state equals the previous step's, so a click shows nothing new), `step-id-chars` (a step id with characters other than letters, digits, `_` and `-`), `remote-url` when the URL is cited in running text (in a prop that loads it, it is an error), `diagram-overlap` when two drawn nodes of a `diagram` share a cell (its other cases are errors), `kicker-no-region` (a `section` on a layout with no `title` region), `lede-on-cover` (a `lede` on a cover layout), `title-accent` (an unmatched `*` in a title), `accent-empty` (`**` in a title), `exit-delay-ignored` (a `delay` in an `exit`, where it does nothing), `motion-budget` (an element whose stagger hold plus entrance reaches 8000 ms, close to the 10 s an element has to settle), `chart-prop-unused` (a chart prop that does nothing without another, such as `ticker` without `until`), `diagram-caption-unused` (a `caption` on a `diagram` that is not `compact`), `map-compact-ignored` (a `map` prop that a `compact` map does not draw) and `map-prop-unused` (a `map` prop that does nothing without a time-lapse layer). Warnings are printed with a `warning:` prefix, and validate still exits 0 when there are only warnings.
 
 Narrow it to one slide with `--slide`:
 
@@ -105,7 +105,7 @@ node cli/index.js check ../my-talk --slide chart --played
 check: 1 slide, 4 steps, 6 played arrivals compared, 0 problems
 ```
 
-`--played` adds a second pass. Every step is reached three ways: by jumping straight to it, by arriving animated from the step before, and by arriving from the step after. The three results are compared per element by visibility, text, box (rounded to 1 px) and canvas state (the `data-*` attributes of its canvas layers, such as a draw fan's `draws`, `seed` and `signature`, so the fan is compared without reading pixels). A difference is a `played-mismatch`, reported once per element, at the first differing arrival, with `(+N more differing arrivals)`. It almost always means a component's `update()` depends on earlier calls or leaves animation residue. The built-in components pass; look at your custom components.
+`--played` adds a second pass. Every step is reached three ways: by jumping straight to it, by arriving animated from the step before, and by arriving from the step after. The three results are compared per element by visibility, text, box (rounded to 1 px) and canvas state (the `data-*` attributes of its canvas layers, such as a draw fan's `draws`, `seed` and `signature`, so the fan is compared without reading pixels), and by the size of each outermost `<svg>` and `<canvas>` inside the element, so a figure that kept its old size in a resized box is caught. A difference is a `played-mismatch`, reported once per element, at the first differing arrival, with `(+N more differing arrivals)`. It almost always means a component's `update()` depends on earlier calls or leaves animation residue. The built-in components pass; look at your custom components.
 
 A slide with `n` steps gives `2(n − 1)` arrivals, so the four-step `chart` slide gives 6.
 
@@ -123,8 +123,8 @@ node cli/index.js dump ../my-talk --slide chart --step mark
 chart · step 2 (mark)
   visible  title   text        96,96 1728×74         "Group B overtakes Group A after 2020"
   visible  chart   chart.line  96,218 1096×754       "0 10 20 30 40 2016 2018 2020 2022 2024 2020 Gro…"
-  visible  note    text        1264,443 560×83       "From 2020 on, Group B rises three times faster …"
-  hidden   latest  big-number  1264,562 560×184      "37.3 Group B in 2024, per 1,000"
+  visible  note    text        1264,437 560×83       "From 2020 on, Group B rises three times faster …"
+  hidden   latest  big-number  1264,556 560×197      "37.3 Group B in 2024, per 1,000"
   visible  source  text        96,996 1728×36        "Source: synthetic example data (data/make-data.…"
   changed: chart, note
 ```
@@ -153,7 +153,7 @@ node cli/index.js dump ../my-talk --slide chart --json
     "step": 0,
     "stepId": "base",
     "elements": [
-      { "id": "title", "type": "text", "visible": true, "text": "…", "box": { "x": 96, "y": 96, "w": 1728, "h": 74 }, "props": { "text": "…" } }
+      { "id": "title", "type": "text", "visible": true, "text": "…", "box": { "x": 96, "y": 96, "w": 1728, "h": 74 }, "props": { "text": "…", "accent": true } }
     ],
     "changed": ["title", "chart", "note", "latest", "source"],
     "errors": []
@@ -161,7 +161,7 @@ node cli/index.js dump ../my-talk --slide chart --json
 ]
 ```
 
-`dump` exits 1 when any step has errors. A failed request (a 404, a blocked remote request) shows in `errors` only as Chrome's console line (`console: Failed to load resource: …`), without the URL, and it still makes `dump` exit 1. `check` reports the request itself as `network-error`, with its URL and its HTTP status or the reason it failed.
+`dump` exits 1 when any step has errors. A failed request (a 404, a blocked remote request) shows in `errors` as one line with its URL and its HTTP status or the reason it failed, such as `network: 404 /data/nope.json`. `check` reports the same request as `network-error`.
 
 ## shoot: a PNG per step
 
@@ -170,10 +170,10 @@ node cli/index.js shoot ../my-talk --slide chart
 ```
 
 ```
-../my-talk/shots/960/chart-00-base.png
-../my-talk/shots/960/chart-01-compare.png
-../my-talk/shots/960/chart-02-mark.png
-../my-talk/shots/960/chart-03-latest.png
+/…/my-talk/shots/960/chart-00-base.png
+/…/my-talk/shots/960/chart-01-compare.png
+/…/my-talk/shots/960/chart-02-mark.png
+/…/my-talk/shots/960/chart-03-latest.png
 shoot: 4 PNGs at 960×540
 ```
 
@@ -201,7 +201,7 @@ Here is `validate` on a `chart` slide with three mistakes: a region typo, a miss
 
 ```
 chart/note · unknown-region · region 'note' vs regions of figure-notes: title, main, notes, footer · set region: "notes"
-chart/chart/base · unknown-prop · prop 'seriesShown' vs props of chart.line: data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval · rename 'seriesShown' to 'series_shown' (props of chart.line)
+chart/chart/base · unknown-prop · prop 'seriesShown' vs props of chart.line: data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval, points, forecast, until, ticker, draws · rename 'seriesShown' to 'series_shown' (props of chart.line)
 warning: chart/pause · noop-step · same elements, props and visibility as the previous step vs a step changes something on screen · merge step 'pause' into the previous step (move its notes there), or give it a patch
 validate: 1 slide, 2 errors, 1 warning
 ```
@@ -236,7 +236,7 @@ With `--json` you get an array of objects with the same parts:
   "rule": "text-outside-region",
   "measured": "text at 1264,107 530×129 (+1 more step)",
   "limit": "inside region 'notes' at 1264,218 560×754",
-  "fix": "shorten the text, break long words, or give the region more room (the slide's `regions` grid variables)"
+  "fix": "shorten the text or use fewer elements in this region; or give it more room: the slide's `regions` grid variables where the layout has them, or another layout"
 }
 ```
 
@@ -256,7 +256,7 @@ With `--json` you get an array of objects with the same parts:
 
 To see how a deck looks under the other built-in theme, run the same command with `--theme academic-light` (or `--theme modern`): a deck that is clean under one theme can still overflow under the other, because the type differs (the cover title, for one).
 
-Narrowing keeps runs short: a full `check` takes a few seconds per slide. When several people or agents work on one deck, each should pass `--slide` for the slide they own.
+Narrowing keeps runs short. The time depends on the machine. On an idle laptop a browser command starts in a second or two, plain `check` on one slide takes about a second, and `check --played` adds about half a second per arrival: 4 s for a four-step slide, 18 s for a 28-step deck. On a busy or slow machine allow several times that: about 10 s to start and 2 s per step. `check --played` already runs everything plain `check` does, so one run is enough. When several people or agents work on one deck, each should pass `--slide` for the slide they own.
 
 ## Working through problems
 
@@ -272,10 +272,9 @@ These pass `validate` and `check`. Look for them in the shots or the dump.
 
 | Problem | What you see | What to do |
 | --- | --- | --- |
-| A chart, diagram, image or terminal in `statement` `main` | The element collapses to zero height. In `dump` its box reads, for example, `1500×0`. | Move it to a region with a height of its own, such as `main` of `figure-notes` or `full-bleed`, or a `halves` half. See the [Fill rules](../reference/layouts.md#fill-rules) table. |
+| A chart, diagram, image, map or terminal in `statement` `main` | The element collapses to zero height. In `dump` its box reads, for example, `1500×0`. | Move it to a region with a height of its own, such as `main` of `figure-notes` or `full-bleed`, or a `halves` half. See the [Fill rules](../reference/layouts.md#fill-rules) table. |
 | `chart.line` `series_shown` or `highlight` naming a series the data does not have | The unknown names are ignored: missing lines, or every series dimmed. | Check the names against the CSV. (`chart.bar` reports unknown categories as an error.) |
 | `list` `active` or `done` given as an integer out of range | Nothing is marked, or every item is done. | Use an index inside the list, or use item ids, which are checked. |
-| A `diagram` node whose `col`/`row` lies outside `cols`/`rows` | The node is drawn outside the diagram. `check` reports it only when its label lands outside the region or the canvas. | Keep every node, with its spans, inside the grid. |
 
 For errors that stop a deck from loading or a command from running, see [Troubleshooting](../troubleshooting.md).
 
@@ -285,7 +284,7 @@ For errors that stop a deck from loading or a command from running, see [Trouble
 | --- | --- |
 | `0` | Clean. For `validate`, warnings only also exit 0. |
 | `1` | Problems: any `validate` error, any `check` problem, any `dump` step with errors. `shoot` exits 0 when it writes its files. |
-| `2` | A usage error, or a run that could not complete: no `deck.js`, an unknown `--slide` or step, Ajv or Playwright missing, a deck with no engine copy, or animation off under `--played`. |
+| `2` | A usage error, or a run that could not complete: no `deck.js`, an unknown `--slide` or step, an option the command does not take, Ajv or Playwright missing, a deck with no engine copy, or animation off under `--played`. |
 
 ```sh
 node cli/index.js validate ../my-talk --json > validate.json
@@ -299,7 +298,7 @@ What `--json` prints:
 - `dump --json`: the array of steps. `shoot --json`: the array of absolute PNG paths.
 - A run that could not complete prints `{ "error": "<message>" }` on stdout and exits 2, for example `{ "error": "unknown slide 'nope' (slides: title, chart, closing)" }`.
 
-Argument errors are never JSON, even with `--json`. An unknown option, a flag without its value, a bad `--size` or `--port`, an unknown command, and a `shoot --size` other than 1920, 1280 or 960 all print `stepdeck: <message>` (with the usage text for parse errors) on stderr and exit 2. A CI script should treat exit 2 with empty stdout as a broken invocation, not as a deck problem. Flags a command does not use, other than `--step`, are ignored.
+Argument errors are never JSON, even with `--json`. An unknown option, a flag without its value, a bad `--size` or `--port`, an unknown command, and a `shoot --size` other than 1920, 1280 or 960 all print `stepdeck: <message>` (with the usage text for parse errors) on stderr and exit 2. A CI script should treat exit 2 with empty stdout as a broken invocation, not as a deck problem. An option a command does not take is refused with exit 2 (`validate does not take --theme (dump, check and shoot do)`); that one is a run error, so under `--json` it is `{ "error": … }`.
 
 ## See also
 

@@ -13,7 +13,13 @@
     "slides",
     "html",
     "data-visualization",
-    "d3"
+    "d3",
+    "claude-code",
+    "skill",
+    "agent",
+    "deck",
+    "charts",
+    "maps"
   ],
   "skills": [
     "./skill"

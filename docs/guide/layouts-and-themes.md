@@ -75,13 +75,13 @@ An element with `box: { x, y, w, h }` is placed at those canvas pixels, above th
 
 ## Give figures room
 
-`chart.line`, `chart.bar`, `diagram`, `image` and `terminal` fill the room their region leaves, in every layout. A chart next to a source line in the same region takes the height the source line does not use. A chart alone in `figure-notes` `main` is 1096×790 (754 with a source line in `footer`). In `full-bleed` `main` a chart with a source line below it is 1728×730 at the 1920×1080 canvas.
+`chart.line`, `chart.bar`, `chart.points`, `diagram`, `image`, `map` and `terminal` fill the room their region leaves, in every layout. A chart next to a source line in the same region takes the height the source line does not use. A chart alone in `figure-notes` `main` is 1096×790 (754 with a source line in `footer`). In `full-bleed` `main` a chart with a source line below it is 1728×730 at the 1920×1080 canvas.
 
 The one place a chart gets no room is `statement` `main`: that region has no set height, so the chart collapses to zero height there. Use `statement` for words. `timeline` does not fill; it is a horizontal strip sized by its labels.
 
 The sizes for every layout, and the rule behind them, are in the [Fill rules](../reference/layouts.md#fill-rules) table. No `validate` or `check` rule flags a collapsed chart, so look at a shot (`node cli/index.js shoot <deck> --slide <id>`) or at the boxes in `dump` (browser commands need Playwright, see [Checking a deck](checking-a-deck.md#dump-what-is-on-screen-at-each-step-as-text)).
 
-Every slide with a chart or a `big-number` needs a `text` element with `role: "source"`, or `validate` reports `figure-source`. Put it in `footer` when the layout has one. `full-bleed` has none, so the source line goes in `main`, under the chart.
+Every slide with a chart, a `map` or a `big-number` needs a `text` element with `role: "source"`, or `validate` reports `figure-source`. Put it in `footer` when the layout has one. `full-bleed` has none, so the source line goes in `main`, under the chart.
 
 ## The title layout's figure column
 
@@ -166,7 +166,7 @@ theme: "modern",
 
 To try another theme without editing the deck, add `?theme=<name>` to the page URL. The URL flag wins over `deck.theme`; with neither, the engine uses its default. The browser commands take the same override as `--theme <name>` (`check --theme academic-light`).
 
-Two themes are built in. `modern` is the default: Geist type, a deep blue accent, near-black titles with tight tracking, and a large cover title. `academic-light` is the plain alternative (Source Sans 3, a muted palette). Both declare the same tokens, so a deck works under either. A deck made by `stepdeck new` carries its own copy of the engine, so changing the engine's default does not change an existing deck until its `stepdeck/` copy is upgraded. `validate` reports a theme the engine does not have as `unknown-theme`. A theme lives in the deck's engine copy, `<deck>/stepdeck/themes/<name>/`; adding one is covered in [Adding a theme](../contributing/adding-a-theme.md), and the theme files are listed in [Themes](../reference/themes.md).
+Two themes are built in. `modern` is the default: Geist type, a deep blue accent, near-black titles with tight tracking, and a large cover title. `academic-light` is the plain alternative (Source Sans 3, a muted palette). Both declare the same tokens, so a deck works under either. A deck made by `stepdeck new` carries its own copy of the engine, so changing the engine's default does not change an existing deck until its `stepdeck/` copy is upgraded (see [How do I update the engine in an existing deck?](../troubleshooting.md#how-do-i-update-the-engine-in-an-existing-deck)). `validate` reports a theme the engine does not have as `unknown-theme`. A theme lives in the deck's engine copy, `<deck>/stepdeck/themes/<name>/`; adding one is covered in [Adding a theme](../contributing/adding-a-theme.md), and the theme files are listed in [Themes](../reference/themes.md).
 
 Every token can be overridden per slide, through `regions` or a `:scope` rule in `style`:
 
@@ -194,7 +194,7 @@ Only the categorical palette is checked. Text needs 4.5:1, which `check` measure
 
 ## Set the language
 
-`deck.lang` (or `?lang=` in the URL, which wins) sets the deck language. It defaults to `en`; `en` and `es` are built in, and any other code falls back to English. The language affects:
+`deck.lang` (or `?lang=` in the URL, which wins) sets the deck language. It defaults to `en`; `en` and `es` are built in. A regional code uses its language (`es-PE` reads as `es`), and any other code falls back to English. The language affects:
 
 | What | `en` | `es` |
 |---|---|---|

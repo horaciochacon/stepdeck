@@ -68,7 +68,7 @@ One page per built-in component, in the order of `components/index.json`:
 
 | Page | Component |
 | --- | --- |
-| [text](reference/components/text.md) | A paragraph in one of four roles: body, source, note, label. |
+| [text](reference/components/text.md) | A paragraph in one of six roles: body, source, note, label, lede, badge. |
 | [chart.line](reference/components/chart-line.md) | Line chart from a CSV, with series, highlight, annotations and an interval band. |
 | [chart.bar](reference/components/chart-bar.md) | Bar chart from a CSV, one row per category. |
 | [chart.points](reference/components/chart-points.md) | Estimates with intervals from a CSV, one row per category, with a reference line. |
@@ -115,7 +115,7 @@ They record what was planned and decided at the time. Some of what they describe
 ## Conventions used in these docs
 
 - **Canvas pixels.** Every slide is drawn on a 1920 x 1080 canvas and scaled to fit the screen. Sizes, positions and element boxes are given in canvas pixels.
-- **Theme values.** Font sizes, colors and spacing are quoted from `academic-light`, one of the two built-in themes, and are marked with its name. The default theme, `modern`, uses the same sizes and spacing (except the cover title) with its own colors and fonts; a theme can change any of them, and the token names stay the same. See [Themes](reference/themes.md).
+- **Theme values.** Font sizes, colors and spacing are quoted from `academic-light`, one of the two built-in themes, and are marked with its name. The default theme, `modern`, uses the same sizes and spacing (except the cover title and the lede) with its own colors and fonts; a theme can change any of them, and the token names stay the same. See [Themes](reference/themes.md).
 - **Commands.** Examples run the CLI from the repository root as `node cli/index.js <command> [deckDir] [options]`. `cli/index.js` is also the package's `stepdeck` bin, so if the `stepdeck` bin is on your `PATH`, `stepdeck <command>` is the same thing. For most commands the deck folder defaults to the current folder. `new` needs a folder, `new-component` takes a component name first and the folder second, and `catalog` takes an optional entry name besides the folder (see the [CLI reference](reference/cli.md)).
 
 ```sh

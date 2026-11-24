@@ -1,12 +1,12 @@
 # terminal
 
-`terminal` replays a recorded agent session in a terminal window: a command line, an activity log, a task list and a file list. The session lives in a JSON script; the slide only says how many of its events are visible at each step. This page lists every prop, the script format, what each event shows, how the component animates, and the errors it reports. It is for anyone writing slides by hand or reviewing what an agent wrote.
+`terminal` replays a recorded shell or agent session in a terminal window: a command line, an activity log, a task list and a file list. The session lives in a JSON script; the slide only says how many of its events are visible at each step. This page lists every prop, the script format, what each event shows, how the component animates, and the errors it reports. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/terminal/schema.json`](../../../engine/components/terminal/schema.json), [`components/terminal/index.js`](../../../engine/components/terminal/index.js), [`components/terminal/derive.js`](../../../engine/components/terminal/derive.js), [`core/animate.js`](../../../engine/core/animate.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/terminal/schema.json`](../../../engine/components/terminal/schema.json), [`components/terminal/index.js`](../../../engine/components/terminal/index.js), [`components/terminal/derive.js`](../../../engine/components/terminal/derive.js), [`core/animate.js`](../../../engine/core/animate.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
-The terminal slide of the spike example (`examples/spike/slides/terminal.js`). `advance` sets `shown` once per step, so the slide never patches the terminal itself:
+The terminal slide of the second example deck (`examples/spike/slides/terminal.js`). `advance` sets `shown` once per step, so the slide never patches the terminal itself:
 
 ```js
 export default {
@@ -83,7 +83,7 @@ The script is a JSON object:
 | --- | --- | --- | --- |
 | `title` | string | no | The title bar. Without it the bar is empty. |
 | `command` | string | no | The command line after the `$` prompt, once `shown` is above 0. |
-| `tasks` | string array | no (default `[]`) | The Tasks list in the side panel, one row per task. |
+| `tasks` | string array | no (default `[]`) | The Tasks list in the side panel, one row per task. Optional: without it the list is empty. |
 | `events` | array | yes | The log, one line per event. Task and file events also drive the side panel. |
 
 ### Event types
@@ -114,23 +114,23 @@ Both lists are derived from events `0` to `shown - 1`:
 
 The headings are localized from the deck's `lang`: `Tasks` and `Files` in English, `Tareas` and `Archivos` in Spanish.
 
-So in the spike script, task 0 turns done at the 7th event (array index 6): it is done at `shown: 9` and still pending at `shown: 4`. To end with every box ticked, the script needs a `done` event for every task, and the last step must show it.
+So in the second example deck's script, task 0 turns done at the 7th event (array index 6): it is done at `shown: 9` and still pending at `shown: 4`. To end with every box ticked, the script needs a `done` event for every task, and the last step must show it.
 
 ## Layout
 
-- **It fills its region.** `core/stepdeck.css` gives every terminal element `flex: 1 1 0`, so it takes the free height of its region in any layout, `full-bleed` included. Other elements in the same region (the source line above) keep their natural height. `chart.line`, `chart.bar`, `diagram` and `image` do the same; see the [Fill rules](../layouts.md#fill-rules) table.
+- **It fills its region.** `core/stepdeck.css` gives every terminal element `flex: 1 1 0`, so it takes the free height of its region in any layout, `full-bleed` included. Other elements in the same region (the source line in the example) keep their natural height. `chart.line`, `chart.bar`, `chart.points`, `diagram`, `image` and `map` do the same; see the [Fill rules](../layouts.md#fill-rules) table.
 - **The log is a scroll window.** It shows the newest `min(shown, N)` events, where N is how many lines fit the log box. Older lines leave the DOM. N is measured in canvas pixels at mount and at every update, and written to `data-capacity` on `.sd-terminal`.
 - **One row per line.** Log lines and the command never wrap; long text is cut with an ellipsis. Keep event text short.
-- **Sizes.** All text in the window uses `--sd-font-size-label` (28px in `academic-light`). Log lines and the command use `--sd-font-mono`. The side panel is 520px wide. Colors come from theme tokens: the prompt and the `run`, `code` and `file` markers are accent, `error` lines are alert, `read`, `note` and `task` text is muted.
+- **Sizes.** All text in the window uses `--sd-font-size-label` (28px in `academic-light`). Log lines and the command use `--sd-font-mono`. The side panel is 520px wide and stays, with its "Tasks" and "Files" headings, even when both lists are empty; a slide `style` of `.sd-terminal-side { display: none; }` hides it. Colors come from theme tokens: the prompt and the `run`, `code` and `file` markers are accent, `error` lines are alert, `read`, `note` and `task` text is muted.
 
-In the spike deck at 1920x1080 the terminal element measures 1728x730 px (from `stepdeck dump`).
+In the second example deck (`examples/spike`) at 1920x1080 the terminal element measures 1728x674 px (from `stepdeck dump`); on a slide with no `section` kicker it is 1728x730.
 
 ## Markup
 
 Inside its element wrapper (`div.sd-el[data-el][data-type="terminal"]`):
 
 ```html
-<div class="sd-terminal" data-shown="9" data-capacity="15">
+<div class="sd-terminal" data-shown="9" data-capacity="14">
   <div class="sd-terminal-bar"><span class="sd-terminal-title">Agent session</span></div>
   <div class="sd-terminal-body">
     <div class="sd-terminal-main">
@@ -168,7 +168,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="terminal"]`):
 
 The engine animates an update only when you move forward by exactly one step, in a live presentation with motion on.
 
-**Entrance.** The terminal builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and it plays the build from an empty terminal to the state of that step: the typing and the new lines below, as if the session went from `shown: 0` to the step's `shown`. Its command and lines are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the terminal shows its state at once; with `enter: "none"` nothing moves.
+**Entrance.** The terminal builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and it plays the build from an empty terminal to the state of that step: the typing and the new lines below, as if the session went from `shown: 0` to the step's `shown`. Its command and lines are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the terminal shows its state at once; with `enter: "none"` nothing moves. `enter: "draw"` is the same as leaving `enter` unset; with `enter: { motion: "draw", duration: <ms> }` the build's motions last that long instead.
 
 While the terminal stays visible, it moves only when `shown` grew:
 
@@ -183,25 +183,25 @@ Every other move renders the target state directly: a jump, a backward move, the
 
 ## Errors
 
-The component checks the script at mount and at every update. A failure becomes an element error, shown on the slide and listed in `STEPDECK.errors` as `<slide>/<element>: <message>`. After the first error the element gets no further updates.
+The component loads and checks the script at mount, and again when an update changes `script`. A failure becomes an element error, shown on the slide and listed in `STEPDECK.errors` as `<slide>/<element>: <message>`. After the first error the element gets no further updates.
 
 Every script message is prefixed with the script path, for example `data/session.json: event 3 is not an object`.
 
 | Message | Cause |
 | --- | --- |
-| `terminal needs a \`script\` path` | `script` is missing, empty or not a string (no path prefix). |
+| ``terminal needs a `script` path`` | `script` is missing, empty or not a string (no path prefix). |
 | `<path>: not a terminal script (expected an object { title, command, tasks, events })` | The file's top level is not a JSON object (an array, a string, `null`). |
-| `<path>: \`command\` must be a string` | `command` is present and not a string. |
-| `<path>: \`title\` must be a string` | `title` is present and not a string. |
-| `<path>: \`tasks\` must be an array of strings` | `tasks` is not an array, or holds a non-string. |
-| `<path>: \`events\` must be an array` | `events` is missing or not an array. |
+| ``<path>: `command` must be a string`` | `command` is present (not `null`) and not a string. |
+| ``<path>: `title` must be a string`` | `title` is present (not `null`) and not a string. |
+| ``<path>: `tasks` must be an array of strings`` | `tasks` is not an array, or holds a non-string. |
+| ``<path>: `events` must be an array`` | `events` is missing or not an array. |
 | `<path>: event <i> is not an object` | Event `i` is `null` or a primitive. |
 | `<path>: event <i> has unknown type '<t>' (use read, run, result, note, error, code, file, task)` | `type` is missing or not one of the eight. |
 | `<path>: event <i>: task index <n> is not in 0..<len-1>` | A task `index` that is not an integer from 0 to `tasks.length - 1`. With no tasks the range reads `0..-1`. |
 | `<path>: event <i>: task status '<s>' is not one of pending, active, done` | A task event without a valid `status`. |
-| `<path>: event <i>: a file event needs its path in \`text\`` | A file event whose `text` is missing, empty or not a string. |
+| ``<path>: event <i>: a file event needs its path in `text` `` | A file event whose `text` is missing, empty or not a string. |
 | `<path>: event <i>: file status '<s>' is not one of created, edited` | A file event with any other `status`. |
-| `<path>: event <i>: \`text\` must be a string` | Any other event with a non-string `text`. |
+| ``<path>: event <i>: `text` must be a string`` | Any other event with a non-string `text`. |
 
 Loading the file can fail first, with the data loader's messages: `data file not found: <path>` when the file is missing, `invalid data file <path>: <message>` when it is not valid JSON.
 

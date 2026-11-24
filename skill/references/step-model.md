@@ -22,7 +22,7 @@ export default {
 
 | Key | Meaning |
 |---|---|
-| `id` | Unique in the slide. `title` is reserved for the title sugar. |
+| `id` | Unique in the slide. Three ids are reserved. `title` and `lede` are the elements the slide's `title` and `lede` keys make; an element of your own with one of those ids replaces that one. `kicker` is the element made from `section`; defining your own is an error (`reserved-id`). |
 | `type` | `text`, `markdown` or a component name from the catalog (`chart.line`, `big-number`, `terminal`, `my.thing`). |
 | `props` | JSON only, validated against the component's schema at every step. |
 | `region` | A region of the layout (default `main`). Elements in a region stack vertically in the order listed. |
@@ -86,7 +86,7 @@ A step whose resulting state equals the previous step's (same elements, props an
 
 ## `advance`: elements with an internal sequence
 
-Components with an internal sequence (the terminal, a custom `stage`-driven story) are driven by **props only**; a component never reads the step number. `advance` writes one value per step so you do not have to write the patches:
+Components with an internal sequence (the terminal, a custom `stage`-driven story) are driven by **props only**; a component never reads the step number. `advance` sets one prop to one value per step, so you do not have to write the patches: at step `start + j` the prop is `values[j]`.
 
 ```js
 { id: "term", type: "terminal",
@@ -99,6 +99,8 @@ Components with an internal sequence (the terminal, a custom `stage`-driven stor
 - `start + values.length` must not exceed the number of steps (`advance-overflow`). Usually `values.length` equals the steps from `start` to the end.
 - Two sequenced elements on one slide each get their own `advance`, aligned by step ids.
 - `advance` is applied before the step's explicit patches, so an explicit `set` of the same prop wins at that step.
+- The value replaces the prop whole: an object is not merged, and `null` is a value.
+- A value may be a binding: `values: [1, "{{data/plan.json#/shown}}", 3]` resolves like a prop (see [components](components.md), the bindings section).
 
 ## Animation
 

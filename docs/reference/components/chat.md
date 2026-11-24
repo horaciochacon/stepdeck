@@ -2,7 +2,7 @@
 
 `chat` shows an exchange as bubbles, or a single prompt or quote as a bordered card. Messages appear one per step when you drive `shown`, and the newest one can be typed out. This page lists every prop, the markup, the motion and the error messages. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chat/schema.json`](../../../engine/components/chat/schema.json), [`components/chat/index.js`](../../../engine/components/chat/index.js), [`components/chat/derive.js`](../../../engine/components/chat/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/chat/schema.json`](../../../engine/components/chat/schema.json), [`components/chat/index.js`](../../../engine/components/chat/index.js), [`components/chat/derive.js`](../../../engine/components/chat/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -95,7 +95,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="chat"]`) the componen
 
 Motion plays only when the engine animates the update: you moved forward exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (`shoot`, and `check` without `--played`) draw the target state at once. `check --played` plays each forward step with motion, typing included, then checks that it ends with the same markup as a jump. See [Animation and motion](../../guide/animation-and-motion.md).
 
-**Entrance.** The chat builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and every visible message rises in, one after another, then the newest is typed (with `typing`), as below; the messages are hidden the moment the chat shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the messages show at once, full text; with `enter: "none"` nothing moves.
+**Entrance.** The chat builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and every visible message rises in, one after another, then the newest is typed (with `typing`), as below; the messages are hidden the moment the chat shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the messages show at once, full text; with `enter: "none"` nothing moves. `enter: "draw"` is the same as leaving `enter` unset; with `enter: { motion: "draw", duration: <ms> }` the build's motions last that long instead.
 
 On an animated step while the chat stays visible (and in its entrance):
 

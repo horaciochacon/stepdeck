@@ -70,13 +70,13 @@ Conventions the existing rules follow:
 
 ### Severity
 
-Only `validate` has a severity. Its `add(p, severity = "error")` stores the problem with `severity: "error"` or `"warning"`. Errors exit 1; warnings print as `warning: <line>` and exit 0. Today the only warning is `noop-step`:
+Only `validate` has a severity. Its `add(p, severity = "error")` stores the problem with `severity: "error"` or `"warning"`. Errors exit 1; warnings print as `warning: <line>` and exit 0. [Checking a deck](../guide/checking-a-deck.md#validate-schemas-data-and-steps-in-node) lists the warnings. `noop-step` is one:
 
 ```js
 add({ slide, step, rule: "noop-step", measured: "…", limit: "…", fix: "…" }, "warning");
 ```
 
-Make a new rule an error unless the deck is still correct and the problem is only a smell. Per-step element rules go through `report(key, p)`, which always calls `add(p)`, so they are always errors.
+Make a new rule an error unless the deck is still correct and the problem is only a smell. Per-step element rules go through `report(key, p, severity)`, which passes the severity on to `add`; leave it out for an error, or pass `"warning"` as `title-accent` does.
 
 `check` problems carry no severity. Any problem makes `check` exit 1.
 
@@ -147,8 +147,10 @@ A rule about one component's props can live in that component's folder as a pure
 ```js
 if (validate(resolved)) {
   if (type === "diagram") {
-    for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
+    for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
+    // …
   }
+  // …
   return;
 }
 ```
@@ -161,7 +163,7 @@ The diagram component also calls `diagramProblems` at run time and throws its fi
 
 | Kind of rule | Where | Existing rules |
 | --- | --- | --- |
-| Per element, from the text layout of one step | `layoutFindings(layout)` | `text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small`, `contrast` |
+| Per element, from the text layout of one step | `layoutFindings(layout)` | `text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small`, `contrast`, `hidden-paints` |
 | From what the page logged, requested or reported | `classifyErrors(m)` and `ERROR_FIX` | `render-error`, `console-error`, `network-error` |
 | Per slide, from two or more steps | `layoutPass`, after the step loop | `step0-shows-all` |
 | From played versus jumped arrivals | `playedPass` | `played-mismatch` |
@@ -171,12 +173,14 @@ The diagram component also calls `diagramProblems` at run time and throws its fi
 For each slide and step, `layoutPass` opens a fresh page in the bare shell in capture mode, waits for fonts and `STEPDECK.settled()`, and takes two measurements:
 
 ```js
-await session.open(id, k, { capture: true });
-const m = await session.measure();                                                   // dump's measurement plus errors
-const layout = await session.page.evaluate(textLayoutInPage, [CANVAS_W, BARE_CANVAS]); // text geometry
+await page.open(id, k, { capture: true });
+const m = await page.measure();                                                   // dump's measurement plus errors
+const layout = await page.page.evaluate(textLayoutInPage, [CANVAS_W, BARE_CANVAS]); // text geometry
 ```
 
-`textLayoutInPage` runs inside the page through `page.evaluate`, so it cannot use imports or anything at module scope; it gets its inputs only through the argument array. It returns `{ minFont, canvas, elements }`, where each element is `{ id, region, box, regionRect, items }` and each text item is `{ text, rects, slack, fontSize, source, fg, bg }`, all in canvas pixels. If your rule needs a value the page does not report yet, add it to the items or elements there.
+The steps are measured as jobs of `session.each` (the worker pool of `withDeck` in `cli/dump.js`: several pages of one browser, results in deck order), and the rules run afterwards in Node, in deck order. A rule must therefore judge from what the job returned (`m`, `layout`), never from the order in which pages finished.
+
+`textLayoutInPage` runs inside the page through `page.evaluate`, so it cannot use imports or anything at module scope; it gets its inputs only through the argument array. It returns `{ minFont, canvas, elements }`, where each element is `{ id, region, box, regionRect, paints, items }` (`paints` is what still shows of a hidden element, for `hidden-paints`, the one rule there that is judged before the no-text skip below) and each text item is `{ text, rects, slack, fontSize, source, fg, bg }`, all in canvas pixels. If your rule needs a value the page does not report yet, add it to the items or elements there.
 
 `textLayoutInPage` collects text nodes only, and `layoutFindings` skips every element with no visible text (`if (el.items.length === 0) continue;`). A rule about element geometry rather than text, for example the box of an image or of a chart before its labels render, would never see those elements there. Read `m.elements` from `session.measure()` instead, inside `layoutPass`: it is dump's measurement, one `{ id, type, visible, ghost?, text, box, props }` per element (`ghost` only while the element's placeholder is on screen), with `box` in canvas pixels rounded to 1 px and `0,0,0,0` for a collapsed element (`measureInPage` in `cli/dump.js`). `layoutPass` already reads it for `props.role`.
 

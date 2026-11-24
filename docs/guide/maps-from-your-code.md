@@ -229,7 +229,7 @@ mapshaper admin1.geojson -simplify 5% keep-shapes -o precision=0.0001 my-talk/da
 When a project has no boundaries of its own, `stepdeck boundaries` fetches one country's open admin boundaries from [geoBoundaries](https://www.geoboundaries.org/) into the deck, once, when you author it:
 
 ```sh
-node cli/index.js boundaries URY ADM1 --deck my-talk
+node cli/index.js boundaries URY ADM1 --deck ../my-talk
 ```
 
 It writes `data/ury-adm1.geojson`, already simplified, with coordinates rounded to four decimals, and next to it `data/ury-adm1.source.json`, which keeps the boundary's source and licence. It prints the licence and a source line for the slide. Each region keeps geoBoundaries' properties, `shapeName`, `shapeISO`, `shapeID`, `shapeGroup` and `shapeType`, so the slide names one as its `id` (`id: "shapeISO", name: "shapeName"`) and your code joins its data to the same one. Licences differ from country to country; keep the credit the source line gives. Every option is in the [CLI reference](../reference/cli.md#boundaries).
@@ -238,7 +238,7 @@ Use it only when you have nothing better. Boundaries your analysis already uses 
 
 ## The slide
 
-The slide names the files and says what each step shows. This one opens on the bare regions, colours them by rate, zooms into one region in an inset, swaps the rates for a population surface, and then flies to that region and plays the surface through its years there:
+The slide names the files and says what each step shows. This one opens on the bare regions, colours them by rate, zooms into one region in an inset, swaps the rates for a population surface, and then flies to that region and plays the surface through its years there. Save it as `slides/where.js` and add `where` to `slides` in `deck.js`:
 
 ```js
 export default {
@@ -278,8 +278,8 @@ The props, the steps a map understands and what each change looks like are in th
 Run the checks after every run of your code, as after every edit of the slide:
 
 ```sh
-node cli/index.js validate my-talk --slide where
-node cli/index.js check my-talk --slide where --played
+node cli/index.js validate ../my-talk --slide where
+node cli/index.js check ../my-talk --slide where --played
 ```
 
 `validate` runs in Node, in about a second. For a map it checks, at every step: the props against the schema; that every file the props name exists; that `shown` names layers that exist (`map-layer`); every raster file and every PNG it names against the format above (`map-raster`); that `frame` is a label of the time-lapse and that its layers agree (`map-frame`); that a run fits in 20 s (`map-run`); and that the columns a layer names are in its CSV (`missing-column`). It warns about `frame` or `pace` without a time-lapse, and a `numbers` key no frame has (`map-prop-unused`). It does not draw the map, so it does not join the CSV to the regions.

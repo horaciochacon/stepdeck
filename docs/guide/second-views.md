@@ -45,7 +45,7 @@ A compact copy only works if it is the same diagram. Copying the nodes by hand i
 }
 ```
 
-In each slide that draws the diagram, bind every structural prop (`cols`, `rows`, `nodes`, `edges` and `groups`) to it, and spread the result into the element's props. The full diagram keeps its state (`shown`) in the slide:
+In each slide that draws the diagram, bind every structural prop (`cols`, `rows`, `nodes`, `edges` and `groups`) to it, and spread the result into the element's props. The full diagram keeps its state (`shown`) in the slide. Save each slide on this page as `slides/<id>.js` and add its id to `slides` in `deck.js`.
 
 ```js
 const process = {
@@ -208,10 +208,10 @@ The inset draws the same frame as the compact views, from the theme's tokens.
 A second view is checked like any other element:
 
 ```sh
-node cli/index.js validate my-talk
-node cli/index.js check my-talk
-node cli/index.js check my-talk --theme academic-light
-node cli/index.js shoot my-talk
+node cli/index.js validate ../my-talk
+node cli/index.js check ../my-talk
+node cli/index.js check ../my-talk --theme academic-light
+node cli/index.js shoot ../my-talk
 ```
 
 - **`validate`** resolves the bindings, so the shared definition is checked on every slide that uses it. It warns `diagram-caption-unused` for a `caption` on a diagram that is not compact, and `map-compact-ignored` for a prop a compact map ignores. It also checks the compact gap and pad against each other, as it does the full gap and pad.

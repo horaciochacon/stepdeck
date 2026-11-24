@@ -30,8 +30,10 @@ List the layouts with `catalog`. `catalog <layout> my-talk` prints its regions a
 - **`statement`:** one large sentence or question, centred both ways in the statement size (`--sd-font-size-statement`). Use `markdown` for bold terms. The title is optional. Other elements in `main`, such as a list or a timeline, sit in the centred column, in the middle of the canvas; a chart or a diagram needs a region with height instead.
 - **`halves`:** two columns under a title band, for before and after or a prompt and its tasks. A chart, diagram, image or terminal in a half takes the height the other elements leave. `regions: { "--split": "2fr 1fr" }` makes the halves unequal. `--align` (`start`, `center` or `end`) moves the content of both halves vertically: `regions: { "--align": "center" }` centres short halves instead of leaving the lower part of the slide empty.
 - **`figure-notes`, `main`:** a chart, diagram, image or terminal takes the height the other elements leave. This is the home for `chart.line` and `chart.bar`.
-- **Charts fill their region.** A `chart.line` or `chart.bar` takes the height the other elements in its region leave, so a source line can sit beside it (`full-bleed` has no `footer`, so there it goes in `main`). `statement` `main` has no set height and a chart there collapses to zero. Sizes are in the Fill rules table of the Layouts reference (`docs/reference/layouts.md`).
-- **`figure-notes`, `notes`:** at the default width, the column holds about 20 characters per line at the body size. Use `role: "note"` (32px) for longer notes, or widen `--notes-width`.
+- **Charts fill their region.** A `chart.line` or `chart.bar` takes the height the other elements in its region leave, so a source line can sit beside it (`full-bleed` has no `footer`, so there it goes in `main`). `statement` `main` has no set height and a chart there collapses to zero. Sizes are in the Fill rules table of the Layouts reference ([`$STEPDECK/docs/reference/layouts.md`](../../docs/reference/layouts.md)).
+- **`figure-notes`, `notes`:** at the default width (560px), a line holds about 25 characters at the body size and about 33 with `role: "note"` (32px). Use `role: "note"` for notes, or widen the column: `regions: { "--notes-width": "700px" }`. A narrower column gives the figure more room.
+- **`figure-notes`, an empty notes column:** the column keeps its width when every note is still hidden, so the first step can show a figure beside a blank third of the slide. Put one standing note there from step 0, or narrow `--notes-width`.
+- **Hidden elements keep their space**, so a region whose later elements are still hidden looks top-heavy at step 0. Give a hidden element `ghost: true` (or a label) to show a dashed placeholder, or `collapse: true` to let the rest reflow when it appears.
 - **Unknown regions.** An element that names a region its layout lacks is an error (`unknown-region`).
 
 ## Kicker and accent phrase
@@ -43,9 +45,15 @@ List the layouts with `catalog`. `catalog <layout> my-talk` prints its regions a
 - every selector is prefixed with the slide, so it cannot leak;
 - a selector starting with `:scope` or `&` targets the slide's canvas itself.
 
+- `[data-el="<id>"]` selects one element by its id: the element's box, which holds what the component draws.
+
 ```js
 style: ":scope { --sd-region-gap: 40px; } .sd-role-note { max-width: 20em; }"
 ```
+
+Two touches that come up often on `statement`:
+- **Centre a big number.** A `big-number` in `main` sits at the left of the centred column. `style: '[data-el="saved"] { text-align: center; }'` centres the figure and its label (the cookbook has the slide).
+- **A smaller second line.** A second `markdown` element under the statement takes the statement size too. `style: '[data-el="then"] { --sd-font-size-statement: var(--sd-font-size-body); }'` sets that one element at the body size.
 
 ## Theme tokens
 
@@ -83,7 +91,7 @@ Components and layouts read only tokens, never raw colors or sizes. `catalog mod
 - **Color names.** Each color has a name per language. **Roles** map meanings to colors: categorical `accent` and `alert`; sequential and diverging `low`, `mid` and `high`.
 - **Color words.** `{{color:accent}}` in a **markdown** element becomes that color's name in the deck language, such as "blue" or "azul". Text then never names a color the theme does not show.
 - **Order.** Charts assign categorical colors in series order, and the first color is the accent.
-- **Contrast.** Palette colors promise 3:1 against the background, enough for marks. Text needs 4.5:1 (`contrast` in check), so components darken label colors as needed.
+- **Contrast.** Palette colors promise 3:1 against the background, enough for marks. Text needs 4.5:1 (`contrast` in check), so components darken label colors as needed (lighten, on a dark background).
 
 ## Adding a theme or a layout
 
@@ -106,11 +114,11 @@ Themes and layouts are looked up in the deck's engine copy, `my-talk/stepdeck/`.
 
   ```json
   { "name": "<name>", "description": "One sentence.",
-    "regions": [{ "name": "title", "description": "…" }, { "name": "main", "description": "…" }],
+    "regions": [{ "name": "title", "description": "…" }, { "name": "main", "description": "…" }, { "name": "side", "description": "…" }],
     "variables": [{ "name": "--side-width", "default": "600px", "description": "…" }] }
   ```
 
-  A wrong shape fails validate (`layout-schema`).
+  List every region the CSS places: an element that names a region the schema lacks fails validate (`unknown-region`). A wrong shape fails validate (`layout-schema`).
 - Optional in `schema.json`: `"kind": "cover"` for a cover layout (its title takes the cover size; a region named `figure` makes it smaller while it holds an element), and `"hooks": { "<region>": "subtitle" | "meta" | "statement" | … }` to give a region a published hook.
 - **`layout.css`**, scoped to `.sd-canvas[data-layout="<name>"]`. It is placement only: no `color`, `font*`, `letter-spacing`, `text-transform`, `line-height`, `text-align`, `--sd-*` property or `!important`, and `font-size` only as `var(--sd-…)`. The `title` region must sit in a stretched or sized grid track (never `auto`), because it is an inline-size container. It sets `grid-template-columns`, `grid-template-rows` and `grid-template-areas` with the region names, and `padding: var(--sd-canvas-margin)`.
   - Each region is `[data-region="<name>"]`, a vertical stack with `grid-area` already set.

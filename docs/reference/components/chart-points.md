@@ -2,7 +2,9 @@
 
 `chart.points` draws estimates by category from a CSV file: one row per category, each a dot with an optional interval whisker and its value written beside it, against a value axis at the bottom and an optional reference line across every row. It is built for step-by-step stories: the axis stays put across steps, rows can appear one at a time out of the reference line, one row can be emphasized, a row can show a before and after pair, and an empty cell reads "no data" instead of a dot at zero. With `id`, a category holds many points instead: a beeswarm strip with a summary tick, in which one item can be followed from strip to strip. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chart.points/schema.json`](../../../engine/components/chart.points/schema.json), [`components/chart.points/index.js`](../../../engine/components/chart.points/index.js), [`components/chart.points/model.js`](../../../engine/components/chart.points/model.js), [`components/chart.points/strips.js`](../../../engine/components/chart.points/strips.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+It is a categorical dot plot (and, with `id`, a beeswarm): one axis is a value and the other a list of categories. stepdeck has no numeric x–y scatter plot component: for a scatter of two numeric columns, write a deck component with `ctx.chart` (see [Custom components](../../guide/custom-components.md)), or, when x is ordered such as time, use [`chart.line`](chart-line.md) with `points: true`.
+
+Source code (for contributors; deck authors do not need it): [`components/chart.points/schema.json`](../../../engine/components/chart.points/schema.json), [`components/chart.points/index.js`](../../../engine/components/chart.points/index.js), [`components/chart.points/model.js`](../../../engine/components/chart.points/model.js), [`components/chart.points/strips.js`](../../../engine/components/chart.points/strips.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -90,7 +92,7 @@ Sur,p01,12.5,16.2
 
 | Prop | Type | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- |
-| `data` | string | (required) | snap | Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`). |
+| `data` | string | (required) | tween | Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`). A change to another file with the same categories tweens the marks like a change of `y` (marks keyed by category, and by `id` in strips); with other categories it snaps. A `.json` file that holds an array of row objects loads too, but `validate` checks column names only in `.csv` files. |
 | `x` | string | (required) | snap | Column holding the category of each row. Its text labels the row. Rows with an empty category are skipped. |
 | `y` | string | (required) | tween | Column holding the estimate of each row. A change moves every dot to its new value. An empty cell shows "no data" (see [Missing values](#missing-values)). |
 | `from` | string | none | tween | Column holding the earlier value of each row, for a pair. See [Pairs](#pairs-before-and-after). |
@@ -104,7 +106,7 @@ Sur,p01,12.5,16.2
 | `highlight` | string | none | fade | One category to emphasize. The other rows' dots and whiskers turn the theme's dim color (`--sd-color-dim`) and their value labels the muted color. |
 | `reference` | number \| `{ value, label? }` | none | fade | A dashed line across every row at `value`, with `label` above the plot when it is set. |
 | `id` | string | none | snap | Column naming each point. With it every row is one point and each category a beeswarm strip. See [Strips](#strips). |
-| `summary` | `"median"` \| `"mean"` \| `"none"` | `"median"` | fade | Strips: the summary tick across each strip, at the median or the mean of its values, or none. |
+| `summary` | `"median"` \| `"mean"` \| `"none"` | `"median"` | fade | Strips: the summary tick across each strip, at the median or the mean of its values, or none. Without `id` it does nothing, and `validate` does not warn about it. |
 | `focus` | string | none | fade | Strips: one `id` followed across the strips. Its dots are ringed and raised, a line joins them, and every other dot turns `--sd-color-dim`. |
 
 The transition column is the schema's `x-transition` annotation. It feeds the catalog; the motion itself is written in `index.js` and described in [Motion](#motion).
@@ -194,7 +196,7 @@ The engine animates only a forward move of exactly one step, in a live presentat
 
 Every animated change runs as a single `ctx.animate.tween` that lasts twice the theme's `--sd-duration` (800 ms in both built-in themes), or the step's `transition.duration` when it is set, with the theme's `--sd-easing`. Colors run in their own tween over `--sd-duration-fast`.
 
-The origin of a growing row is the reference value when it is inside the axis, else 0 when it is inside the axis, else the start of the axis.
+The origin of a growing row is the reference value when there is one inside the axis, and the start of the axis when the reference lies outside it. Without a reference it is 0 when 0 is inside the axis, else the start of the axis.
 
 | Change | What you see |
 | --- | --- |
@@ -241,12 +243,20 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 
 | What | With `format` | Without |
 | --- | --- | --- |
-| Value labels | `format.y` | The value as precise as the data (d3 format `,~r`). |
+| Value labels | `format.y` | The value as precise as the data (d3 format `,.12~r`: every digit the table holds, up to 12 significant ones, with a thousands separator). |
 | Tick labels | `format.y` | A fixed number of decimals from the tick step. |
 | Interval text in `<title>` | `format.y` | Same as value labels. |
 | Category labels | `format.x`, only when the category is a number | The category text as it is. |
 
+`format.y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data.
+
+Tick labels that would run into each other are thinned: fewer ticks (d3's for a count of 5, then 3, then 2) over the same domain, which never moves. Every step of the slide gets the same count, so the margins (which hold half a tick label) and the plot keep their size.
+
 Formats are localized by the deck language: in an `es` deck the decimal separator is a comma and the thousands separator a dot.
+
+## Colours
+
+Every dot takes one colour, the first colour of the theme's categorical palette (`--sd-color-accent` in a theme without one): there is no per-category colour option and no colour column. To single a row out, use `highlight` (or `focus` for one item of a strip), which dims the others. Whiskers and value labels are ink, a pair's connector muted, and marks out of focus `--sd-color-dim`.
 
 ## Markup
 
@@ -313,10 +323,11 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `<data> is not a table (use a .csv file)` | `data` points at a file that does not load as a list of rows. |
 | ``chart.points needs `<prop>` (a column name)`` | `<prop>` is `x`, `y`, `id`, `from`, `interval.lower` or `interval.upper`. `x` and `y` must be non-empty strings; `id`, `from` and the interval keys are optional, but when set, an empty string (or a value that is not a string) is this error. |
 | `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y`, `id`, `from` or `interval` is not in the CSV header. |
+| `<data> has no rows` | The CSV has a header and no rows, so its columns cannot be checked. |
 | ``\`domain\` must be [min, max] with min < max`` | `domain` is not two finite numbers in increasing order. |
 | ``category '<k>' appears more than once in <data> (chart.points needs one row per category, or `id` for strips)`` | Two rows share a category, without `id`. |
 | `id '<id>' appears more than once in category '<k>' of <data>` | Strips: two rows of one category share an id. |
-| ``\`focus\` id '<id>' not found in <data>`` | `focus` names an id that no row of the data has (without `id`, every `focus` is unknown). An id found only outside a given `domain` is known: it simply has no dot. |
+| `` `focus` id '<id>' not found in <data> `` | `focus` names an id that no row of the data has (without `id`, every `focus` is unknown). An id found only outside a given `domain` is known: it simply has no dot. |
 | ``category '<k>' in `shown` not found in <data> (categories: …)`` | `shown` names a category the data does not have. |
 | ``category '<k>' in `highlight` not found in <data> (categories: …)`` | `highlight` names a category the data does not have. |
 | `sort column '<c>' not found (columns: a, b, …)` | `sort: { by }` names a column the CSV does not have. |
@@ -325,7 +336,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | ``estimate '<k>' (<value>) is outside `domain` [<a>, <b>]`` | A given `domain` stops short of an estimate (the first one, in data order). |
 | ``\`from\` of '<k>' (<value>) is outside `domain` [<a>, <b>]`` | A given `domain` stops short of the `from` value of a row that has an estimate. |
 
-`validate` checks that `x`, `y`, `id`, `from` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain`, `sort`, duplicate categories or ids, or names in `shown`, `highlight` and `focus`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+`validate` checks that `x`, `y`, `id`, `from` and the `interval` columns exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix). It does not check `domain` order, the column or the categories that `sort` names (only its form, against the schema), duplicate categories or ids, or names in `shown`, `highlight` and `focus`. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 domain-error/points: estimate 'Norte' (12.4) is outside `domain` [0, 10]

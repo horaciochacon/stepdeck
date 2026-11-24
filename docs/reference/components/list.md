@@ -2,7 +2,7 @@
 
 This page lists every prop and behaviour of the built-in `list` component: numbered, lettered, bulleted or checklist items that you reveal, tick or emphasise one step at a time. It is for anyone who writes slides, by hand or through an agent. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog list <deck>`.
 
-Sources: [`components/list/schema.json`](../../../engine/components/list/schema.json), [`components/list/index.js`](../../../engine/components/list/index.js), [`components/list/derive.js`](../../../engine/components/list/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/list/schema.json`](../../../engine/components/list/schema.json), [`components/list/index.js`](../../../engine/components/list/index.js), [`components/list/derive.js`](../../../engine/components/list/derive.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -68,7 +68,7 @@ See the [step model](../../guide/step-model.md) for `advance`, `set` and how ste
 | `active` | integer >= 0 (an index), or string (an id) | no | none | fade | One item is emphasised; the text of every other item turns muted. |
 | `rule` | boolean | no | `false` | snap | Draws an accent rule down the left side of the list. |
 
-The schema has `additionalProperties: false` on the props and on each item, so any other key is a `validate` error (`unknown-prop` or `prop-invalid`).
+The schema has `additionalProperties: false` on the props and on each item, so any other key is a `validate` error (`unknown-prop`; an item key is named by its path, e.g. `items.0.foo`).
 
 ### Item ids
 
@@ -130,7 +130,7 @@ Use slide `style` with these classes and attributes to restyle one slide.
 
 The engine animates an update only when you move forward by exactly one step, in a live presentation with motion on. Every other move (a jump, a backward move, the first render, capture mode for `shoot` and `check`) renders the target state at once. See [Animation and motion](../../guide/animation-and-motion.md).
 
-**Entrance.** The list builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the list plays the build from nothing to the state of that step: every visible item rises in, one after another, and a done tick draws after its row. The items are hidden the moment the list shows. A list that appears with `shown: 3` plays one build of three items. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the list shows its state at once; with `enter: "none"` nothing moves.
+**Entrance.** The list builds its own entrance (`"x-enter": "own"`). On the step where the element appears, in its stagger slot, its box stays still and the list plays the build from nothing to the state of that step: every visible item rises in, one after another, and a done tick draws after its row. The items are hidden the moment the list shows. A list that appears with `shown: 3` plays one build of three items. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the list shows its state at once; with `enter: "none"` nothing moves. `enter: "draw"` is the same as leaving `enter` unset; with `enter: { motion: "draw", duration: <ms> }` the build's motions last that long instead.
 
 While the list stays visible, an animated forward step compares each item before and after the update and plays:
 

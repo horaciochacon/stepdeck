@@ -84,7 +84,7 @@ Later layers beat earlier ones whatever the selectors' specificity.
 
 Not in a layer: `tokens.css` (`:root` custom properties and `@font-face`; it has no competing rules) and the reveal shell's own sheets. Unlayered rules beat layered ones.
 
-Engine state rules use `!important` inside `sd-core`: `.sd-el.sd-hidden`, `.sd-el.sd-collapsed`, `.sd-el.sd-failed`, `.sd-canvas.sd-booting` and the `[data-visible="false"]` rules of the components. An important declaration in an earlier layer beats every later layer, so no `theme.css`, layout or slide rule can show a hidden element or hide a failed one. The class names `sd-hidden` and `sd-collapsed` are stable: a theme may select on them (the `modern` meta rule does).
+Engine state rules use `!important` inside `sd-core`: `.sd-el.sd-hidden`, `.sd-el.sd-collapsed`, `.sd-el.sd-failed`, `.sd-canvas.sd-booting` and the `[data-visible="false"]` rules of the components. An important declaration in an earlier layer beats every later layer, so no `theme.css`, layout or slide rule can show a hidden element or hide a failed one. A hidden element's descendants are forced hidden the same way (all but its ghost placeholder), so a child rule or inline style that says `visibility: visible` does not show through. The class names `sd-hidden` and `sd-collapsed` are stable: a theme may select on them (the `modern` meta rule does).
 
 ## Styling hooks
 
@@ -94,7 +94,7 @@ A hook is a class that core puts on the elements that play a role, so a theme ca
 |---|---|---|
 | `title` | The element with id `title` (the slide's `title`, or an explicit element of that id). | Title size, weight and tight line height; `--sd-letter-spacing-title`; `--sd-color-title`. |
 | `kicker` | The element wrapper of the `kicker` element, which core makes from the slide's `section`. Its selector is `[data-el="kicker"]` or `.sd-kicker`. | `--sd-font-size-kicker` (else the label size), strong weight, 0.12em tracking, uppercase, `--sd-color-kicker` (else muted). |
-| `lede` | The element wrapper of the `lede` element (the slide's `lede`, or an explicit element of that id). Its selector is `[data-el="lede"]` or `.sd-lede`. | None on the hook: the text's `lede` role (`.sd-role-lede`) sets the lede size, tight line height and muted colour, and the built-in themes restyle that role. |
+| `lede` | The element wrapper of the `lede` element (the slide's `lede`, or an explicit element of that id). Its selector is `[data-el="lede"]` or `.sd-lede`. | None on the hook: the text's `lede` role (`.sd-role-lede`) sets the lede size, tight line height and muted colour in core (`core/stepdeck.css`); the built-in themes only supply the tokens. A theme may restyle that role in its `theme.css`. |
 | `accent` | The `<em class="sd-accent">` of an accent phrase (`*phrase*` in a title). | `--sd-color-accent`; `font-style: normal`, so it is an `<em>` but not italic. |
 | `subtitle` | The mapped region (`title` layout's `subtitle`) and every element wrapper in it. | Heading size, tight line height, muted, balanced wrapping. |
 | `meta` | The mapped region (`title` layout's `meta`) and its wrappers. | Note size. |
@@ -107,7 +107,7 @@ How to write `theme.css`:
 - **Target hooks and component part classes only.** Never `[data-layout]`, a region name (`[data-region]`) or `!important`; the contract test forbids all three.
 - **Do not set `font-size` on `.sd-title`.** A `theme.css` rule beats core's cover rules whatever the specificity, so it would also override the cover size and the cover-figure size. Set the sizes with tokens. If a theme does set a title size, it must restate the cover rules.
 - **Style the element that carries the hook, not its inner nodes.** The wrapper `.sd-el` carries the hook class (`.sd-title`, `.sd-kicker`, `.sd-lede`), and the text sits in a `.sd-text` or `.sd-markdown` inside it. Set inherited properties (colour, font, weight, tracking, size, transform) on the hook element: `.sd-kicker { color: … }`, not `.sd-kicker .sd-text { … }`. The text inherits them, a text and a markdown title alike, and a slide's `style` on the same element (`.sd-title { color: … }`) still wins. A rule on the inner node would beat that slide style, because the inner node then has its own value instead of inheriting.
-- **A slide's `style` still wins**, because it sits in the `sd-slide` layer.
+- **A slide's `style` still wins**, because it sits in the `sd-slide` layer. Inside it, `[data-el="<id>"]` selects one element's wrapper (the per-element selector: `style: '[data-el="n"] { text-align: center; }'` centres the `big-number` with id `n`), `[data-region="<name>"]` a region, and `:scope` the canvas, where a token set as a custom property applies to the whole slide.
 - A theme with no `theme.css` is complete: core's hook defaults apply.
 
 The title region is an inline-size container named `sd-title`, so a slide's `style` or a theme may use `@container sd-title (…)`. Core's own rules no longer do.
@@ -116,7 +116,7 @@ The title region is an inline-size container named `sd-title`, so a slide's `sty
 
 Every token is a CSS custom property on `:root` in `themes/<theme>/tokens.css`: [`modern`](../../engine/themes/modern/tokens.css) and [`academic-light`](../../engine/themes/academic-light/tokens.css). They are prefixed `--sd-`, except `--min-audience-font`, which keeps its spec name. Components, layouts and `core/stepdeck.css` read tokens instead of raw values, with the exceptions listed in [Values not taken from tokens](#values-not-taken-from-tokens). Both themes declare the same names (the contributing guide's `diff` of the names is empty); the tables give both values, with `=` where they are the same.
 
-Nine tokens are **optional**: a theme that does not declare them still works, because core's hook rules fall back as shown. They are marked *optional* below. The motion tokens have fallbacks in code too (see [Motion](#motion)), but every theme should declare them.
+Ten tokens are **optional**: a theme that does not declare them still works, because core's hook rules fall back as shown. They are marked *optional* below. The motion tokens have fallbacks in code too (see [Motion](#motion)), but every theme should declare them.
 
 The **Read by** column says where each token is used today. "Unused" means nothing in `core/`, `components/`, `layouts/` or `cli/` reads it: changing it changes nothing on screen.
 
@@ -133,7 +133,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-color-accent` | `#0072b2` | `#1d4ed8` | Emphasis: links, big numbers, prompts, accent phrases. Equals the categorical palette's `blue` (role `accent`). | `core/stepdeck.css`, `chart.bar` (fallback fill) |
 | `--sd-color-alert` | `#b75002` | `#d81b45` | Errors and warnings. Equals the categorical palette's `vermillion` (academic-light) or `rose` (modern), role `alert`. | `core/stepdeck.css` (error boxes), reveal shell |
 | `--sd-color-rule` | `#d4d4d8` | `#e4e4e7` | Hairlines: borders, separators. Also the fallback for `--sd-color-dim`. | `core/stepdeck.css`, `core/kit.js` (`focusPaint`, as the dim fallback) |
-| `--sd-color-grid` *(optional)* | `#d4d4d8` | `#f0f0f2` | Chart grid lines, lighter than a rule. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (`.sd-grid-line`) |
+| `--sd-color-grid` *(optional)* | `#d4d4d8` | `#f0f0f2` | Chart grid lines, lighter than a rule. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (`.sd-grid-line`, `.sd-axis-grid`) |
 | `--sd-color-dim` *(optional)* | `#b4b4bb` | `#c4c4cc` | What marks out of focus turn to when `highlight` emphasises another: a neutral grey lighter than `--sd-color-muted` and darker than `--sd-color-grid`. Falls back to `--sd-color-rule`. | `core/stepdeck.css` (diagram), `core/kit.js`, `chart.line`, `chart.bar` |
 | `--sd-color-forecast` *(optional)* | *(not set)* | *(not set)* | The shaded region of a `chart.line` forecast. Falls back to 5% of `--sd-color-ink` over `--sd-color-background`. | `core/stepdeck.css`, `chart.line` |
 | `--sd-color-letterbox` | `#111114` | `=` | The page around the canvas when the window is not 16:9. | `core/stepdeck.css`, reveal shell |
@@ -161,7 +161,7 @@ The **Read by** column says where each token is used today. "Unused" means nothi
 | `--sd-font-size-note` | `32px` | `=` | Notes (`role: "note"`), meta lines, big-number labels, diagram and timeline labels, captions. | `core/stepdeck.css` |
 | `--sd-font-size-label` | `28px` | `=` | Axis ticks, legends, terminal text, inline code. | `core/stepdeck.css`, `chart.line`, `chart.bar`, `diagram` |
 | `--sd-font-size-kicker` *(optional)* | `28px` | `=` | The kicker. Falls back to the label size. | `core/stepdeck.css` (`.sd-kicker`) |
-| `--sd-font-size-lede` *(optional)* | `32px` | `36px` | The message line under a title (`role: "lede"`, the slide's `lede`). Falls back to the note size. | `core/stepdeck.css` (`.sd-role-lede`), the theme's `theme.css` |
+| `--sd-font-size-lede` *(optional)* | `32px` | `36px` | The message line under a title (`role: "lede"`, the slide's `lede`). Falls back to the note size. | `core/stepdeck.css` (`.sd-role-lede`) |
 | `--sd-font-size-source` | `28px` | `=` | Source lines (`role: "source"`). | `core/stepdeck.css` |
 
 The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 when it is missing.
@@ -170,7 +170,7 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 
 | Token | Value (both themes) | Use | Read by |
 | --- | --- | --- | --- |
-| `--sd-font-weight-body` | `400` | Body weight. | **Unused** |
+| `--sd-font-weight-body` | `400` | Body weight: the canvas's `font-weight` (falls back to 400), inherited by all text that sets none of its own. | `core/stepdeck.css` (`.sd-canvas`) |
 | `--sd-font-weight-title` | `600` | Titles, big numbers, markdown headings. | `core/stepdeck.css`, reveal shell, both themes' `theme.css` |
 | `--sd-font-weight-strong` | `600` | Bold inside text, the kicker. | `core/stepdeck.css` (with a fallback of `600`) |
 
@@ -182,7 +182,7 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 | `--sd-line-height-tight` | `1.15` | `=` | Titles, kickers, subtitles, statements, labels, diagram and timeline text. | `core/stepdeck.css`, `diagram` |
 | `--sd-letter-spacing-title` *(optional)* | `normal` | `-0.03em` | Title tracking. Falls back to `normal`. | `core/stepdeck.css` (`.sd-title`) |
 | `--sd-letter-spacing-cover` *(optional)* | `normal` | `-0.05em` | Cover title tracking. Falls back to `--sd-letter-spacing-title`, then `normal`. | `core/stepdeck.css` (cover rule) |
-| `--sd-measure` | `34em` | `=` | A comfortable line length for long text. | **Unused** |
+| `--sd-measure` | `34em` | `=` | Reserved: a comfortable line length for long text. No rule of the engine reads it; a deck's own `style` may (`max-width: var(--sd-measure)`). | **Unused** (reserved) |
 
 ### Minimum audience font
 
@@ -198,7 +198,7 @@ The charts read `--sd-font-size-label` from `ctx.tokens` and fall back to 28 whe
 | Token | Value | Use | Read by |
 | --- | --- | --- | --- |
 | `--sd-grid` | `8px` | Base unit; the other spacing tokens are multiples of it. | `core/stepdeck.css`, `diagram`, `timeline` |
-| `--sd-space` | `16px` | Default inner spacing (two units). (The `rise` motion travels `--sd-motion-distance`, see [Motion](#motion).) | `core/stepdeck.css`, `core/animate.js` (its legacy `rise` helper), `diagram`, `title` layout |
+| `--sd-space` | `16px` | Default inner spacing (two units). (The `rise` motion travels `--sd-motion-distance`, see [Motion](#motion).) | `core/stepdeck.css`, `diagram`, `title` layout |
 | `--sd-region-gap` | `24px` | Gap between stacked elements in a region. | `core/stepdeck.css`, every layout |
 | `--sd-canvas-margin` | `96px` | Canvas margin. Layouts with a footer use half of it at the bottom; `full-bleed` pads its regions instead of the canvas. | every layout, `core/stepdeck.css`, reveal shell |
 | `--sd-rule-width` | `2px` | Width of rules and borders. | `core/stepdeck.css`, `diagram`, `timeline` |
@@ -348,7 +348,7 @@ Components get palettes through `ctx.palette(kind = "categorical")` (see [Compon
 - It returns `null` when no palette is found for the kind, for example when `palettes.json` failed to load.
 - The result is built once per kind and shared between components: treat it as read-only.
 
-Who uses it today: `chart.line` takes `colors` in order of each series' first appearance, `chart.bar` takes the first color, and `markdown` resolves `{{color:<role>}}` to a color name by searching the categorical, then the sequential, then the diverging palette's roles. An unknown role is an element error: `unknown color role '<role>' in {{color:<role>}} (known roles: ...)`.
+Who uses it today: `chart.line` takes `colors` in order of each series' first appearance, `chart.bar` and `chart.points` colour their marks from it, `diagram` gives each `kind` a categorical colour, `map` builds its colour scales from the sequential, diverging and categorical palettes, `text` resolves a badge's `tone`, and `markdown` resolves `{{color:<role>}}` to a color name by searching the categorical, then the sequential, then the diverging palette's roles. An unknown role is an element error: `unknown color role '<role>' in {{color:<role>}} (known roles: ...)`.
 
 ## Checks
 
@@ -360,7 +360,7 @@ Who uses it today: `chart.line` takes `colors` in order of each series' first ap
 | `theme-palettes` | validate | `palettes.json` is missing or is not valid JSON | `add themes/<t>/palettes.json (see themes/academic-light/palettes.json)` |
 | `unknown-palette` | validate | `deck.palette` is not a palette of the theme | `set palette: "viridis" in deck.js` |
 | `theme-background` | validate | `--sd-color-background` is missing, or not `#rgb` / `#rrggbb` (`white`, `rgb()` and 8-digit hex are rejected) | `declare --sd-color-background as a hex color in themes/<t>/tokens.css` |
-| `palette-contrast` | validate | a categorical color has WCAG contrast under 3:1 against the background | `darken orange (#e69f00) to #c68905 or darker …` |
+| `palette-contrast` | validate | a categorical color has WCAG contrast under 3:1 against the background | `darken orange (#e69f00) to #c68905 or darker …` (on a dark background: `lighten … or lighter`) |
 | `palette-cvd` | validate | two categorical colors differ by less than CIEDE2000 8 under simulated protanopia, deuteranopia or tritanopia | `change the lightness of <a> or <b> so they differ for <type>, or drop one` |
 | `contrast` | check | rendered text is under 4.5:1 against its resolved background | — |
 | `font-too-small` | check | visible audience text is under the theme's minimum font | — |
@@ -382,7 +382,7 @@ Every rule, with its trigger and fix, is in [Rules](rules.md); agents use [skill
 
 ## The theme in the catalog
 
-`catalog` lists each theme as `{ kind: "theme", name, summary, animates: [] }`. The summary is the first sentence of the README's first paragraph. The detail adds `description` (that whole paragraph), `tokens` (every `--name: value` in the `:root` blocks of `tokens.css`, read as text), `palettes` (the parsed `palettes.json`) and `readme`:
+`catalog` lists each theme as `{ kind: "theme", name, summary, animates: [], enter: "box" }`. The summary is the first sentence of the README's first paragraph. The detail adds `description` (that whole paragraph), `tokens` (every `--name: value` in the `:root` blocks of `tokens.css`, read as text), `palettes` (the parsed `palettes.json`) and `readme`:
 
 ```sh
 node cli/index.js catalog modern ../my-talk

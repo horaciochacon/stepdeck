@@ -2,7 +2,7 @@
 
 `diagram` draws nodes, arrows and nested groups on an explicit grid, and reveals them step by step. This page lists every prop, how the component places and draws each part, how it animates, and which mistakes `validate` and `check` catch. It is for anyone writing slides by hand or reviewing what an agent wrote. Agents get the same facts from [skill/references/components.md](../../../skill/references/components.md) and `node cli/index.js catalog diagram <deck>`.
 
-Sources: [`components/diagram/schema.json`](../../../engine/components/diagram/schema.json), [`components/diagram/index.js`](../../../engine/components/diagram/index.js), [`components/diagram/place.js`](../../../engine/components/diagram/place.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css), [`cli/validate.js`](../../../cli/validate.js). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/diagram/schema.json`](../../../engine/components/diagram/schema.json), [`components/diagram/index.js`](../../../engine/components/diagram/index.js), [`components/diagram/place.js`](../../../engine/components/diagram/place.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css), [`cli/validate.js`](../../../cli/validate.js). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -34,7 +34,7 @@ export default {
 };
 ```
 
-The component's own example (`components/diagram/example.js`) adds nested groups, a dashed edge, every node shape and a final highlight step:
+The component's own example (`components/diagram/example.js`) adds nested groups, a dashed edge, four of the five node shapes (`box`, `pill`, `circle`, `text`; for `card` and `kind` see [Cards and kinds](#cards-and-kinds)) and a final highlight step:
 
 ```js
 export default {
@@ -181,7 +181,7 @@ All state lives in `shown` and `highlight`. Change them per step with `set`, as 
 
 Inline Markdown means bold, italic, `code`, links, images and line breaks; block syntax such as lists does not apply. Raw HTML is escaped. The sandbox example uses code spans for file names (``label: "`data/`"``).
 
-A label too long for its node is never shrunk and never clipped. It wraps inside the node and, if it still does not fit, overflows the node. `check` reports it only if it leaves the region or the canvas. Labels that collide inside one diagram are not reported, because `check` compares elements, not the parts inside one element. Look at a screenshot (`shoot`).
+A label too long for its node is never shrunk and never clipped. It wraps to the node's width and, with more lines than the cell holds, overflows it downward. A `card` fills its cell and reads from the back of the room; a `box` and a `pill` are label-sized. `check` reports it only if it leaves the region or the canvas. Labels that collide inside one diagram are not reported, because `check` compares elements, not the parts inside one element. Look at a screenshot (`shoot`).
 
 ## Placement
 
@@ -231,7 +231,7 @@ The component reads the element's size when it renders. If `cols`, `rows`, `node
 
 The engine animates only a forward move of exactly one step. A jump, a backward move and the first render draw the target state at once, and going back hides parts with no motion. Either way, every update first writes the target state and removes any inline style the motion used, so the markup after playing a step equals the markup after jumping to it. See [Animation and motion](../../guide/animation-and-motion.md).
 
-**Entrance.** The diagram builds its own entrance (`"x-enter": "own"`). On the step where the element appears (through [`from` or `at`](../../guide/step-model.md#visibility-sugar-from-and-at)), in its stagger slot, its box stays still and its parts build from nothing to the state of that step, in the order below. Its parts are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the diagram shows its state at once; with `enter: "none"` nothing moves.
+**Entrance.** The diagram builds its own entrance (`"x-enter": "own"`). On the step where the element appears (through [`from` or `at`](../../guide/step-model.md#visibility-sugar-from-and-at)), in its stagger slot, its box stays still and its parts build from nothing to the state of that step, in the order below. Its parts are hidden the moment it shows. With `enter: "fade"`, `"rise"`, `"wipe"` or `"pop"` the box moves instead and the diagram shows its state at once; with `enter: "none"` nothing moves. `enter: "draw"` is the same as leaving `enter` unset; with `enter: { motion: "draw", duration: <ms> }` the build's motions last that long instead.
 
 On an animated step (the entrance, or a step while the diagram stays visible), the motion runs in this order:
 
@@ -270,7 +270,7 @@ The component throws on props that would draw a blank or wrong diagram. The erro
 | ``diagram needs `cols`, an integer >= 1`` (or `rows`) | `cols` or `rows` is missing, not an integer, or below 1. |
 | ``diagram needs a non-empty `nodes` array`` | `nodes` is missing or empty. |
 | `diagram: <message> (<limit>)` | The first `diagram-id` problem in the props (see below). |
-| `diagram has <n> kinds; the categorical palette has <m> colours` | The nodes use more distinct `kind` values than the theme's categorical palette has colours. |
+| `diagram has <n> kinds; the categorical palette has <m> colours` | The nodes use more distinct `kind` values than the theme's categorical palette has colours. `validate` does not count kinds: this is found only when the slide renders (`check`: `render-error`). |
 
 ### What `validate` checks
 
@@ -283,6 +283,8 @@ The component throws on props that would draw a blank or wrong diagram. The erro
 | `diagram-id` | A group contains itself, directly or through other groups. | `group 'x' contains itself (x -> y -> x)` |
 | `diagram-overlap` | Sibling groups (same parent group, or both top-level) share grid cells. | `sibling groups 'g' and 'h' share cells (from col 0, row 0)` |
 | `diagram-overlap` | A node that is not a member of a group sits inside that group's cells. | `node 'n' sits in the cells of group 'g' but is not a member` |
+| `diagram-overlap` (warning) | Two nodes that are not `text` share a cell (their cell rectangles intersect), so one is drawn over the other. A `text` node may share a cell. | `nodes 'a' and 'b' share a cell (col 0, row 0)` |
+| `diagram-grid` | A node's cells reach outside the grid: `col + colspan` is more than `cols`, or `row + rowspan` more than `rows` (`col` and `row` are 0-based, so the last column is `cols - 1`). | `node 'off' at col 3, row 0 is outside the 3 x 1 grid` |
 | `diagram-overlap` | The theme's `--sd-diagram-gap` is less than twice its `--sd-diagram-pad` (for a compact diagram, `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`). | `grid gap 20px is less than twice the group padding 16px` |
 | `diagram-caption-unused` (warning) | `caption` is set and `compact` is not `true`, so the caption draws nothing. | `` `caption` does nothing without `compact: true` `` |
 
@@ -295,18 +297,11 @@ bad/d · diagram-id · shown names an unknown id 'ghost' vs ids of nodes, groups
 bad/d · diagram-overlap · sibling groups 'g' and 'h' share cells (from col 0, row 0) vs sibling groups cover separate cells · move the members of 'g' or 'h' to other cells, or nest one group inside the other
 ```
 
-A `diagram-id` problem is also an element error at runtime. A `diagram-overlap` problem is not: the diagram still renders, but its boxes may overlap or touch. The gap check uses the theme's `tokens.css` values only; it does not see a `--sd-diagram-gap` or `--sd-diagram-pad` override (or one of the compact pair) in a slide's `style`. The fix text printed for this problem mentions the slide style, but changing only the slide style does not clear the `validate` problem; raise the gap or lower the pad in the theme's `tokens.css` to clear it (`--sd-diagram-gap` and `--sd-diagram-pad`, or `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad` for a compact diagram). All rules are listed in [Rules](../rules.md).
+A `diagram-id` problem is also an element error at runtime. A `diagram-overlap` or `diagram-grid` problem is not: the diagram still renders, but its boxes may overlap or touch, and a node outside the grid is drawn outside the element. The gap check uses the theme's `tokens.css` values only; it does not see a `--sd-diagram-gap` or `--sd-diagram-pad` override (or one of the compact pair) in a slide's `style`. The fix text printed for this problem mentions the slide style, but changing only the slide style does not clear the `validate` problem; raise the gap or lower the pad in the theme's `tokens.css` to clear it (`--sd-diagram-gap` and `--sd-diagram-pad`, or `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad` for a compact diagram). All rules are listed in [Rules](../rules.md).
 
 ### Not detected
 
-- **A node outside the grid.** Nothing checks that `col + colspan <= cols` or `row + rowspan <= rows`. A node at `col: 2` in a 2-column diagram is placed past the element's edge by the grid formula, with no error and no `diagram-*` problem. `validate` passes; `check` reports the node only through its label, as `text-outside-region` and/or `text-outside-canvas` (usually both; the numbers below depend on the label):
-
-  ```text
-  bad/d/0 · text-outside-canvas · text at 2271,565 42×46 vs inside the canvas 0,0 1920×1080 · ...
-  ```
-
-  Keep every `col` below `cols` and every `row` below `rows`, including spans.
-- **Two nodes in the same cell.** Nodes that share a cell are not reported; their shapes draw on top of each other.
+- **Two `text` nodes, or a `text` node and a shape, in the same cell.** Only two drawn shapes in one cell are reported (the `diagram-overlap` warning above); a `text` node may sit on another node, and nothing checks that the two labels stay readable.
 - **A routed edge through other nodes.** A routed edge's straight runs to and from its lane are not checked against the nodes they cross: route `over` only between nodes in the top row (or groups that reach it), `under` in the bottom row, `left` and `right` in the first and last columns.
 - **A turned label past the region's top or bottom.** `check` allows text the overhang of its line box above and below; on a side lane's turned label that allowance is about half the label's length, so such a label can leave the region, or the canvas, by up to that much without `text-outside-region` or `text-outside-canvas` (an overlap with other text is still reported). Keep side-lane labels short and look at a screenshot.
 - **Labels that collide inside the diagram.** See [Text](#text).

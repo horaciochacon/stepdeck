@@ -2,7 +2,7 @@
 
 `chart.bar` draws one bar per category from a CSV file, horizontal or vertical, with the value written at the end of each bar and an optional interval whisker. It is built for step-by-step reveals: the value axis stays put, categories can appear one at a time, and switching `y` shrinks or grows the bars. With `mode: "waterfall"` the same rows become contributions that add up to a running total, and with `mode: "back-to-back"` two groups' bars extend left and right of a centre rule, as in a population pyramid. This page lists every prop and default, what each change does on a forward step, how the chart is laid out, the markup it renders and the errors it raises. It is for anyone writing chart slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`components/chart.bar/modes.js`](../../../engine/components/chart.bar/modes.js), [`components/chart.bar/paint-modes.js`](../../../engine/components/chart.bar/paint-modes.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/chart.bar/schema.json`](../../../engine/components/chart.bar/schema.json), [`components/chart.bar/index.js`](../../../engine/components/chart.bar/index.js), [`components/chart.bar/modes.js`](../../../engine/components/chart.bar/modes.js), [`components/chart.bar/paint-modes.js`](../../../engine/components/chart.bar/paint-modes.js), [`core/chart.js`](../../../engine/core/chart.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -58,7 +58,7 @@ To emphasize one bar for a single step, set `highlight` in the step's `only`, so
 
 | Prop | Type | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- |
-| `data` | string | (required) | snap | Path to a CSV file, relative to the deck root. One row per category; with `mode: "back-to-back"`, one row per category and group. |
+| `data` | string | (required) | tween | Path to a CSV file, relative to the deck root. One row per category; with `mode: "back-to-back"`, one row per category and group. A change to another file with the same categories tweens the bars like a change of `y` (bars keyed by category); with other categories it snaps. A `.json` file that holds an array of row objects loads too, but `validate` checks column names only in `.csv` files. |
 | `x` | string | (required) | snap | Column holding the category of each row. Its text labels the band. Rows with an empty category are skipped. |
 | `y` | string | (required) | tween | Column holding the numeric value of each bar. A change tweens every bar to its new length. |
 | `interval` | `{ lower, upper }` | none | tween | Columns of a whisker at each bar's end, for example an uncertainty interval. Both keys are required. The whisker is drawn after its bar and moves with it. |
@@ -144,7 +144,7 @@ Other,3
 | Shown bars only | The running total counts the shown bars. A hidden category keeps its band but adds nothing: it is a point on the running total of its slot, hidden. So the bars and the total always add up what is on screen. At `growth` above, `Growth` appears between `Opening` and `Prices`, and every later base moves up by 12. |
 | Connectors | A dotted, quiet line (`line.sd-connector`) joins each shown bar's end to the next shown bar, and the last one to the total. |
 | `total` | `true` adds a last bar from zero to the sum, in `--sd-color-ink`, labelled with the engine string `total` (`Total` in English and Spanish). A string labels it with that text. `false`, the default, adds none. The total's band is kept on every step of a slide that shows a total at some step, so it fades in and out without moving the other bars. |
-| Colours | Increases take the diverging palette's `high` role colour and decreases its `low` role colour (red and blue in both built-in themes); a palette without roles gives its last and first colours. `invert: true` swaps them, for a chart where a reduction is the good news. `highlight` dims the other bars and the total. |
+| Colours | Increases take the diverging palette's `high` role colour and decreases its `low` role colour (red for increases and blue for decreases in both built-in themes); a palette without roles gives its last and first colours. `invert: true` swaps them, for a chart where a reduction is the good news. `highlight` dims the other bars and the total. |
 | Value labels | Signed: `+12`, `−15`, through `format.y` with a `+` sign (unless the spec names its own sign). The total's label is not signed. Each label goes past its bar's end, else inside the bar against its end, else past its start, whichever fits first (`fit` in `core/chart.js`). The side is chosen at rest and kept through a motion. A waterfall keeps a label's room on both sides of the plot (left and right of a horizontal chart, above and below a vertical one, with the band labels set back by it), so within its axis every label fits past its bar's end, outside the bar. Only a fixed `domain` that cuts bars off can push a label inside. |
 | `interval` | Each contribution's whisker sits on its running total, from start + lower to start + upper, so it brackets the bar's end. |
 | Value axis | Without `domain`, the axis covers every running total, the total and every whisker of **every waterfall step of the slide**, each step with its own `y`, `sort`, `shown` and `total` (read from `ctx.stepProps`; steps that read another file do not count), plus zero, rounded outward to tick values. Nothing a step shows, hides or re-orders moves the axis. |
@@ -268,12 +268,22 @@ An aborted step (you press next again before the motion ends) snaps to its end s
 
 | What | With `format` | Without |
 | --- | --- | --- |
-| Value labels at the bar ends | `format.y` | The value as precise as the data (d3 format `,~r`). |
+| Value labels at the bar ends | `format.y` | The value as precise as the data (d3 format `,.12~r`: every digit the table holds, up to 12 significant ones, with a thousands separator). |
 | Tick labels | `format.y` | A fixed number of decimals from the tick step, so ticks of 5 show `0 5 10`, ticks of 2.5 show `0.0 2.5 5.0`. |
 | Interval text in `<title>` | `format.y` | Same as value labels. |
 | Category labels | `format.x`, only when the category is a number | The category text as it is. |
 
+`format.y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data. Set it when the two should read the same (`",.0f"`, `".1%"`).
+
+Tick labels on a horizontal value axis that would run into each other are thinned: fewer ticks (d3's for a count of 5, then 3, then 2) over the same domain, which never moves. A vertical axis keeps d3's ticks.
+
+A negative bar's value label points away from zero (left of a horizontal bar, under a vertical one). When the axis goes below zero the chart keeps room for it between the plot and the category labels, so the two never overlap.
+
 Formats are localized by the deck language: in an `es` deck the decimal separator is a comma and the thousands separator a dot.
+
+## Colours
+
+Every plain bar takes one colour, the first colour of the theme's categorical palette (`--sd-color-accent` in a theme without one): there is no per-category colour option and no colour column. To single a bar out, use `highlight`, which dims the others; a waterfall colours by sign and back-to-back by group. Bars out of focus turn `--sd-color-dim`.
 
 ## Sizing: give the chart a region that fills
 
@@ -286,7 +296,7 @@ wide · step 0 (a)                       (full-bleed, chart alone in main)
   visible  bars    chart.bar  96,194 1728×790  ...
 ```
 
-Neither `validate` nor `check` reports a collapsed chart. Look at `dump` boxes or `shoot` images. See the [Fill rules](../layouts.md#fill-rules) table.
+`validate` does not report a collapsed chart. `check` reports it only indirectly: the chart's labels spill out of the zero-height region, so it prints `text-outside-region` for the chart element, and the region's size in that line ends in `×0`. Confirm with `dump` boxes or `shoot` images. See the [Fill rules](../layouts.md#fill-rules) table.
 
 ## Markup
 
@@ -340,6 +350,7 @@ Each of these fails the element. The message is recorded as `<slide>/<element>: 
 | `<data> is not a table (use a .csv file)` | `data` points at a file that does not load as a list of rows, for example a JSON object or a .geojson file. |
 | ``chart.bar needs `<prop>` (a column name)`` | `x` or `y` is missing or not a non-empty string, or `interval.lower` / `interval.upper` is set but empty or not a string. A missing interval key is reported by `validate` (schema); at render time the whisker is just left out. |
 | `column '<c>' not found in <data> (columns: a, b, …)` | A column named by `x`, `y` or `interval` is not in the CSV header. |
+| `<data> has no rows` | The CSV has a header and no rows, so its columns cannot be checked. |
 | ``\`domain\` must be [min, max] with min < max`` | `domain` is not two finite numbers in increasing order. |
 | `category '<k>' appears more than once in <data> (chart.bar needs one row per category)` | Two rows share a category, in `bars` or `waterfall`. Back-to-back has a row per category and group, and reports a repeated group instead (below). |
 | ``category '<id>' in `shown` not found in <data> (categories: …)`` | `shown` names a category the data does not have. |
@@ -364,22 +375,24 @@ The file errors from the data loader also apply, such as `data file not found: <
 `validate` catches only some of these before you open the deck. It checks that `x`, `y`, the `interval` columns and, at a back-to-back step, `group` exist in the CSV header, at every step (rule `missing-column`, with a did-you-mean fix):
 
 ```text
-squash/bars · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'
+squash/bars/agent · missing-column · y = 'agent_day' vs columns of data/speed.csv: task, before_days, agent_days · set y to 'agent_days'
 ```
+
+The location is `<slide>/<element>/<step>`; a slide without `steps` prints `<slide>/<element>`.
 
 It also gives a misspelt `mode` a did-you-mean (`prop-invalid`, `set mode to "waterfall"`), and warns with `chart-prop-unused` when `invert` or `total` is set on a chart that is not in `mode: "waterfall"`, where they do nothing:
 
 ```text
-warning: flow/bars · chart-prop-unused · `total` does nothing without `mode: "waterfall"` vs `total` together with `mode: "waterfall"` · set `mode: "waterfall"`, or remove `total`
+warning: flow/bars/start · chart-prop-unused · `total` does nothing without `mode: "waterfall"` vs `total` together with `mode: "waterfall"` · set `mode: "waterfall"`, or remove `total`
 ```
 
 A back-to-back chart set vertical is an error (`chart-orient`), as it is at render time:
 
 ```text
-s/bars · chart-orient · back-to-back bars are horizontal only vs `orient: "horizontal"` with `mode: "back-to-back"` · remove `orient: "vertical"`, or choose another `mode`
+s/bars/plain · chart-orient · back-to-back bars are horizontal only vs `orient: "horizontal"` with `mode: "back-to-back"` · remove `orient: "vertical"`, or choose another `mode`
 ```
 
-It does not check `domain` order, `sort`, duplicate categories, names in `shown` and `highlight`, empty waterfall values, or back-to-back groups and rows. Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
+It does not check `domain` order, the column or the categories that `sort` names (only its form, against the schema: `prop-invalid`), duplicate categories, names in `shown` and `highlight`, empty waterfall values, a back-to-back step that has no `group`, or back-to-back group values and rows (only a `groups` list that repeats a name: `prop-invalid`). Those appear only at render time, at the step where they first occur. Run `check` (or `dump`) to see them:
 
 ```text
 squash/bars: category 'Nope' in `highlight` not found in data/speed.csv (categories: Clean the data, Write the report)
@@ -394,7 +407,7 @@ squash/bars: `domain` must be [min, max] with min < max
 
 **Switching `y` without `domain` can hide the change.** The default axis rescales to the new column, so set `domain` when the point of the step is that bars got shorter or longer.
 
-**Changing `orient`, `data` or `x` between steps does not animate.** The new chart is drawn at once.
+**Changing `orient`, or the set of categories, between steps does not animate.** A `data` or `x` that names other rows draws the new chart at once; so does a change to or from `back-to-back`. A `data` file with the same categories and other values tweens.
 
 **`highlight` set with `set` lasts.** It folds into every later step. Use `only` for a one-step emphasis, and clear it with `highlight: null` in `set` if you did use `set`.
 

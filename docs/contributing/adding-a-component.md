@@ -65,7 +65,7 @@ The schema is what `validate` checks props against and what `catalog` shows agen
 - give every prop a `description`, a non-empty `examples` array and an `x-transition` of `tween`, `draw`, `fade` or `snap`. A prop without them is the `catalog-schema` warning `prop '<key>' lacks <what>`;
 - put a `default` on a prop only when `index.js` really uses that value when the prop is absent. The catalog's JSON detail (`catalog <name> --json`, or `catalog/<name>.json` from a full run) carries it.
 
-Two tests and one rule guard the schema. `test/unit/schemas.test.mjs` compiles the `schema.json` of every folder in `components/` with `createAjv()` from `cli/ajv.js` and `ajv.compile`. That instance is strict and registers only `x-transition`, so any other `x-*` keyword fails this test, even though `validate` accepts it (its `compile()` registers every `x-*` keyword it finds in the schema first). `validate` reports `component-schema` for any engine schema that does not compile, whether a deck uses the component or not. And `test/unit/catalog.test.mjs` checks that the catalog lists exactly the names in `components/index.json`.
+Two tests and one rule guard the schema. `test/unit/schemas.test.mjs` compiles the `schema.json` of every folder in `components/` with `createAjv()` from `cli/ajv.js` and `ajv.compile`. That instance is strict and registers only `x-transition` and `x-enter`, so any other `x-*` keyword fails this test, even though `validate` accepts it (its `compile()` registers every `x-*` keyword it finds in the schema first). `validate` reports `component-schema` for any engine schema that does not compile, whether a deck uses the component or not. And `test/unit/catalog.test.mjs` checks that the catalog lists exactly the names in `components/index.json`.
 
 A prop from `components/list/schema.json`:
 
@@ -142,7 +142,7 @@ From `core/kit.js` (no imports, no DOM beyond the document you pass):
 | --- | --- |
 | `canAnimate(info)` | `info.animate === true` and the signal is not aborted. Gate all motion on it. |
 | `motion(info, ctx, opts)` | `ctx.motion.timing(info, opts)`: `{ duration, ease, stagger, signal }` from the theme tokens, overridden by the step's `transition`; `opts` is `{ factor, fast }`. Without a `ctx`, `{ signal, duration: info.transition?.duration }`. |
-| `motionMs(info, ctx, factor = 1)` | The step's `transition.duration`, else `factor` x the theme's `--sd-duration` (400 ms when unknown). The charts use factor 2. |
+| `motionMs(info, ctx, factor = 1)` | The step's `transition.duration`, else `factor` x the theme's `--sd-duration` as `ctx.motion.timing` reads it, in ms or s (400 ms when the token is missing). The charts use factor 2. |
 | `el`, `svgEl`, `xhtmlEl`, `sizeSvg` | Create HTML, SVG and foreignObject elements. Always pass `el.ownerDocument`, never the global `document`. |
 | `measureWidth`, `measureHeight` | The node's size in canvas pixels, else `ctx.size`, else 0. |
 | `inkMix(p)` | A text color between `--sd-color-muted` (0) and `--sd-color-ink` (1), for emphasis that keeps contrast. |
@@ -157,7 +157,6 @@ From `ctx.animate` (`core/animate.js`): `fadeIn`, `reveal`, `drawPath`, `tween(f
 | Import from `core/animate.js` | What it does |
 | --- | --- |
 | `clearInlineStyle(...nodes)` | Removes every inline style and the `style` attribute itself. Call it after rendering and in `finally`. |
-| `rise(ctx.animate, node, opts)` | Fades a node in while it moves up by `--sd-space`. Legacy: the built-ins use `ctx.motion.in(node, "rise", opts)`, which travels `--sd-motion-distance`. |
 | `typeCount(ctx.animate, total, onCount, opts)`, `typingMs(chars)` | Typing at 28 ms per character, at most 1400 ms. |
 
 For a chart, `core/chart.js` has `loadTable(props, ctx, name, columns)`, which loads a CSV and gives the shared column errors (`column '<c>' not found in <data> (columns: …)`), and `tickFormat` and `opacityAttr`. Author text goes through `renderInline` or `renderBlock` from `core/inline.js`, which escape raw HTML and keep only safe link URLs.
@@ -220,14 +219,16 @@ Every `example.js` runs as a slide in the gallery deck (`site/gallery`), and the
 
 The schema covers types, enums and required props. Some mistakes are only visible across props, such as an id in `shown` that names nothing. `diagram` is the model for these:
 
-1. **A pure problems function** in the component folder. `diagramProblems(props, { gap, pad })` in `components/diagram/place.js` returns `[{ rule, id, message, limit, fix }]`, where `rule` is `diagram-id` or `diagram-overlap`. The module must have no imports and no DOM access, because `cli/validate.js` imports it statically and runs in plain Node.
+1. **A pure problems function** in the component folder. `diagramProblems(props, { gap, pad })` in `components/diagram/place.js` returns `[{ rule, id, message, limit, fix }]`, where `rule` is `diagram-id`, `diagram-overlap` or `diagram-grid`. The module must have no imports and no DOM access, because `cli/validate.js` imports it statically and runs in plain Node.
 2. **Wire it into `validate`.** In `cli/validate.js` it runs only when the resolved props pass the schema, at every step, and each item is mapped through `componentProblem` from `cli/problems.js` (`measured` is the message):
 
    ```js
    if (validate(resolved)) {
      if (type === "diagram") {
-       for (const item of diagramProblems(resolved, env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
+       for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
+       // …
      }
+     // …
      return;
    }
    ```
@@ -242,7 +243,7 @@ The schema covers types, enums and required props. Some mistakes are only visibl
      assert.deepEqual(rules(problems), ["diagram-overlap"], show(problems));
    });
    ```
-5. **Document the rule names** in [the rules reference](../reference/rules.md) and in `skill/references/checks.md`. The skill's table does not list `diagram-id` and `diagram-overlap` today, so do not copy that gap.
+5. **Document the rule names** in [the rules reference](../reference/rules.md) and in `skill/references/checks.md`.
 
 See [Adding a rule](adding-a-rule.md) for rules that are not tied to one component.
 

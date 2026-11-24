@@ -70,7 +70,7 @@ A cover slide, laid out like a printed cover (`kind: "cover"`). The `title` regi
 
 **Two-column switch.** When the `figure` region holds any element, the columns become `minmax(0, 1fr) var(--figure-width, 720px)` with a column gap of `--sd-canvas-margin`. The title column then takes the rest of the width and no longer stops at `--title-width`. The selector is `:has(> [data-region="figure"] > .sd-el)`, so the switch happens as soon as the figure region contains an element, **even one that is hidden until a later step** (hidden and collapsed elements are still children). An element revealed at step 1 does not change the layout between steps: the cover is two-column from step 0, and its title size is the same at every step. Measured with `dump`: with a figure element, the title column is 912px wide at every step; the figure region is 720×876 with a one-line footer (720×912 with an empty footer).
 
-**Fill.** A chart, diagram, image or terminal in `figure` takes the height the other elements leave; any other element fills it only when it is alone (`flex: 1 1 0; min-height: 0`). See [Fill rules](#fill-rules).
+**Fill.** A chart, diagram, image, map or terminal in `figure` takes the height the other elements leave; any other element fills it only when it is alone (`flex: 1 1 0; min-height: 0`). See [Fill rules](#fill-rules).
 
 From [`templates/talk/slides/title.js`](../../templates/talk/slides/title.js):
 
@@ -97,7 +97,7 @@ A figure with a column of notes beside it: a title band, the figure in `main` on
 | Region | Meaning |
 |---|---|
 | `title` | Title band across the canvas, with `2 × --sd-region-gap` (48px) below it. |
-| `main` | The figure. A chart, diagram, image or terminal takes the height the other elements leave. |
+| `main` | The figure. A chart, diagram, image, map or terminal takes the height the other elements leave. |
 | `notes` | Notes column right of the figure. Elements stack centred vertically, `1.5 × --sd-region-gap` (36px) apart. |
 | `footer` | Footer line across the canvas, typically the source, with `--sd-region-gap` above it. |
 
@@ -108,7 +108,7 @@ A figure with a column of notes beside it: a title band, the figure in `main` on
 
 **Grid.** Columns `minmax(0, 1fr) var(--notes-width, 560px)`; rows `auto minmax(0, 1fr) auto`; areas `"title title" "main notes" "footer footer"`; column gap `var(--notes-gap, 72px)`. At the defaults `main` is 1728 − 560 − 72 = 1096px wide.
 
-**Fill.** `> [data-region="main"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }`. Only `main` has this rule; the notes column does not. A chart, diagram, image or terminal fills `main` whatever else is there, so a source line may share `main` with it or go in `footer` (see [Fill rules](#fill-rules)).
+**Fill.** `> [data-region="main"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }`. Only `main` has this rule; the notes column does not. A chart, diagram, image, map or terminal fills `main` whatever else is there, so a source line may share `main` with it or go in `footer` (see [Fill rules](#fill-rules)).
 
 The starter deck's chart slide ([`templates/talk/slides/chart.js`](../../templates/talk/slides/chart.js)) uses this layout: a `chart.line` alone in `main`, a note and a `big-number` in `notes`, the source in `footer`.
 
@@ -118,7 +118,7 @@ One `main` region filling the canvas, with an optional title band on top. It is 
 
 | Region | Meaning |
 |---|---|
-| `title` | Title band. Its row is `auto`, so it has zero height when the slide has no title. |
+| `title` | Title band. Its row is `auto`: the title's height plus the band's top padding (`--sd-canvas-margin`, 96px). A slide with no title keeps that padding, so the band is 96px high and the first element in `main` starts at y = 120 (the margin plus `--sd-region-gap`, 24px), inside the canvas margin like every other slide. |
 | `main` | Everything else; elements stack in the order listed. |
 
 | Variable | Default | Meaning |
@@ -129,7 +129,7 @@ One `main` region filling the canvas, with an optional title band on top. It is 
 
 **Gotchas.**
 - There is no `footer` region. A source line goes in `main`, under the figure (`validate`'s `figure-source` fix suggests `region: "main"` for this layout).
-- There is no only-child fill rule, and none is needed for a figure. A `chart.line`, `chart.bar`, `diagram`, `image` or `terminal` fills the height the other elements leave: a chart with a one-line source below it in a slide with a title measures 1728×730, and 1728×790 alone (see [Fill rules](#fill-rules)). Another type of element is only as tall as its content.
+- There is no only-child fill rule, and none is needed for a figure. A `chart.line`, `chart.bar`, `chart.points`, `diagram`, `image`, `map` or `terminal` fills the height the other elements leave: a chart with a one-line source below it in a slide with a title measures 1728×730, and 1728×790 alone (see [Fill rules](#fill-rules)). Another type of element is only as tall as its content.
 
 ## statement
 
@@ -149,7 +149,7 @@ One large centred sentence or question, with an optional title on top and a foot
 
 **Text styling.** The descriptor maps `main` to the `statement` hook. Every `text` and `markdown` element in `main` is set at `--sd-font-size-statement` (64px), tight line height, centred, with balanced lines, by core's hook rule (the layout CSS only places `main`). Use a `markdown` element to make key words bold. A list, a chart or any other component in `main` keeps its own type. A theme can restyle the hook as `.sd-statement`.
 
-**Gotchas.** `main` has an `auto` height, so there is no room for a filling type to take: a chart there measures 1500×0, and a diagram, image or terminal collapses the same way. `check` can report it as `text-outside-region`, but only as a side effect: the chart's axis text spills out of the empty region. There is no squashed-chart check, so that report may not fire. This layout is for words.
+**Gotchas.** `main` has an `auto` height, so there is no room for a filling type to take: a chart there measures 1500×0, and a diagram, image, map or terminal collapses the same way. `check` can report it as `text-outside-region`, but only as a side effect: the chart's axis text spills out of the empty region. There is no squashed-chart check, so that report may not fire. This layout is for words.
 
 From [`examples/kit/slides/question.js`](../../examples/kit/slides/question.js):
 
@@ -172,7 +172,7 @@ Two halves side by side under a title band, with a footer line: before and after
 | Region | Meaning |
 |---|---|
 | `title` | Title band across the canvas, with `2 × --sd-region-gap` (48px) below it. |
-| `left` | The left half. A chart, diagram, image or terminal takes the height the other elements leave; any other element fills it only when alone. |
+| `left` | The left half. A chart, diagram, image, map or terminal takes the height the other elements leave; any other element fills it only when alone. |
 | `right` | The right half, same rules as `left`. |
 | `footer` | Footer line across the canvas, with `--sd-region-gap` above it. |
 
@@ -184,7 +184,7 @@ Two halves side by side under a title band, with a footer line: before and after
 
 **Grid.** Columns `var(--split, 1fr 1fr)`; rows `auto minmax(0, 1fr) auto`; areas `"title title" "left right" "footer footer"`; column gap `var(--gutter, var(--sd-region-gap))`. At the defaults each half is (1728 − 24) / 2 = **852px** wide.
 
-**Fill and alignment.** A chart, diagram, image or terminal in `left` or `right` takes the height the other elements leave, and any other element fills the half when it is alone (`flex: 1 1 0; min-height: 0`). `--align` sets `justify-content: safe <align>` on each half, which moves stacked elements; for a lone element it sets `align-content: safe <align>` on the element instead, so the element keeps filling the half (a chart still measures the full height) and its own content moves inside it. `safe` stops overflowing content from being pushed above the half.
+**Fill and alignment.** A chart, diagram, image, map or terminal in `left` or `right` takes the height the other elements leave, and any other element fills the half when it is alone (`flex: 1 1 0; min-height: 0`). `--align` sets `justify-content: safe <align>` on each half, which moves stacked elements; for a lone element it sets `align-content: safe <align>` on the element instead, so the element keeps filling the half (a chart still measures the full height) and its own content moves inside it. `safe` stops overflowing content from being pushed above the half.
 
 From [`examples/kit/slides/tasks.js`](../../examples/kit/slides/tasks.js), which widens the gutter and centres short halves:
 
@@ -236,8 +236,8 @@ Sizes of a `chart.line`, measured with `dump` at the defaults (title text presen
 | `statement` `main` | 1500×0 |
 
 Gotchas:
-- A region with no height of its own gives a filling element nothing to take. `statement` `main` is `auto` high, so a chart, diagram, image or terminal there collapses to zero height.
-- The only-child rule counts every element in the region, hidden and collapsed ones included. Adding a second element to the region turns it off from step 0. A chart, diagram, image or terminal is not affected; it is the other types that stay as tall as their content.
+- A region with no height of its own gives a filling element nothing to take. `statement` `main` is `auto` high, so a chart, diagram, image, map or terminal there collapses to zero height.
+- The only-child rule counts every element in the region, hidden and collapsed ones included. Adding a second element to the region turns it off from step 0. A chart, diagram, image, map or terminal is not affected; it is the other types that stay as tall as their content.
 - A deck's own component does not get the type rule: it is written per built-in type in core CSS.
 - No rule checks a chart's height. A collapsed chart is caught only incidentally, when its axis text spills out of the region (`text-outside-region`, as in `statement`). Look at `dump` boxes or `shoot` images.
 - Any element can be given a `box` instead, which sets its size directly.
@@ -269,7 +269,7 @@ Every `layouts/<name>/schema.json` is a layout descriptor, validated against [`s
 | `variables[].name` | string | yes | Pattern `^--[a-z0-9-]+$`. |
 | `variables[].default` | string | yes | The fallback used in `layout.css`, as text. |
 | `variables[].description` | string | yes | Non-empty. |
-| `hooks` | object | no | Region name to a published hook: one of `title`, `kicker`, `accent`, `subtitle`, `meta`, `statement` (`HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). Core adds the class `sd-<hook>` to that region and to every element wrapper in it. |
+| `hooks` | object | no | Region name to a region hook: one of `subtitle`, `meta`, `statement` (`REGION_HOOKS` in [`core/constants.js`](../../engine/core/constants.js)). Core adds the class `sd-<hook>` to that region and to every element wrapper in it. The other published hooks (`title`, `kicker`, `lede`, `accent`; all seven are `HOOKS` in the same file) are core's own: core puts them on the title element, the kicker, the lede and the accent phrase, and a layout cannot map a region to one (the schema rejects it). |
 | `kind` | string | no | `content` (default) or `cover` (`LAYOUT_KINDS` in `core/constants.js`). Core sets it as `data-kind` on the canvas. A `cover` title takes `--sd-font-size-cover`, and `--sd-font-size-cover-figure` while a region named `figure` holds an element. |
 
 No other keys are allowed at any level (`additionalProperties: false`).
@@ -277,7 +277,7 @@ No other keys are allowed at any level (`additionalProperties: false`).
 What the engine uses:
 - **Runtime**: `regions[].name`, in order, to create the region elements, and `hooks` and `kind` for the hook classes and `data-kind`. Variables are documentation; their real defaults are the fallbacks in `layout.css` (`var(--notes-width, 560px)`), so keep the two in step.
 - **validate** ([`cli/validate.js`](../../cli/validate.js)): region names, and the rules below.
-- **catalog** ([`cli/catalog.js`](../../cli/catalog.js)): a layout entry is `{ kind: "layout", name, summary, animates: [] }`, and `catalog <name>` adds `description`, `regions`, `variables`, `readme` (the README text) and `example` (`layouts/<name>/example.js`, or `null`). Layouts are found as the folders of `layouts/` that hold a `schema.json`; an unreadable one gives a `catalog-schema` warning, and a layout with the same name as a theme gives `catalog-name`.
+- **catalog** ([`cli/catalog.js`](../../cli/catalog.js)): a layout entry is `{ kind: "layout", name, summary, animates: [], enter: "box" }`, and `catalog <name>` adds `description`, `regions`, `variables`, `readme` (the README text) and `example` (`layouts/<name>/example.js`, or `null`). Layouts are found as the folders of `layouts/` that hold a `schema.json`; an unreadable one gives a `catalog-schema` warning, and a layout with the same name as a theme gives `catalog-name`.
 
 The `title` descriptor, from [`layouts/title/schema.json`](../../engine/layouts/title/schema.json) (long descriptions shortened with `…`):
 
@@ -329,6 +329,6 @@ The runtime and `validate` read layouts from the engine root only: the repositor
 
 1. Write `schema.json` with every region the slides may use, and list each grid variable with the same default you use in the CSS fallback.
 2. Write `layout.css` scoped with `.sd-canvas[data-layout="<name>"]`: grid templates and areas named after the regions, and canvas padding (the built-ins with a footer use `var(--sd-canvas-margin) var(--sd-canvas-margin) calc(var(--sd-canvas-margin) / 2)`).
-3. Charts, diagrams, images and terminals fill any region through core CSS, so they need nothing from the layout. Add `> [data-region="<r>"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }` to a region meant to hold one lone element of another type, such as a deck's own component. Give a filling element a region with a height of its own (not `auto`).
+3. Charts, diagrams, images, maps and terminals fill any region through core CSS, so they need nothing from the layout. Add `> [data-region="<r>"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }` to a region meant to hold one lone element of another type, such as a deck's own component. Give a filling element a region with a height of its own (not `auto`).
 4. Name the region for source lines `footer`, so the `font-too-small` exemption and the `figure-source` fix apply.
 5. Add a `README.md` and an `example.js`, then run `validate` (for `layout-schema`) and `check` on a deck that uses the layout.

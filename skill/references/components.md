@@ -6,8 +6,8 @@ The catalog is the single source for props. This page never repeats the props ta
 
 ```sh
 node "$STEPDECK/cli/index.js" catalog my-talk                  # writes my-talk/catalog/index.json and one <name>.json each
-node "$STEPDECK/cli/index.js" catalog chart.line my-talk       # one entry, readable
-node "$STEPDECK/cli/index.js" catalog chart.line my-talk --json  # the full entry, README included
+node "$STEPDECK/cli/index.js" catalog chart.line my-talk       # one entry as text: read this one first
+node "$STEPDECK/cli/index.js" catalog chart.line my-talk --json  # the full entry, README included, for a script
 ```
 
 The two files the catalog writes:
@@ -15,11 +15,13 @@ The two files the catalog writes:
 - **`catalog/<name>.json`**, or `catalog <name> --json`, adds:
   - `props`: each prop's `required`, `x-transition`, `description`, `examples`, `default` and JSON `schema`;
   - the component's `readme`, which holds the behaviour notes and file shapes;
-  - an `example` slide path, relative to the engine and so at `my-talk/stepdeck/<example>`.
+  - an `example` slide path: relative to the engine for a built-in component or a layout (`my-talk/stepdeck/<example>`), relative to the deck for a deck component (`origin: "deck"`, `my-talk/<example>`).
+
+The README is also a file: `my-talk/stepdeck/components/<name>/README.md`.
 
 Run `catalog` again after adding a custom component; it then lists that component with `origin: "deck"`.
 
-Only the components in the catalog exist. `mark`, `callout`, `table` and the like are not there yet. If you need something the catalog lacks, write a [custom component](custom-components.md).
+Only the components in the catalog exist. `mark`, `callout`, `table` and the like are not there yet. There is no scatter plot either (a numeric x against a numeric y): `chart.points` is a categorical dot plot, or a beeswarm with `id`. If you need something the catalog lacks, write a [custom component](custom-components.md).
 
 ## The built-ins, in one paragraph each
 
@@ -38,6 +40,7 @@ The element with id `title` is styled as the slide title. When it appears its bo
 - Raw HTML is shown as text.
 - `{{color:accent}}` becomes the palette's name for that role in the deck language ("blue" in `en`, "azul" in `es`). An unknown role is an element error shown on the slide.
 - Use it for any text that mixes emphasis or lists.
+- A fenced code block is drawn in the mono font on the surface colour, with no syntax highlighting. Tables (`| a | b |`) render too.
 
 **`chart.line`.** One or more series over a numeric x, read from a CSV with one row per series and x.
 - **Labels.** Each line is labelled directly at its end; there is no legend.
@@ -60,7 +63,10 @@ The element with id `title` is styled as the slide title. When it appears its bo
 - **Count-up.** In an animated step it counts up: from 0 when it appears (its own entrance), from the old value when `value` changes.
 - **Source line.** It counts as a figure: the slide needs a `role: "source"` element.
 
-**`terminal`.** A terminal window that replays a recorded session from a JSON `script` file (`title`, `command`, `tasks`, `events`). A complete example script is in `catalog terminal --json`, in the `readme` field. A new deck has no session file, so create one in `data/`.
+**`terminal`.** A terminal window that replays a recorded session from a JSON `script` file (`title`, `command`, `tasks`, `events`). It suits any recorded shell session, not only an agent's run. A complete example script is in the component's README (`my-talk/stepdeck/components/terminal/README.md`, or the `readme` key of `catalog terminal --json`). A new deck has no session file, so create one in `data/`.
+- **`tasks` is optional.** Leave it out for a plain shell session.
+- **The side panel stays.** The window has a log on the left and a side panel with the headings "Tasks" and "Files" on the right, also when both lists are empty. To hide it, give the slide `style: ".sd-terminal-side { display: none; }"`; the log then takes the full width.
+- **Lines never wrap.** On `full-bleed`, an event's text shows about 60 characters with the side panel and about 90 without it; the rest is cut with an ellipsis.
 
 **What the events show:**
 - **Every event is one log line, task and file events included.** For example, `{ "type": "task", "index": 0, "status": "done" }` prints the line `task  Check the data: done`.
@@ -75,7 +81,7 @@ The element with id `title` is styled as the slide title. When it appears its bo
 **Stepping:**
 - **`shown` per step.** The slide drives `shown`, the number of events visible, with `advance`: `values: [0, 4, 8, 11]` means four steps.
 - **The first step.** `shown: 0` is an empty prompt, a deliberate "before" state. Start above 0 to open on activity. Either way `step0-shows-all` does not fire, because `shown` changes.
-- **Scrolling.** Only the newest lines that fit stay visible, and lines never wrap (long text is cut with an ellipsis), so keep event text short.
+- **Scrolling.** Only the newest lines that fit stay visible, so keep event text short.
 - **Typing.** With `typing: true`, the command is typed out only in an animated step that takes `shown` from 0 to above 0. Otherwise it appears whole.
 
 ## The slide-kit components
@@ -96,12 +102,12 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `active` emphasises one item and dims the rest. `rule: true` draws an accent rule on the left.
 
 **`diagram`** (`catalog diagram`). Nodes, arrows and nested groups on an explicit grid.
-- Each node sits in a cell (`col`, `row`, 0-based). Its `shape` is `box`, `pill`, `circle`, `card` (fills its cell, stripe on its left edge) or `text`. An optional `kind` string colours it from the categorical palette, one colour per distinct kind in order of first appearance (a card's stripe, a box, pill or circle's outline); more kinds than the palette has colours is an element error.
+- Each node sits in a cell (`col`, `row`, 0-based); `colspan` and `rowspan` (default 1) make it cover more cells. A `card` fills its cell, so it reads from the back of the room; a `box` or a `pill` is only as large as its label, and a `circle` a little larger. Prefer `card` when the nodes carry the slide. Its `shape` is `box`, `pill`, `circle`, `card` (fills its cell, stripe on its left edge) or `text`. An optional `kind` string colours it from the categorical palette, one colour per distinct kind in order of first appearance (a card's stripe, a box, pill or circle's outline); more kinds than the palette has colours is an element error.
 - An edge's id is its `id`, else `"<from>-><to>"`. Its `label` sits beside the arrow. `route` (`over`, `under`, `left`, `right`) sends it around the grid in a lane on that side, for a loop back (the lanes are reserved whether the edge is shown or not, so nothing moves between steps; keep routed labels short). `flow: true` draws it dashed with its dashes marching from source to target while the page animates (not under `?capture`, with reduced motion unless `?motion=full`, or while the page is hidden, where it stands still, dashed); a flowing edge that `highlight` dims stands still too.
 - A group's `contains` lists node and group ids, so groups nest. A group's box covers all its members, shown or not, so it never resizes between steps.
 - `shown` lists the visible ids, edges included. An edge is visible only when its id is listed. `highlight` dims everything else: outlines and lines turn a neutral grey, labels turn muted.
 - A diagram takes the height the other elements in its region leave, so a source line can share the region.
-- **A second view.** `compact: true` draws the same diagram small, for a "you are here" copy in a corner `box` beside a slide's own figure: shapes only (no label, sub, group legend or edge label; `text` nodes and their edges are left out), inside the theme's frame, with an optional one-line `caption`. A lit node (`highlight`) takes its kind's colour and a tint of it; flowing edges stand still. Share the definition: put `cols`, `rows`, `nodes`, `edges` and `groups` in one `data/` file and bind **every one** of them in both views with a whole-string binding (`"{{data/process.json#/nodes}}"` resolves to the raw array), so ids and kind colours agree; keep `shown`, `highlight` and `caption` in each slide. Give each cell about 40 px or more, keep the caption short, and keep the title short or put the box where the title band is free. `check` catches a caption that overflows a `box` only when it leaves the canvas or overlaps other text, so look at a screenshot (`shoot`). `caption` without `compact` is a `validate` warning (`diagram-caption-unused`). The pattern, with a full example, is in [Show where we are](../../docs/guide/second-views.md) and the cookbook.
+- **A second view.** `compact: true` draws the same diagram small, for a "you are here" copy in a corner `box` beside a slide's own figure: shapes only (no label, sub, group legend or edge label; `text` nodes and their edges are left out), inside the theme's frame, with an optional one-line `caption`. A lit node (`highlight`) takes its kind's colour and a tint of it; flowing edges stand still. Share the definition: put `cols`, `rows`, `nodes`, `edges` and `groups` in one `data/` file and bind **every one** of them in both views with a whole-string binding (`"{{data/process.json#/nodes}}"` resolves to the raw array), so ids and kind colours agree; keep `shown`, `highlight` and `caption` in each slide. Give each cell about 40 px or more, keep the caption short, and keep the title short or put the box where the title band is free. `check` catches a caption that overflows a `box` only when it leaves the canvas or overlaps other text, so look at a screenshot (`shoot`). `caption` without `compact` is a `validate` warning (`diagram-caption-unused`). The pattern, with a full example, is in [`$STEPDECK/docs/guide/second-views.md`](../../docs/guide/second-views.md) and the cookbook.
 
 **`chart.bar`** (`catalog chart.bar`). Horizontal or vertical bars from a CSV, one row per category (back-to-back: one row per category and group), each with its value at the end of the bar.
 - Switching `y` between columns grows or shrinks the bars. Set an explicit `domain: [min, max]` then, so the axis stays put and the change is visible.
@@ -110,6 +116,8 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `sort` orders the bands: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden bars keep their place, empty values come last, and changing it on a step slides every bar, with its label and whisker, to its new band.
 - `mode: "waterfall"` stacks the rows, in display order, into a running total over the shown bars only, with dotted connectors and signed labels; increases take the diverging palette's high colour and decreases its low colour (`invert: true` swaps them). `total: true` (or a label) adds a last bar from zero to the sum. A category that appears grows from the running total before it and the later bases move up; the axis covers every step's running totals. Every category needs a value: an empty one is an element error. Switching `mode` between `"bars"` and `"waterfall"` on a step morphs the bars; clear `total` and `invert` (`null`) when you switch back.
 - `mode: "back-to-back"` (horizontal only) takes long data: one row per category and `group`, a column with exactly two values (`groups: [left, right]` orders them). The left group's bars extend left of a centre rule and the right group's right, the ticks read as magnitudes, each side has a title in its group's colour, and `interval` whiskers sit on halos. `highlight` names a category or a group (the other side dims); `sort` ranks bands by the sum of the two sides. The axis covers every back-to-back step of the slide. A category missing a group row, a `group` without two values, a negative value or a name that is both a category and a group is an element error. A change of `mode` to or from it snaps. `orient: "vertical"` with it is a `validate` error (`chart-orient`); `invert` or `total` outside a waterfall only warns (`chart-prop-unused`).
+- **Colour.** Plain bars all take one colour, the first of the categorical palette (the accent). There is no colour per category: use `highlight` to set one bar apart. A waterfall and back-to-back bars take the colours named above.
+- **`format.y`** formats the value labels and the axis ticks alike (`",.1f"` gives ticks such as `10.0`). Leave it out and the labels show the values as they are in the data, with ticks at the precision of the tick step, so integers stay integers.
 - It counts as a figure, so the slide needs a `role: "source"` line.
 - A chart fills the room its region leaves, so a source line may share the region (in `full-bleed` it goes in `main`, under the chart). In `figure-notes` and `halves` it can go in `footer`. In `statement` `main` the region has no set height and the chart collapses.
 
@@ -121,10 +129,13 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - `sort` orders the rows: `"value"` (lowest first), `"-value"` (highest first), `{ by: "<column>", order }` or a list of categories first. Hidden rows keep their place, empty values come last, and changing it on a step slides every row to its new place.
 - An empty `y` cell shows "no data" (`sin datos` in Spanish) beside the label, never a dot at zero.
 - `id` (a column) turns it into strips: one row per point, each category a beeswarm strip with a summary tick (`summary`: `"median"`, `"mean"` or `"none"`). `focus: "<id>"` rings that item in every strip, joins it with a line and dims the rest; `sort` ranks strips by their summary. With `domain`, points outside it are not drawn and a box at that end counts them.
+- **Colour.** Every dot takes the first colour of the categorical palette (the accent); whiskers and value labels are ink. There is no colour per category: use `highlight`. `format.y` works as in `chart.bar`.
 - It counts as a figure, so the slide needs a `role: "source"` line. It fills the room its region leaves, like `chart.bar`.
 
 **`chat`** (`catalog chat`). An exchange as bubbles, or a prompt or quote as a bordered card.
 - `style: "bubbles"` puts `user` on the right and `agent` and `note` on the left. `style: "card"` gives full-width cards with the label on top.
+- It is top-aligned: in `full-bleed` `main` a short exchange sits under the title and leaves the rest of the slide empty. For a short one, use a half of `halves` with `regions: { "--align": "center" }`.
+- How many fit: in `full-bleed` `main` under a one-line title, five one-line messages that each carry a `label` (a sixth overflows); give only each speaker's first message a `label` and seven fit (six with a `lede`). For a longer exchange, split it over two slides.
 - `shown` reveals messages one by one. `typing: true` types the newest message on a forward step; jumping or going backward shows it whole.
 
 **`timeline`** (`catalog timeline`). A track between stops that fills.
@@ -138,8 +149,9 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 - The image finishes loading before the step settles. A missing file is an element error naming the path.
 
 **`map`** (`catalog map`). The regions of a GeoJSON file, with layers of data over them, told step by step.
-- **The files come from the project's own code, never from you by hand.** Real map slides are admin 1 or admin 2 maps made by the project's analysis code in R or Python, which already has the boundaries, the region ids and the values. Add the writing of the map's files to that code: boundaries as GeoJSON with an id property, values as a CSV keyed by that id, rasters with the writer functions [`$STEPDECK/docs/guide/maps/stepdeck-map.R`](../../docs/guide/maps/stepdeck-map.R) or [`stepdeck_map.py`](../../docs/guide/maps/stepdeck_map.py) (copy the file into the project, then call it). Run `node "$STEPDECK/cli/index.js" boundaries <ISO3> ADM1 --deck my-talk` only when the project has no boundaries at all: it needs the network, and the source line it prints goes in the slide's source element. The exact file shapes, the writers' arguments and which side fixes which error are in [From your analysis code to a map slide](../../docs/guide/maps-from-your-code.md).
+- **The files come from the project's own code, never from you by hand.** Real map slides are admin 1 or admin 2 maps made by the project's analysis code in R or Python, which already has the boundaries, the region ids and the values. Add the writing of the map's files to that code: boundaries as GeoJSON with an id property, values as a CSV keyed by that id, rasters with the writer functions [`$STEPDECK/docs/guide/maps/stepdeck-map.R`](../../docs/guide/maps/stepdeck-map.R) or [`$STEPDECK/docs/guide/maps/stepdeck_map.py`](../../docs/guide/maps/stepdeck_map.py) (copy the file into the project, then call it). Run `node "$STEPDECK/cli/index.js" boundaries <ISO3> ADM1 --deck my-talk` only when the project has no boundaries at all: it needs the network, and the source line it prints goes in the slide's source element. The exact file shapes, the writers' arguments and which side fixes which error are in [`$STEPDECK/docs/guide/maps-from-your-code.md`](../../docs/guide/maps-from-your-code.md).
 - `boundaries` (required) names the GeoJSON. `id` is the feature property that identifies a region: `highlight`, `labels`, `view` and a layer's `key` refer to regions by it. `name` is the property labels show. Files written by `sf` or `geopandas` work as they are. Limits: 5,000 regions, 250,000 points.
+- `projection` is `conic-equal-area` (the default, for a country or a region of one), `equal-earth` (for a world or continent map), `natural-earth` or `mercator`.
 - `layers` declares the layers by id; each has exactly one kind key, and `label` (its legend title):
   - `areas` is a choropleth: `{ areas: "data/rates.csv", value: "rate", label: "Cases per 1,000", classes: [5, 10, 20] }`. `key` is the CSV column of region ids (default: the map's `id`). Keys compare as text: a key that matches no region, or a region in two rows, is an element error. Declare a column of codes with leading zeros as `"string"` in `types`, or `07` becomes `7`.
   - `raster` names a raster JSON (`bounds`, `value`, and a greyscale PNG in `src`, or `frames` for a time-lapse). Its `value` decides the look: a value ramp (`scale` `linear` or `log`), classes (categorical palette, at most as many as the palette has colours), or one class, a mask in `color` (a theme role, default `accent`). `clip` (default `true`) stops coarse cells at the coastline; `clip: false` for a raster that covers the sea.
@@ -155,7 +167,7 @@ Each paragraph says what the piece is for and how a step drives it. The props ar
 
 ## Bindings: `{{path#/pointer | format}}`
 
-Any string prop, at any depth (inside arrays and objects too), can bind to a data file:
+A string can bind to a data file:
 
 | Written | Result |
 |---|---|
@@ -163,9 +175,32 @@ Any string prop, at any depth (inside arrays and objects too), can bind to a dat
 | `"{{data/summary.json#/total \| ,.0f}}"`, the whole string with a format | a **string** (`"53,265"`) |
 | `"About {{data/summary.json#/share \| .0%}} of cases"`, embedded in text | a string; an embedded object or array is an error |
 
+**Where bindings resolve:**
+
+| Place | Resolved? |
+|---|---|
+| Any string in an element's `props`, at any depth (inside arrays and objects too) | yes |
+| A step's `set`, `replace` and `only` patches | yes |
+| `advance.values` | yes |
+| The slide's `title`, `lede` and `section` | yes (they become the props of the `title`, `lede` and `kicker` elements) |
+| `notes` (slide or step) | no: the presenter view shows the braces as written |
+| An element's `ghost` label | no |
+| `id`, `type`, `region`, `box`, `from`, `at`, `style`, `regions` and everything in `deck.js` | no |
+
+- **A whole-string binding keeps the value's type.** A number stays a number. So a `text` prop bound to a number fails `prop-invalid … must be string`: add a format to get a string (`"{{data/summary.json#/total | d}}"`, or `,.0f`, `.1f`, `.0%`). The other way round, a prop that needs a number (`big-number` `value`, a `reference` value) takes the binding with **no** format.
+- **A bound title has no accent phrase.** A `*` that comes from a data value is shown as written. Write the `*phrase*` in the spec, around or beside the binding.
 - **`path`** is relative to the deck root and must match the case on disk. It can name `.json`, `.geojson` or `.csv`.
 - **`pointer`** is an RFC 6901 JSON pointer. `#` alone is the whole file; `#/rows/0/value` is the `value` of the first row. A CSV loads as an array of row objects.
-- **`format`** is a d3-format specifier, localized by the deck's `lang`. `es` uses the decimal comma and the period for thousands: `,.0f` gives `53.265`.
+- **`format`** is a d3-format specifier, localized by the deck's `lang`. `es` uses the decimal comma and the period for thousands: `,.0f` gives `53.265`. The common ones:
+
+  | Format | 53265.4 becomes | Use |
+  |---|---|---|
+  | `d` | `53265` | an integer as it is; years |
+  | `,.0f` | `53,265` | a count |
+  | `,.1f` | `53,265.4` | one decimal |
+  | `.0%` | 0.31 becomes `31%` | a share stored as a fraction |
+  | `~s` | `53.2654k` | SI prefix; `.2s` gives `53k` |
+
 - **What validate checks.** The file, the pointer and the format must exist. A wrong pointer lists the keys that are there.
 - **Prefer JSON for bound figures.** A binding cannot declare CSV column types.
 - **Types in CSVs.** An undeclared CSV column becomes a number only when every non-empty value is a plain decimal with no leading zero, so the code `080101` stays a string. Declare types where a component offers it (`chart.line` `types`).

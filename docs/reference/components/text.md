@@ -2,7 +2,7 @@
 
 `text` shows one paragraph of plain text: body copy, a note, a short label, a source line, the message line under a title or a badge. This page lists every prop, how each role looks in the built-in theme, the markup the component renders, when it animates, and the mistakes that are easy to make. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/text/schema.json`](../../../engine/components/text/schema.json), [`components/text/index.js`](../../../engine/components/text/index.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/text/schema.json`](../../../engine/components/text/schema.json), [`components/text/index.js`](../../../engine/components/text/index.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -20,7 +20,7 @@ A slide's `title` string is also a `text` element: the engine adds `{ id: "title
 
 | Prop | Type | Required | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- | --- |
-| `text` | string | yes | | fade | The text to show. It may hold a data binding such as `{{data/summary.json#/responders \| ,.0f}}`; the engine resolves it before the component sees it. |
+| `text` | string | yes | | fade | The text to show. It may hold a data binding such as `{{data/summary.json#/responders \| ,.0f}}`; the engine resolves it before the component sees it. A binding that is the whole string must have a format or point at a string: a bare binding to a number resolves to a number, and `validate` reports `prop-invalid` (`must be string`). |
 | `role` | `body` \| `source` \| `note` \| `label` \| `lede` \| `badge` | no | `body` | snap | Typographic role: body copy, a source or citation line, a side note, a short label, a message line under a title, or a badge. The slide `lede` string and a `text` element with id `lede` get `role: "lede"` unless their props say otherwise. |
 | `tone` | integer ≥ 0 | no | | fade | For `role: "badge"`: the index of the badge's colour in the deck's categorical palette (0 is the first colour). Without it, or past the palette's end, the badge is in the theme's accent colour. A change while the badge is on screen fades the colour. The pill's border takes the palette colour as it is; the text takes it darkened (lightened on a dark background) until it reaches 4.5:1 on the background, so every tone passes `check`. |
 | `accent` | boolean | no | `false` | snap | Render `*phrase*` as an [accent phrase](#accent-phrase). The slide `title` string and a `text` element with id `title` get `accent: true` unless their props say otherwise. |
@@ -75,7 +75,7 @@ With `accent: true`, each pair of asterisks marks an accent phrase, rendered as 
 ```
 
 - The accent colour (`--sd-color-accent`) comes from the hook `.sd-accent`. The `<em>` is not italic by default (`font-style: normal`); a theme or a slide `style` can change that.
-- `\*` is a literal asterisk and `\\` a literal backslash. An unmatched `*` stays literal. `**` renders as two literal asterisks (titles are not markdown).
+- `\*` is a literal asterisk and `\\` a literal backslash. An unmatched `*` stays literal. `**` on its own renders as two literal asterisks (titles are not markdown).
 - The text is built from DOM nodes, never HTML: markup in it shows as typed.
 - Text that comes from a data binding is escaped before parsing, so a bound `*` never makes a phrase.
 - `validate` warns `title-accent` (an odd number of unescaped `*`) and `accent-empty` (`**`) for a title; both are described in [Rules](../rules.md).

@@ -10,14 +10,14 @@ If you work through an agent, point it at [skill/SKILL.md](../../skill/SKILL.md)
 |---|---|
 | Node 20 or later | Runs the CLI (`package.json` `engines`). The test scripts need Node 22.15 or later (see [Testing](../contributing/testing.md)). |
 | Chrome | `check`, `dump` and `shoot` drive your system Chrome by default. Set `STEPDECK_CHANNEL` to use another Playwright channel. |
-| Playwright | Not a dependency of this repo. The CLI resolves it from its own `cli/` folder, so install it in the stepdeck clone (`npm i -D playwright`, next to `npm install`), not in the deck. Or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder, for example `STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright`. |
+| Playwright | Not a dependency of this repo. The CLI resolves it from its own `cli/` folder, so installing it inside a deck does nothing. Install it in the stepdeck clone with `npm run playwright`, which runs `npm install --no-save` for the version CI uses and leaves `package.json` and the lockfile alone. Run it after `npm install`; a later plain `npm install` removes it again. Or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder, for example `STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright`. |
 | `npm install` | Installs Ajv, which only `validate` needs. Without it, `validate` asks you to run `npm install` and exits 2. The other commands still work. |
 
 ```sh
 git clone https://github.com/horaciochacon/stepdeck.git
 cd stepdeck
 npm install
-npm i -D playwright   # optional: for check, dump and shoot
+npm run playwright    # optional: for check, dump and shoot
 ```
 
 The commands below run from the `stepdeck` folder and use `node cli/index.js`. After `npm link`, `stepdeck <command>` does the same thing.
@@ -37,7 +37,7 @@ stepdeck: /…/my-talk is not empty; pass a new or empty folder
 On success, it prints the next commands with the full path to the CLI, ready to paste:
 
 ```text
-created ../my-talk (template talk; engine copied to stepdeck/)
+created /…/my-talk (template talk; engine copied to stepdeck/)
 
 next:
   the deck already works: slides/chart.js, slides/closing.js, slides/title.js;
@@ -107,12 +107,12 @@ On the fresh deck all three pass:
 ```text
 validate: 3 slides, 0 errors, 0 warnings
 check: 3 slides, 6 steps, 6 played arrivals compared, 0 problems
-../my-talk/shots/960/title-00-0.png
-../my-talk/shots/960/chart-00-base.png
-../my-talk/shots/960/chart-01-compare.png
-../my-talk/shots/960/chart-02-mark.png
-../my-talk/shots/960/chart-03-latest.png
-../my-talk/shots/960/closing-00-0.png
+/…/my-talk/shots/960/title-00-0.png
+/…/my-talk/shots/960/chart-00-base.png
+/…/my-talk/shots/960/chart-01-compare.png
+/…/my-talk/shots/960/chart-02-mark.png
+/…/my-talk/shots/960/chart-03-latest.png
+/…/my-talk/shots/960/closing-00-0.png
 shoot: 6 PNGs at 960×540
 ```
 
@@ -129,7 +129,7 @@ Exit codes: `0` clean, `1` problems found (for `validate`, warnings alone still 
 Every problem prints as one line, `slide/element/step · rule · measured vs limit · fix`. For example, a misspelled prop on the chart:
 
 ```text
-chart/chart/base · unknown-prop · prop 'colour' vs props of chart.line: data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval · remove 'colour'; allowed keys are data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval (props of chart.line)
+chart/chart/base · unknown-prop · prop 'colour' vs props of chart.line: data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval, points, forecast, until, ticker, draws · remove 'colour'; allowed keys are data, x, y, series, series_shown, highlight, annotate, axes, format, types, interval, points, forecast, until, ticker, draws (props of chart.line)
 validate: 3 slides, 1 error, 0 warnings
 ```
 

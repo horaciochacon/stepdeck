@@ -121,7 +121,7 @@ Add `"kind": "cover"` to `schema.json` if the layout is a cover slide; the defau
 
 ## Let a figure fill its region
 
-A region is a column flexbox, so by default each element is only as tall as its content. Charts read their own height when they mount, so they need a region that gives them some. A layout does not have to do anything for this: `core/stepdeck.css` makes a `chart.line`, `chart.bar`, `diagram`, `image` or `terminal` take the height the other elements in its region leave, in any layout. What the layout must provide is a region with a height of its own: a grid row that is `1fr` or `minmax(0, 1fr)`, as `main` is in `wide-figure`. In a row that is `auto`, as `main` is in `statement`, a chart collapses to zero height. See the [Fill rules](../reference/layouts.md#fill-rules) table.
+A region is a column flexbox, so by default each element is only as tall as its content. Charts read their own height when they mount, so they need a region that gives them some. A layout does not have to do anything for this: `core/stepdeck.css` makes a `chart.line`, `chart.bar`, `chart.points`, `diagram`, `image`, `map` or `terminal` take the height the other elements in its region leave, in any layout. What the layout must provide is a region with a height of its own: a grid row that is `1fr` or `minmax(0, 1fr)`, as `main` is in `wide-figure`. In a row that is `auto`, as `main` is in `statement`, a chart collapses to zero height. See the [Fill rules](../reference/layouts.md#fill-rules) table.
 
 `dump` on the scratch deck shows the result for `wide-figure` `main`, a 1728px-wide region, with and without a layout rule of its own:
 
@@ -260,7 +260,7 @@ Full rule details are in [Checking a deck](../guide/checking-a-deck.md) and [ski
 ### Look it up in the catalog
 
 ```sh
-node cli/index.js catalog wide-figure my-talk
+node cli/index.js catalog wide-figure ../my-talk
 ```
 
 ```text

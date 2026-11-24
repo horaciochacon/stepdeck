@@ -2,7 +2,7 @@
 
 `big-number` shows one large figure, with an optional caption and an optional 95% interval under it. When a forward step changes the figure, it counts up to the new value. This page lists every prop, the markup, when and how it moves, the errors it raises, and the rule that makes it count as a figure. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/big-number/schema.json`](../../../engine/components/big-number/schema.json), [`components/big-number/index.js`](../../../engine/components/big-number/index.js), [`core/format.js`](../../../engine/core/format.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/big-number/schema.json`](../../../engine/components/big-number/schema.json), [`components/big-number/index.js`](../../../engine/components/big-number/index.js), [`core/format.js`](../../../engine/core/format.js), [`core/i18n.js`](../../../engine/core/i18n.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -43,15 +43,15 @@ steps: [
 | Prop | Type | Required | Default | Transition | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | `value` | number, or one binding with no format | yes | | tween | The figure. Usually a binding such as `{{data/summary.json#/responders}}`, which resolves to the raw number. |
-| `format` | string (d3-format, not empty) | yes | | snap | Format for the figure and for the interval, such as `,.0f`, `.1%` or `~s`. Separators follow the deck language. |
+| `format` | string (d3-format, not empty) | yes | | fade | Format for the figure and for the interval, such as `,.0f`, `.1%` or `~s`. Separators follow the deck language. |
 | `label` | string | no | none | fade | Short caption under the figure. |
 | `ci` | `[lo, hi]` (two numbers), or one binding with no format | no | none | fade | 95% interval, shown under the caption as `95% CI lo–hi` (`IC 95%` in `es`), with the same `format` as the figure. |
-| `prefix` | string | no | none | snap | Text before the figure, such as a currency sign. Not applied to the interval. |
-| `suffix` | string | no | none | snap | Text after the figure, such as a unit. Drawn smaller. Not applied to the interval. |
+| `prefix` | string | no | none | fade | Text before the figure, such as a currency sign. Not applied to the interval. |
+| `suffix` | string | no | none | fade | Text after the figure, such as a unit. Drawn smaller. Not applied to the interval. |
 
 The schema has `additionalProperties: false`, so any other prop is a `validate` error (`unknown-prop`). The schema accepts a string for `value` and `ci` only when it is a single binding with no `|` format: `^\{\{[^{}|]+\}\}$`. The binding syntax is in [Data and bindings](../../guide/data-and-bindings.md).
 
-The Transition column is the schema's `x-transition` annotation, which feeds the catalog. The actual motion is written in the component and is described in [Motion](#motion); for `prefix`, `suffix` and `format` it is a fade, not a snap.
+The Transition column is the schema's `x-transition` annotation, which feeds the catalog. The motion itself is written in the component and is described in [Motion](#motion): a changed `format` fades the whole figure line (prefix, figure and suffix) in.
 
 ### Bind value without a format
 
@@ -105,6 +105,24 @@ Styles in `core/stepdeck.css`:
 
 The pixel values are those of `academic-light`; `modern`, the default theme, has the same sizes, its own colors, and tighter tracking on the figure (`letter-spacing: -0.04em`); any theme changes them through its tokens. See [Themes](../themes.md). Use slide `style` with these classes to restyle one slide.
 
+### Alignment
+
+The figure, its caption and its interval are left-aligned inside the element, in every layout. The `statement` layout centres only `text` and `markdown` elements (the `.sd-statement` hook), so a `big-number` in its `main` region sits at the left edge of the statement column. There is no alignment prop. To centre one, target the element by its id in the slide's `style`:
+
+```js
+export default {
+  id: "share",
+  layout: "statement",
+  style: '[data-el="n"] { text-align: center; }',
+  elements: [
+    { id: "n", region: "main", type: "big-number", props: { value: 42, format: "d", suffix: " %", label: "of households" } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic." } },
+  ],
+};
+```
+
+`[data-el="<id>"]` is the element's wrapper; `text-align` is inherited, so the figure line, the caption and the interval all follow. `text-align: right` works the same way.
+
 ## Motion
 
 The engine animates an update only when you move forward exactly one step, in a live presentation with motion on. A jump, a backward move, the first render and capture mode (`shoot`, `check`) draw the target state at once. See [Animation and motion](../../guide/animation-and-motion.md).
@@ -154,11 +172,11 @@ bad/nofmt · prop-invalid · 'format' missing vs required · add 'format' (props
 bad/badci · prop-invalid · ci = [1] vs must be an array of 2 items or a string matching ^\{\{[^{}|]+\}\}$ · make ci an array of 2 items or a string matching ^\{\{[^{}|]+\}\}$ (props of big-number)
 ```
 
-An invalid specifier such as `format: "zz"` passes `validate` (the schema only asks for a non-empty string) and fails only in the browser. Run `dump` or `check` after `validate` to catch it. A broken binding is reported by `validate` as `binding-file`, `binding-pointer` or `binding-format`; see the [CLI reference](../cli.md).
+An invalid specifier such as `format: "zz"` passes `validate` (the schema only asks for a non-empty string) and fails only in the browser. Run `dump` or `check` after `validate` to catch it. A broken binding is reported by `validate` as `binding-file`, `binding-pointer` or `binding-format`; see [Rules](../rules.md).
 
 ## It counts as a figure
 
-`validate` treats `big-number` as a figure, like `chart.line`, `chart.bar` and `chart.points`. A slide with a figure fails `figure-source` unless some element has `props.role === "source"` from the start (its initial props, before any step):
+`validate` treats `big-number` as a figure, like `chart.line`, `chart.bar`, `chart.points` and `map`. A slide with a figure fails `figure-source` unless some element has `props.role === "source"` from the start (its initial props, before any step):
 
 ```text
 bad/fmtd · figure-source · fmtd (big-number), nofmt (big-number), badci (big-number) without a source vs an element with role: "source" · add { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: …" } }

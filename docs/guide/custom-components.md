@@ -27,9 +27,10 @@ node cli/index.js new-component my.counter ../my-talk
 The name comes first, then the deck folder. The deck folder defaults to the current folder.
 
 ```text
-created ../my-talk/components/my.counter/ (index.js, schema.json, example.js, README.md)
+created /…/my-talk/components/my.counter/ (index.js, schema.json, example.js, README.md)
 added "my.counter" to components in deck.js
-try it: copy ../my-talk/components/my.counter/example.js to slides/, add its id to slides in deck.js, then
+try it: the example slide's id is "my-counter-example", so copy it to slides/my-counter-example.js and add "my-counter-example" to slides in deck.js, then
+  cp /…/my-talk/components/my.counter/example.js /…/my-talk/slides/my-counter-example.js
   node /…/stepdeck/cli/index.js validate /…/my-talk
   node /…/stepdeck/cli/index.js check /…/my-talk --played
 ```
@@ -154,8 +155,19 @@ Keep one `render(props)` that writes the whole state, and use it like this in ev
 
 `ctx.motion.timing(info)` gives `{ duration, ease, stagger, signal }` from the theme's motion tokens, overridden by the step's `transition`, with `info.signal`. Awaiting the `ctx.motion` and `ctx.animate` helpers with that signal matters. When a newer step aborts this one, each helper jumps to its end state and resolves, and `STEPDECK.settled()` waits for your promise. An update that has not settled after 10 seconds fails the element (see the [contract](../reference/component-contract.md)).
 
-### The counter
+### Height and hidden parts
 
+**A deck component is only as tall as its content**, unless something gives it height. Unlike a chart or a `map`, it has no fill rule of its own. It fills its region when it is the only element in `main` of `figure-notes`, in `left` or `right` of `halves`, or in `figure` of `title`. `main` of `full-bleed` and of `statement` do not stretch it. There, do one of three things: give your root or its drawing a height of its own, place the element with [`box`](layouts-and-themes.md#floating-elements-with-box), or add the fill rule to the slide:
+
+```js
+style: "[data-region=\"main\"] > .sd-el:only-child { flex: 1 1 0; min-height: 0; }",
+```
+
+The rule counts every child of the region, so put a source line in another region or use `box`. The [Fill rules](../reference/layouts.md#fill-rules) table lists every region.
+
+**Do not write `visibility: visible` on a part of your component.** The engine hides an element with `visibility: hidden` on its box and forces every descendant hidden too, so a child that says `visible` no longer shows through. Still do not write it: an inline `visibility: visible !important` would win over the engine's rule and keep the part on screen at steps where the element is hidden. To show a part again, clear the property (`node.style.visibility = ""`); to hide one, write `hidden`.
+
+### The counter
 `components/my.counter/index.js`:
 
 ```js
@@ -326,8 +338,29 @@ Try it: copy `example.js` to `slides/my-counter-example.js` and add `"my-counter
 
 ## Mount a compact view
 
-A component that draws its own figure can keep a "you are here" copy of a `diagram` or a `map` beside it, with `ctx.mount`, the same second view a slide gets by setting `compact: true` (see [Show where we are](second-views.md)). This `my.stage` writes the name of the current stage of `data/process.json` and mounts a compact diagram of the whole process, lit at that stage. Its `schema.json` has one prop, `stage` (an integer, `x-transition: "snap"`).
+A component that draws its own figure can keep a "you are here" copy of a `diagram` or a `map` beside it, with `ctx.mount`, the same second view a slide gets by setting `compact: true` (see [Show where we are](second-views.md)). This `my.stage` writes the name of the current stage of `data/process.json` and mounts a compact diagram of the whole process, lit at that stage. `data/process.json` is the file that [One definition for both views](second-views.md#one-definition-for-both-views) writes; copy it into the deck's `data/` folder first.
 
+Make the folder with `new-component my.stage`, then replace its `schema.json` and `index.js`. `schema.json` has one prop:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "my.stage",
+  "description": "The name of the current stage, with a compact diagram of the process.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stage": {
+      "type": "integer",
+      "description": "The current stage, counted from 0.",
+      "examples": [0, 1],
+      "x-transition": "snap"
+    }
+  }
+}
+```
+
+`index.js`:
 ```js
 export default {
   async mount(el, props, ctx) {
@@ -362,6 +395,19 @@ export default {
 };
 ```
 
+A slide that walks the first three stages, as `slides/stage.js` (add `stage` to `slides` in `deck.js`):
+
+```js
+export default {
+  id: "stage",
+  layout: "full-bleed",
+  title: "Stage",
+  elements: [
+    { id: "st", type: "my.stage", props: { stage: 0 }, advance: { prop: "stage", values: [0, 1, 2] } },
+  ],
+  steps: [{ id: "a" }, { id: "b" }, { id: "c" }],
+};
+```
 - **The props are yours.** The child gets the props you pass it, not the slide's, so read the shared definition yourself (`ctx.data`, as here) or take it as props the slide binds. The child's `highlight`, `caption` and the rest change with your own props, through `handle.update`.
 - **Give its element a size.** A compact view fills the element it is mounted in, so give that element a width and a height of its own. A mounted `map` also needs that element positioned (`position: relative` or `absolute`), because its frame, body and caption are placed against the nearest positioned ancestor.
 - **The caption band comes from the current props.** A diagram or map mounted with `ctx.mount` has no step list (`ctx.stepProps` is `null` for a child), so unlike the same view on a slide it cannot see the captions of other steps. Its caption band is reserved when the props it has now carry a caption, and a caption turning empty or non-empty redraws the view. Keep a caption in every update to keep the drawing still.
@@ -750,6 +796,8 @@ validate: 4 slides, 0 errors, 0 warnings
 ```text
 my.counter · component (deck)
 One large number with a label, counting from its previous value to the new one when a step plays. The number is formatted in the deck language.
+
+enter: own (the component builds its own entrance; its box stays still)
 
 props (name, transition, required, description):
   value   tween  required  The number to show. Drive it with `advance` or `set` it in steps; a played step counts to it.

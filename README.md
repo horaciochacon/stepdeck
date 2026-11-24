@@ -6,6 +6,7 @@
 
 [Español](README.es.md)
 
+**AI agents:** start at [AGENTS.md](AGENTS.md).
 ![A chart slide and a chat slide building up step by step](docs/media/demo.gif)
 
 [Live site](https://horaciochacon.github.io/stepdeck/) · [Gallery of every layout and component](https://horaciochacon.github.io/stepdeck/site/gallery/)
@@ -14,7 +15,7 @@ stepdeck is an engine for step-by-step HTML presentations. Slides are plain data
 
 This page is the front door. It shows what you get, a quick start and one slide, then points deck authors, agent operators and contributors to the right page in [docs/](docs/index.md).
 
-**Status.** First public release (0.1.0), with a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The built-in kit has 13 components and 5 layouts. The default theme is `modern`, and `academic-light` is the plain alternative; see the [changelog](CHANGELOG.md). PDF export is not implemented.
+**Status.** The first public release is 0.1.0; `main` is ahead of it (see *Unreleased* in the [changelog](CHANGELOG.md)). On `main` the built-in kit has 13 components and 5 layouts. There is a [docs site](https://horaciochacon.github.io/stepdeck/site/docs/) and a [gallery](https://horaciochacon.github.io/stepdeck/site/gallery/). The default theme is `modern`, and `academic-light` is the plain alternative. PDF export is not implemented.
 
 ## What you get
 
@@ -31,7 +32,7 @@ This page is the front door. It shows what you get, a quick start and one slide,
 You need:
 - Node 20 or later;
 - `npm install` in this repository, for Ajv (only `validate` needs it);
-- Chrome plus Playwright for the browser commands (`check`, `dump`, `shoot`). Playwright is not a dependency: install it where Node can find it, or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder.
+- Chrome plus Playwright for the browser commands (`check`, `dump`, `shoot`). Playwright is not a dependency, and the CLI looks for it from this folder, not from the deck: run `npm run playwright` here (it installs the version CI uses and leaves `package.json` alone), or set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder.
 
 Then:
 
@@ -85,7 +86,7 @@ export default {
 };
 ```
 
-Each step patches the state of the step before, so any step can be reached directly and looks the same as playing up to it. The big number comes from a data file through a `{{file#/pointer}}` binding, so no figure is typed by hand.
+Each step patches the state of the step before, so any step can be reached directly and looks the same as playing up to it. The big number comes from a data file through a `{{file#/pointer}}` binding instead of being typed into the slide.
 
 Build your own in [Your first deck](docs/guide/first-deck.md); the rules for steps are in [The step model](docs/guide/step-model.md).
 
@@ -94,7 +95,7 @@ Build your own in [Your first deck](docs/guide/first-deck.md); the rules for ste
 | Page | For |
 |---|---|
 | [docs/index.md](docs/index.md) | The start of the docs: every page, by audience |
-| [Guides](docs/index.md#guides) | Deck authors: quick start, first deck, step model, data, layouts, presenting, checking, custom components |
+| [Guides](docs/index.md#guides) | Deck authors: quick start, first deck, step model, animation, data, second views, maps, layouts, presenting, checking, custom components, agents |
 | [Reference](docs/index.md#reference) | Deck and slide spec, components, layouts, themes, CLI, rules, runtime API, component contract |
 | [Concepts](docs/concepts/architecture.md) | How the pieces fit: fold engine, slide controller, layout renderer, registry, shells, CLI |
 | [Contributing](docs/contributing/index.md) | Working on the engine: setup, tests, adding components, layouts, themes and rules |
@@ -102,7 +103,16 @@ Build your own in [Your first deck](docs/guide/first-deck.md); the rules for ste
 
 ## For agents
 
-The [skill](skill/SKILL.md) teaches an agent the whole workflow without reading engine source: catalog, slide spec, `validate`, `check`, `shoot` or `dump`, look, fix. Its `references/` cover the step model, components, custom components, themes and layouts, every check rule, and a cookbook. The repository is also a Claude Code plugin (`.claude-plugin/plugin.json`), which loads the skill; load it with `claude --plugin-dir /path/to/stepdeck`. Any other agent can read `skill/SKILL.md` directly.
+[AGENTS.md](AGENTS.md) is the entry point for an agent. It leads to the [skill](skill/SKILL.md), which teaches the whole workflow without reading engine source: catalog, slide spec, `validate`, `check`, `shoot` or `dump`, look, fix. The skill's `references/` cover the step model, components, custom components, themes and layouts, slide design (`skill/references/design.md`), every check rule, and a cookbook.
+
+The repository is also a Claude Code plugin (`.claude-plugin/plugin.json`), which loads the skill. Load it from a clone with `claude --plugin-dir /path/to/stepdeck`, or install it inside Claude Code:
+
+```text
+/plugin marketplace add horaciochacon/stepdeck
+/plugin install stepdeck@stepdeck
+```
+
+Any other agent can read `AGENTS.md` and `skill/SKILL.md` directly.
 
 The docs and the skill agree. To run agents on stepdeck, start with [stepdeck for agents](docs/guide/for-agents.md).
 
@@ -112,6 +122,7 @@ The docs and the skill agree. To run agents on stepdeck, start with [stepdeck fo
 - **Tooling:** `cli/` (the command line), `templates/` (the starter deck and the component skeleton), `skill/` (the agent skill; `.claude-plugin/` publishes it as a plugin).
 - **Site and examples:** `index.html` (the landing page), `site/` (the docs viewer and the gallery), `examples/` (two example decks).
 - **Docs:** `docs/`.
+- **Agent entry points:** `AGENTS.md`, with `GEMINI.md` and `llms.txt` for the tools that look for those names.
 - **Development:** `test/` (unit and browser tests, fixtures), `.github/` (CI, contributing and security notes, issue and pull request templates).
 
 Paths in backticks such as `core/fold.js` or `components/<name>/` are relative to `engine/`, which is also the layout of a deck's `stepdeck/` folder. The [repository tour](docs/contributing/index.md#repository-tour) describes every folder, including the generated ones.

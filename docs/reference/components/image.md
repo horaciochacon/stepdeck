@@ -2,7 +2,7 @@
 
 `image` shows one local picture with required alt text, an optional caption and a fit mode. Use it for the figure on a cover or for a picture anywhere on a slide. This page lists every prop, the markup, how the picture fills its region, when it moves, and the errors it raises. It is for anyone writing slides by hand or reviewing what an agent wrote.
 
-Sources: [`components/image/schema.json`](../../../engine/components/image/schema.json), [`components/image/index.js`](../../../engine/components/image/index.js), [`core/data.js`](../../../engine/core/data.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
+Source code (for contributors; deck authors do not need it): [`components/image/schema.json`](../../../engine/components/image/schema.json), [`components/image/index.js`](../../../engine/components/image/index.js), [`core/data.js`](../../../engine/core/data.js), [`core/stepdeck.css`](../../../engine/core/stepdeck.css). For the other components, see the [components reference](index.md).
 
 ## Use it
 
@@ -83,7 +83,7 @@ Inside its element wrapper (`div.sd-el[data-el][data-type="image"]`) the compone
 | Picture (`.sd-image-img`) | Full width, `flex: 1 1 0`, `object-fit` from `fit`. |
 | Caption (`.sd-image-caption`) | `--sd-font-size-note`, `--sd-line-height`, `--sd-color-muted`; wraps anywhere. Code is in `--sd-font-mono`, strong text in `--sd-font-weight-strong`, links in `--sd-color-accent`. |
 
-So an image fills any region of any layout, alone or next to other elements. `chart.line`, `chart.bar`, `diagram` and `terminal` do the same (see the [Fill rules](../layouts.md#fill-rules) table). A long caption makes the picture shorter; the picture never overflows the box. In the example above, the image in a `halves` half measures 852×790 canvas pixels. The fill rule does not apply to a collapsed or failed element.
+So an image fills any region that has a height of its own, alone or next to other elements. `chart.line`, `chart.bar`, `chart.points`, `diagram`, `map` and `terminal` do the same (see the [Fill rules](../layouts.md#fill-rules) table). It does not fill a region whose height is `auto`: in `main` of the `statement` layout, or in a `footer`, the picture is 0 pixels high and nothing shows. The same happens to an image placed with `box`: the fill rule only applies inside a region, so the picture is 0 pixels high inside its box. Neither `validate` nor `check` reports this; look at a `shoot` image. A long caption makes the picture shorter; the picture never overflows the box. In the example above, the image in a `halves` half measures 852×790 canvas pixels. The fill rule does not apply to a collapsed or failed element.
 
 ## Motion
 
@@ -139,18 +139,18 @@ error: bad/missing: image 'assets/nope.png' could not be loaded: the file is mis
 error: bad/broken: image 'assets/broken.png' could not be loaded: the file is missing or is not a decodable image (http://127.0.0.1:62668/assets/broken.png)
 ```
 
-A missing file also produces a `console: Failed to load resource … 404` line in `dump`, and `check` reports the 404 as `network-error`.
+A missing file also produces a `network: 404 <path>` line in `dump`, and `check` reports the 404 as `network-error`.
 
 `validate` catches some of these earlier:
 
 ```text
 bad/remote · remote-url · src has https://example.com/a.png vs relative, same-origin paths only · copy the resource into the deck (e.g. assets/) and use a relative path, or drop the link from src
 bad/missing · file-missing · src = assets/nope.png vs a file in the deck · create assets/nope.png in the deck (generate data with a script under data/), or fix the path in src
-bad/blank · prop-invalid · alt = "  " vs must match pattern "\S" · change alt so it is match pattern "\S" (props of image)
+bad/blank · prop-invalid · alt = "  " vs must match pattern "\S" · change alt so it does match pattern "\S" (props of image)
 bad/fit · prop-invalid · fit = "fill" vs one of "contain", "cover" · set fit to one of "contain", "cover" (props of image)
 ```
 
-`validate` does not catch a `..` path, a `%` in the path, or a file that exists but is not a decodable image (here `assets/broken.png` held plain text). These fail only in the browser, so run `dump` or `check` after `validate`. Every rule is listed in the [CLI reference](../cli.md).
+`validate` does not catch a `..` path, a `%` in the path, or a file that exists but is not a decodable image (here `assets/broken.png` held plain text). These fail only in the browser, so run `dump` or `check` after `validate`. Every rule is listed in [Rules](../rules.md).
 
 `image` is not a figure for the `figure-source` rule, so a slide with only an image does not need a source line.
 

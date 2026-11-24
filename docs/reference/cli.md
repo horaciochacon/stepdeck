@@ -13,8 +13,8 @@ node cli/index.js <command> [deckDir] [options]
 `cli/index.js` is also the package's `stepdeck` bin, so `stepdeck <command>` does the same thing when that bin is on your `PATH`. Node 20 or later is required (`engines` in `package.json`).
 
 - **`deckDir`** is the deck folder (the one holding `deck.js`). It defaults to the current folder.
-- **Engine lookup.** A deck made by `new` holds its own engine copy in `<deck>/stepdeck/` (detected by `stepdeck/core/render.html`). Commands use that copy when it exists, and the engine in this repository (`engine/`) otherwise.
-- **Browser commands** (`serve`, `dump`, `check`, `shoot`) serve the deck over HTTP. A deck with an engine copy is served from its own folder. A deck without one must be inside this repository (the examples and test fixtures are), and is served from the repository root. Anything else is refused, so no folder above the deck is ever served:
+- **Engine lookup.** A deck made by `new` holds its own engine copy in `<deck>/stepdeck/` (detected by `stepdeck/core/render.html`). Commands use that copy when it exists, and the engine in this repository (`engine/`) otherwise. `validate` reads the deck, slide and layout schemas from that copy too.
+- **Browser commands** (`serve`, `dump`, `check`, `shoot`) serve the deck over HTTP. A folder with no `deck.js` is refused first, with the message `validate` gives: `no deck.js in <dir>; pass the deck folder (the one holding deck.js)`. A deck with an engine copy is served from its own folder. A deck without one must be inside this repository (the examples and test fixtures are), and is served from the repository root. Anything else is refused, so no folder above the deck is ever served:
 
   ```
   stepdeck: deck at /path/to/outside has no engine copy; run `stepdeck new` or copy the engine to /path/to/outside/stepdeck/
@@ -56,23 +56,28 @@ There is no `pdf` command yet; it is planned.
 | `--full` | none | `boundaries` | the simplified geometry |
 | `--precision <n>` | a whole number from 0 to 10 | `boundaries` | 4 |
 | `-h`, `--help` | none | any position | |
+| `--version` | none | any position | |
+
+An option that takes a value accepts it as the next argument or after `=`: `--slide chart` and `--slide=chart` are the same. `--version` prints the version from `package.json` and exits 0.
 
 Rules that apply to every command:
 
 - **`--size n`** sets the browser viewport to `n` x `round(n * 9 / 16)`. Boxes are still reported in canvas pixels (1920 x 1080). `shoot` takes only 1920, 1280 or 960.
 - **`--theme name`** runs the browser command under another theme: it adds `?theme=<name>` to every page the command loads, so it wins over `deck.theme`. Use it to check a deck under both built-in themes (`--theme modern`, `--theme academic-light`) without editing `deck.js`. The name is checked before any browser starts, against the engine the deck loads: it must be lowercase letters, digits and hyphens, and name a folder of `themes/` that holds `tokens.css`. Otherwise the command exits 2 with `unknown theme '<name>'; themes: …` (with a did-you-mean when it is close) or `--theme '<name>' is not a theme name (lowercase letters, digits and hyphens)`. `validate` has no `--theme`: it checks the deck's own theme.
 - **`--step`** is resolved per slide. A value made only of digits that is less than the slide's step count is an index. Anything else is matched against the step ids. A slide with no steps has one step, `0`. See [Deck and slide spec](deck-and-slide.md) for step references.
-- **`--step` scope.** `--step` without `--slide` fails with `--step needs --slide`. Commands other than `dump`, `check`, `shoot` and `help` refuse `--step` (`help` ignores it). `validate` says `validate does not take --step: it folds and checks every step of a slide; use --slide <id>`; the others say `<command> does not take --step (dump, check and shoot do)`.
-- **Unused flags are ignored.** A command silently ignores a flag it does not use, except `--step`. For example, `validate --played --port 3 --size 999` runs a normal `validate`.
+- **`--step` scope.** `--step` without `--slide` fails with `--step needs --slide`.
+- **An option a command does not use is refused.** The "Used by" column above is enforced: a command given another command's option exits 2 with `<command> does not take --<option> (<the commands that do> do)`, so a flag is never silently dropped. For example, `validate my-talk --theme modern` exits 2 with `validate does not take --theme (dump, check and shoot do)`, and `catalog --port 3` with `catalog does not take --port (serve does)`. For `--step`, `validate` says `validate does not take --step: it folds and checks every step of a slide; use --slide <id>`. `--json` is read by every command; `help` ignores every option. Like other run errors, this one is `{ "error": … }` under `--json`.
+- **`--json` and what a deck logs.** Under `--json`, stdout holds the JSON alone: a `console.log`, `console.info` or `console.debug` call in `deck.js` or a slide file (they are imported by `validate`, `catalog` and `new-component`) is written to stderr instead.
 - **Positionals.** `new-component`, `catalog` and `boundaries` take two positionals; every other command takes one. An extra one is a parse error. For `boundaries` they are the country and the level, and the deck folder is `--deck`.
 - **Parse errors** print `stepdeck: <message>`, a blank line and the usage text to stderr, and exit 2. This happens even with `--json`; stdout stays empty. The parse errors are:
   - `unknown option <x>`;
   - `<flag> needs a value` (the value is missing or starts with `--`);
+  - `<flag> takes no value` (`--json=yes`);
   - `--port must be a port number, e.g. 8000`;
   - `--size must be a width in pixels, e.g. 960`;
   - `unexpected argument <x>`.
 
-  An unknown command (`stepdeck: unknown command '<x>'`) and a missing command also print the usage to stderr and exit 2.
+  An unknown command (`stepdeck: unknown command '<x>'`, with `; did you mean '<command>'?` when one is close) and a missing command also print the usage to stderr and exit 2.
 
 ## Exit codes and errors
 
@@ -130,6 +135,8 @@ node cli/index.js help
 
 Prints the usage text to stdout and exits 0. `-h` and `--help` do the same in any position, for example `node cli/index.js validate -h`. `help` ignores `--json`.
 
+The usage text lists the commands with their positionals, the options with the commands that take each, the exit codes, the environment variables of the browser commands (`STEPDECK_PLAYWRIGHT`, `STEPDECK_CHANNEL`, `STEPDECK_WORKERS`) and the absolute path of this page in your copy.
+
 ## new
 
 Creates a deck folder from a template and copies the engine into it.
@@ -140,7 +147,7 @@ node cli/index.js new <dir> [--template talk]
 
 | Argument | Required | Default | Notes |
 | --- | --- | --- | --- |
-| `<dir>` | yes | | A new or empty folder. It is created if needed. |
+| `<dir>` | yes | | A new or empty folder. It is created if needed. A folder that holds only `.git`, `.gitignore`, `.DS_Store` or `Thumbs.db` counts as empty, so `new` works in a fresh repository. |
 | `--template` | no | `talk` | A folder of `templates/` that holds an `index.html`. `talk` is the only one today. |
 
 `new` copies the template into `<dir>`. It then copies the engine into `<dir>/stepdeck/`: `core`, `components`, `layouts`, `themes`, `vendor`, `schema`, `LICENSE` and `THIRD_PARTY_NOTICES.md`. It skips `.DS_Store`, `Thumbs.db`, `shots`, `catalog` and `node_modules`. The CLI, tests, docs and examples are not copied.
@@ -167,7 +174,8 @@ Errors (exit 2):
 | Message | Cause |
 | --- | --- |
 | `new needs a folder: stepdeck new <dir>` | No `<dir>`. |
-| `<absolute dir> is not empty; pass a new or empty folder` | The folder exists and holds files. The message shows the resolved absolute path, not the argument as typed. |
+| `<absolute dir> is not empty; pass a new or empty folder` | The folder exists and holds files (other than `.git`, `.gitignore`, `.DS_Store` and `Thumbs.db`). The message shows the resolved absolute path, not the argument as typed. |
+| `<absolute path> is a file; pass a new or empty folder` | The path names a file. |
 | `unknown template '<t>' (templates: talk)` | `--template` names no template. |
 
 ## new-component
@@ -189,7 +197,8 @@ Text output:
 ```
 created my-talk/components/my.badge/ (index.js, schema.json, example.js, README.md)
 added "my.badge" to components in deck.js
-try it: copy my-talk/components/my.badge/example.js to slides/, add its id to slides in deck.js, then
+try it: the example slide's id is "my-badge-example", so copy it to slides/my-badge-example.js and add "my-badge-example" to slides in deck.js, then
+  cp my-talk/components/my.badge/example.js my-talk/slides/my-badge-example.js
   node /path/to/stepdeck/cli/index.js validate /abs/my-talk
   node /path/to/stepdeck/cli/index.js check /abs/my-talk --played
 ```
@@ -228,13 +237,13 @@ Both positionals are optional and may come in either order. An argument is taken
 | A deck (`deck.js`) | The deck's engine (its `stepdeck/` copy, else this repository's `engine/`), then the deck's own `components` | `<deck>/catalog/` |
 | The repository root | The repository's `engine/` | `<repo>/catalog/` |
 | An engine (`components/index.json`), such as `engine/` | The engine | `<engine>/catalog/` |
-| Anything else | | Exits 2: `<dir> is neither a deck (deck.js) nor the stepdeck engine (components/index.json); pass the deck folder` |
+| Anything else | | Exits 2: `<dir> is neither a deck (deck.js), an engine (components/index.json) nor a stepdeck repository (engine/); pass the deck folder` |
 
 So running `catalog` with no folder from the repository root writes `<repo>/catalog/`. That folder is git-ignored.
 
 Built-in components come from `components/index.json` and deck components from `deck.js` `components`. Layouts are the folders of `layouts/` holding `schema.json`; themes are the folders of `themes/` holding `tokens.css`. Only data files are read: component code is never imported.
 
-**Without a name**, `catalog` rewrites the output folder. It first removes every `*.json` file in it (nothing else), then writes `index.json` (the entries) and one `<name>.json` per entry (the detail). It does this with `--json` too.
+**Without a name**, `catalog` rewrites the output folder. It first removes what its previous run wrote there: the `<name>.json` of every entry the old `index.json` lists, and `index.json` itself. Any other file, a `*.json` of your own included, is left alone. Then it writes `index.json` (the entries) and one `<name>.json` per entry (the detail). It does this with `--json` too.
 
 ```
 catalog: 13 components, 5 layouts, 2 themes -> my-talk/catalog/index.json
@@ -277,7 +286,7 @@ More than one name exits 2 with `catalog takes one name (got a, b)`.
   "kind": "component",
   "name": "big-number",
   "summary": "One large figure with an optional label and 95% interval.",
-  "animates": ["value", "label", "ci"],
+  "animates": ["value", "format", "label", "ci", "prefix", "suffix"],
   "enter": "own"
 }
 ```
@@ -392,15 +401,19 @@ The `present:` URL is the server URL plus the deck's path under the served root.
 }
 ```
 
-The server runs until it gets SIGINT (Ctrl-C) or SIGTERM, then exits 0. If it cannot listen (port taken, or not allowed), it exits 2 with the system error, for example `stepdeck: listen EACCES: permission denied 127.0.0.1:1`.
+The server runs until it gets SIGINT (Ctrl-C) or SIGTERM, then exits 0. A port that is taken exits 2 with `stepdeck: port 8000 is in use; pass --port 0 for a free port, or another --port`. If it cannot listen for another reason, it exits 2 with the system error, for example `stepdeck: listen EACCES: permission denied 127.0.0.1:1`. A folder with no `deck.js` exits 2 with `no deck.js in <dir>; pass the deck folder (the one holding deck.js)`.
 
 Responses:
 
 | Request | Status | Body |
 | --- | --- | --- |
 | A file under the root | 200 | The file, with `Content-Type` from the table below and `Content-Length`. |
-| A folder | 200 or 404 | Its `index.html`, or 404 when it has none. There are no folder listings. |
+| A folder, with its trailing slash | 200 or 404 | Its `index.html`, or 404 when it has none. There are no folder listings. |
+| A folder, without the trailing slash | 301 | `Location` is the same path with the slash (the query is kept), so the relative URLs of its `index.html` resolve inside the folder. |
 | A path that resolves outside the root | 403 | `forbidden` |
+| A file reached through a symbolic link that leads outside the root | 403 | `forbidden`. A link that stays inside the root is served. |
+| A path with a segment that starts with `.` (`.git/config`, `.env`) | 404 | `not found` |
+| A `Host` header other than `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` | 403 | `forbidden host`. A page of another site cannot reach the server under a name of its own. |
 | A path that is not valid percent-encoding | 400 | `bad request` |
 | A missing file | 404 | `not found` |
 | A method other than `GET` or `HEAD` | 405 | `method not allowed` |
@@ -418,10 +431,19 @@ Every response, errors included, carries `Cache-Control: no-store`, so a reload 
 | `.txt` | `text/plain; charset=utf-8` |
 | `.md` | `text/markdown; charset=utf-8` |
 | `.woff2` | `font/woff2` |
+| `.woff` | `font/woff` |
 | `.svg` | `image/svg+xml` |
 | `.png` | `image/png` |
 | `.jpg`, `.jpeg` | `image/jpeg` |
+| `.gif` | `image/gif` |
+| `.webp` | `image/webp` |
+| `.avif` | `image/avif` |
+| `.ico` | `image/x-icon` |
 | `.mp4` | `video/mp4` |
+| `.webm` | `video/webm` |
+| `.mp3` | `audio/mpeg` |
+| `.wav` | `audio/wav` |
+| `.ogg` | `audio/ogg` |
 | anything else | `application/octet-stream` |
 
 Presenting is covered in [Presenting](../guide/presenting.md).
@@ -469,7 +491,7 @@ A clean deck prints only `validate: 3 slides, 0 errors, 0 warnings`.
 ]
 ```
 
-**Exit codes.** 1 when any problem has severity `error`; 0 when there are none, warnings included. A `deck.js` that does not import is reported as the problem `deck-load` (exit 1). Exit 2 when the run cannot start:
+**Exit codes.** 1 when any problem has severity `error`; 0 when there are none, warnings included. A `deck.js` that does not import is reported as the problem `deck-load` (exit 1), and a slide file that does not as `slide-load`; for a syntax error the fix is `` syntax error; run `node --check slides/<id>.js` for the line ``. Exit 2 when the run cannot start:
 
 - `no deck.js in <dir>; pass the deck folder (the one holding deck.js)`;
 - `unknown slide '<id>' (slides: …)`;
@@ -520,7 +542,7 @@ Each step is a fresh page load of the bare shell at that step in capture mode, m
 | `elements[].canvas` | Present only when the element has a canvas layer: one object per `canvas.sd-canvas-layer`, in DOM order, holding its `data-*` attributes without the `data-` prefix. A `chart.line` draw fan has `draws`, `until` (empty without `until`), `seed` and `signature` (a hash of what the fan painted), so a dump shows the canvas state without pixels. Measured on the page. |
 | `elements[].props` | The resolved props (bindings applied) from `STEPDECK.state()`. They appear only in the JSON. |
 | `changed` | Ids whose resolved props or visibility differ from the previous step. At step 0, every id. With `--step`, the previous step is also loaded to compute it (and not printed). |
-| `errors` | Runtime errors (`STEPDECK.errors`) plus console errors (`console: …`) and uncaught page errors (`pageerror: …`) seen while showing the step. Failed network requests are not included: a 404 does not appear here and does not fail `dump`. Use `check` for those. |
+| `errors` | Runtime errors (`STEPDECK.errors`), console errors (`console: …`), uncaught page errors (`pageerror: …`) and failed requests seen while showing the step. A failed request is one line with its URL, `network: 404 /data/nope.json` (or `network: failed <url> (<reason>)`, `network: remote <url> (blocked: …)`): the lines `check` reports as `network-error`. Chrome's own console line for it (`Failed to load resource`, with no URL) is left out. Any line here makes `dump` exit 1. |
 
 **Text output**, one block per step. Each element line shows visibility, id, type, box, `ghost "label"` (or `ghost`) while a ghost placeholder is shown, its text, cut to 48 characters (47 plus `…`) when longer, and, for an element with a canvas layer, `canvas draws=20 seed=1 signature=…` (the layer's attributes; an empty one is left out):
 
@@ -548,11 +570,11 @@ node cli/index.js check [deckDir] [--slide id] [--step ref] [--size n] [--theme 
 
 **Layout pass.** Every step is a fresh load of the bare shell in capture mode, measured after fonts and `settled()`, at 1920 x 1080 unless `--size` says otherwise. It reports:
 
-- `text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small` and `contrast`, once per slide, element and rule (per pair for overlaps), at the first step, with `(+N more steps)` when the problem persists;
+- `text-outside-canvas`, `text-outside-region`, `text-overlap`, `font-too-small`, `contrast` and `hidden-paints`, once per slide, element and rule (per pair for overlaps), at the first step, with `(+N more steps)` when the problem persists. `hidden-paints` is a backstop: the engine's stylesheet forces the descendants of a hidden element hidden, and the rule reports what still shows through (a child with an inline `visibility: visible !important`). A ghost placeholder and a failed element's error box are meant to show and are not reported;
 - `step0-shows-all` for a slide whose step 0 already shows what its last step shows. This is skipped with `--step`;
-- page errors: `render-error`, `console-error` and `network-error`, once per slide, step and message. Unlike `dump`, `check` reports failed requests.
+- page errors: `render-error`, `console-error` and `network-error`, once per slide, step and message. A request that was answered with an HTTP error is one `network-error` line (`404 /data/nope.json`), never a second one for the same request.
 
-**Played pass (`--played`).** For each step k, `check` compares three arrivals: a jump (fresh load with `?motion=full`), an animated arrival from step k−1, and an arrival back from step k+1. It compares each element's presence, visibility, text, box (rounded to 1 px) and canvas state (the `data-*` attributes of its canvas layers, as `dump` lists them), and reports `played-mismatch` once per slide and element. A slide with n steps has 2(n−1) arrivals. With `--step`, only the arrivals at that step are compared: from the step before and from the step after, so just one at the first or last step. If the page reports that animation is off, the run stops with exit 2: `animation is off on the page (flags …); check --played cannot test the animated path`. So it does when the page is hidden (`document.visibilityState` is not `"visible"`), since a hidden page renders end states only: `the page is hidden (document.visibilityState is 'hidden'), so it renders end states only; check --played cannot test the animated path`.
+**Played pass (`--played`).** For each step k, `check` compares three arrivals: a jump (fresh load with `?motion=full`), an animated arrival from step k−1, and an arrival back from step k+1. It compares each element's presence, visibility, text, box (rounded to 1 px), canvas state (the `data-*` attributes of its canvas layers, as `dump` lists them) and the size of each outermost `<svg>` and `<canvas>` inside it (rounded to 1 px, reported as `inner <svg> 300×200`: a figure that kept its old size inside a box that has the new one), and reports `played-mismatch` once per slide and element. A slide with n steps has 2(n−1) arrivals. With `--step`, only the arrivals at that step are compared: from the step before and from the step after, so just one at the first or last step. If the page reports that animation is off, the run stops with exit 2: `animation is off on the page (flags …); check --played cannot test the animated path`. So it does when the page is hidden (`document.visibilityState` is not `"visible"`), since a hidden page renders end states only: `the page is hidden (document.visibilityState is 'hidden'), so it renders end states only; check --played cannot test the animated path`.
 
 Problems are listed in this order: page errors, layout rules, `step0-shows-all`, then `played-mismatch`. The thresholds and fixes are in [Rules](rules.md).
 
@@ -566,6 +588,8 @@ check: 1 slide, 1 step, 1 problem
 ```
 check: 1 slide, 4 steps, 6 played arrivals compared, 0 problems
 ```
+
+One arrival reads `1 played arrival compared`.
 
 A slide with no steps is reported as step `0` (`closing/0` above).
 
@@ -589,7 +613,7 @@ Each step is a fresh load in capture mode, shot after fonts and `settled()`. Fil
 <deck>/shots/<size>/<slide>-<nn>-<stepId>.png
 ```
 
-`nn` is the step index, zero-padded to two digits (more for a slide with 100 steps or more). `stepId` is the step id, or the index when the step has no id: a slide with no steps gives `closing-00-0.png`. Existing files are overwritten; nothing else in `shots/` is deleted, so remove stale PNGs yourself after renaming steps. `shots/` is git-ignored.
+`nn` is the step index, zero-padded to two digits (more for a slide with 100 steps or more). `stepId` is the step id, or the index when the step has no id: a slide with no steps gives `closing-00-0.png`. In the file name, every run of characters other than letters, digits, `.`, `_` and `-` in an id becomes one `_` (a step id `a/b` is written as `a_b`), so no id can write outside `shots/<size>/`. `validate` warns about such a step id (`step-id-chars`). Existing files are overwritten; nothing else in `shots/` is deleted, so remove stale PNGs yourself after renaming steps. `shots/` is git-ignored.
 
 **Text output.** The paths, relative to the current folder, then a summary:
 
@@ -608,21 +632,24 @@ shoot: 1 PNG at 960×540
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `STEPDECK_PLAYWRIGHT` | `playwright`, resolved by Node | Path to a `playwright` package folder. |
+| `STEPDECK_PLAYWRIGHT` | `playwright`, resolved by Node from the stepdeck folder (not from the deck) | Path to a `playwright` package folder. |
 | `STEPDECK_CHANNEL` | `chrome` (the system Chrome) | The Playwright browser channel to launch. |
+| `STEPDECK_WORKERS` | `min(4, max(1, floor(cores / 2)))` | How many pages of the one browser a run drives at once. `1` is one page, every step in turn. Anything but a whole number of 1 or more exits 2: `STEPDECK_WORKERS must be a whole number, 1 or more (got '<value>')`. |
 
 ```sh
 STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node cli/index.js check my-talk
 ```
 
-Without Playwright, these commands exit 2 with `Playwright not found[ at STEPDECK_PLAYWRIGHT=…]. Install it (npm i -D playwright) or set STEPDECK_PLAYWRIGHT to a playwright package directory.`
+Without Playwright, these commands exit 2 with `Playwright not found[ at STEPDECK_PLAYWRIGHT=…]. Install it in the stepdeck folder: (cd /path/to/stepdeck && npm run playwright), or set STEPDECK_PLAYWRIGHT to a playwright package folder.` The path is the absolute path of your copy, so the command can be pasted. Playwright is looked up from the stepdeck folder: installing it in the deck folder does not help.
 
 Limits and behaviour of every run:
 
-- **One browser per run.** The deck is served on a free local port for the duration of the run.
+- **One browser per run, several pages.** The deck is served on a free local port for the duration of the run. The steps are loaded on up to `STEPDECK_WORKERS` pages of that browser side by side (each step is a fresh page load, so they do not depend on each other), and the results are put back in deck order: the output is the same with one page or four, `shoot`'s PNGs included. With `--played`, each page plays its own arrivals; every page is visible, so each one animates.
+- **A slide listed in `deck.js` whose file is not written yet** does not fail the other slides. The runtime imports every listed slide when a page loads, but the 404 for `slides/<id>.js` is not counted against the slide on screen: `check --slide title` passes while `slides/later.js` is missing. A run over the whole deck reports the missing slide once, at that slide: `later/0 · render-error · later: cannot load slide: slides/later.js not found (create it, or remove 'later' from slides in deck.js)`. `validate` reports it as `slide-missing`.
 - **Offline.** Every request whose origin is not the local server is aborted before it leaves the browser. `check` reports it as `network-error`: `remote <url> (blocked: only same-origin requests are allowed, spec §3)`.
-- **Timeouts.** A page has 30 seconds to boot and settle. A component that does not settle within the runtime's 10-second watchdog becomes that element's error rather than a timeout. A page that never becomes ready exits 2 with `deck did not become ready at <url> (slide '<s>', step '<k>'): …`.
-- **Run errors (exit 2).** Besides the timeout: `deck did not load: …` when the deck has no slides, `unknown slide '<id>' (slides: …)`, `unknown step '<ref>' in slide '<id>' (steps: …)`, `cannot open <target>: HTTP <status>` when the shell page answers with a non-OK HTTP status, `deck did not settle at <url> (slide '<s>', step '<k>'): …` when the deck does not settle after a step change, and a deck outside the repository with no engine copy.
+- **Timeouts.** A page has 30 seconds to boot and settle. A component that does not settle within the runtime's 10-second watchdog becomes that element's error rather than a timeout. A page that never becomes ready exits 2 with `deck did not become ready at <url> (slide '<s>', step '<k>'): …`. When the run ends, the browser has 3 seconds to close; after that the command exits anyway (a page stuck in a script cannot hold it), and the browser is killed with the process.
+- **Signals.** SIGINT (Ctrl-C) and SIGTERM end a run at once, with nothing printed; SIGTERM exits 143.
+- **Run errors (exit 2).** Besides the timeout: `deck did not load: …` when the deck has no slides, `unknown slide '<id>' (slides: …)`, `unknown step '<ref>' in slide '<id>' (steps: …)`, `cannot open <target>: HTTP <status>` when the shell page answers with a non-OK HTTP status, `deck did not settle at <url> (slide '<s>', step '<k>'): …` when the deck does not settle after a step change, a folder with no `deck.js`, and a deck outside the repository with no engine copy.
 
 ## See also
 

@@ -1,6 +1,6 @@
 # Cookbook
 
-These are complete slide specs. Each one passes `validate`, `check` and `check --played` in a deck made with `new`.
+These are complete slide specs. Each one passes `validate` and `check --played` in a deck made with `new` (`check --played` runs everything plain `check` does).
 
 To use one:
 1. Save it as `slides/<id>.js`, where `<id>` is the spec's `id`.
@@ -181,7 +181,7 @@ export default {
 
 ## The slide kit
 
-These recipes are copied from `examples/kit` in the stepdeck repository. Each passes `validate`, `check` and `check --played`; the data files are shown as their contents and come from a `data/make-data.mjs` script in the kit deck.
+These recipes are copied from `$STEPDECK/examples/kit`. Each passes `validate` and `check --played`; the data files are shown as their contents and come from a `data/make-data.mjs` script in the kit deck.
 
 ### A cover with an image
 
@@ -189,7 +189,7 @@ On the `title` layout, an element in the `figure` region switches the cover to t
 
 ```js
 export default {
-  id: "cover",
+  id: "cover-figure",
   layout: "title",
   section: "Slide kit",
   title: "Analysing data with *an agent*",
@@ -637,16 +637,96 @@ export default {
 };
 ```
 
+### What adds up to a change: a waterfall
+
+`mode: "waterfall"` stacks the rows into a running total over the shown bars only. Show the gains, then the cuts, then everything (`shown: null` removes the prop), then `total: true` adds the bar from zero to the sum. Increases take the diverging palette's `high` colour and decreases its `low` colour: red and blue in both built-in themes. `invert: true` swaps them (increases blue, decreases red), for a chart where a reduction is the good news or to show cuts in red. To bridge last year's total to this year's, chart only the changes and let `total` name the net change; when the level dwarfs the changes (a budget of 24.6 M against changes under 1 M), show the two levels as `big-number`s beside the chart rather than as bars. A first row from zero, such as `Opening`, is drawn as an increase, so use one only when the level and the changes are of the same order. Hidden categories keep their band, and the axis covers every step.
+
+`data/budget.csv`:
+
+```csv
+item,change
+New programmes,18
+Fee income,12
+Staffing,-14
+Equipment,-6
+Other,3
+```
+
+```js
+export default {
+  id: "waterfall",
+  layout: "full-bleed",
+  title: "Gains outweigh the cuts: the budget *ends up higher*",
+  elements: [
+    { id: "bars", region: "main", type: "chart.bar",
+      props: { data: "data/budget.csv", x: "item", y: "change", mode: "waterfall",
+               shown: ["New programmes", "Fee income"], format: { y: ",.0f" }, axes: { y: "Change in budget, index points" } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "gains" },
+    { id: "cuts", set: { bars: { shown: ["New programmes", "Fee income", "Staffing", "Equipment"] } } },
+    { id: "all", set: { bars: { shown: null } } },
+    { id: "total", set: { bars: { total: true } } },
+  ],
+};
+```
+
+### Estimates with intervals against an average
+
+`interval` draws a whisker through each dot and `reference` a dashed line across every row. Three rows come first, each growing out of the reference line; then the rest; then `sort: "-value"` ranks them in one motion; then `only` puts `highlight` on the leader for the last step. The reference value is bound with no format, so it stays a number. A script computes it from the same CSV.
+
+`data/estimates.csv`:
+
+```csv
+region,rate,low,high
+North,14.4,12.2,16.9
+South,9.1,8.1,10.1
+East,12.6,10.1,15.2
+West,7.8,6.0,9.7
+Central,11.4,9.0,13.9
+Coastal,16.8,14.2,19.5
+```
+
+`data/estimates-summary.json`, the mean of `rate`:
+
+```json
+{ "average": 12.0 }
+```
+
+```js
+export default {
+  id: "estimates",
+  layout: "figure-notes",
+  title: "Two regions sit *clear above the average*",
+  elements: [
+    { id: "points", region: "main", type: "chart.points",
+      props: { data: "data/estimates.csv", x: "region", y: "rate", interval: { lower: "low", upper: "high" },
+               reference: { value: "{{data/estimates-summary.json#/average}}", label: "Average" },
+               shown: ["North", "South", "East"], format: { y: ",.1f" }, axes: { y: "Uptake per 100, 95% interval" } } },
+    { id: "note", region: "notes", type: "text", from: "all",
+      props: { role: "note", text: "A whisker that crosses the dashed line is not clearly different from the average." } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "three" },
+    { id: "all", set: { points: { shown: null } } },
+    { id: "ranked", set: { points: { sort: "-value" } } },
+    { id: "leader", only: { points: { highlight: "Coastal" } } },
+  ],
+};
+```
+
 ## Maps
 
-A map's files come from the project's own analysis code (R or Python), which already holds the boundaries, the region ids and the values: add the writing of the files to that code, and write rasters with the writer functions in `$STEPDECK/docs/guide/maps/` (`stepdeck-map.R`, `stepdeck_map.py`; copy one into the project). Use `stepdeck boundaries` only when the project has no boundaries. The file shapes are in [From your analysis code to a map slide](../../docs/guide/maps-from-your-code.md).
+A map's files come from the project's own analysis code (R or Python), which already holds the boundaries, the region ids and the values: add the writing of the files to that code, and write rasters with the writer functions in `$STEPDECK/docs/guide/maps/` (`stepdeck-map.R`, `stepdeck_map.py`; copy one into the project). Use `stepdeck boundaries` only when the project has no boundaries. The file shapes are in [`$STEPDECK/docs/guide/maps-from-your-code.md`](../../docs/guide/maps-from-your-code.md).
 
 ### Rates, a closer look, then the years
 
 A choropleth of a rate by region, a flight to the region with the highest rate, then a time-lapse of a population surface played there. The flight is one step (`view`); the last step fades the time-lapse in at its first frame, then runs it to `2021`, 700 ms a frame, while the panel counts the people. Played, the run takes 11 × 700 ms = 7.7 s after a 400 ms fade, inside the 20 s a run may take; a jump or a backward step shows the last frame at once.
 
 The files, all written by the project's code into `data/`:
-- `data/regions.geojson`: the project's boundaries, one feature per region, with the properties `code` (the id the data uses) and `name`. The stepdeck repository has a fictional country of this shape at `site/gallery/data/map/regions.geojson`.
+- `data/regions.geojson`: the project's boundaries, one feature per region, with the properties `code` (the id the data uses) and `name`. The stepdeck repository has a fictional country of this shape at `$STEPDECK/site/gallery/data/map/regions.geojson`.
 - `data/rates.csv`: one row per region, keyed by `code`. `N3` has no row, so it is hatched and the legend adds "no data".
 - `data/years.json` and `data/years/001.png` to `012.png`: a time-lapse, written by the writer function.
 
@@ -709,9 +789,48 @@ export default {
 
 The region ids in `view` and `labels` must be ids of the boundaries (`check` reports any other as `render-error`), and the labels in `frame` must be labels of the time-lapse file (`validate` reports any other as `map-frame`).
 
+### Sites as points, then a few of them in focus
+
+A `points` layer puts a circle at each `lon`, `lat`. `size` makes the area true to a column and `color` takes a column (one categorical colour per value); the legend shows both. The map opens on the regions alone, the layer fades in with `shown`, and `only` sets `highlight` to three point ids for one step: every other point turns dim. Give points ids no region has.
+
+`data/regions.geojson` is the project's boundaries, as in the recipe above.
+
+`data/sites.csv`:
+
+```csv
+id,lon,lat,beds,kind
+S01,-14.089,-24.480,21,clinic
+S02,-12.914,-24.800,182,hospital
+S03,-10.920,-25.223,8,post
+S04,-15.794,-25.631,40,clinic
+S05,-12.458,-25.666,116,hospital
+S06,-14.323,-25.756,5,post
+S07,-13.417,-26.668,28,clinic
+S08,-11.465,-26.451,142,hospital
+```
+
+```js
+export default {
+  id: "sites",
+  layout: "full-bleed",
+  title: "Three hospitals hold *most of the beds*",
+  elements: [
+    { id: "map", region: "main", type: "map",
+      props: { boundaries: "data/regions.geojson", id: "code", name: "name",
+               layers: { sites: { points: "data/sites.csv", lon: "lon", lat: "lat", id: "id", size: "beds", color: "kind", label: "Beds" } } } },
+    { id: "src", region: "main", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "regions" },
+    { id: "sites", set: { map: { shown: ["sites"] } } },
+    { id: "hospitals", only: { map: { highlight: ["S02", "S05", "S08"] } } },
+  ],
+};
+```
+
 ## Second views
 
-A second view is a small copy of a `diagram` or a `map` that keeps the audience's bearings while another figure carries the slide. The full guide is [Show where we are](../../docs/guide/second-views.md); these are the recipes. They pass `validate` and `check` in both themes on a deck made with `new`.
+A second view is a small copy of a `diagram` or a `map` that keeps the audience's bearings while another figure carries the slide. The full guide is [`$STEPDECK/docs/guide/second-views.md`](../../docs/guide/second-views.md); these are the recipes. They pass `validate` and `check` in both themes on a deck made with `new`.
 
 ### One process, a full diagram and a compact copy on the result slides
 
@@ -812,7 +931,7 @@ export default {
 
 ### A compact map beside a chart
 
-The same boundaries file as the full maps, the same `id`; the region under discussion is lit, and a step moves both the chart's highlight and the map's. The data is the stepdeck repository's fictional country: `site/gallery/data/map/regions.geojson` and `rates.csv`, copied into `data/`.
+The same boundaries file as the full maps, the same `id`; the region under discussion is lit, and a step moves both the chart's highlight and the map's. The data is the stepdeck repository's fictional country: `$STEPDECK/site/gallery/data/map/regions.geojson` and `rates.csv`, copied into `data/`.
 
 ```js
 export default {
@@ -888,7 +1007,28 @@ export default {
 };
 ```
 
-To give one element a motion of its own, set `enter`: a name (`fade`, `rise`, `wipe`, `pop`, `none`) or `{ motion: "pop", delay: 300, duration: 600 }` (ms; `delay` is added to its slot).
+To give one element a motion of its own, set `enter`: a name (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`) or `{ motion: "pop", delay: 300, duration: 600 }` (ms; `delay` is added to its slot). The next recipe does both.
+
+### Entrances and exits of an element's own
+
+`enter` and `exit` take a name or an object. `first` wipes in. `second` pops, 300 ms after its turn, over 600 ms. `aside` is on screen for one step (`at`): `enter: "none"` puts it there at once, and its `exit` wipes it away on the next click. `last` has neither key, so it takes the theme's entrance. An `exit` has no `delay` (`exit-delay-ignored`).
+
+```js
+export default {
+  id: "entrances",
+  layout: "full-bleed",
+  title: "Each line arrives its own way",
+  elements: [
+    { id: "first", region: "main", type: "text", from: "go", enter: "wipe", props: { text: "This line wipes in from the left." } },
+    { id: "second", region: "main", type: "text", from: "go", enter: { motion: "pop", delay: 300, duration: 600 },
+      props: { text: "This one pops, 300 ms after its turn, over 600 ms." } },
+    { id: "aside", region: "main", type: "text", at: ["go"], enter: "none", exit: { motion: "wipe", duration: 600 },
+      props: { role: "note", text: "This note is there at once, and wipes away on the next click." } },
+    { id: "last", region: "main", type: "text", from: "end", props: { text: "The default: the theme's entrance." } },
+  ],
+  steps: [{ id: "start" }, { id: "go" }, { id: "end" }],
+};
+```
 
 ### A message line that changes with each step, and a badge
 
@@ -962,6 +1102,140 @@ export default {
     { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
   ],
   steps: [{ id: "method" }, { id: "result" }],
+};
+```
+
+## More patterns
+
+### A focus that moves down a list
+
+`active` emphasises one item and dims the rest. `advance` moves it one item per step, so the list is an agenda the talk walks through. Every item is visible from the start; only the focus moves.
+
+```js
+export default {
+  id: "agenda",
+  layout: "full-bleed",
+  title: "Three parts, one at a time",
+  elements: [
+    { id: "parts", region: "main", type: "list",
+      props: { marker: "number", active: 0, items: [
+        { text: "Where the data come from", sub: "Twelve sources, one format" },
+        { text: "What the model estimates", sub: "A rate for every region" },
+        { text: "What changes for the regions", sub: "Two of them need a second look" },
+      ] },
+      advance: { prop: "active", values: [0, 1, 2] } },
+  ],
+  steps: [{ id: "data" }, { id: "model" }, { id: "regions" }],
+};
+```
+
+### A callout for one step
+
+`at: ["caveat"]` shows an element at that step only, and `only` sets a prop for that step only: the note and the annotation come and go together. The `takeaway` note shares the column, so the caveat's space stays reserved and nothing moves. The data is the starter deck's (`data/series.csv`).
+
+```js
+export default {
+  id: "callout",
+  layout: "figure-notes",
+  title: "Group B *overtakes Group A* after 2020",
+  elements: [
+    { id: "chart", region: "main", type: "chart.line",
+      props: { data: "data/series.csv", x: "year", y: "value", series: "group",
+               axes: { x: "Year", y: "Indicator per 1,000" }, format: { x: "d", y: ",.0f" } } },
+    { id: "caveat", region: "notes", type: "text", at: ["caveat"],
+      props: { role: "note", text: "The 2020 value comes from a smaller sample." } },
+    { id: "takeaway", region: "notes", type: "text", from: "end",
+      props: { role: "note", text: "After 2020, Group B rises three times faster." } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [
+    { id: "both" },
+    { id: "caveat", only: { chart: { annotate: [{ x: 2020, label: "2020" }] } } },
+    { id: "end", set: { chart: { highlight: "Group B" } } },
+  ],
+};
+```
+
+### One number, centred, with a prefix and a unit
+
+On `statement`, a `big-number` sits at the left of the centred column; the slide's `style` centres it by its element id. `prefix` and `suffix` go before and after the figure (the suffix is drawn smaller). The title asks the question, and the click answers it with a count-up.
+
+`data/headline.json`, written by the script that makes the deck's data:
+
+```json
+{ "saved": 4.2, "share": 0.31 }
+```
+
+```js
+export default {
+  id: "savings",
+  layout: "statement",
+  title: "What the new process saves",
+  style: '[data-el="saved"] { text-align: center; }',
+  elements: [
+    { id: "saved", region: "main", type: "big-number", from: "figure",
+      props: { value: "{{data/headline.json#/saved}}", format: ",.1f", prefix: "~", suffix: " h",
+               label: "saved per analyst, per week" } },
+    { id: "src", region: "footer", type: "text", props: { role: "source", text: "Source: synthetic example data." } },
+  ],
+  steps: [{ id: "question" }, { id: "figure" }],
+};
+```
+
+### Markdown with a code block and a table
+
+A fenced code block is drawn in the mono font on the surface colour, with no syntax highlighting. A Markdown table needs its header row and the `|---|` line. In a JS string, write the line breaks as `\n`.
+
+```js
+export default {
+  id: "code",
+  layout: "halves",
+  title: "One script, one table",
+  elements: [
+    { id: "script", region: "left", type: "markdown",
+      props: { md: "### The script\n\n```r\nrates <- read_csv(\"data/clean.csv\") |>\n  group_by(region) |>\n  summarise(rate = mean(rate))\n```" } },
+    { id: "table", region: "right", type: "markdown", from: "table",
+      props: { md: "### What it writes\n\n| Column | Meaning |\n|---|---|\n| `region` | Region name |\n| `rate` | Mean rate per 100 |\n| `n` | Rows behind the mean |" } },
+  ],
+  steps: [{ id: "script" }, { id: "table" }],
+};
+```
+
+### A plain shell session
+
+A `terminal` replays any recorded session. The script has no `tasks`, and the slide's `style` hides the side panel, so the log takes the full width (about 90 characters a line on `full-bleed`). `shown: 0` opens on an empty prompt; with `typing: true` the command is typed on the first click. Every event is one log line; a `file` event prints the path and its status.
+
+`data/shell.json`:
+
+```json
+{
+  "title": "analysis — zsh",
+  "command": "make report",
+  "events": [
+    { "type": "run", "text": "Rscript R/01-clean.R" },
+    { "type": "result", "text": "read 12 files, 48,210 rows" },
+    { "type": "file", "text": "data/clean.csv", "status": "created" },
+    { "type": "run", "text": "Rscript R/02-model.R" },
+    { "type": "result", "text": "model converged in 14 iterations" },
+    { "type": "file", "text": "output/estimates.csv", "status": "created" },
+    { "type": "run", "text": "quarto render report.qmd" },
+    { "type": "file", "text": "report.html", "status": "created" }
+  ]
+}
+```
+
+```js
+export default {
+  id: "shell",
+  layout: "full-bleed",
+  title: "One command rebuilds the report",
+  style: ".sd-terminal-side { display: none; }",
+  elements: [
+    { id: "term", region: "main", type: "terminal",
+      props: { script: "data/shell.json", shown: 0, typing: true },
+      advance: { prop: "shown", values: [0, 3, 6, 8] } },
+  ],
+  steps: [{ id: "prompt" }, { id: "clean" }, { id: "model" }, { id: "render" }],
 };
 ```
 

@@ -22,23 +22,28 @@ To see them:
 - From the CLI, with `dump` (each step's `error:` lines) or `check` (rule `render-error`).
 
 ```sh
-node cli/index.js dump my-talk --slide broken
+node cli/index.js dump ../my-talk --slide broken
 ```
 
 ```text
 broken · step 0 (one)
+  visible  title  text       96,96 632×74          "Broken"
+  visible  a      chart.lin  96,218 0×626          "broken/a: unknown component 'chart.lin'; did yo…"
+  visible  b      text       872,867 952×165       "broken/b: unknown region 'side' in layout 'figu…"
+  visible  c      text       168,474 560×113       "broken/c: data file not found: data/nope.json"
   error: broken/b: unknown region 'side' in layout 'figure-notes' (regions: title, main, notes, footer)
   error: broken/a: unknown component 'chart.lin'; did you mean 'chart.line'?
   error: broken/c: data file not found: data/nope.json
-  error: console: Failed to load resource: the server responded with a status of 404 (Not Found)
+  error: network: 404 /data/nope.json
+  changed: title, a, b, c
 ```
 
-A `console: Failed to load resource … 404` line only repeats a missing file. The line above it names the real cause (here `data/nope.json`). `check` skips these console lines and reports the missing file as `network-error` instead. Other `console: …` lines and `pageerror: …` lines are script errors in a component or in the deck's own code. `check` reports those as [`console-error`](reference/rules.md#check-page-errors).
+A `network: …` line is a failed request, with its URL: here the 404 that the line above it reports from the element's side (`data/nope.json`). `check` reports the same request as `network-error`. `console: …` lines and `pageerror: …` lines are script errors in a component or in the deck's own code. `check` reports those as [`console-error`](reference/rules.md#check-page-errors).
 
 The first thing to run is always `validate`. It needs no browser and catches most of the mistakes on this page by rule name:
 
 ```sh
-node cli/index.js validate my-talk
+node cli/index.js validate ../my-talk
 ```
 
 ## Setup errors
@@ -49,15 +54,18 @@ On stderr every message below starts with `stepdeck: `. Under `--json`, the run 
 
 | Message | Cause | Fix |
 |---|---|---|
-| `Playwright not found. Install it (npm i -D playwright) or set STEPDECK_PLAYWRIGHT to a playwright package directory.` | `dump`, `check` and `shoot` drive Chrome through Playwright, which is not a stepdeck dependency. | Run `npm i -D playwright`, or point `STEPDECK_PLAYWRIGHT` at an existing `playwright` package folder. |
+| `Playwright not found. Install it in the stepdeck folder: (cd /path/to/stepdeck && npm run playwright), or set STEPDECK_PLAYWRIGHT to a playwright package folder.` | `dump`, `check` and `shoot` drive Chrome through Playwright, which is not a stepdeck dependency. | Run `npm run playwright` in the stepdeck folder (the CLI resolves Playwright from there, so installing it inside a deck does nothing), or point `STEPDECK_PLAYWRIGHT` at an existing `playwright` package folder. |
+| `no deck.js in <dir>; pass the deck folder (the one holding deck.js)` | `validate`, `serve`, `dump`, `check` or `shoot` was pointed at a folder that is not a deck (often the folder above it, or the engine). | Pass the folder that holds `deck.js`. |
+| `<command> does not take --<option> (<commands> do)` | An option was given to a command that does not read it, for example `validate --theme modern`. | Remove the option, or use a command that takes it. `validate` checks the deck's own theme. |
+| `port <n> is in use; pass --port 0 for a free port, or another --port` | `serve` could not listen on the port: another `serve` is probably still running. | Stop the other server, or pass `--port 0` and open the URL it prints. |
 | `Playwright not found at STEPDECK_PLAYWRIGHT=<path>. …` | `STEPDECK_PLAYWRIGHT` is set, but no package is found there. | Set it to the `playwright` package folder itself, for example `…/node_modules/playwright`. |
 | ``validate needs the repo's dependencies (Ajv): run `npm install` in <repo> first`` | `validate` is the only command that needs Ajv, and it is not installed. | Run `npm install` in the stepdeck folder that the message names. |
 | ``deck at <dir> has no engine copy; run `stepdeck new` or copy the engine to <dir>/stepdeck/`` | A browser command was pointed at a deck outside the engine repo that has no `stepdeck/` folder. | Create decks with `stepdeck new`, which copies the engine. Or copy `core`, `components`, `layouts`, `themes`, `vendor` and `schema` from the repository's `engine/` into `<dir>/stepdeck/`. |
 | `no deck.js in <dir>; pass the deck folder (the one holding deck.js)` | `validate` was given a folder that is not a deck (often the current folder, which is the default). | Pass the folder that holds `deck.js`. |
-| `stepdeck: unknown command '<x>'` | A command name that the CLI does not have. | Use one of `help`, `new`, `new-component`, `catalog`, `serve`, `validate`, `dump`, `check`, `shoot`. |
+| `stepdeck: unknown command '<x>'` (with `; did you mean '<command>'?` when one is close) | A command name that the CLI does not have. | Use one of `help`, `new`, `new-component`, `catalog`, `boundaries`, `serve`, `validate`, `dump`, `check`, `shoot`. |
 | `stepdeck: unknown option <x>` | A flag that the CLI does not parse. | See [CLI](reference/cli.md) for the flags. |
-| `stepdeck: unexpected argument <x>` | An extra positional argument, such as two deck folders. `new-component` and `catalog` take two; every other command takes one. | Pass one deck folder; quote paths that contain spaces. |
-| `stepdeck: <flag> needs a value` | `--slide`, `--step`, `--size`, `--port` or `--template` with no value, or followed by another flag. | Give the value: `--slide chart`. |
+| `stepdeck: unexpected argument <x>` | An extra positional argument, such as two deck folders. `new-component`, `catalog` and `boundaries` take two; every other command takes one. | Pass one deck folder; quote paths that contain spaces. |
+| `stepdeck: <flag> needs a value` | `--slide`, `--step`, `--size`, `--theme`, `--port`, `--template`, `--deck`, `--out` or `--precision` with no value, or followed by another flag. | Give the value: `--slide chart`. |
 | `stepdeck: --size must be a width in pixels, e.g. 960` / `--port must be a port number, e.g. 8000` | A non-integer, a `--size` under 160, or a port outside 0–65535. | Give a whole number. For `shoot`, use 1920, 1280 or 960. |
 | `stepdeck: shoot --size must be 1920\|1280\|960` | `shoot` got a `--size` that is a valid width but not one of the three shot sizes, such as `800`. | Use 1920, 1280 or 960. |
 | `--step needs --slide` | `--step` without `--slide`. | Add `--slide <id>`. |
@@ -154,6 +162,7 @@ Each built-in component reports its own prop errors as `<slide>/<el>: <message>`
 | `markdown` | [markdown](reference/components/markdown.md) |
 | `chart.line` | [chart.line](reference/components/chart-line.md) |
 | `chart.bar` | [chart.bar](reference/components/chart-bar.md) |
+| `chart.points` | [chart.points](reference/components/chart-points.md) |
 | `big-number` | [big-number](reference/components/big-number.md) |
 | `terminal` | [terminal](reference/components/terminal.md) |
 | `list` | [list](reference/components/list.md) |
@@ -161,8 +170,9 @@ Each built-in component reports its own prop errors as `<slide>/<el>: <message>`
 | `chat` | [chat](reference/components/chat.md) |
 | `timeline` | [timeline](reference/components/timeline.md) |
 | `image` | [image](reference/components/image.md) |
+| `map` | [map](reference/components/map.md) |
 
-The two charts share four table errors: ``<name> needs a `data` path``, `<data> is not a table (use a .csv file)`, ``<name> needs `<prop>` (a column name)`` and `column '<c>' not found in <data> (columns: …)`.
+The three charts share four table errors: ``<name> needs a `data` path``, `<data> is not a table (use a .csv file)`, ``<name> needs `<prop>` (a column name)`` and `column '<c>' not found in <data> (columns: …)`.
 
 ## Watchdog: did not settle within 10s
 
@@ -209,9 +219,9 @@ These look wrong but produce no error line, and `validate` passes.
 
 ### A chart has no height
 
-A `chart.line`, `chart.bar` or `chart.points` fills the room its region leaves, next to other elements or alone. The one place it gets none is `statement` `main`: that region has no set height, so the chart collapses to zero height there. (`diagram`, `image` and `terminal` do the same.)
+A `chart.line`, `chart.bar` or `chart.points` fills the room its region leaves, next to other elements or alone. The one place it gets none is `statement` `main`: that region has no set height, so the chart collapses to zero height there. (`diagram`, `image`, `map` and `terminal` do the same.)
 
-Fix: move the chart to a region with a height, such as `main` of `figure-notes` or `full-bleed`, or either half of `halves`. If the chart is small in a region that should be larger, check what else is in the region: the chart takes only the height the other elements leave. No rule catches this, so look at a shot (`node cli/index.js shoot my-talk --slide chart`). The sizes are in the [Fill rules](reference/layouts.md#fill-rules) table; see also [Give figures room](guide/layouts-and-themes.md#give-figures-room).
+Fix: move the chart to a region with a height, such as `main` of `figure-notes` or `full-bleed`, or either half of `halves`. If the chart is small in a region that should be larger, check what else is in the region: the chart takes only the height the other elements leave. No rule catches this, so look at a shot (`node cli/index.js shoot ../my-talk --slide chart`). The sizes are in the [Fill rules](reference/layouts.md#fill-rules) table; see also [Give figures room](guide/layouts-and-themes.md#give-figures-room).
 
 ### Nothing animates
 
@@ -251,12 +261,30 @@ The `title` layout switches to two columns as soon as its `figure` region holds 
 Not yet. There is no `pdf` command. To hand out the slides, export PNGs of every step with `shoot` (into `shots/<size>/`), or share the deck folder itself.
 
 ```sh
-node cli/index.js shoot my-talk --size 1920
+node cli/index.js shoot ../my-talk --size 1920
 ```
 
 ### Are there other themes?
 
 Two are built in: `modern` (the default) and `academic-light`. A deck chooses one with `theme` in `deck.js`, and `?theme=<name>` overrides that for one page load (`check`, `dump` and `shoot` take `--theme <name>`). To make your own, copy `themes/modern/` in the deck's engine copy under a new name and keep every token name. See [Themes](reference/themes.md).
+
+### How do I update the engine in an existing deck?
+
+A deck keeps the engine it was made with, in `<deck>/stepdeck/`. `new` is the only command that copies the engine, so make a fresh deck from the newer clone and swap the folder. From the stepdeck folder:
+
+```sh
+node cli/index.js new /tmp/fresh
+mv ../my-talk/stepdeck ../my-talk/stepdeck.old
+cp -R /tmp/fresh/stepdeck ../my-talk/stepdeck
+```
+
+Then:
+
+1. Copy back anything you added inside `stepdeck/`, such as a theme or a layout of your own: `cp -R ../my-talk/stepdeck.old/themes/my-theme ../my-talk/stepdeck/themes/my-theme`. Your slides, data and `components/` live outside `stepdeck/` and are not touched.
+2. Run `node cli/index.js validate ../my-talk` and `node cli/index.js check ../my-talk --played`, and look at the shots.
+3. Delete `stepdeck.old` when the deck is clean.
+
+The [changelog](../CHANGELOG.md) lists the changes that move or restyle existing slides.
 
 ### Can I present offline?
 

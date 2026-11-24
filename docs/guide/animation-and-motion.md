@@ -27,13 +27,9 @@ Only one kind of move animates: a **forward move of exactly one step from the la
 | Backward, by any number of steps | No |
 | Jump on the same slide by id or number (`STEPDECK.goTo`, a hash change in reveal) | Only if the target happens to be the next step after the one applied |
 
-The engine decides this in the slide controller (`core/controller.js`), not in the components. It passes the decision to every changed element as `info.animate`:
+The engine decides this in the slide controller (`core/controller.js`), not in the components. It passes the decision to every changed element as `info.animate`, which is true only when three things hold: the shell asked for motion, a step has already been applied on the slide, and the target is the step right after it.
 
-```js
-animate: animate && appliedIndex !== null && index === appliedIndex + 1
-```
-
-`animate` is the shell's request, which is `STEPDECK.flags.animate`, withheld while the page is hidden (see [Hidden pages](#hidden-pages)). `appliedIndex` is the step the slide currently shows. It is `null` before the first step is applied, so the first render never animates.
+The shell's request is `STEPDECK.flags.animate`, withheld while the page is hidden (see [Hidden pages](#hidden-pages)). Before the first step is applied the slide shows no step, so the first render never animates.
 
 ```mermaid
 flowchart TD
@@ -115,7 +111,7 @@ A component whose content has a natural build declares `"x-enter": "own"` at the
 | `terminal` | With `typing`, the command is typed; then the log lines fade in, one after another. |
 | `timeline` | The track fills from the start to `progress`, then the `current` stop grows. |
 
-`text`, `markdown` and `image` do not own their entrance: their box moves.
+`text`, `markdown`, `image` and `map` do not own their entrance: their box moves.
 
 The engine resolves `enter` like this (`core/choreography.js`):
 
@@ -241,6 +237,7 @@ How long each motion lasts:
 | [chat](../reference/components/chat.md) | The visible messages rise in, staggered; the newest types (with `typing`) | Newly shown messages rise in, staggered; with `typing`, the newest is then typed |
 | [diagram](../reference/components/diagram.md) | Groups fade in, nodes pop in, staggered, then edges draw | New groups fade in, new nodes pop in, then new edges draw; `highlight` dims the others |
 | [timeline](../reference/components/timeline.md) | The fill runs to `progress`, then the `current` stop grows | The fill tweens from the previous `progress`; a new `current` stop grows and its label fades in |
+| [map](../reference/components/map.md) | Its box plays `--sd-enter` | A changed `view` flies the map there; layers added to `shown` fade in and removed ones fade out; a shown layer's colours crossfade when its data or scale changes; `highlight` tweens the colours and outlines; labels and the inset fade; a changed `frame` runs through the frames in between |
 
 Notes:
 
@@ -282,7 +279,7 @@ steps: [
 ],
 ```
 
-An element of your own with id `lede` replaces the sugar. Core styles the `lede` role (and the `badge` role below) for a theme that has no rules of its own for them; `modern` and `academic-light` restyle both in their `theme.css`. Every built-in layout has a `title` region; on a layout without one, a `lede` is an `unknown-region` error. On a cover (`kind: "cover"`) put the line in the `subtitle` region instead: `validate` warns `lede-on-cover`.
+An element of your own with id `lede` replaces the sugar. Core styles the `lede` role (and the `badge` role below) for a theme that has no rules of its own for them; `modern` and `academic-light` restyle both in their `theme.css`. Every built-in layout has a `title` region; on a layout without one, a `lede` is an `unknown-region` error. On a cover layout (one whose `schema.json` declares `kind: "cover"`; `title` is the built-in one) put the line in the `subtitle` region instead: `validate` warns `lede-on-cover`.
 
 ### Badges
 

@@ -14,7 +14,7 @@ slide/element/step · rule · measured vs limit · suggested fix
 Exit codes:
 - `0`: clean, or warnings only;
 - `1`: problems;
-- `2`: usage error, or a run that could not complete. Examples: no `deck.js`, an unknown `--slide`, Playwright missing, a deck folder with no engine copy. Under `--json` the error comes as `{ "error": "…" }`.
+- `2`: usage error, or a run that could not complete. Examples: no `deck.js`, an unknown `--slide`, Playwright missing, a deck folder with no engine copy, an option the command does not take (`validate does not take --theme (dump, check and shoot do)`). Under `--json` the error comes as `{ "error": "…" }`.
 
 Run `validate` first: it is fast and catches most mistakes. Run `check` once validate is clean.
 
@@ -26,14 +26,14 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 
 | Rule | Means | Fix |
 |---|---|---|
-| `deck-load` | `deck.js` threw on import or has no default export object. | Make it plain data: `export default { title, slides, … }`, with no DOM, no fetch and no top-level await. |
+| `deck-load` | `deck.js` threw on import or has no default export object. | Make it plain data: `export default { title, slides, … }`, with no DOM, no fetch and no top-level await. For a syntax error, run `node --check deck.js`: it prints the line. |
 | `unknown-key` | A key the deck schema does not allow (did-you-mean given). | Rename it as suggested. Allowed keys: `title`, `lang`, `theme`, `palette`, `sections`, `components`, `slides`. |
 | `spec-invalid` | Any other deck schema violation: a wrong type, a missing `title` or `slides`, a bad pattern. | Follow the fix text. |
 | `unknown-theme` | No `stepdeck/themes/<theme>/tokens.css`. | Use `modern` or `academic-light`, or add the theme ([themes-layouts](themes-layouts.md)). |
 | `theme-palettes` | The theme has no readable `palettes.json`. | Fix the theme's `palettes.json`. |
 | `theme-background` | `--sd-color-background` is missing or not a hex color in `tokens.css`. | Declare it as hex. |
 | `unknown-palette` | `palette` is not one of the theme's palettes. | Use a name from `catalog <theme>`, or drop `palette`. |
-| `palette-contrast` | A categorical color has less than 3:1 contrast against the background. Located as `<palette>/<color>`. | Use the darker value the fix names. |
+| `palette-contrast` | A categorical color has less than 3:1 contrast against the background. Located as `<palette>/<color>`. | Use the value the fix names: darker on a light background, lighter on a dark one. |
 | `palette-cvd` | Two categorical colors are too close under simulated color-vision deficiency (CIEDE2000 < 8). | Change one of the two colors. |
 | `engine` | The engine's `components/index.json` is unreadable. | Recreate the deck's engine copy (`new`). |
 | `component-collision` | A deck component has a built-in's name. | Rename the folder and the `components` entry with a namespace (`my.text`). |
@@ -46,7 +46,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | Rule | Means | Fix |
 |---|---|---|
 | `slide-missing` | `slides/<id>.js` for an id in `deck.js` `slides` does not exist. | Create the file or remove the id. |
-| `slide-load` | The slide file threw on import or has no default export object. | Plain data only. Synchronous code such as loops is fine; DOM, fetch and top-level await are not. |
+| `slide-load` | The slide file threw on import or has no default export object. | Plain data only. Synchronous code such as loops is fine; DOM, fetch and top-level await are not. For a syntax error the fix says so: run `node --check slides/<id>.js`, which prints the line. |
 | `slide-id` | The exported `id` differs from the file name. | Make them equal. |
 | `path-case` | A path (slide file, data, binding, component) differs in case from the file on disk. | Use the exact case the fix shows. Published sites are case-sensitive. |
 | `unknown-key` | A key not allowed on the slide, an element or a step (did-you-mean given). | Rename it as suggested. |
@@ -54,6 +54,7 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `duplicate-id` | Two elements share an id. | Rename one, and the patches that target it. |
 | `duplicate-step-id` | Two steps share an id. | Rename one, and its references. |
 | `step-id-numeric` | A step id is digits only (`"1"`). | Use a word (`"intro"`, `"step-1"`). |
+| `step-id-chars` | Warning. A step id holds something other than letters, digits, `_` and `-`, or does not start with a letter or digit (`"a/b"`, `"two words"`). Step ids name the PNGs of `shoot` (which writes such a character as `_`) and URL fragments. | Rename the step as the fix proposes, and update its references. |
 | `unknown-layout` | No such layout. | Use one from the catalog: `title`, `figure-notes`, `full-bleed`, `statement`, `halves`. |
 | `unknown-region` | The element's region is not in its layout. | Use a region the fix lists. Elements with a `box` need none. |
 | `remote-url` | The slide's `style` contains `http://`, `https://` or `//host` (located as the slide, `measured` starts with `style has`). | Copy the file into the deck (`assets/`) and use a relative `url()`, or drop it. |
@@ -78,23 +79,25 @@ Validate checks the deck, then each slide. It folds every step and checks the re
 | `fold-error` | Folding the slide to that step threw for another reason. | Read `measured`; usually a malformed patch. |
 | `props-not-object` | After folding, an element's props are `null` or a scalar, usually from `set: { el: null }`. | Delete one prop with `set: { el: { prop: null } }`, or use `replace`. |
 | `unknown-prop` | A prop the component schema does not have (did-you-mean given). | Rename it as suggested; `catalog <type>` lists the props. |
-| `prop-invalid` | A resolved prop violates the component schema: a wrong type, a missing required prop, out of range. | Follow the fix text. Remember that a binding *with* a format yields a string. |
-| `remote-url` | A prop contains `http://`, `https://` or `//host`. | Copy the file into the deck (`assets/`) and use a relative path, or drop the link. |
-| `hex-color` | A prop contains a hex color (`#c0392b`). | Remove it. Colors come from the theme. In text, use `{{color:role}}` (markdown). |
+| `prop-invalid` | A resolved prop violates the component schema: a wrong type, a missing required prop, out of range. | Follow the fix text. With a binding, check the type it yields. A whole-string binding with no format yields the raw value, so a number bound to a `text` prop is `must be string`: add a format (`\| d`, `\| ,.0f`); the fix text then shows the binding with one. A binding *with* a format yields a string, so a prop that needs a number (`big-number` `value`) is `must be a number …`: drop the format. |
+| `remote-url` | A prop contains `http://`, `https://` or `//host`. In running text it is only a warning (`… in running text`): a string with spaces and none of `](`, `src=` or `url(`, such as a source citation, loads nothing. | Copy the file into the deck (`assets/`) and use a relative path, or drop the link. Leave a citation as it is. |
+| `hex-color` | A prop contains a hex color (`#c0392b`). In running text, `#` and three or four digits is a number and passes (`issue #123`). | Remove it. Colors come from the theme. In text, use `{{color:role}}` (markdown). |
 | `binding-file` | A binding's file is missing, unsupported or does not parse. | Create the file (generate it), or fix the path. |
 | `binding-pointer` | A binding's JSON pointer is invalid or not found. The measured part lists the keys there. | Point at an existing key. |
 | `binding-format` | A bad d3-format specifier, a format applied to a non-number, or an object or array embedded in text. | Use a valid specifier (`,.0f`, `.1%`, `d`), or bind the raw value. |
-| `file-missing` | A string prop that names a deck file (`.json`, `.csv`, image or media) points at nothing. | Create the file or fix the path. |
+| `file-missing` | A string prop that names a deck file (`.json`, `.csv`, image or media) points at nothing. `./assets/a.png`, `assets/a.png?v=2` and `assets/my photo.png` are checked as the file they name; a sentence that ends in a file name is not. | Create the file or fix the path. |
 | `data-invalid` | A CSV does not parse with the declared `types`. | Fix the data or the `types`. |
 | `missing-column` | `x`, `y`, `id`, `from`, `series`, `interval.lower`/`interval.upper`, or `group` on a back-to-back `chart.bar`, names a column the CSV lacks; so does a `map` layer's `key` (else the map's `id`), `value`, `lon`, `lat`, `id`, `size`, or a points `color` that is not a theme colour (`layers.rate.value = 'rat'`). Checked per step, because `y` may change. | Use a column the fix lists. |
 | `title-accent` | Warning. The title has an odd number of unescaped `*`, so one `*` renders as written. | Close the accent phrase (`*phrase*`), or write `\*` for a literal asterisk. |
 | `accent-empty` | Warning. The title has an empty accent phrase `**` (markdown bold habit); it renders as two asterisks. | Write one `*phrase*`, or `\*\*`. |
 | `diagram-id` | A `diagram` (props that pass its schema) has an edge `from`/`to`, a group `contains`, or a `shown` or `highlight` entry that names an unknown id; an id used twice across nodes, groups and edges (two edges between the same pair need explicit ids); or a group that contains itself. | Correct the id, or give the edge an explicit `id`. |
-| `diagram-overlap` | A `diagram` (props that pass its schema) has sibling groups that share grid cells; a node that is not a member sitting inside a group's cells; or a theme `--sd-diagram-gap` less than twice `--sd-diagram-pad` (for a compact diagram, `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`). | Move the group or node, or put the node in the group (`contains`). For the gap, change the theme tokens. |
+| `diagram-overlap` | A `diagram` (props that pass its schema) has sibling groups that share grid cells; a node that is not a member sitting inside a group's cells; or a theme `--sd-diagram-gap` less than twice `--sd-diagram-pad` (for a compact diagram, `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`). As a warning: two nodes that are not `text` in the same cell, so one is drawn over the other. | Move the group or node, or put the node in the group (`contains`). For the gap, change the theme tokens. For two nodes in one cell, move one to a free cell or make one `shape: "text"`. |
+| `diagram-grid` | A `diagram` with `cols` and `rows` has a node whose cells reach outside the grid: `col + colspan` over `cols`, or `row + rowspan` over `rows`. `col` and `row` count from 0, so the last cell is `cols - 1`, `rows - 1`. The node would be drawn past the diagram's box. | Move the node into the grid, or raise `cols` or `rows`. |
 | `diagram-caption-unused` | Warning. A `diagram` sets `caption` and not `compact: true`; only a compact diagram draws its caption. | Set `compact: true`, or remove `caption` (`caption: null` on the step that turns `compact` off). |
 | `chart-prop-unused` | Warning. A `chart.line` has `ticker: true` and no `until`, so the ticker has no sweep to count. Or a `chart.bar` has `invert: true` or a `total` without `mode: "waterfall"`, so they change nothing on plain bars. | Set `until`, or remove `ticker`. Set `mode: "waterfall"`, or remove `invert` / `total` (`total: null` on a step that switches back to plain bars). |
 | `chart-orient` | A `chart.bar` with `mode: "back-to-back"` and `orient: "vertical"`: its two sides run left and right, so it fails at render time too (`back-to-back bars are horizontal only`). | Remove `orient: "vertical"`, or choose another `mode`. |
 | `map-layer` | A `map`'s `shown` lists an id that is not a key of `layers`; it fails at render time too. | Add the layer, or remove the id from `shown`. |
+| `map-classes` | A `map` layer's `classes` are not in increasing order (a break given twice included); it fails at render time too. | Write the breaks in increasing order, each once: the fix shows the list. |
 | `map-frame` | A `map`'s `frame` is not a label of its time-lapse layers' files; two time-lapse layers have different label lists; or a `numbers` key is in the frames of two time-lapse layers. | Use a label the message lists, give the files the same labels in the same order, or rename the key in one file. |
 | `map-raster` | A map layer's raster JSON does not parse or breaks the raster format (a frame's `numbers` must be finite numbers), or an image it names is missing, in another case on disk, not a PNG, not 8-bit greyscale (color type 0 or 4), interlaced, has a color chunk (`gAMA`, `cHRM`, `iCCP`, `sRGB`) or a `tRNS` chunk, is over 2,000 × 2,000 pixels, or differs in size from the other frames; or a time-lapse holds more than 100 million pixels, every frame together. The message starts with the file's path. | Correct the JSON, or re-export the image as 8-bit greyscale (alpha for no data), not interlaced, without a color profile, at one size for every frame; use fewer or smaller frames. |
 | `map-run` | A step moves a `map`'s `frame` and its run, with the step's other motion before it (a flight takes twice the step's duration), would last more than 20 s; it fails at render time too. Reported at the step that plays it. | Lower `pace` (default 700 ms a frame), or play the frames over two steps. |
@@ -120,24 +123,25 @@ Each step is a fresh load of the bare shell in capture mode, measured after font
 | Rule | Means | Fix |
 |---|---|---|
 | `text-outside-canvas` | Text extends past the 1920×1080 canvas. | Move or shrink the element (its `box`, its region), or shorten the text. |
-| `text-outside-region` | Text of an element in a region extends past the region's content box. Line overhang of half the leading plus 1 px is allowed. Elements with a `box` are exempt. | Shorten the text, use a smaller role (`note`), or widen the region with the slide's `regions` grid variables. |
+| `text-outside-region` | Text of an element in a region extends past the region's content box. Line overhang of half the leading plus 1 px is allowed. Elements with a `box` are exempt. | Shorten the text, use a smaller role (`note`), or widen the region with the slide's `regions` grid variables. A region reported with no height (`inside region 'main' at 210,564 1500×0`) means a chart, a diagram or a map sits in `statement` `main`, which has no set height: move it to `figure-notes`, `full-bleed` or a half of `halves`. |
 | `text-overlap` | Text of two different elements intersects by more than 4 px in both directions. Reported on the later element, naming the earlier one. | Move one (region, `box`) or shorten the text. Elements hidden but keeping their space do not count, because they are invisible. |
 | `font-too-small` | Text below `--min-audience-font` (28px). | Use a larger size or role. Only `role: "source"` and the `footer` region may be smaller. |
 | `contrast` | Text contrast below 4.5:1 against its background. Text and background colors are named. | Use the theme's ink or muted color, or a darker palette color. |
-| `render-error` | The engine reported an error: an element that failed (unknown component, binding error, `mount`/`update` threw, or `did not settle within 10s`) or a slide that failed. | Fix the error shown on the slide; the `measured` part is the message. |
+| `hidden-paints` | An element that is hidden at this step still shows something: one of its descendants is forced visible (a custom component's inline `visibility: visible !important`; in a deck with an older engine copy, any `visibility: visible` on a child), which shows through a hidden parent. The audience sees it before its step, and `dump` still says `hidden`. | Never set `visibility: visible` on a child. Remove it, or set `visibility` to `""` or `"hidden"`: a child shows with its element. |
+| `render-error` | The engine reported an error: an element that failed (unknown component, binding error, `mount`/`update` threw, or `did not settle within 10s`) or a slide that failed. A slide listed in `deck.js` whose file is not written is `<id>: cannot load slide: slides/<id>.js not found (…)`, once, at that slide. | Fix the error shown on the slide; the `measured` part is the message. |
 | `console-error` | The page logged an error or threw. | Fix the script error (usually a custom component). |
-| `network-error` | A request failed (HTTP ≥ 400 or never completed), shown as a path; or a request to another origin, shown as `remote <url> (blocked…)`. Check blocks every remote request (no remote requests at presentation time). | Fix the path, or add the missing file. For a remote one, copy the resource into the deck and use a relative path. |
+| `network-error` | A request failed (HTTP ≥ 400 or never completed), shown as a path, one line per request; or a request to another origin, shown as `remote <url> (blocked…)`. Check blocks every remote request (no remote requests at presentation time). `dump` lists the same lines in a step's `errors`, as `network: 404 /data/x.csv`. | Fix the path, or add the missing file. For a remote one, copy the resource into the deck and use a relative path. |
 | `step0-shows-all` | A multi-step slide shows the same thing at step 0 as at its last step: the same visible elements, text and props. | Hide elements until their step (`from`/`at`), change props per step (`set`/`only`/`advance`), or drop the extra steps. |
 
 ### `check --played`
 
-`--played` adds a second pass. Every step is reached three ways, and the results are compared per element by visibility, text and box (rounded to 1 px):
+`--played` runs the whole of `check`, then adds a second pass. Every step is reached three ways, and the results are compared per element by visibility, text, box (rounded to 1 px), the state of its canvas layers (a chart's draw fan, a map's layers) and the size of the `<svg>` or `<canvas>` inside it (`inner <svg> 300×200`: a figure that kept its old size in a box that has the new one):
 1. jumping straight to it;
 2. arriving animated from the step before;
 3. arriving from the step after.
 
-- **The summary count.** The summary line reports `N played arrivals compared`. A slide with `n` steps gives `2(n − 1)`: from the previous step at every step but the first, and from the next step at every step but the last. A one-step slide gives 0.
-- **Run time.** The whole check takes a few seconds per slide. Use `--slide`, and `--step` to look at one step:
+- **The summary count.** The summary line reports `N played arrivals compared` (`1 played arrival compared`). A slide with `n` steps gives `2(n − 1)`: from the previous step at every step but the first, and from the next step at every step but the last. A one-step slide gives 0.
+- **Run time.** A browser command takes between about 2 s and about 10 s to start, depending on the machine, and `--played` adds about 1 to 2 s per step. The steps are loaded on several pages of one browser side by side (up to 4; env `STEPDECK_WORKERS` sets the number, `1` for one page), and the output is the same either way. Use `--slide`, and `--step` to look at one step:
   - only that step is measured;
   - with `--played`, only its two arrivals are compared;
   - `step0-shows-all` is skipped, because it needs both ends of the slide.
@@ -154,13 +158,17 @@ These are printed as `warning:` lines; `catalog` still exits 0.
 
 | Rule | Means | Fix |
 |---|---|---|
-| `catalog-schema` | A component schema lacks a top-level `description`, or a prop lacks `description`, `examples` or `x-transition`; or a file is unreadable. | Add what the fix names to `schema.json`. |
+| `catalog-schema` | A component schema lacks a top-level `description`, or a prop lacks `description`, `examples` or `x-transition`; or it has a top-level `x-enter` other than `"own"` or `"box"`; or a file is unreadable. | Add or correct what the fix names in `schema.json`. |
 | `catalog-name` | Two entries of different kinds share a name (a component and a layout, say). | Rename one with a namespace. |
 
 ## Known limits (they will bite)
 
-- **Hex false positives.** `#123`, `#bad`, `#add` or `#cafe` in text are read as hex colors (`hex-color`). This catches hashtags and issue numbers too. Rephrase ("issue 123"), or put the text in a data file and bind it.
-- **Strings ending in `.csv` or `.json` count as files.** A whitespace-free string prop such as `"results.csv"` must exist in the deck (`file-missing`), even when it is only a label. Add a space or other words ("file results.csv"), or bind it from data.
+- **`check` measures text only.** An element that covers a figure's marks, a cropped image or an empty-looking chart is not reported. Look at the shots.
+- **Hand-typed figures are not detected.** The no-figure-by-hand rule is yours to keep.
+- **A slide listed in `deck.js` and not written yet** does not fail the slides that are: `validate --slide <id>`, `check --slide <id>`, `dump` and `shoot` of a written slide pass while other files are missing, so several authors can fill one deck side by side. A run over the whole deck reports each missing file once, at its slide (`slide-missing` from `validate`, `render-error` from `check`).
+- **Hex false positives.** `#bad`, `#add` or `#cafe` in text are read as hex colors (`hex-color`), and so is `#123` when it is the whole string. An issue number inside a sentence (`"Fixed in issue #123"`) passes. Rephrase a hashtag, or put the text in a data file and bind it.
+- **Strings ending in `.csv` or `.json` count as files.** A whitespace-free string prop such as `"results.csv"` must exist in the deck (`file-missing`), even when it is only a label. Add other words ("file results.csv": a sentence is not checked), or bind it from data.
+- **A flag a command does not take is an error, not ignored.** `validate` has no `--theme`, `--size` or `--played`; it checks the deck's own theme. Exit 2 names the commands that take the flag.
 - **`check` contrast sees only ancestor backgrounds.** It does not see a sibling SVG rect, an image or a gradient under the text. Text over such a background can pass `check` and still be unreadable. Look at the shots.
 - **Stale screenshots.** `shoot` overwrites the files it writes but never deletes old ones. After renaming a slide or a step, delete `my-talk/shots/` (or `shots/<size>/<slide>-*`) before shooting, or you will look at ghosts.
 - **`text-overlap` has no opt-out.** Deliberately layered text (a label on a `box` over a chart) is flagged. Move it so the text boxes do not intersect.

@@ -7,6 +7,37 @@ All notable changes to stepdeck are recorded here. The format follows
 
 ### Changed
 
+- **Behaviour change: `advance` assigns each value whole.** An object value is no longer merged into the prop it replaces, and `null` is a value (it used to delete the prop).
+- **Behaviour change: `chart.line` with a non-numeric `x` is an element error** (`chart.line needs a numeric x …`) instead of an empty plot; a header-only CSV fails with `<data> has no rows`.
+- **Behaviour change: `classes` out of increasing order is an error**, in `map` (`validate` rule `map-classes`) and in `ctx.chart.colorScale`, instead of a scale with wrong colours.
+- **The browser tab title is `deck.title`**, set once the deck has loaded; the `<title>` of `index.html` shows only while it loads.
+- **`STEPDECK.goTo(slide, "2")` reads an all-digit string as the step index**, as `?step=2` and `#/slide/2` do, in both shells.
+- **A figure beside a `collapse: true` element is laid out again** when that element appears or leaves: a component may now get `update` with `changed: []` and the same props (a reflow), and must render from its props and the size it measures.
+- **`big-number`: a multi-word `suffix` keeps normal letter-spacing.** In `modern` it inherited the figure's tight tracking and read as "ayear".
+- **`catalog` and `shoot` print paths relative to the working folder only inside it**, and absolute paths otherwise (never `../../…`); `check`'s `text-outside-region` fix no longer sends every layout to grid variables it may not have.
+- **Hidden elements force their descendants hidden**, so a child that sets `visibility: visible` no longer shows through (the ghost placeholder and an error box still show).
+- **`pause()` no longer drops a target that is still resolving its bindings**: it ends the motion as `finish()` does and the target is applied without animation.
+- **A regional `lang` uses its language**: `es-PE` formats and reads as `es`, `en-GB` as `en`.
+- **`motionMs` reads a `--sd-duration` written in seconds** (`0.4s`), as `ctx.motion.timing` does.
+- **CSV integers above 2^53 stay strings**, so a long id is never rounded.
+- **The reveal placeholder of an untitled slide shows its id**; a reveal shell that cannot start shows an error instead of a blank page; a layout that failed to load is retried.
+- **Charts:** value labels keep every digit (default format `,.12~r`); negative bar labels no longer overprint; horizontal tick labels are thinned to fit; all-negative line data ends its axis at 0; an integer `x` gets integer ticks.
+- **`text`: a change of `accent` or `role` alone no longer crossfades**; `big-number` lists `format`, `prefix` and `suffix` as `fade` in its schema and catalog entry.
+- **`markdown` styles tables, `h5`/`h6`, rules and task items**; `diagram` and `timeline` changed while collapsed lay out correctly when shown.
+- **`--sd-font-weight-body` now sets the canvas weight**; `--sd-measure` is reserved.
+- **`palette-contrast` suggests lightening on a dark background** ("lighten … or lighter").
+- **`check`, `dump` and `shoot` load steps on several pages of one browser** (up to 4; `STEPDECK_WORKERS`, `1` = one page). Output is identical; `check --played` on the gallery goes from about 103 s to 38 s.
+- **`validate` reads prose as prose:** `remote-url` is a warning for a URL cited in running text, `#123` in running text is no longer `hex-color`, and a sentence ending in a file name is no longer `file-missing`; `./assets/x.png`, `assets/x.png?v=2` and `assets/my photo.png` are now checked. It reads the schemas of the deck's own engine copy.
+- **A slide listed in `deck.js` and not written yet** no longer fails `check`, `dump` or `shoot --slide` of other slides; a whole-deck run reports it once.
+- **`shoot` could write PNGs outside `shots/`** for a step id holding `/` or `..`; ids are now made safe in file names.
+- **`check --played` compares the size of the figure inside the box** (`inner`), so a drawing left at a stale size is a `played-mismatch`.
+- **`serve`:** a folder without a trailing slash redirects (301); dotfiles are 404; symlinks out of the root and foreign `Host` headers are 403; a busy port is one plain line.
+- **`catalog` no longer deletes your own `*.json` files** in `catalog/`; `new` accepts a folder holding only `.git`, `.gitignore`, `.DS_Store` or `Thumbs.db`.
+- **CLI ergonomics:** `--version`, `--name=value`, did-you-mean for an unknown command; `--help` lists exit codes, environment variables and where the docs are; a component that never settles no longer adds about 26 s of shutdown; `--json` stdout stays JSON when a deck module logs; syntax errors get a `node --check` hint; the Playwright-not-found message says where to install it.
+- **CLI:** a flag a command does not take is refused (exit 2) instead of ignored; `dump` lists failed requests as `network: 404 /path`; `new` and `new-component` print clearer hints (the exact `cp` line, absolute paths, the Playwright note, `id` in `--json`); `npm run site` reports a busy port.
+- **Faster:** the fold and the bindings; map rasters (pixel loops, the hatch tile cache, held frames), legend fades and island areas; the `chart.line` fan's frames.
+- **Removed (internal):** the legacy `rise` helper of `core/animate.js` and `frameElements` of `core/layout.js`.
+- **`ajv` is a dependency**, not a devDependency, so `validate` works after a plain install.
 - **Elements enter and leave with motion.** On a forward step (motion on, not in capture), every element that
   becomes visible now enters: its box plays the theme's entrance (`rise` in `modern`, `fade` in
   `academic-light`), and the elements that appear on one step enter one after another, in slide order. Elements
@@ -62,6 +93,13 @@ All notable changes to stepdeck are recorded here. The format follows
 
 ### Added
 
+- **`validate` rules:** `diagram-grid` (error: a diagram node whose cells reach outside `cols` × `rows`), a `diagram-overlap` warning for two drawn nodes in one cell, `map-classes` (error) and `step-id-chars` (warning: a step id with characters other than letters, digits, `_` and `-`). **`check` rule:** `hidden-paints` (a hidden element with a descendant that still shows).
+- **`ctx.chart.paintLines` takes `{ sign: false }`** for the frames of a motion, which nobody reads the signature of.
+- **Schema defaults** for more component props, so the catalog shows them.
+- **For agents:** `AGENTS.md`, `GEMINI.md`, `llms.txt` and `.claude-plugin/marketplace.json`; the skill has a new description, setup and Playwright notes, a definition of done, a bindings table, `skill/references/design.md` and nine cookbook recipes.
+- **Site:** reference tables use the page width; the docs viewer draws mermaid flowcharts; gallery and example links open the live page; a For-agents card, a 404 page, page descriptions and a font preload.
+- **Starter and second example deck:** clearer wording in the starter slides and in `examples/spike`.
+- **Tooling:** `npm run test:all` and `npm run playwright`; CI runs in groups with concurrency limits, timeouts and a writers job; new unit tests (CLI usage, serve, reveal hash, agent links, chart, map painters, check rules) and browser tests (reflow, shell, hidden children).
 - **Named motions.** One vocabulary for every entrance and exit: `fade`, `rise`, `wipe`, `pop` (new), `draw` and
   `none`. A `rise` leaves moving up as it fades, a `pop` leaves shrinking slightly, and a `draw` exit is a fade. An element's `enter` and `exit` take a name or `{ motion, delay, duration }` (ms; `delay` for entrances).
   `validate` suggests the closest name for a misspelt one, in both forms, and names the bound of a `delay` or

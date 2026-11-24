@@ -24,7 +24,7 @@ The folder is a theme when it holds `tokens.css`. The name is matched with exact
 The quickest start is a copy of `modern` (or `academic-light`, the plain one), which you then edit:
 
 ```sh
-cp -R themes/modern themes/my-theme                                   # built-in
+cp -R engine/themes/modern engine/themes/my-theme                     # built-in, from the repository root
 cp -R <deck>/stepdeck/themes/modern <deck>/stepdeck/themes/my-theme   # one deck
 ```
 
@@ -47,11 +47,11 @@ A theme has no `schema.json` and no `example.js`.
 
 ### Keep every token name
 
-Declare every custom property that `themes/modern/tokens.css` declares, with the same name, and change only the values. Nine of them are optional (core falls back when they are missing): `--sd-color-title`, `--sd-color-grid`, `--sd-color-dim`, `--sd-color-kicker`, `--sd-letter-spacing-title`, `--sd-letter-spacing-cover`, `--sd-font-size-kicker`, `--sd-font-size-lede` and `--sd-font-size-cover-figure`. The [themes reference](../reference/themes.md#tokens) gives each fallback. Components, layouts and `core/stepdeck.css` read these names, and `ctx.tokens` holds only the names the theme declares, so a missing name is a missing value: the `var()` that reads it falls back to its default, or to nothing. No rule checks this, so compare the names yourself. This prints nothing when they match:
+Declare every custom property that `engine/themes/modern/tokens.css` declares, with the same name, and change only the values. Nine of them are optional (core falls back when they are missing): `--sd-color-title`, `--sd-color-grid`, `--sd-color-dim`, `--sd-color-kicker`, `--sd-letter-spacing-title`, `--sd-letter-spacing-cover`, `--sd-font-size-kicker`, `--sd-font-size-lede` and `--sd-font-size-cover-figure`. The [themes reference](../reference/themes.md#tokens) gives each fallback. Components, layouts and `core/stepdeck.css` read these names, and `ctx.tokens` holds only the names the theme declares, so a missing name is a missing value: the `var()` that reads it falls back to its default, or to nothing. No rule checks this, so compare the names yourself. This prints nothing when they match (for a deck theme, run it in `<deck>/stepdeck/` with `themes/…`):
 
 ```sh
 names() { grep -oE '^ *--[a-z0-9-]+ *:' "$1" | tr -d ' :' | sort -u; }
-diff <(names themes/modern/tokens.css) <(names themes/my-theme/tokens.css)
+diff <(names engine/themes/modern/tokens.css) <(names engine/themes/my-theme/tokens.css)
 ```
 
 The token groups are colors (`--sd-color-*`), fonts and sizes (`--sd-font-*`, `--sd-line-height*`, `--sd-measure`), the minimum audience font, spacing (`--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, and for a compact diagram `--sd-diagram-compact-gap` and `--sd-diagram-compact-pad`, the pad also a compact map's inset), second views (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill` and `--sd-inset-radius`: the one frame of a compact `diagram` or `map` and of a map's inset; `--sd-compact-tint`: how much of a colour lights a part of a compact view) and motion (`--sd-duration`, `--sd-duration-fast`, `--sd-easing`, `--sd-stagger`, `--sd-enter`, `--sd-motion-distance`: the timing and feel of every entrance, exit and change; `--sd-flow-period`: the pace of a flowing `diagram` edge). The [tokens section of the reference](../reference/themes.md#tokens) lists each one with what reads it. Some values in `core/stepdeck.css` are hard-coded rather than read from tokens (title line height 1.15, label weight 600, big-number suffix weight 500, and others); they are listed under [Values not taken from tokens](../reference/themes.md#values-not-taken-from-tokens), and a theme cannot change them.

@@ -39,7 +39,7 @@ flowchart TD
   browser -- "core/render.html?deck=&slide=&step=&capture" --> api
 ```
 
-The arrows outside the CLI box are the runtime, in the browser; the dotted "drives goTo" line is control, not data. `boot()` sets `window.STEPDECK` first and creates the shell host; the host's `show()` calls `mountSlide`, which builds the `SlideController`, and every `goTo` then reaches the controller through the host. `validate` reads the same spec files in Node and calls the same `core/` modules (`fold.js`, `bindings.js`, `data.js`, `registry.js`, `format.js`). The browser commands drive the bare shell through `window.STEPDECK`.
+The arrows outside the CLI box are the runtime, in the browser; the dotted "drives goTo" line is control, not data. `boot()` sets `window.STEPDECK` first and creates the shell host; the host's `show()` calls `mountSlide`, which builds the `SlideController`, and every `goTo` then reaches the controller through the host. `validate` reads the same spec files in Node and calls the same `core/` modules (`fold.js`, `bindings.js`, `data.js`, `registry.js`, `format.js`, and the pure rule modules `chart-rules.js` and `map-rules.js`). The browser commands drive the bare shell through `window.STEPDECK`.
 
 ## From spec to screen
 
@@ -60,25 +60,34 @@ The runtime. Everything here runs in the browser. Modules marked "Node too" are 
 | Module | Role |
 | --- | --- |
 | `stepdeck.js` | `boot()`, `loadDeck`, `mountSlide`, the navigation queue, `readFlags` and `window.STEPDECK`. Holds the bare shell host (`createBareHost`). |
-| `constants.js` | `CANVAS` (1920 x 1080), `DEFAULT_THEME`, `DEFAULT_LAYOUT` (`full-bleed`). Node too. |
-| `fold.js` | The pure fold: `stateAt`, `stepIndex`, `stepCount`, `expandSugar` (`from`, `at`, `advance`), `mergePatch`, `initialElements` (the slide `title` and `section` sugar), `parseStepRef`. Node too. |
+| `constants.js` | `CANVAS` (1920 x 1080), `DEFAULT_THEME`, `DEFAULT_LAYOUT` (`full-bleed`), `THEME_NAME`, `MAX_RUN_MS`, the hook lists (`HOOKS`, `REGION_HOOKS`), `LAYOUT_KINDS` and the cascade layers (`LAYERS`). Node too. |
+| `fold.js` | The pure fold: `stateAt`, `stepIndex`, `stepCount`, `expandSugar` (`from`, `at`, `advance`), `mergePatch`, `initialElements` (the slide `title`, `lede` and `section` sugar), `parseStepRef`. Node too. |
 | `accent.js` | The accent phrase in titles: `parseAccent`, `stripAccent`, `escapeAccent`, `accentMarks`. Pure; the `text` component, the reveal placeholder, `dump` and `validate` share it. |
-| `controller.js` | `SlideController`: mount, `goTo`, abort, watchdog, `ctx` (including `ctx.mount` for nested components and `ctx.motion`), error recording. On an animating step it holds entering elements to their stagger slot and asks the frame to move their boxes. Runs without a DOM. |
+| `controller.js` | `SlideController`: mount, `goTo`, abort, watchdog, `ctx` (including `ctx.mount` for nested components, `ctx.motion`, `ctx.stepProps`, `ctx.chart` and `ctx.map`), error recording. On an animating step it holds entering elements to their stagger slot and asks the frame to move their boxes. Runs without a DOM. |
 | `layout.js` | `renderSlideFrame`: canvas, regions, element boxes, visibility classes, ghost placeholders, box entrances and exits (`enterBox`, `exitBox`), error boxes, scoped `slide.style`, `slide.regions` variables. |
 | `registry.js` | `createRegistry`: resolves a component name to its module and schema, deck components first. Did-you-mean on unknown names. Node too. |
 | `bindings.js` | `{{path#pointer \| format}}` resolution in props. Node too. |
 | `data.js` | The data loader (JSON, GeoJSON, CSV), path rules, CSV parsing and typing, caching. The caller injects `read`. Node too. |
 | `format.js` | `makeFormat(lang)`: d3-format with the deck's locale (`en`, `es`). Node too. |
 | `i18n.js` | `t(lang, key)` for the few engine strings. |
-| `animate.js` | `ctx.animate`: `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. All abort-aware; they settle at the end state when aborted. |
+| `animate.js` | `ctx.animate`: `fadeIn`, `reveal`, `drawPath`, `tween`, `stagger`. All abort-aware; they settle at the end state when aborted. Node too (`validate` reads the typing speed for its motion budget). |
 | `motion.js` | The named motions (`fade`, `rise`, `wipe`, `pop`, `draw`, `none`), `parseEase`, the theme timing (`timing`: `--sd-duration`, `--sd-easing`, `--sd-stagger`, overridden by a step's `transition`) and `makeMotion(tokens)`, which is `ctx.motion`. Writes only `opacity`, `transform` and `clip-path` and puts them back. The frame moves element boxes with it; components move their parts. |
 | `choreography.js` | Pure rules for a step's entrances and exits: which system plays an entrance (`resolveEntrance`: the box, or a component with `"x-enter": "own"`), the exit (`resolveExit`), and the stagger slots (`slotDelays`). Used by the controller. Node too. |
 | `kit.js` | Small shared helpers for the engine and components (`message`, `escapeHtml`, `memoAsync`, `motion`, `motionMs`, `focusPaint`, `tweenColor`, SVG and measuring helpers). |
-| `chart.js` | Helpers shared by `chart.line` and `chart.bar` (`loadTable`, tick formats). |
+| `chart.js` | `loadTable`, `tickFormat` and `chartKit`, the frozen object every component gets as `ctx.chart`, built from the four modules below. Shared by the three charts and the map. |
+| `chart-layout.js` | The pure half of the chart building blocks: extents, category order, forecast splits, label placement, draw order, beeswarm offsets, colour classes. No imports, no DOM. |
+| `chart-marks.js` | The DOM half: the plot frame, keyed joins, `settle`, the marks (dots, whiskers, rules, axes, halos, bands) and `paintLines`. |
+| `chart-motion.js` | `morph`, `entrance` and `undraw`: chart motion over the theme's timing. |
+| `chart-scale.js` | `colorScale` and `legendRow`: colour scales from the theme's palettes, for charts and maps. |
+| `chart-rules.js` | What `validate` reports about chart props beyond their schemas (`chart-prop-unused`, `chart-orient`). Pure. Node too. |
+| `canvas.js` | Canvas layers under an element's SVG (`canvasLayer`) and the `signature` hasher that lets a dump stand in for pixels. |
+| `map.js` | The geography of a map (boundaries, projection, views, the raster loader and lookup) and `mapKit`, the frozen object every component gets as `ctx.map`. Node too. |
+| `map-paint.js` | The map painters: regions, borders, a raster and points on canvas layers; the inset frame and the scale bar on an SVG. |
+| `map-rules.js` | The pure rules of the map: raster levels, frame runs, the join of rows to regions, and what `validate` reports about a map's props and raster files. Node too. |
 | `color.js` | WCAG 2 color math (`parseHex`, `luminance`, `contrast`). Node too: the CLI uses it for palette and contrast checks. |
 | `inline.js` | `renderBlock` and `renderInline`: sanitized Markdown through the vendored marked. |
 | `d3.js` | One accessor for the vendored d3 bundle that works in Node and the browser. |
-| `stepdeck.css` | Structural CSS and the default rules of the styling hooks (title, kicker, accent, subtitle, meta, statement, cover), in the `sd-core` layer: canvas, regions, hidden and collapsed elements, error boxes, text roles, `html.capture` (no transitions). Colors, fonts and sizes come from theme tokens. |
+| `stepdeck.css` | Structural CSS and the default rules of the styling hooks (title, kicker, lede, accent, subtitle, meta, statement, cover), in the `sd-core` layer: canvas, regions, hidden and collapsed elements, error boxes, text roles, `html.capture` (no transitions). Colors, fonts and sizes come from theme tokens. |
 | `render.html` | The bare shell page: `render.html?deck=<dir>&slide=&step=&capture`. `deck` defaults to `../../`, the deck folder when the engine is copied to `<deck>/stepdeck/`. |
 | `shells/bare.js` | `createBareShell`: one canvas on a stage, scaled to fit and letterboxed. |
 | `shells/reveal.js`, `shells/reveal.css` | `createRevealHost`: the presenting shell on top of the vendored reveal.js. |
@@ -98,6 +107,9 @@ Dev tooling. Nothing here is needed to present.
 | `serve.js` | Static server with `Cache-Control: no-store`. |
 | `catalog.js` | `catalog`: the index of components, layouts and themes that agents read. |
 | `new.js` | `new` (copy a template and the engine) and `new-component`. |
+| `boundaries.js` | `boundaries`: fetches a country's admin boundaries from geoBoundaries into a deck's `data/`, at authoring time (the one command that needs a network). |
+| `png.js` | A small PNG reader and writer for the raster maps; `validate` reads raster headers with it. |
+| `serve-site.js` | `npm run site`: previews the GitHub Pages site locally. |
 | `engine.js` | The two roots, `ENGINE` (`<repo>/engine`) and `REPO` (the repository root); finds the engine a deck uses (`<deck>/stepdeck/` or `ENGINE`); shared file helpers. |
 | `problems.js` | The `Problem` shape and the one-line formatter every command uses. |
 | `palettes.js` | Palette contrast and color-vision checks. |

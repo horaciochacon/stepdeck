@@ -51,12 +51,12 @@ The default export is an object with these keys. No other key is allowed (`addit
 
 | Key | Type | Required | Default | What it does |
 | --- | --- | --- | --- | --- |
-| `title` | string, non-empty | yes | | The deck title. Required by the schema, but not read by the engine or the CLI. The browser tab title comes from your `index.html`. |
+| `title` | string, non-empty | yes | | The deck title. It becomes the browser tab title (`document.title`) once the deck has loaded, in both shells, replacing the `<title>` of `index.html`; that one shows only while the deck loads, or when `deck.js` cannot be loaded. |
 | `slides` | string[], at least 1, unique | yes | | Slide ids in presentation order. Each id must match `^[A-Za-z0-9][A-Za-z0-9_-]*$` and names the file `slides/<id>.js`. |
-| `lang` | string matching `^[a-z]{2,3}(-[A-Za-z0-9]+)*$` | no | `"en"` | Language of engine strings and number formats. `en` and `es` are built in; any other language falls back to `en`. The `?lang=` query flag overrides it. |
+| `lang` | string matching `^[a-z]{2,3}(-[A-Za-z0-9]+)*$` | no | `"en"` | Language of engine strings and number formats. `en` and `es` are built in. A regional tag uses its language (`es-PE` reads as `es`, `en-GB` as `en`); any other language falls back to `en`. The `?lang=` query flag overrides it. |
 | `theme` | string, non-empty | no | `"modern"` | Theme folder under the engine's `themes/` (lowercase letters, digits and hyphens). The built-in themes are `modern` and `academic-light`. The `?theme=` query flag overrides it. |
 | `palette` | string, non-empty | no | the theme's default per kind | A palette name from the theme's `palettes.json`. It is used only for its own kind (categorical, sequential or diverging); the other kinds keep the theme defaults. |
-| `sections` | boolean | no | | **Inert.** The schema describes it as a "Section · n" footer, but nothing in the engine or the components reads it. |
+| `sections` | boolean | no | | **Reserved.** The schema accepts it, but nothing in the engine or the components reads it, and it draws nothing. For a label above the title use a slide's [`section`](#section-the-kicker). |
 | `components` | string[], unique, each matching `^[a-z0-9][a-z0-9._-]*$` | no | `[]` | Deck components, each a folder `components/<name>/` with `index.js` and `schema.json`. A name must not equal a built-in; use a namespace such as `my.chart`. See [Custom components](../guide/custom-components.md). |
 
 ### How the runtime resolves the deck
@@ -332,7 +332,7 @@ steps: [{ id: "prompt" }, { id: "checked" }, { id: "fitted" }, { id: "drawn" }, 
 
 No other key is allowed (`unknown-key`).
 
-The engine turns `advance` into `set: { <id>: { <prop>: values[j] } }` at step `start + j`. These patches are applied before the step's own patches, so an explicit `set` of the same prop in the same step wins at that step. Steps before `start` keep the element's `props` value. After the last value, the prop keeps that value, because `set` folds into later steps.
+At step `start + j` the engine assigns `props[<prop>] = values[j]`. The value replaces the prop whole: an object or an array is not merged into the one before, and `null` makes the prop `null` (it does not remove it, as `null` in a `set` does). The assignment is applied before the step's own patches, so an explicit `set` of the same prop in the same step wins at that step (an object there merges into the value just assigned), and a `replace` of the element in that step drops it. Steps before `start` keep the element's `props` value. After the last value, the prop keeps that value, because the assignment folds into later steps.
 
 Values that would land past the last step are dropped at runtime. `validate` reports them as `advance-overflow`, with how many steps to add or values to remove.
 

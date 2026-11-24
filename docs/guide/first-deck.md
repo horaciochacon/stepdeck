@@ -49,9 +49,9 @@ export default {
 
 | Key | Required | What it does |
 |---|---|---|
-| `title` | yes | Deck metadata. The engine never reads it; it does not set the page title or appear on a slide. |
+| `title` | yes | The deck's name. The engine sets the page title (the browser tab) from it. It does not appear on a slide. |
 | `slides` | yes | Slide ids in show order, at least one, no duplicates. |
-| `lang` | no | Language for number formats and built-in labels. `en` and `es` are built in; the default is `en`. |
+| `lang` | no | Language for number formats and built-in labels. `en` and `es` are built in; the default is `en`. A regional code such as `es-PE` uses its language. |
 | `theme` | no | Theme folder name. The built-in themes are `modern` (the default) and `academic-light`. |
 | `palette` | no | Another palette from the theme, by name. |
 | `components` | no | Deck components in `components/<name>/` (see `new-component`). |
@@ -82,6 +82,8 @@ export default {
 - **`elements`** (required) are drawn in the order listed. Each has an `id`, a `type` (`text`, `markdown` or a component such as `chart.line`) and `props` for that component. Elements in the same region stack top to bottom.
 - **`region`** names the layout region an element goes into. The default is `main`. A region the layout does not have is an `unknown-region` error.
 - **`notes`** holds speaker notes for every step that has none of its own.
+- **A `text` element takes a `role`.** `body` is the default. The others are `note`, `label`, `source` (the source line, which is exempt from the minimum font size), `lede` and `badge`. See the [text reference](../reference/components/text.md).
+- **Three more slide keys shape the title.** `section` puts a small label, the kicker, above the title, and `*phrase*` in a title draws that phrase in the accent colour: see [Kicker and accent phrase](layouts-and-themes.md#kicker-and-accent-phrase). `lede` puts one message line under the title: see [The message line](animation-and-motion.md#the-message-line-lede).
 
 The second slide shows the defaults at work. It has no title, and its one element has no `region`, so it lands in `main`:
 
@@ -111,10 +113,29 @@ To see what a component accepts, run `catalog <name> my-talk`, for example `cata
 
 Grid variables and full descriptions are in [Layouts](../reference/layouts.md).
 
-> **A chart fills the room its region leaves.** A `chart.line` or `chart.bar` takes the height the other elements in its region do not use, so a source line beside it is fine. The exception is `statement` `main`, which has no set height and leaves the chart none. No rule checks chart height, so look at a shot if a chart looks wrong. See [Layouts and themes](layouts-and-themes.md#give-figures-room).
+> **A chart fills the room its region leaves.** A chart (`chart.line`, `chart.bar` or `chart.points`) takes the height the other elements in its region do not use, so a source line beside it is fine. A `diagram`, an `image`, a `map` and a `terminal` do the same. The exception is `statement` `main`, which has no set height and leaves the chart none. No rule checks chart height, so look at a shot if a chart looks wrong. See [Layouts and themes](layouts-and-themes.md#give-figures-room).
+
+## Choose a component
+
+| Component | Use it when | Reference |
+|---|---|---|
+| `text` | One paragraph: body copy, a note, a label, a source line, a badge | [text](../reference/components/text.md) |
+| `markdown` | Text with emphasis, headings, lists, code or links | [markdown](../reference/components/markdown.md) |
+| `image` | A picture, with alt text and an optional caption | [image](../reference/components/image.md) |
+| `big-number` | One figure is the message | [big-number](../reference/components/big-number.md) |
+| `chart.line` | A trend over a numeric x, a forecast, or uncertainty around a line | [chart.line](../reference/components/chart-line.md) |
+| `chart.bar` | A ranking or a comparison across categories. Its modes add a waterfall and two groups back to back | [chart.bar](../reference/components/chart-bar.md) |
+| `chart.points` | Estimates with intervals by category, a before and after pair, or strips of many points. It is a categorical dot plot, not a numeric x–y scatter | [chart.points](../reference/components/chart-points.md) |
+| `map` | The answer is where: regions coloured by a value, a raster or points | [map](../reference/components/map.md) |
+| `diagram` | How parts connect: nodes, arrows and groups on a grid | [diagram](../reference/components/diagram.md) |
+| `list` | A short ordered set of items, revealed one by one | [list](../reference/components/list.md) |
+| `timeline` | Stages along one path, with the current one marked | [timeline](../reference/components/timeline.md) |
+| `chat` | A prompt, a quote or an exchange | [chat](../reference/components/chat.md) |
+| `terminal` | A recorded terminal session: a command, its log, tasks and files | [terminal](../reference/components/terminal.md) |
+
+`catalog <name> my-talk` prints one component's props. Anything else is a [custom component](custom-components.md).
 
 ## Add a figure with a source line
-
 The third slide puts a line chart alone in `main` of `figure-notes`, text in `notes`, and the source line in `footer`:
 
 ```js
@@ -248,7 +269,7 @@ STEPDECK_PLAYWRIGHT=/path/to/node_modules/playwright node /path/to/stepdeck/cli/
 | `check` | Chrome, via Playwright | Layout of every step: text outside the canvas or its region, overlaps, font size, contrast, render and console errors |
 | `check --played` | Chrome | Also compares each step reached by playing forward or back against the same step jumped to directly |
 
-`validate` needs the engine repo's dependencies (`npm install` there). `check`, `dump` and `shoot` need Playwright: set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder or install it where Node can find it. They use the system Chrome.
+`validate` needs the engine repo's dependencies (`npm install` there). `check`, `dump` and `shoot` need Playwright: set `STEPDECK_PLAYWRIGHT` to a `playwright` package folder, or run `npm run playwright` in the engine repo (the CLI looks for Playwright there, not in the deck). They use the system Chrome.
 
 A clean run of this deck prints one summary line per command (`validate`, `check`, `check --played`):
 
