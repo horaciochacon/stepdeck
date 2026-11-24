@@ -45,10 +45,11 @@ jobs:
 
   # The map writers users copy (R and NumPy; docs/guide/maps/). Their tests skip when R or NumPy is
   # missing, as in the unit job, so this job installs both and fails if any test was skipped. A status check; it does
-  # not gate the deploy.
+  # not gate the deploy. The tests take seconds; the time is the R download from the runner's apt mirror, which took
+  # 8 minutes on a slow day, hence the long timeout.
   writers:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,13 +74,16 @@ jobs:
   # The full browser suite on six runners (each runs its files one at a time): the status check; it does not gate
   # the deploy.
   #
-  # BROWSER_GROUPS deals the slow files out by their measured time on a runner, so that the six runners finish
-  # together (about 5 to 6 minutes each): map 348 s; gallery 286; chart-points 269; chart-bar-modes 158; diagram
-  # about 158; chart-line-story 148; check 65; chart-bar about 64; theme-modern 57; played 56; every other file 3 to
-  # 48 s. One line per group, `<group>: <files>`, each file the name of test/browser/<name>.test.mjs. The group
-  # `rest` has no line: it runs every test file no line names, so a new test file is never left out. site.test.mjs
-  # runs in the unit job and in no group. `matrix.group` must list every group name and `rest`; the step fails when
-  # the two disagree, when a line names a file that does not exist, or when a file is named twice.
+  # BROWSER_GROUPS deals the files out by their measured time on a runner, so that the six runners finish together,
+  # in about 6 minutes each. Measured on the first run of these groups (seconds of tests per runner): map 333;
+  # gallery and check 240; chart-points, theme-modern and kit 326; chart-bar-modes, chart-line-story and map-kit 290;
+  # diagram, chart-bar, played, motion-box and kicker 304; everything else 597, of which cli-pool 61, chat 48,
+  # list 45, terminal 36, image 24, dump 13 and text-crossfade 12 now sit in the named groups. That makes every
+  # group about 340 to 360 s. One line per group, `<group>: <files>`, each file the name of
+  # test/browser/<name>.test.mjs. The group `rest` has no line: it runs every test file no line names, so a new test
+  # file is never left out. site.test.mjs runs in the unit job and in no group. `matrix.group` must list every group
+  # name and `rest`; the step fails when the two disagree, when a line names a file that does not exist, or when a
+  # file is named twice. When `rest` grows past the others, move a file from it to the shortest group.
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -89,11 +93,11 @@ jobs:
         group: [map, gallery, points, lines, diagram, rest]
     env:
       BROWSER_GROUPS: |
-        map: map
-        gallery: gallery check
-        points: chart-points theme-modern kit
-        lines: chart-bar-modes chart-line-story map-kit
-        diagram: diagram chart-bar played motion-box kicker
+        map: map dump
+        gallery: gallery check cli-pool chat
+        points: chart-points theme-modern kit image
+        lines: chart-bar-modes chart-line-story map-kit list text-crossfade
+        diagram: diagram chart-bar played motion-box kicker terminal
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
