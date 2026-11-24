@@ -72,7 +72,7 @@
 import { d3 } from "../../core/d3.js";
 import { clearInlineStyle } from "../../core/animate.js";
 import { renderInline } from "../../core/inline.js";
-import { DEFAULT_PROJECTION, boundaries, loadRaster, lookup, projection, view } from "../../core/map.js";
+import { DEFAULT_PROJECTION, boundaries, largestBy, loadRaster, lookup, projection, view } from "../../core/map.js";
 import { DOT_SIZE } from "../../core/map-paint.js";
 import { firstPhase } from "../../core/map-rules.js";
 import { canAnimate, clamp01, lerp, measureHeight, measureWidth, memoAsync, motion, motionMs, num } from "../../core/kit.js";
@@ -129,7 +129,7 @@ async function buildGeo(props, ctx, size, caches) {
     spans.set(id, [x1 - x0, y1 - y0]);
     const { type, coordinates } = feature.geometry;
     const polygons = (type === "Polygon" ? [coordinates] : coordinates).map((rings) => ({ type: "Polygon", coordinates: rings }));
-    anchors.set(id, path.centroid(polygons.reduce((a, b) => (path.area(b) > path.area(a) ? b : a))));
+    anchors.set(id, path.centroid(largestBy(polygons, (polygon) => path.area(polygon))));
   }
   const token = (name) => ctx.tokens?.[name]?.trim();
   const rule = token("--sd-color-rule");

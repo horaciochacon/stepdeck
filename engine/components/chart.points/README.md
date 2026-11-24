@@ -6,9 +6,11 @@ rows can appear one by one out of the reference line, one row can be emphasized,
 as a pair, and an empty cell reads "no data". With `id`, a category holds many points instead: a beeswarm strip with
 a summary tick, in which one item can be followed across the strips.
 
+It is a categorical dot plot (and, with `id`, a beeswarm): one axis is a value and the other a list of categories. stepdeck has no numeric x–y scatter plot component: for a scatter of two numeric columns, write a deck component with `ctx.chart` (see the custom components guide), or, when x is ordered such as time, use `chart.line` with `points: true`.
+
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
-| `data` | string | (required) | snap | CSV path relative to the deck root. One row per category (one per point, with `id`). |
+| `data` | string | (required) | tween | CSV path relative to the deck root. One row per category (one per point, with `id`). A change to another file with the same categories tweens the marks like a change of `y` (marks keyed by category, and by `id` in strips); with other categories it snaps. |
 | `x` | string | (required) | snap | Category column. Its text labels the row. A category may appear in one row only, unless `id` is set. |
 | `y` | string | (required) | tween | Estimate column. A change moves every dot to its new value. An empty cell shows "no data". |
 | `from` | string | none | tween | Column with the earlier value of each row: a hollow dot at it, a connector, and the filled dot at `y`. See Pairs. |
@@ -103,17 +105,19 @@ Behaviour:
   past the lower end; only when neither fits does it sit inside the whisker. Each has a background halo. The side
   is chosen from the row at rest (where it ends; where it started, for a row that leaves) and kept through a
   motion, so a label follows its mark and never jumps to the other side part-way.
-  Without `format.y` value labels show the value as it is, and ticks use a fixed precision from the tick step.
+  Without `format.y` value labels show the value as it is (every digit of the data, up to 12 significant ones, with a
+  thousands separator), and ticks use a fixed precision from the tick step. `format.y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data.
+  Tick labels that would run into each other are thinned: fewer ticks (d3's for a count of 5, then 3, then 2) over the same domain, which never moves. Every step of the slide gets the same count, so the plot keeps its size.
   Category labels sit left of the plot and wrap. Everything is at least `--sd-min-audience-font` (it uses
   `--sd-font-size-label`). Margins come from character counts, not measured text; the left one keeps half of the widest tick label inside the chart.
 - **Layout.** The chart fills the room its region leaves (like `chart.line` and `chart.bar`), so a source line can
   share the region.
 - **Colors.** Dots (the hollow one too, as its outline) use the first color of `ctx.palette("categorical")`;
-  whiskers and value labels the ink color; a pair's connector the muted color.
+  whiskers and value labels the ink color; a pair's connector the muted color. Every dot takes one colour, the first colour of the theme's categorical palette (`--sd-color-accent` in a theme without one): there is no per-category colour option and no colour column. To single a row out, use `highlight` (or `focus` for one item of a strip), which dims the others.
   Out of focus, dots, whiskers and connectors use `--sd-color-dim` (`--sd-color-rule` in a theme without it) and value labels
   `--sd-color-muted`.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
-  lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows (without `id`), an
+  lacks (`column '<name>' not found in <data> (columns: …)`), a file with a header and no rows (`<data> has no rows`), a category that appears in two rows (without `id`), an
   id twice in one category (`id '<id>' appears more than once in category '<k>' of <data>`), a `focus` id the data
   does not have (`` `focus` id '<id>' not found in <data> ``; without `id` every `focus` is unknown), a category in
   `shown` or `highlight` that the data does not have, an estimate outside a given `domain`

@@ -29,6 +29,7 @@
     },
     "projection": {
       "enum": ["equal-earth", "natural-earth", "mercator", "conic-equal-area"],
+      "default": "conic-equal-area",
       "description": "The map projection, centred on the regions and fitted to the element with a margin. \"conic-equal-area\" (the default) keeps areas true and, for a country or a region of one, nearly its shape (its two parallels sit a sixth of the way in from each end of the regions' latitudes). A world or continent map names \"equal-earth\", which keeps areas but narrows shapes near the equator; \"mercator\" keeps shapes but enlarges areas away from the equator.",
       "examples": ["conic-equal-area", "equal-earth"],
       "x-transition": "snap"
@@ -51,11 +52,11 @@
           "lat": { "type": "string", "minLength": 1, "description": "For `points`: the column of latitudes, in degrees. A row whose latitude is empty or not a number is an element error.", "examples": ["lat"] },
           "id": { "type": "string", "minLength": 1, "description": "For `points`: the column that names each point, which `highlight` refers to (compared as text). Without it a point has no name and cannot be highlighted.", "examples": ["id"] },
           "size": { "type": "string", "minLength": 1, "description": "For `points`: the column of values that sizes each point, with an area true to the value: radius 18 px × √(value ÷ largest value), so the largest point has a radius of 18 px. The legend adds a size key of two circles: the largest value rounded down to two significant figures, and the round number (1, 2 or 5 × 10ⁿ) at most a quarter of it (70 gives 70 and 10). Without it every point has a radius of 6 px. A row whose size is empty, not a number or negative is an element error.", "examples": ["beds"] },
-          "key": { "type": "string", "minLength": 1, "description": "The column that names each row's region, compared as text with the map's `id` (\"07\" is not 7: declare it in `types`). Default: the map's `id`. A key that matches no region, or a region in two rows, is an element error.", "examples": ["code"] },
+          "key": { "type": "string", "minLength": 1, "description": "The column that names each row's region, compared as text with the map's `id` (a code with a leading zero such as \"07\" stays text unless `types` declares the column a number). Default: the map's `id`. A key that matches no region, or a region in two rows, is an element error.", "examples": ["code"] },
           "value": { "type": "string", "minLength": 1, "description": "For `areas`: the column of values that colours each region. An empty cell, or a region without a row, is hatched and adds a \"no data\" row to the legend: never a colour of the scale.", "examples": ["rate"] },
           "label": { "type": "string", "description": "The title of the layer's legend row.", "examples": ["Cases per 1,000"] },
-          "types": { "type": "object", "additionalProperties": { "enum": ["string", "number", "date"] }, "description": "CSV column types, passed to the data loader. Declare a key column of codes with leading zeros as \"string\".", "examples": [{ "code": "string" }] },
-          "classes": { "type": "array", "items": { "type": "number" }, "minItems": 1, "description": "For `areas` and value rasters: class breaks, in increasing order: n breaks make n + 1 classes, coloured in even steps along the sequential palette and labelled `< 5`, `5–10`, …, `≥ 20` in the legend. A value equal to a break is in the class above it.", "examples": [[5, 10, 20]] },
+          "types": { "type": "object", "additionalProperties": { "enum": ["string", "number", "date"] }, "description": "CSV column types, passed to the data loader. A key column of codes with leading zeros stays text by itself; never declare it \"number\".", "examples": [{ "code": "string" }] },
+          "classes": { "type": "array", "items": { "type": "number" }, "minItems": 1, "description": "For `areas` and value rasters: class breaks, in increasing order, each once (breaks out of order are an element error, and `map-classes` in `validate`): n breaks make n + 1 classes, coloured in even steps along the sequential palette and labelled `< 5`, `5–10`, …, `≥ 20` in the legend. A value equal to a break is in the class above it.", "examples": [[5, 10, 20]] },
           "midpoint": { "type": "number", "description": "For `areas` and value rasters: a value that splits the diverging palette: below it one hue, above it the other. With `classes` it must be one of the breaks.", "examples": [0, 1] },
           "domain": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "For `areas` and value rasters: the ends of a continuous ramp (no `classes`), used as given; a value past an end takes the end colour. Default: the values' extent (a raster's `min` and `max`), made symmetric about `midpoint` when there is one.", "examples": [[0, 25]] },
           "clip": { "type": "boolean", "default": true, "description": "For `raster`: whether the picture is clipped to the land outline (the default). A coarse cell whose centre is on land then stops at the coastline instead of sticking out over the sea, and the hatch of land with no data stops there too. With false every cell is drawn whole, for a raster that covers the sea as well. A change on a step crossfades.", "examples": [false], "x-transition": "fade" },
@@ -87,7 +88,7 @@
         { "type": "object", "additionalProperties": false, "required": ["bounds"], "properties": { "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 } } },
         { "type": "null" }
       ],
-      "description": "Where the map looks: a region id or a list of them, fitted with the same margin as the whole map; `{ \"bounds\": [west, south, east, north] }` in degrees; or null (the default) for the whole map. A view names regions only: an id that is not a region, a point's included, is an element error. A change on a forward step flies the map there over twice the step's duration, zooming out and in again as far as the distance asks: vectors are redrawn as it moves and a raster crossfades from its picture at the start to its picture at the end.",
+      "description": "Where the map looks: a region id or a list of them, fitted with the same margin as the whole map; `{ \"bounds\": [west, south, east, north] }` in degrees; or null (the default) for the whole map. A view names regions only: an id that is not a region, a point's included, is an element error. A change on a forward step flies the map there over twice the theme's duration (or exactly the step's `transition.duration`), zooming out and in again as far as the distance asks: vectors are redrawn as it moves and a raster crossfades from its picture at the start to its picture at the end.",
       "examples": ["N1", ["W1", "S2"], { "bounds": [-15, -28, -12, -25] }, null],
       "x-transition": "tween"
     },
@@ -160,12 +161,14 @@
         { "enum": ["bottom-left", "bottom-right", "top-left", "top-right"] },
         { "const": false }
       ],
+      "default": "bottom-left",
       "description": "The corner the legend sits in, its rows stacked away from it: one row per shown layer, with its classes or ramp and, when some region has no value, a hatched \"no data\" swatch. Default \"bottom-left\"; false shows no legend.",
       "examples": ["bottom-left", false],
       "x-transition": "snap"
     },
     "compact": {
       "type": "boolean",
+      "default": false,
       "description": "Draw the same map small, as a second view (a locator beside a chart): inside the theme's second-view frame, fitted to the element less the compact pad and the caption's band, with no legend, names, time-lapse panel or inset (`labels`, `legend`, `numbers` and `inset` are ignored). A highlighted region's land takes a tint of the accent, under its ink outline. Layers, `shown`, `view` and `frame` work as at full size.",
       "examples": [true],
       "x-transition": "snap"

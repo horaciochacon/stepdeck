@@ -1,11 +1,50 @@
 // The parts of chart.line's series, shared by its final render and every frame of a played change: a series'
 // pixel points cut at `until` and split at the forecast start into an observed part and a forecast part, the
 // marks drawn from them, the dots, the forecast region, the ticker and the series labels placed from the same
-// numbers. Pure of the component's state: everything comes in as arguments.
+// numbers; and the scales' pure parts (the y extent, the x ticks, the numeric-x check). Pure of the component's state:
+// everything comes in as arguments.
 import { d3 } from "../../core/d3.js";
 import { splitAt, spread, band, dot, rule, halo } from "../../core/chart.js";
+import { cellValue } from "../../core/chart-layout.js";
 
 const HOLLOW_GROWTH = 1.2; // a hollow (forecast) dot is a little larger than a filled one: its ring is thinner
+
+/**
+ * The y extent of the values `ys` before it is rounded to ticks: it always includes 0, so data that is all negative
+ * ends at 0 and data that is all positive starts there. With no values, or only zeros, it is one unit up from 0.
+ * @param {number[]} ys
+ * @returns {[number, number]}
+ */
+export function yExtent(ys) {
+  const lo = Math.min(0, d3.min(ys) ?? 0);
+  const hi = Math.max(0, d3.max(ys) ?? 1);
+  return [lo, lo < hi ? hi : lo + 1];
+}
+
+/**
+ * The x tick values of `domain` for the x values `xs` of the data: d3's (about 6), and, when every x is a whole
+ * number (years, days, counts), only the whole ones, so no tick is 1.5 or prints a year twice.
+ * @param {[number, number]} domain
+ * @param {number[]} xs
+ * @returns {number[]}
+ */
+export function xTickValues(domain, xs) {
+  const values = d3.scaleLinear().domain(domain).ticks(6);
+  return xs.length && xs.every(Number.isInteger) ? values.filter(Number.isInteger) : values;
+}
+
+/**
+ * Throws when the table has rows but its `x` column has no number in any of them (dates, month names): chart.line's
+ * x axis is linear, so nothing could be drawn. A table with some numeric x draws those rows; an empty table is not
+ * this function's business.
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {{ data: string, x: string }} props
+ */
+export function checkX(rows, props) {
+  if (rows.length && !rows.some((r) => cellValue(r, props.x) !== null)) {
+    throw new Error(`chart.line needs a numeric \`x\`: column '${props.x}' of ${props.data} has no numbers (a date or a name is not a number: add a numeric column, such as the year)`);
+  }
+}
 
 /**
  * `points` (pixels) cut at `at`: what lies at or before it, ending at the cut itself (`splitAt`'s boundary point,
@@ -54,7 +93,7 @@ export const dotData = (m) =>
   m.showPoints
     ? m.series.flatMap((s) =>
         s.points
-          .filter((p) => Number.isFinite(p.px) && Number.isFinite(p.py) && (m.cut == null || p.px <= m.cut))
+          .filter((p) => m.cut == null || p.px <= m.cut)
           .map((p) => ({ key: p.key, series: s.name, px: p.px, py: p.py, dimmed: s.dimmed, paint: s.paint })),
       )
     : [];
@@ -103,15 +142,11 @@ export function placeTicker(plot, m, text) {
 export function labelSpots(series, { font, pw, ph, cut = null, avoid = null }) {
   const ends = series.map((s) => (cut == null ? s.points : cutAt(s.points, cut)).at(-1));
   const spots = new Map(series.map((s) => [s.name, cut == null ? { x: pw + font * 0.4, y: 0 } : null]));
-  // An end that is NaN (a non-numeric y cell) takes no part: `spread`'s ordering is not defined for NaN, so a series
-  // whose end is NaN must not reach it. Its label keeps y NaN, and while one is present the other labels are not lifted
-  // off the plot's bottom.
+  // Every point has a finite place: the model leaves out a row without a numeric x or y (buildModel in ./index.js).
   const have = series.map((s, i) => i).filter((i) => ends[i]);
-  const placed = have.filter((i) => !Number.isNaN(ends[i].py));
   const xOf = (i) => (cut == null ? pw + font * 0.4 : Math.min(ends[i].px, pw) + font * 0.4);
-  const wanted = placed.map((i) => (avoid && xOf(i) < avoid.right ? Math.max(ends[i].py, avoid.bottom) : ends[i].py));
-  const ys = spread(wanted, font * 1.15, [-Infinity, placed.length < have.length ? Infinity : ph]);
-  for (const i of have) spots.set(series[i].name, { x: xOf(i), y: NaN });
-  placed.forEach((i, k) => spots.set(series[i].name, { x: xOf(i), y: ys[k] }));
+  const wanted = have.map((i) => (avoid && xOf(i) < avoid.right ? Math.max(ends[i].py, avoid.bottom) : ends[i].py));
+  const ys = spread(wanted, font * 1.15, [-Infinity, ph]);
+  have.forEach((i, k) => spots.set(series[i].name, { x: xOf(i), y: ys[k] }));
   return spots;
 }

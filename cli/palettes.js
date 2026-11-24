@@ -18,6 +18,8 @@
 //   contrast(a, b)                      WCAG 2 contrast ratio (1–21), unrounded
 //   darkenToContrast(hex, bg, target)   the lightest color with the same OKLab hue and chroma direction
 //                                       whose (hex-rounded) contrast against bg is at least target
+//   toContrast(hex, bg, target)         { color, verb }: the same, darkening ("darken") on a light background and
+//                                       lightening ("lighten") on a dark one, whichever can reach the target
 //   simulateCvd(hex, type)              hex as seen with protanopia | deuteranopia | tritanopia
 //   deltaE(a, b)                        CIEDE2000 color difference between two hex colors
 import { problem } from "./problems.js";
@@ -63,11 +65,14 @@ function oklabToLinear([L, a, b]) {
 }
 const inGamut = (rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
-/** Lowers OKLab lightness (hue kept; chroma reduced only if it leaves the sRGB gamut) until contrast >= target. */
-export function darkenToContrast(hex, background, target = 3) {
-  if (contrast(hex, background) >= target) return toHex(parseHex(hex));
+/**
+ * Moves OKLab lightness by `step` a time (down for a negative step, up for a positive one; hue kept, chroma reduced
+ * only if it leaves the sRGB gamut) until contrast >= target: the first such colour, or null when black or white is
+ * reached without it.
+ */
+function shiftToContrast(hex, background, target, step) {
   const [L0, a0, b0] = linearToOklab(parseHex(hex).map(toLinear));
-  for (let L = L0; L > 0; L -= 0.002) {
+  for (let L = L0; step < 0 ? L > 0 : L < 1; L += step) {
     let k = 1;
     let lin = oklabToLinear([L, a0, b0]);
     while (!inGamut(lin) && k > 0) {
@@ -77,7 +82,29 @@ export function darkenToContrast(hex, background, target = 3) {
     const out = toHex(lin.map(fromLinear)); // toHex clamps to 0..1
     if (contrast(out, background) >= target) return out;
   }
-  return "#000000";
+  const end = step < 0 ? "#000000" : "#ffffff";
+  return contrast(end, background) >= target ? end : null;
+}
+
+/** Lowers OKLab lightness (hue kept; chroma reduced only if it leaves the sRGB gamut) until contrast >= target. */
+export function darkenToContrast(hex, background, target = 3) {
+  if (contrast(hex, background) >= target) return toHex(parseHex(hex));
+  return shiftToContrast(hex, background, target, -0.002) ?? "#000000";
+}
+
+/**
+ * The nearest colour to `hex` with contrast >= target on `background`, and the way there: `{ color, verb }` with
+ * `verb` "darken" or "lighten" (null when `hex` passes already). It moves away from the background first (darker on
+ * a light background, lighter on a dark one), and the other way only when that cannot reach the target.
+ */
+export function toContrast(hex, background, target = 3) {
+  if (contrast(hex, background) >= target) return { color: toHex(parseHex(hex)), verb: null };
+  const lighter = luminance(hex) > luminance(background);
+  for (const up of [lighter, !lighter]) {
+    const color = shiftToContrast(hex, background, target, up ? 0.002 : -0.002);
+    if (color) return { color, verb: up ? "lighten" : "darken" };
+  }
+  return { color: "#000000", verb: "darken" }; // not reached for a target black or white can meet
 }
 
 // Machado, Oliveira and Fernandes (2009), severity 1.0, applied to linear RGB.
@@ -167,12 +194,13 @@ export function checkPalette(palette, background, { cvd = true, minContrast = 3,
   for (const c of p.colors) {
     const r = contrast(c.value, background);
     if (r >= minContrast) continue;
+    const { color, verb } = toContrast(c.value, background, minContrast);
     problems.push(problem({
       element: where(c.id),
       rule: "palette-contrast",
       measured: ratioText(r),
       limit: `${minContrast}:1`,
-      fix: `darken ${label(c)} to ${darkenToContrast(c.value, background, minContrast)} or darker (marks need ${minContrast}:1 on ${background})`,
+      fix: `${verb} ${label(c)} to ${color} or ${verb === "lighten" ? "lighter" : "darker"} (marks need ${minContrast}:1 on ${background})`,
     }));
   }
   if (!cvd) return problems;

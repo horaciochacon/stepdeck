@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.bar",
-  "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker; or a waterfall of contributions that add up to a running total, or two groups back to back, as in a population pyramid (`mode`). The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars.",
+  "description": "Horizontal or vertical bars from a CSV, one per category, with a direct value label at each bar's end and an optional interval whisker; or a waterfall of contributions that add up to a running total, or two groups back to back, as in a population pyramid (`mode`). The value axis stays fixed across steps, categories can appear one by one, and switching `y` shrinks or grows the bars. Every plain bar takes one colour, the first of the theme's categorical palette: there is no per-category colour option (`highlight` dims the others; a waterfall colours by sign, back-to-back by group).",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -9,9 +9,9 @@
   "properties": {
     "data": {
       "type": "string",
-      "description": "Path to a CSV file, relative to the deck root. One row per category; with `mode: \"back-to-back\"`, one row per category and group.",
+      "description": "Path to a CSV file, relative to the deck root. One row per category; with `mode: \"back-to-back\"`, one row per category and group. A change to another file with the same categories tweens the bars like a change of `y` (bars keyed by category); with other categories it snaps.",
       "examples": ["data/durations.csv"],
-      "x-transition": "snap"
+      "x-transition": "tween"
     },
     "x": {
       "type": "string",
@@ -44,7 +44,7 @@
         "x": { "type": "string", "description": "d3-format spec for category labels, applied when the category column is numeric (e.g. years).", "examples": ["d"] },
         "y": { "type": "string", "description": "d3-format spec for value labels, ticks and the interval text.", "examples": [",.0f", ".1%"] }
       },
-      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). Without `y`, ticks use a fixed precision from the tick step and value labels show the value as it is.",
+      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). `y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data (every digit, with a thousands separator).",
       "examples": [{ "y": ",.1f" }],
       "x-transition": "snap"
     },
@@ -93,12 +93,14 @@
     },
     "total": {
       "anyOf": [{ "type": "boolean" }, { "type": "string", "minLength": 1 }],
+      "default": false,
       "description": "With `mode: \"waterfall\"`, a last bar from zero to the sum of the shown bars, in the theme's ink, joined to the last bar by a connector. `true` labels it with the engine string (\"Total\"), a string with that text, and `false` (the default) adds none. Its band is kept on every step of the slide, so it fades in and out without moving the other bars.",
       "examples": [true, "Net change"],
       "x-transition": "fade"
     },
     "invert": {
       "type": "boolean",
+      "default": false,
       "description": "With `mode: \"waterfall\"`, swaps the colours: increases take the diverging palette's low colour and decreases its high one, for a chart where a reduction is the good news.",
       "examples": [true],
       "x-transition": "fade"

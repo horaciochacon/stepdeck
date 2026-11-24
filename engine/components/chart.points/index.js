@@ -76,9 +76,6 @@ function buildModel(props, rows, ctx, el) {
   return m;
 }
 
-/** The row band, the radius of a dot and the length of a whisker's caps (./model.js, which packs the strips with them). */
-const sizes = sizesOf;
-
 /**
  * Which side of its mark a row's value label takes, decided once from the row at rest (its whole whisker and pair, its
  * dots at full size, the model's own axis) and then kept through a motion, so it never flips part-way: `edge` is the
@@ -93,7 +90,7 @@ function sideOf(m, row) {
   let own = sides.get(m);
   if (!own) sides.set(m, (own = new Map()));
   if (!own.has(row.key)) {
-    const { r } = sizes(m);
+    const { r } = sizesOf(m);
     const x = d3.scaleLinear().domain(m.domain).range([0, m.pw]);
     const [d0, d1] = m.domain;
     const clamped = (v) => x(Math.min(Math.max(v, Math.min(d0, d1)), Math.max(d0, d1)));
@@ -245,7 +242,7 @@ export default {
     /** Writes `view` of model `m`: every attribute the component owns, on every call, leavers included. */
     function place(m, view) {
       const f = m.font;
-      const { band, r, cap } = sizes(m);
+      const { band, r, cap } = sizesOf(m);
       const x = d3.scaleLinear().domain(view.domain).range([0, m.pw]);
       const [d0, d1] = view.domain;
       const clamped = (v) => x(Math.min(Math.max(v, Math.min(d0, d1)), Math.max(d0, d1))); // a whisker is cut at the axis ends

@@ -800,6 +800,40 @@ test("fan errors show on the slide", async () => {
   });
 });
 
+test("an x column with no numbers, and a file with no rows, are element errors that say so", async () => {
+  const broken = deckPages("test/fixtures/decks/line-story-broken/");
+  await withPage({ root, url: broken.url("dates", "") }, async (page, ctx) => {
+    for (const [slide, message] of [
+      ["dates", "chart.line needs a numeric `x`: column 'date' of data/dates.csv has no numbers"],
+      ["empty", "data/empty.csv has no rows"],
+    ]) {
+      await ctx.open(broken.url(slide, ""));
+      const errors = await page.evaluate(() => window.STEPDECK.errors);
+      assert.equal(errors.length, 1, slide);
+      assert.ok(errors[0].startsWith(`${slide}/chart: ${message}`), errors[0]);
+      assert.ok((await page.evaluate(() => document.querySelector('[data-el="chart"] .sd-error')?.textContent) ?? "").includes(message), "shown on the slide");
+      assert.equal(await page.evaluate(() => document.querySelector('[data-el="chart"] .tick')), null, "no axis of a made-up 0 to 1");
+      assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="src"]')).visibility), "visible", "the sibling carries on");
+    }
+    assert.deepEqual(ctx.errors.filter((e) => e.startsWith("pageerror")), []);
+  });
+});
+
+test("data all below zero ends its y axis at zero; whole-number x gets whole-number ticks", async () => {
+  await withPage({ root, url: pages.url("below", "step=start") }, async (page, ctx) => {
+    const got = await page.evaluate(() => {
+      const texts = (sel) => [...document.querySelectorAll(`[data-el="chart"] ${sel}`)].map((n) => n.textContent);
+      return { y: texts(".sd-tick-y text"), x: texts(".sd-tick-x text") };
+    });
+    assert.deepEqual(got.x, ["2020", "2021", "2022"], "one tick a year: no half years printed as the same year twice");
+    const ys = got.y.map((s) => Number(s.replace("−", "-")));
+    assert.equal(Math.max(...ys), 0, `the axis ends at zero: ${got.y.join(" ")}`);
+    assert.equal(Math.min(...ys), -0.4);
+    assert.deepEqual(ctx.errors, []);
+  });
+  assert.deepEqual(await check(deck, { slide: "below" }), [], "check reports no problems");
+});
+
 test("fan with a sweep", async () => {
   /** The canvas right of the cut: how many pixels are painted there (the cut in plot pixels, plus `slack`). */
   const rightOf = (el, cut, slack) => {

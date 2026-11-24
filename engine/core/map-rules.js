@@ -30,6 +30,8 @@
 //
 // Rules:
 //   map-layer (error)         `shown` names an id that is not in `layers`.
+//   map-classes (error)       a layer's `classes` are not in increasing order (a break twice included); the element
+//                             fails with `colorScale`'s message.
 //   map-frame (error)         `frame` is not a label of the time-lapse; two time-lapse layers have different label
 //                             lists; a `numbers` key is found in two time-lapse layers.
 //   map-raster (error)        a sidecar, a PNG (an interlaced one included) or a frame size outside the raster format,
@@ -404,6 +406,14 @@ export function mapProblems(props, files) {
   for (const id of Array.isArray(props.shown) ? props.shown : []) {
     if (!layerIds.includes(id)) {
       found.push(item("map-layer", "error", `\`shown\` lists '${id}', which is not a layer (layers: ${layerIds.join(", ") || "none"})`, "every id in `shown` is a key of `layers`", `add a layer '${id}', or remove it from \`shown\``));
+    }
+  }
+
+  for (const [id, layer] of Object.entries(isObject(props.layers) ? props.layers : {})) {
+    const breaks = isObject(layer) && Array.isArray(layer.classes) && layer.classes.every((v) => typeof v === "number") ? layer.classes : null;
+    if (breaks && !breaks.every((v, i) => i === 0 || v > breaks[i - 1])) {
+      const sorted = [...new Set(breaks)].sort((a, b) => a - b);
+      found.push(item("map-classes", "error", `layer '${id}' has \`classes\` ${breaks.join(", ")}, which are not in increasing order`, "`classes` are breaks in increasing order, each once", `write \`classes: [${sorted.join(", ")}]\``));
     }
   }
 

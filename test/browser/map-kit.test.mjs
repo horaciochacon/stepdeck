@@ -800,6 +800,34 @@ test("rasterGaps: `frames` names the frames to look at; every frame by default",
   });
 });
 
+test("rasterGaps: a frame the raster holds decoded is not fetched again; one it does not hold is", async () => {
+  await withPage({ root, url: pages.url("kit", "step=a") }, async (page, ctx) => {
+    const got = await withKit(page, async (M, ctx) => {
+      const { features } = M.boundaries(await ctx.data("data/square-cw.geojson"), { id: "code" });
+      const raster = await M.loadRaster("data/patched.json", ctx); // decodes the first frame
+      const fetched = [];
+      const real = window.fetch;
+      window.fetch = (...args) => { fetched.push(String(args[0])); return real(...args); };
+      try {
+        const count = async (run) => { fetched.length = 0; const found = await run(); return [found, fetched.filter((u) => /\.png(\?|$)/.test(u)).length]; };
+        const first = await count(() => M.rasterGaps(raster, features, { frames: [0] }));
+        const second = await count(() => M.rasterGaps(raster, features, { frames: [1] }));
+        await raster.grid(1);
+        const held = await count(() => M.rasterGaps(raster, features, { frames: [1] }));
+        const every = await count(() => M.rasterGaps(raster, features));
+        return { first, second, held, every };
+      } finally {
+        window.fetch = real;
+      }
+    });
+    assert.deepEqual(got.first, [false, 0], "the first frame is held since loadRaster");
+    assert.deepEqual(got.second, [true, 1], "a frame not held is decoded apart from the cache");
+    assert.deepEqual(got.held, [true, 0], "once the raster holds it, it is read from there");
+    assert.deepEqual(got.every, [true, 0]);
+    assert.deepEqual(ctx.errors, []);
+  });
+});
+
 test("the painters keep played equal to jumped, forward and backward", async () => {
   for (const [slide, steps] of [["kit", ["a", "b", "c", "d", "e", "f"]], ["square", ["a", "hatch", "dot", "zoom", "points"]], ["raster", ["a", "bare", "mix", "moved", "gone", "covered", "hole", "half", "coast", "clip"]]]) {
     await withPage({ root, url: pages.url(slide, "step=a") }, async (page, ctx) => {

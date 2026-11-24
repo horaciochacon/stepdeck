@@ -46,7 +46,7 @@
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, extentOf, drawOrder, frame, keyed, settle, halo, canvasLayer, paintLines, morph, entrance, undraw } from "../../core/chart.js";
 import { cellValue } from "../../core/chart-layout.js";
-import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots, cutAt } from "./parts.js";
+import { partsOf, partsByName, lineAttr, bandAttr, forecastSeries, labelled, dotData, placeDots, placeForecast, placeTicker, labelSpots, cutAt, yExtent, xTickValues, checkX } from "./parts.js";
 import { fanAlpha, fanWidth, fanModel, loadDraws } from "./fan.js";
 import { textColor } from "../../core/color.js";
 import { SVG_NS, num, lerp, motion, motionMs, focusPaint, tweenColor } from "../../core/kit.js";
@@ -56,12 +56,15 @@ const LINE_WIDTH = 5; // the stroke width of path.sd-line in core/stepdeck.css, 
 
 const lerpArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
 
-/** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`. */
-const loadRows = (props, ctx) =>
-  loadTable(props, ctx, "chart.line", [
+/** Loads the rows and checks every column the props name. Throws `column 'c' not found in <data>`, or that `x` has no numbers. */
+async function loadRows(props, ctx) {
+  const rows = await loadTable(props, ctx, "chart.line", [
     ["x", props.x], ["y", props.y], ["series", props.series, true],
     ["interval.lower", props.interval?.lower, true], ["interval.upper", props.interval?.upper, true],
   ]);
+  checkX(rows, props); // the x axis is linear: a column of dates or names has nothing to place
+  return rows;
+}
 
 /**
  * The [min, max] of `y` over every draws file a step of the slide with the current `y` names, each read with that step's
@@ -126,13 +129,13 @@ function buildModel(props, rows, ctx, el, draws = null) {
   if (draws?.extent) ys.push(...draws.extent); // and every draw any step can show
   const xDomain = xs.length ? d3.extent(xs) : [0, 1];
   if (xDomain[0] === xDomain[1]) xDomain[1] = xDomain[0] + 1;
-  const yScale0 = d3.scaleLinear().domain([Math.min(0, d3.min(ys) ?? 0), Math.max(0, d3.max(ys) ?? 1) || 1]).nice(5);
+  const yScale0 = d3.scaleLinear().domain(yExtent(ys)).nice(5);
   const yTickValues = yScale0.ticks(5);
-  const xTickValues = d3.scaleLinear().domain(xDomain).ticks(6);
+  const xValues = xTickValues(xDomain, xs); // whole numbers only when every x is one
   const fy = tickFormat(ctx, props.format?.y, yTickValues);
-  const fx = tickFormat(ctx, props.format?.x, xTickValues);
+  const fx = tickFormat(ctx, props.format?.x, xValues);
   const yTicks = yTickValues.map((v) => ({ value: v, label: fy(v) }));
-  const xTicks = xTickValues.map((v) => ({ value: v, label: fx(v) }));
+  const xTicks = xValues.map((v) => ({ value: v, label: fx(v) }));
 
   // Fixed margins from character counts (not measured text), so layout never depends on font timing.
   const seriesList = order.filter((s) => shown.has(s));
@@ -381,7 +384,7 @@ export default {
             width: p && q ? lerp(wa, wb, t) : q ? wb : wa,
           };
         });
-        paintLines(fanCanvas(origin, pw, ph), lines);
+        paintLines(fanCanvas(origin, pw, ph), lines, { sign: false }); // a frame: the resting fan signs (writeFan)
       };
     }
 
@@ -587,7 +590,7 @@ export default {
           renderStatic(model);
           // The dotted line and the dots cannot draw along their length: they fade in while the solid lines draw, and so does the fan.
           const late = plot.selectAll("g.sd-points, path.sd-forecast-line, g.sd-forecast .sd-halo-under").attr("opacity", 0);
-          const fanAt = (t) => model.fan && paintLines(fanCanvas(model.margin, model.pw, model.ph), restingFan(model, t));
+          const fanAt = (t) => model.fan && paintLines(fanCanvas(model.margin, model.pw, model.ph), restingFan(model, t), { sign: false });
           fanAt(0);
           await Promise.all([
             ...gLines.selectAll("path.sd-line, .sd-halo-under").nodes().map((n) => ctx.animate.drawPath(n, { duration, signal, ease })),

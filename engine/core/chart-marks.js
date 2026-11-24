@@ -256,19 +256,49 @@ function runsOf(points) {
 }
 
 /**
+ * Strokes one line of `paintLines` straight from its points, with the calls the stretches of `runsOf` give (a stretch
+ * starts at its second point: one point alone draws nothing, and a line without a stretch is not stroked), but
+ * without building them.
+ */
+function strokeLine(g, line, width, alpha) {
+  let [px, py, pen, begun] = [0, 0, 0, false]; // pen: 0 up, 1 one point seen, 2 drawing
+  for (const point of Array.isArray(line.points) ? line.points : []) {
+    const x = Array.isArray(point) ? point[0] : undefined;
+    const y = Array.isArray(point) ? point[1] : undefined;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) pen = 0;
+    else if (pen === 0) [px, py, pen] = [x, y, 1];
+    else {
+      if (pen === 1) {
+        if (!begun) g.beginPath();
+        begun = true;
+        g.moveTo(px, py);
+        pen = 2;
+      }
+      g.lineTo(x, y);
+    }
+  }
+  if (!begun) return;
+  g.strokeStyle = line.color;
+  g.lineWidth = line.width ?? width;
+  g.globalAlpha = line.alpha ?? alpha;
+  g.stroke();
+}
+
+/**
  * Clears the canvas, then strokes each `{ points: [[x, y], ...], color, alpha?, width? }` with round joins
  * and caps, in plot pixels (see `canvasLayer`). `width` and `alpha` are the defaults for a line without its
  * own. A point whose x or y is not a finite number (a missing value) breaks the line there, so a gap is a gap
  * and never a line to zero; a stretch of fewer than 2 points draws nothing, so a line without such a stretch
  * is skipped. Returns a signature of what was painted, the FNV-1a hex of every painted line's color, width,
  * alpha and stretches, rounded to 0.1 px and 0.001 alpha: two paintings with the same signature are the same
- * picture, so it can stand in for the pixels in a dump.
+ * picture, so it can stand in for the pixels in a dump. With `sign: false` (a frame of a motion, whose signature
+ * nobody reads) it paints the same picture without computing one, and returns "".
  * @param {HTMLCanvasElement} canvas
  * @param {Array<{ points: Array<[number | null, number | null]>, color: string, alpha?: number, width?: number }>} lines
- * @param {{ width?: number, alpha?: number }} [defaults]
+ * @param {{ width?: number, alpha?: number, sign?: boolean }} [defaults]
  * @returns {string}
  */
-export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
+export function paintLines(canvas, lines, { width = 1, alpha = 1, sign = true } = {}) {
   const g = canvas.getContext("2d");
   if (g) {
     g.save();
@@ -277,6 +307,12 @@ export function paintLines(canvas, lines, { width = 1, alpha = 1 } = {}) {
     g.restore();
     g.lineJoin = "round";
     g.lineCap = "round";
+  }
+  if (!sign) {
+    if (!g) return "";
+    for (const line of lines) strokeLine(g, line, width, alpha);
+    g.globalAlpha = 1;
+    return "";
   }
   // The signature hashes, line by line, `${color}|${width}|${alpha}|` and the stretches (each point `${x},${y}`, points
   // joined by ";", stretches by "/"), then "\n", without building that text.

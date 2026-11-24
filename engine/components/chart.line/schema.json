@@ -9,13 +9,13 @@
   "properties": {
     "data": {
       "type": "string",
-      "description": "Path to a CSV file, relative to the deck root. One row per series and x value.",
+      "description": "Path to a CSV file, relative to the deck root. One row per series and x value. A change to another file morphs the lines like a change of `y` (points keyed by series and x).",
       "examples": ["data/dose-response.csv"],
-      "x-transition": "snap"
+      "x-transition": "tween"
     },
     "x": {
       "type": "string",
-      "description": "Column holding the numeric x value.",
+      "description": "Column holding the numeric x value (a year, a day number, any quantity): the x axis is linear. There is no date or category axis: a column with no numbers (dates such as 2020-01-01, month names) is an element error, so add a numeric column. When every x is a whole number, every x tick is too.",
       "examples": ["dose_mg"],
       "x-transition": "snap"
     },
@@ -84,7 +84,7 @@
     "types": {
       "type": "object",
       "additionalProperties": { "enum": ["string", "number", "date"] },
-      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one.",
+      "description": "CSV column types, passed to the data loader. Undeclared columns are numbers only when every value looks like one. `x`, `y` and the interval columns must be numbers: a \"date\" column stays an ISO string, which the chart cannot place on an axis.",
       "examples": [{ "dose_mg": "number", "regimen": "string" }],
       "x-transition": "snap"
     },
@@ -102,6 +102,7 @@
     },
     "points": {
       "type": "boolean",
+      "default": false,
       "description": "Draw a dot at every data point of every shown series. Dots after `forecast.from` are hollow. Fades in and out.",
       "examples": [true],
       "x-transition": "fade"
@@ -126,6 +127,7 @@
     },
     "ticker": {
       "type": "boolean",
+      "default": false,
       "description": "With `until`, a large label of the current x in the plot's upper left (formatted with `format.x`), counting through a sweep and resting on `until`. Does nothing without `until` (`validate` warns).",
       "examples": [true],
       "x-transition": "snap"

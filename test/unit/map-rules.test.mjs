@@ -439,3 +439,16 @@ test("map-rules.js imports only ./chart-layout.js", async () => {
   assert.match(imports[0], /from "\.\/chart-layout\.js";$/);
   assert.doesNotMatch(source, /\bimport\s*\(/);
 });
+
+test("mapProblems: map-classes for breaks that are not in increasing order, in any layer", () => {
+  const found = mapProblems({ layers: { ...layers, bad: { areas: "d/v.csv", key: "code", value: "v", classes: [10, 5, 20] }, twice: { raster: "d/none.json", classes: [1, 1] } }, shown: ["a"] }, files);
+  assert.deepEqual(rules(found.filter((p) => p.rule === "map-classes")), ["map-classes:error", "map-classes:error"]);
+  const [bad, twice] = found.filter((p) => p.rule === "map-classes");
+  assert.equal(bad.message, "layer 'bad' has `classes` 10, 5, 20, which are not in increasing order");
+  assert.equal(bad.fix, "write `classes: [5, 10, 20]`");
+  assert.match(twice.message, /layer 'twice' has `classes` 1, 1/);
+  assert.equal(twice.fix, "write `classes: [1]`");
+  for (const p of [bad, twice]) assert.ok(p.limit, "a limit");
+  const fine = { ok: { areas: "d/v.csv", key: "code", value: "v", classes: [5, 10, 20] }, one: { areas: "d/v.csv", key: "code", value: "v", classes: [3] }, odd: { areas: "d/v.csv", classes: "x" } };
+  assert.deepEqual(mapProblems({ layers: fine }, {}).filter((p) => p.rule === "map-classes"), [], "ascending breaks, one break, and what the schema rejects");
+});

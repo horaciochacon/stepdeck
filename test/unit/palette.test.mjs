@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { checkPalette, contrast, simulateCvd, deltaE } from "../../cli/palettes.js";
+import { checkPalette, contrast, simulateCvd, deltaE, toContrast, darkenToContrast } from "../../cli/palettes.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const theme = new URL("../../engine/themes/academic-light/", import.meta.url);
@@ -114,4 +114,29 @@ test("palettes.json: kinds, citations, localized names, roles", () => {
   assert.equal(token("--sd-color-alert"), value(cat.roles.alert));
   assert.equal(cat.roles.accent, "blue");
   assert.equal(cat.roles.alert, "vermillion");
+});
+
+test("palette-contrast on a dark background: the fix lightens, and the value it names passes", () => {
+  const [p] = checkPalette(["#1f3a5f"], "#0b1020", { cvd: false });
+  assert.equal(p.rule, "palette-contrast");
+  assert.match(p.fix, /^lighten #1f3a5f to #[0-9a-f]{6} or lighter \(marks need 3:1 on #0b1020\)/);
+  const suggested = /to (#[0-9a-f]{6})/.exec(p.fix)[1];
+  assert.ok(contrast(suggested, "#0b1020") >= 3, p.fix);
+  assert.notEqual(suggested, "#000000");
+  assert.ok(contrast(suggested, "#0b1020") < 3.2, `the nearest value that passes, not white: ${suggested}`);
+});
+
+test("toContrast: away from the background first, the other way when that cannot reach the target", () => {
+  assert.deepEqual(toContrast("#F0E442", "#ffffff").verb, "darken");
+  assert.deepEqual(toContrast("#1f3a5f", "#000000").verb, "lighten");
+  // Darker than a dark background: no darker value reaches 3:1, so the only way is up.
+  const up = toContrast("#101010", "#303030");
+  assert.equal(up.verb, "lighten");
+  assert.ok(contrast(up.color, "#303030") >= 3);
+  // Lighter than a light background: nothing lighter reaches it either.
+  const down = toContrast("#ffffff", "#eeeeee");
+  assert.equal(down.verb, "darken");
+  assert.ok(contrast(down.color, "#eeeeee") >= 3);
+  assert.deepEqual(toContrast("#000000", "#ffffff"), { color: "#000000", verb: null }, "a passing colour is returned as it is");
+  assert.equal(darkenToContrast("#F0E442", "#ffffff"), toContrast("#F0E442", "#ffffff").color, "darkenToContrast is the darkening half");
 });

@@ -28,10 +28,10 @@
 // `{ by }` column read by `sortColumns` (both core/chart-layout.js), and changes nothing else: not the domain, the
 // margins nor any row's data. The margins come from character counts and from every step too (its titles, its
 // reference label, the tick labels of its own axis, its overflow boxes), so nothing that appears later resizes the
-// plot. Cells are read by `cellValue`: a missing value (an empty or blank cell, or text) is never zero: it gives
+// plot. Tick labels that would not fit side by side are thinned (fewer ticks over the same domain; `ticksFit`). Cells are read by `cellValue`: a missing value (an empty or blank cell, or text) is never zero: it gives
 // `missing: true` and no value (a strip with no value at all is `missing`).
 import { d3 } from "../../core/d3.js";
-import { extentOf, rank, wrapLabel, swarm, cellValue, sortColumns } from "../../core/chart-layout.js";
+import { extentOf, rank, wrapLabel, swarm, cellValue, sortColumns, VALUE_SPEC, TICK_COUNTS, ticksFit } from "../../core/chart-layout.js";
 
 const isText = (v) => v != null && String(v) !== "";
 const validDomain = (d) => Array.isArray(d) && d.length === 2 && d.every((v) => Number.isFinite(v)) && d[0] < d[1];
@@ -91,9 +91,9 @@ function autoDomain(rows, steps) {
   return d3.scaleLinear().domain(extentOf(values.map((v) => ({ v })), ["v"])).nice(5).domain();
 }
 
-/** The ticks of a domain with one step's labels: `format.y`, else a fixed precision from the tick step. */
-function ticksOf(domain, spec, format) {
-  const values = d3.scaleLinear().domain(domain).ticks(5);
+/** The ticks of a domain (about `count` of them) with one step's labels: `format.y`, else a fixed precision from the tick step. */
+function ticksOf(domain, spec, format, count = TICK_COUNTS[0]) {
+  const values = d3.scaleLinear().domain(domain).ticks(count);
   const step = values.length > 1 ? Math.abs(values[1] - values[0]) : 1;
   const label = format(spec || `.${d3.precisionFixed(step || 1)}f`);
   return values.map((value) => ({ value, label: label(value) }));
@@ -231,8 +231,7 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
   const auto = autoDomain(rows, steps);
   const domainAt = (p) => (validDomain(p.domain) ? [p.domain[0], p.domain[1]] : auto); // a step's own axis
   const domain = domainAt(props);
-  const ticks = ticksOf(domain, props.format?.y, format);
-  const fValue = format(props.format?.y || ",~r"); // value labels: as precise as the data
+  const fValue = format(props.format?.y || VALUE_SPEC); // value labels: as precise as the data
   const fCategory = props.format?.x ? format(props.format.x) : null;
   const noData = t("noData");
   const kind = strips ? (Object.hasOwn(STATS, props.summary ?? "") || props.summary === "none" ? props.summary : "median") : null;
@@ -295,16 +294,30 @@ export function pointsModel(rows, props, { stepProps = null, font = 28, charW = 
   const maxLines = Math.max(1, Math.floor(ph / Math.max(1, out.length) / lineH));
   for (const r of out) r.lines = wrapLabel(r.label, maxChars, maxLines);
   const chars = Math.max(1, ...out.flatMap((r) => r.lines.map((l) => l.length)));
-  const tickChars = Math.max(1, ...steps.flatMap((p) => ticksOf(domainAt(p), p.format?.y, format).map((k) => k.label.length)));
-  const tickHalf = (tickChars * charW) / 2 + font * 0.2; // half the widest tick label, past either end of the axis
   const room = overflowRoom(rows, steps, font, charW);
-  const margin = {
-    left: Math.round(Math.max(chars * charW + font * 0.6 + room.low, tickHalf)),
-    right: Math.round(Math.max(font * 0.6, tickHalf, room.high + (room.high ? font * 0.2 : 0))),
-    top,
-    bottom,
+  // The ticks: as many as d3 gives for the first count of TICK_COUNTS at which every step's labels fit side by side
+  // along the plot (the last count when none does). One count for every step, so the margins, which hold half a tick
+  // label, are the same at every step. The domain is never touched: fewer ticks, the same axis.
+  const layoutAt = (count) => {
+    const axes = steps.map((p) => ({ domain: domainAt(p), ticks: ticksOf(domainAt(p), p.format?.y, format, count) }));
+    const tickChars = Math.max(1, ...axes.flatMap((a) => a.ticks.map((k) => k.label.length)));
+    const tickHalf = (tickChars * charW) / 2 + font * 0.2; // half the widest tick label, past either end of the axis
+    const margin = {
+      left: Math.round(Math.max(chars * charW + font * 0.6 + room.low, tickHalf)),
+      right: Math.round(Math.max(font * 0.6, tickHalf, room.high + (room.high ? font * 0.2 : 0))),
+      top,
+      bottom,
+    };
+    const pw = Math.max(1, w - margin.left - margin.right);
+    return { count, margin, pw, fits: axes.every((a) => ticksFit(a.ticks, a.domain, pw, charW, font * 0.5)) };
   };
-  const pw = Math.max(1, w - margin.left - margin.right);
+  let layout = null;
+  for (const count of TICK_COUNTS) {
+    layout = layoutAt(count);
+    if (layout.fits) break;
+  }
+  const { margin, pw } = layout;
+  const ticks = ticksOf(domain, props.format?.y, format, layout.count);
 
   // The beeswarm: each strip's points packed by `swarm` over their x pixels, within the row band.
   if (strips) {

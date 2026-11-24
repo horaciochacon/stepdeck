@@ -25,7 +25,7 @@ test("catalog index lists chart.line with animates including y", async () => {
     const line = index.find((e) => e.name === "chart.line");
     assert.equal(line.kind, "component");
     assert.ok(line.animates.includes("y"), JSON.stringify(line));
-    assert.ok(!line.animates.includes("data"), "snap props do not animate");
+    assert.ok(!line.animates.includes("x"), "snap props do not animate");
     assert.match(line.summary, /^Line chart of one or more series/);
     assert.ok(!line.summary.includes("morphs"), "summary is the first sentence only");
     for (const e of index) assert.deepEqual(Object.keys(e), ["kind", "name", "summary", "animates", "enter"]);

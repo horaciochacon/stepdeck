@@ -245,3 +245,13 @@ test("modes.js has no DOM and imports only the pure layout module", async () => 
   assert.deepEqual(imports, ["../../core/chart-layout.js"]);
   assert.doesNotMatch(source, /document|window|querySelector/);
 });
+
+test("value labels: the default spec keeps every digit of the data, signed for a waterfall", async () => {
+  const { d3 } = await import("#engine/core/d3.js");
+  const { VALUE_SPEC } = await import("#engine/core/chart-layout.js");
+  const { signedSpec } = await import("#engine/components/chart.bar/paint-modes.js");
+  const f = d3.format(VALUE_SPEC);
+  assert.deepEqual([1234567, 12345678.9, 0.1 + 0.2, 2.5, 0.123456789, -60, 0].map(f), ["1,234,567", "12,345,678.9", "0.3", "2.5", "0.123456789", "−60", "0"]);
+  assert.ok(signedSpec(VALUE_SPEC).endsWith("+,.12~r"), signedSpec(VALUE_SPEC)); // d3 writes the default fill and align first
+  assert.deepEqual([1234567, -0.5, 12345678.9].map(d3.format(signedSpec(VALUE_SPEC))), ["+1,234,567", "−0.5", "+12,345,678.9"]);
+});

@@ -15,13 +15,19 @@ export const roleNames = (ctx) => Object.keys(ctx.tokens ?? {}).filter((name) =>
 export const roleColor = (role, ctx) => ctx.tokens?.[`${COLOR}${role}`]?.trim() || undefined;
 
 const mixes = new Map();
+/** The most interpolators `blend` keeps: a blend of blends (data and highlight changing together) names new pairs at every frame. */
+const MIXES_MAX = 2000;
 /** `a` blended toward `b` by `t` in RGB (d3.interpolateRgb), with `a` and `b` themselves at the ends. */
 export function blend(a, b, t) {
   if (t >= 1 || a === b) return b;
   if (t <= 0) return a;
   const key = `${a}|${b}`;
-  if (!mixes.has(key)) mixes.set(key, d3.interpolateRgb(a, b));
-  return mixes.get(key)(t);
+  let mix = mixes.get(key);
+  if (!mix) {
+    if (mixes.size >= MIXES_MAX) mixes.clear(); // the pairs in use are made again, the ones of past frames go
+    mixes.set(key, (mix = d3.interpolateRgb(a, b)));
+  }
+  return mix(t);
 }
 
 /**

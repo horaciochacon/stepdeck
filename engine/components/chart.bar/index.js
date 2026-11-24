@@ -48,7 +48,7 @@
 // and theme tokens; sizes from the label token.
 import { d3 } from "../../core/d3.js";
 import { loadTable, tickFormat, opacityAttr, wrapLabel, frame, whisker, morph, entrance } from "../../core/chart.js";
-import { cellValue, lerp as lerpNull } from "../../core/chart-layout.js"; // lerpNull: a missing end gives the end value
+import { cellValue, lerp as lerpNull, VALUE_SPEC, TICK_COUNTS, ticksFit } from "../../core/chart-layout.js"; // lerpNull: a missing end gives the end value
 import { SVG_NS, lerp, clamp01, motion, focusPaint, tweenColor } from "../../core/kit.js";
 import { waterfallSteps, waterfallDomain, backToBack, backToBackSpan, barOrder, categoriesOf, hasTotal } from "./modes.js";
 import {
@@ -142,13 +142,17 @@ function buildModel(props, rows, ctx, el) {
   // The axes the frame is sized for: this step's, or on a waterfall slide every step's over this data (back-to-back: a
   // side's, as its labels read).
   const frameDomains = flowSlide ? steps.filter((p) => p.data === props.data && (p.domain === undefined || validDomain(p.domain))).map(domainAt) : pairs ? [[0, domain[1]]] : [domain];
-  const tickValues = d3.scaleLinear().domain(domain).ticks(5);
-  const fy = tickFormat(ctx, props.format?.y, tickValues);
-  const fv = props.format?.y ? ctx.format(props.format.y) : ctx.format(",~r"); // value labels: as precise as the data
-  const fs = flowSlide ? ctx.format(signedSpec(props.format?.y ?? ",~r")) : fv; // a waterfall's contributions, signed
+  // The value axis' ticks for a tick count: about 5, or fewer when a horizontal axis has no room for their labels.
+  const ticksAt = (count) => {
+    const values = d3.scaleLinear().domain(domain).ticks(count);
+    const f = tickFormat(ctx, props.format?.y, values);
+    return values.map((value) => ({ value, label: f(pairs ? Math.abs(value) : value) })); // back-to-back: magnitudes
+  };
+  const fv = props.format?.y ? ctx.format(props.format.y) : ctx.format(VALUE_SPEC); // value labels: as precise as the data
+  const fs = flowSlide ? ctx.format(signedSpec(props.format?.y ?? VALUE_SPEC)) : fv; // a waterfall's contributions, signed
   const fl = flow ? fs : fv;
   const fx = props.format?.x ? ctx.format(props.format.x) : null;
-  const ticks = tickValues.map((value) => ({ value, label: fy(pairs ? Math.abs(value) : value) })); // back-to-back: magnitudes
+  let ticks = ticksAt(TICK_COUNTS[0]);
   const tickLabels = (d) => {
     const values = d3.scaleLinear().domain(d).ticks(5);
     return values.map(tickFormat(ctx, props.format?.y, values));
@@ -221,7 +225,8 @@ function buildModel(props, rows, ctx, el) {
   // the wrapped lines, so each orientation sizes one pair of sides, then the plot, then wraps (setting
   // `b.lines`), then sizes the other pair. A waterfall keeps a value label's room on both sides of the plot (a
   // decrease's label points left, or down), with the band axis set back by the room on its side (`labelRoom`), so no
-  // label has to go inside its bar.
+  // label has to go inside its bar. Plain bars whose axis goes below zero set the band axis back the same way, so a
+  // negative bar's label never lands on a category label.
   let lineH = 0;
   let labelRoom = 0;
   const { w, h, font, charW, margin, pw, ph } = frame(el, ctx, ({ font, charW, w, h }) => {
@@ -231,7 +236,8 @@ function buildModel(props, rows, ctx, el) {
       // Category labels left of the plot, value ticks under it, value labels past the bar ends.
       // Back-to-back: the left bars' value labels point left, so the band labels are set back too, and the side
       // titles get a row above the plot.
-      labelRoom = flowSlide || pairs ? labelW : 0;
+      // Plain bars with a negative axis: a negative bar's label points left too, into the same room.
+      labelRoom = flowSlide || pairs || domain[0] < 0 ? labelW : 0;
       const top = Math.round((hasX ? font * 1.9 : font * 0.6) + (pairs ? font * 1.4 : 0));
       const bottom = Math.round(hasY ? font * 3.6 : font * 1.9);
       const plotH = Math.max(1, h - top - bottom);
@@ -242,7 +248,8 @@ function buildModel(props, rows, ctx, el) {
       return { top, bottom, left: chars * charW + font * 0.6 + (domain[0] < 0 || flowSlide ? labelW : 0), right: domain[1] > 0 || flowSlide ? labelW : font * 0.6 };
     }
     // Value ticks left of the plot, category labels under it, value labels above the bar ends.
-    labelRoom = flowSlide ? font * 1.5 : 0;
+    // (Plain bars with a negative axis: a negative bar's label hangs under its end, above the category labels.)
+    labelRoom = flowSlide ? font * 1.5 : below ? font * 1.4 : 0;
     const tickChars = flowSlide ? frameDomains.flatMap((d) => tickLabels(d).map((l) => l.length)) : ticks.map((t) => t.label.length);
     const left = Math.round(Math.max(1, ...tickChars) * charW + font * 0.6);
     const right = Math.round(font * 0.6);
@@ -253,9 +260,15 @@ function buildModel(props, rows, ctx, el) {
     return {
       left, right,
       top: hasY ? font * 2.7 : font * 1.9,
-      bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + (flowSlide ? labelRoom : below ? font * 1.4 : 0),
+      bottom: font * 0.5 + lines * lineH + (hasX ? font * 1.7 : font * 0.4) + labelRoom,
     };
   });
+  // A horizontal value axis writes its tick labels side by side: when they would run into each other, fewer ticks over
+  // the same domain (the plot's width does not depend on them, so nothing else moves).
+  if (horizontal) for (const count of TICK_COUNTS.slice(1)) {
+    if (ticksFit(ticks, domain, pw, charW, font * 0.5)) break;
+    ticks = ticksAt(count);
+  }
   if (flow) placeSides(bands, domain, { horizontal, pw, ph, margin, labelRoom, hasY, font, charW });
   return {
     w, h, font, lineH, orient, mode, flowSlide, margin, pw, ph, domain, ticks, bars, bands, total, links, sides, pairing, labelRoom, hasInterval,
@@ -280,7 +293,7 @@ const restOf = (m, b) => (m.mode === "waterfall"
   : { slot: b.slot, v: b.value, lo: b.lo, hi: b.hi });
 
 const staticView = (m) => ({
-  domain: m.domain, pw: m.pw, ph: m.ph, margin: { left: m.margin.left, top: m.margin.top },
+  domain: m.domain, pw: m.pw, ph: m.ph, margin: { left: m.margin.left, top: m.margin.top }, labelRoom: m.labelRoom,
   ticks: m.ticks.map((t) => ({ ...t, opacity: 1 })),
   bars: new Map(marksOf(m).map((b) => [b.key, { ...restOf(m, b), whisker: 1, visible: b.shown, labelOpacity: 1, fill: b.fill, labelFill: b.labelFill }])),
   links: m.mode === "waterfall" ? staticLinks(m) : null,
@@ -355,11 +368,11 @@ export default {
       gBand.selectAll("text.sd-band-label").data(m.bands, (d) => d.key).join((enter) => enter.append("text").attr("class", "sd-band-label"))
         .attr("data-key", (d) => d.key)
         .attr("data-visible", (d) => String(bandView(d).visible))
-        .attr("y", (d) => (horizontal ? centerOf(bandView(d).slot) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5 + m.labelRoom))
+        .attr("y", (d) => (horizontal ? centerOf(bandView(d).slot) - ((d.lines.length - 1) * m.lineH) / 2 : g.ph + f * 0.5 + view.labelRoom))
         .attr("text-anchor", horizontal ? "end" : "middle")
         .order()
         .each(function (d) {
-          const x = horizontal ? -f * 0.4 - m.labelRoom : centerOf(bandView(d).slot);
+          const x = horizontal ? -f * 0.4 - view.labelRoom : centerOf(bandView(d).slot);
           text(d3.select(this).selectAll("tspan").data(d.lines).join("tspan")
             .attr("x", x).attr("dy", (_l, j) => (j > 0 ? m.lineH : horizontal ? "0.35em" : "0.71em")), (l) => l);
         });
@@ -432,7 +445,7 @@ export default {
 
       text(bandTitle, m.axes.x).attr("text-anchor", horizontal ? "start" : "middle")
         .attr("x", horizontal ? 0 : view.margin.left + view.pw / 2)
-        .attr("y", horizontal ? f : view.margin.top + view.ph + f * 0.5 + m.labelRoom + (Math.max(1, ...m.bands.map((b) => b.lines.length)) * m.lineH) + f * 1.2);
+        .attr("y", horizontal ? f : view.margin.top + view.ph + f * 0.5 + view.labelRoom + (Math.max(1, ...m.bands.map((b) => b.lines.length)) * m.lineH) + f * 1.2);
       text(valueTitle, m.axes.y).attr("text-anchor", horizontal ? "middle" : "start")
         .attr("x", horizontal ? view.margin.left + view.pw / 2 : 0)
         .attr("y", horizontal ? view.margin.top + view.ph + f * 3.1 : f);
@@ -483,6 +496,7 @@ export default {
           pw: lerp(ref.pw, to.pw, t),
           ph: lerp(ref.ph, to.ph, t),
           margin: { left: lerp(ref.margin.left, to.margin.left, t), top: lerp(ref.margin.top, to.margin.top, t) },
+          labelRoom: lerp(ref.labelRoom, to.labelRoom, t), // the band labels' setback moves with the margins (a `y` that turns negative)
           ticks: [],
           bars: new Map(),
           links: null,

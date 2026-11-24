@@ -192,3 +192,48 @@ test("paintLines: the signature is the one the whole text hashes to (values capt
     assert.equal(paintLines(canvas, lines), signatureText(lines), `random case ${k}`);
   }
 });
+
+/** A 2D context that records every call and every property written, in order. */
+function recorder() {
+  const log = [];
+  const g = new Proxy({}, {
+    get: (_t, name) => (...args) => { log.push([name, ...args]); },
+    set: (_t, name, value) => { log.push([`${String(name)}=`, value]); return true; },
+  });
+  return { log, canvas: { width: 300, height: 150, getContext: () => g } };
+}
+
+test("paintLines: `sign: false` makes the calls of a signed painting, and returns no signature", () => {
+  const cases = Object.values(SIGNATURES).map(([lines, defaults]) => [lines, defaults]);
+  let seed = 3;
+  const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32);
+  const pick = () => (rnd() < 0.15 ? [null, NaN, Infinity, undefined][Math.floor(rnd() * 4)] : (rnd() - 0.5) * 2000);
+  for (let k = 0; k < 200; k++) {
+    cases.push([Array.from({ length: Math.floor(rnd() * 4) }, (_, j) => ({
+      points: rnd() < 0.05 ? null : Array.from({ length: Math.floor(rnd() * 12) }, () => (rnd() < 0.03 ? null : [pick(), pick()])),
+      color: ["red", "rgb(1, 2, 3)", "blue"][j % 3],
+      ...(rnd() < 0.5 ? { width: rnd() * 5, alpha: rnd() } : {}),
+    })), rnd() < 0.5 ? { width: 2, alpha: 0.4 } : undefined]);
+  }
+  let strokes = 0;
+  cases.forEach(([lines, defaults], k) => {
+    const [signed, plain] = [recorder(), recorder()];
+    const sig = paintLines(signed.canvas, lines, defaults);
+    assert.equal(paintLines(plain.canvas, lines, { ...defaults, sign: false }), "", `case ${k}: no signature`);
+    assert.deepEqual(plain.log, signed.log, `case ${k}: the same calls in the same order`);
+    assert.match(sig, /^[0-9a-f]{8}$/);
+    strokes += signed.log.filter(([name]) => name === "stroke").length;
+  });
+  assert.ok(strokes > 100, "the cases stroke lines");
+  assert.equal(paintLines({ getContext: () => null }, SIGNATURES.basic[0], { sign: false }), "", "without a context: nothing to paint, nothing to sign");
+});
+
+test("loadTable: a table with no rows says so, not that a column is missing from an empty list", async () => {
+  const files = { "data/empty.csv": [], "data/rows.csv": [{ region: "A", rate: 1 }] };
+  const ctx = { data: async (path) => files[path] };
+  const { loadTable } = chartKit;
+  await assert.rejects(loadTable({ data: "data/empty.csv" }, ctx, "chart.bar", [["x", "region"], ["y", "rate"]]), { message: "data/empty.csv has no rows" });
+  await assert.rejects(loadTable({ data: "data/empty.csv" }, ctx, "chart.bar", [["x", undefined]]), { message: "chart.bar needs `x` (a column name)" }, "a prop that is not set is reported first, as before");
+  assert.deepEqual(await loadTable({ data: "data/empty.csv" }, ctx, "chart.bar", [["interval.lower", undefined, true]]), [], "no column to check: the empty table is returned, as before");
+  await assert.rejects(loadTable({ data: "data/rows.csv" }, ctx, "chart.bar", [["x", "region"], ["y", "value"]]), { message: "column 'value' not found in data/rows.csv (columns: region, rate)" });
+});

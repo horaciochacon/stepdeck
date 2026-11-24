@@ -1,18 +1,29 @@
 // The legend of a map: one row per layer on screen that has one (`legendRow`, core/chart-scale.js), in a box at a corner
 // of the element, `div.sd-map-legend[data-at]`, where core/stepdeck.css places it and stacks the rows away from the
 // corner. A row fades with its layer. The box is made afresh at every write that changes it (a write of the same rows at
-// the same corner, as each frame of a flight makes, leaves it), so the markup is the same however a step was reached; a
-// legend with no rows, or `legend: false`, writes nothing.
+// the same corner, as each frame of a flight makes, leaves it; one that changes only how far the rows have faded writes
+// their opacity and nothing else), so the markup is the same however a step was reached; a legend with no rows, or
+// `legend: false`, writes nothing.
 //
 // A row may carry a size key (`size: { items: [{ r, label }] }`, from a layer of points) after its colours: a circle of
 // radius `r` px for each item, `svg.sd-legend-circle` (sized by attributes, outlined by the theme's CSS), and its label.
 // A row with a size key and no `legend` is a title and the key.
 import { legendRow } from "../../core/chart-scale.js";
+import { clearInlineStyle } from "../../core/animate.js";
 import { SVG_NS } from "../../core/kit.js";
 
-/** What a row is made from: two writes whose rows agree on all of it make the same box. */
-const ROW_KEYS = ["id", "title", "legend", "noData", "size", "opacity"];
+/** What a row's nodes are made from: two writes whose rows agree on all of it make the same box, but for the rows' opacity. */
+const ROW_KEYS = ["id", "title", "legend", "noData", "size"];
 const sameRows = (a, b) => a.length === b.length && a.every((row, i) => ROW_KEYS.every((key) => row[key] === b[i][key]));
+
+/**
+ * Writes a row's opacity as a fresh row has it: an inline `opacity` under 1, and no `style` attribute at 1
+ * (`clearInlineStyle`, which a bare removeAttribute after a style write is not: Chrome leaves `style=""`).
+ */
+function fade(row, opacity) {
+  if (opacity < 1) row.style.opacity = String(opacity);
+  else clearInlineStyle(row);
+}
 
 /** An item of a size key: a circle of radius `r` px, and its `label`. */
 function circleItem(doc, { r, label }) {
@@ -47,7 +58,12 @@ export function createLegend(el, ctx) {
   let wrote = null; // the corner and rows of the last write
   return {
     write(at, rows) {
-      if (wrote && wrote.at === at && sameRows(wrote.rows, rows)) return;
+      if (wrote && wrote.at === at && sameRows(wrote.rows, rows)) {
+        // The same box: only a fade moves, on the rows that are there (a frame of a fade does not rebuild them).
+        if (box) rows.forEach((row, i) => { if (row.opacity !== wrote.rows[i].opacity) fade(box.children[i], row.opacity); });
+        wrote = { at, rows };
+        return;
+      }
       wrote = { at, rows };
       box?.remove();
       box = null;
@@ -59,7 +75,7 @@ export function createLegend(el, ctx) {
         const row = legendRow(doc, legend ?? { kind: "categories", items: [] }, { title, noData, t }); // no colours: the title alone
         for (const item of size?.items ?? []) row.append(circleItem(doc, item));
         row.setAttribute("data-layer", id);
-        if (opacity < 1) row.style.opacity = String(opacity);
+        fade(row, opacity);
         box.append(row);
       }
       el.append(box);

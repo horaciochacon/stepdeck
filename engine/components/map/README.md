@@ -44,7 +44,7 @@ Layers (`layers.<id>`):
 | `value` | Column of values (required). An empty cell, or a region without a row, is hatched. |
 | `label` | Title of the layer's legend row. |
 | `types` | CSV column types for the loader (`areas` and `points`): declare a key column of codes such as `"07"` as `"string"`. |
-| `classes` | (`areas` and value rasters.) Breaks, in increasing order: stepped classes along the sequential palette, labelled `< 5`, `5–10`, …, `≥ 20`. |
+| `classes` | (`areas` and value rasters.) Breaks, in increasing order, each once (anything else is an element error: `` `classes` must be in increasing order ``, and `map-classes` in `validate`): stepped classes along the sequential palette, labelled `< 5`, `5–10`, …, `≥ 20`. |
 | `midpoint` | (`areas` and value rasters.) Splits the diverging palette; with `classes`, one of the breaks. |
 | `domain` | (`areas` and value rasters.) `[lo, hi]`: the ends of a continuous ramp, used as given. Default: the values' extent (symmetric about `midpoint`); for a raster, the file's `min` and `max`. |
 | `clip` | (Rasters.) Whether the picture is clipped to the land outline. Default `true`; `false` draws every cell whole, for a raster that covers the sea. |
@@ -106,27 +106,27 @@ Behaviour:
 - **Legend.** On a panel of the background colour, one row per shown layer: its `label`, then its classes (a swatch
   each, 28 px) or a ramp between its two end values, then the "no data" swatch when a region has no value. Rows stack
   away from the legend's corner. Numbers are written in the deck language (`2,5` in Spanish).
-- **Joins.** Keys compare with region ids as text, trimmed. A key column the loader reads as numbers turns `07` into
-  `7`, which matches no region `07`: declare it as `"string"` in `types`. A key that matches no region and a region in
+- **Joins.** Keys compare with region ids as text, trimmed. The loader keeps a code with a leading zero as text (`07`
+  stays `07`); only a column declared `"number"` in `types` turns it into `7`, which matches no region `07`. A key that matches no region and a region in
   two rows are element errors, never a silently missing value.
 - **Motion** (a forward step by one, the map already on screen): a layer that appears or leaves fades over the step's
   duration (`--sd-duration`, or the step's `transition`), with its legend row; labels that come or go fade with it; a
   change to a shown layer's data or scale (a raster's file, scale, `color` or `clip` too) crossfades its colours (a point that stays moves, resizes and changes colour from one to the other; a new point grows,
   one that has gone shrinks); `highlight` tweens the colours over
-  `--sd-duration-fast`; a change of `view` flies the map there over twice the step's duration (or the step's
-  `transition`), along d3's zoom path (out and in again as far as the distance asks): the land, borders, areas, points
+  `--sd-duration-fast`; a change of `view` flies the map there over twice `--sd-duration` (or exactly the step's
+  `transition.duration`), along d3's zoom path (out and in again as far as the distance asks): the land, borders, areas, points
   and names are redrawn at every frame, and a raster crossfades from its picture at the start view to its picture at
   the end view, both moving with the map, the wider one underneath, so it stays filled as the map zooms in or out
   and is sharp when it lands (a long flight that zooms out past both ends can leave a thin margin unfilled at its
   widest moment); an inset that comes or goes fades, with its box and leaders, and a change of `inset.view` flies the inset alone
-  in the same way, over twice the step's duration, the box following. A change of `frame` is a **run**: every
+  in the same way, over twice `--sd-duration` (or the step's `transition.duration`), the box following. A change of `frame` is a **run**: every
   frame from the old one to the new, in the file's order (backward when the new one comes first), each crossfading into
   the next, `pace` ms per frame moved, with the panel's numbers counting linearly from one frame's value to the next and
   its label showing the frame the crossfade heads to once it is half way. A step runs only when it shows a time-lapse
   layer, both steps have the same frame labels and the geometry stays; otherwise the new frame is drawn at once (or
   crossfades with its layer). A step that changes `frame` and other things
   plays them in two phases: everything else first, together, at the old frame (a flight lands), then the run at the end
-  view; the first phase lasts twice the step's duration for a flight, once for any other change the map animates, and
+  view; the first phase lasts twice `--sd-duration` for a flight, once for any other change the map animates (exactly the step's `transition.duration` when it sets one), and
   not at all otherwise (`core/map-rules.js` `firstPhase`, which `validate` budgets by too). The engine allows a run more than its usual 10 s (`info.expect`), up to 20 s for both phases together: a longer
   one is an element error (`a run of 20.3 s is longer than 20 s; split it across steps`). A click during a run, a hidden
   page or leaving the slide ends it at once on the step's frame. Jumps,
@@ -163,7 +163,7 @@ Behaviour:
   points, `'X' not found (regions: …; points: …)` for `highlight`; ``'S4' is a point: `view` names regions only (regions: …)``; `layer 'x' not found (layers: …)` for `shown`;
   `<csv>: row 4 has no lon` (also `lat`, and `size` for a size that is not a number; rows count from 1, not counting the
   header), `<csv>: color 'kinds' is not a column (…) or a theme colour (…)`; `<csv>: key 'X' matches no region`; `<csv>: key 'X' appears twice`;
-  `column 'c' not found in <csv> (columns: …)`; and the boundaries' own (`<file>: only Polygon and MultiPolygon
+  `column 'c' not found in <csv> (columns: …)`, or `<csv> has no rows` for a header alone; and the boundaries' own (`<file>: only Polygon and MultiPolygon
   features are supported (found LineString)`, `<file>: feature 3 has no 'code'`, …). For a time-lapse:
   `frame '1999' not found (frames: 2010, 2011, …)`, `time-lapse layers 'a' and 'b' have different frame labels`,
   `` `numbers` key 'x' is in no time-lapse layer (keys: …) ``, `` `numbers` key 'x' is in time-lapse layers 'a' and 'b' ``,

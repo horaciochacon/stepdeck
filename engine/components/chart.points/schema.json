@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "chart.points",
-  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker (or a before and after pair) and its value written beside it, against a value axis and an optional reference line; or, with `id`, a beeswarm strip of many points per category with a summary tick and one item followed across the strips. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero.",
+  "description": "Estimates by category from a CSV, one row each: a dot with an optional interval whisker (or a before and after pair) and its value written beside it, against a value axis and an optional reference line; or, with `id`, a beeswarm strip of many points per category with a summary tick and one item followed across the strips. The axis stays fixed across steps, rows can appear one by one, and a missing value reads \"no data\", never zero. A categorical dot plot, not a scatter plot: stepdeck has no numeric x-y scatter component (write a deck component with `ctx.chart` for one, or use chart.line with `points` when x is ordered). Every dot takes one colour, the first of the theme's categorical palette: there is no per-category colour option (`highlight` and `focus` dim the others).",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -9,9 +9,9 @@
   "properties": {
     "data": {
       "type": "string",
-      "description": "Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`).",
+      "description": "Path to a CSV file, relative to the deck root. One row per category (one row per point, with `id`). A change to another file with the same categories tweens the marks like a change of `y` (marks keyed by category, and by `id` in strips); with other categories it snaps.",
       "examples": ["data/estimates.csv"],
-      "x-transition": "snap"
+      "x-transition": "tween"
     },
     "x": {
       "type": "string",
@@ -50,7 +50,7 @@
         "x": { "type": "string", "description": "d3-format spec for category labels, applied when the category column is numeric (e.g. years).", "examples": ["d"] },
         "y": { "type": "string", "description": "d3-format spec for value labels, ticks and the interval text.", "examples": [",.1f", ".0%"] }
       },
-      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). Without `y`, ticks use a fixed precision from the tick step and value labels show the value as it is.",
+      "description": "Label formats (d3-format, localized by the deck language, so a Spanish deck gets the decimal comma). `y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data (every digit, with a thousands separator).",
       "examples": [{ "y": ",.1f" }],
       "x-transition": "snap"
     },
@@ -114,6 +114,7 @@
     },
     "summary": {
       "enum": ["median", "mean", "none"],
+      "default": "median",
       "description": "Strips: the summary tick across each strip, at the median (the default) or the mean of all its values; \"none\" draws no tick. `sort` ranks strips by it (by the median with \"none\"), and `sort: { by }` reduces that column the same way. A change fades the old tick out and the new one in.",
       "examples": ["mean"],
       "x-transition": "fade"

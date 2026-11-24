@@ -21,7 +21,7 @@ export { morph, entrance, undraw } from "./chart-motion.js";
  * Loads the rows of `props.data` and checks every column the props name. `columns` is
  * [[prop, column, optional]]: an optional column may be undefined. Throws the first problem:
  * "<name> needs a `data` path", "<data> is not a table", "<name> needs `<prop>` (a column name)",
- * "column 'c' not found in <data> (columns: …)".
+ * "column 'c' not found in <data> (columns: …)", or, for a table with no rows, "<data> has no rows".
  */
 export async function loadTable(props, ctx, name, columns) {
   if (typeof props.data !== "string" || props.data === "") throw new Error(`${name} needs a \`data\` path`);
@@ -31,7 +31,10 @@ export async function loadTable(props, ctx, name, columns) {
   for (const [prop, column, optional] of columns) {
     if (column === undefined && optional) continue;
     if (typeof column !== "string" || column === "") throw new Error(`${name} needs \`${prop}\` (a column name)`);
-    if (!have.includes(column)) throw new Error(`column '${column}' not found in ${props.data} (columns: ${have.join(", ")})`);
+    if (!have.includes(column)) {
+      if (rows.length === 0) throw new Error(`${props.data} has no rows`); // a header alone: its columns are not known here
+      throw new Error(`column '${column}' not found in ${props.data} (columns: ${have.join(", ")})`);
+    }
   }
   return rows;
 }

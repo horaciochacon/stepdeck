@@ -6,6 +6,32 @@ const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const missing = (v) => v == null || v === "" || (typeof v === "number" && !Number.isFinite(v));
 
 /**
+ * The d3-format spec of a value label without `format.y`: grouped, as precise as the data. Twelve significant digits
+ * keep every digit a table holds and drop the noise of binary fractions (0.1 + 0.2 reads 0.3).
+ */
+export const VALUE_SPEC = ",.12~r";
+
+/** The tick counts a value axis asks d3 for, in order, until the labels fit side by side (`ticksFit`). */
+export const TICK_COUNTS = [5, 3, 2];
+
+/**
+ * Whether the labels of `ticks` (`[{ value, label }]`, evenly spaced values) fit side by side along an axis `length`
+ * pixels long over `domain`: the widest label, `charW` a character, plus `gap`, is no wider than the distance between
+ * two ticks. Fewer than two ticks always fit. The widths come from character counts, never from measured text.
+ * @param {Array<{ value: number, label: string }>} ticks
+ * @param {[number, number]} domain
+ * @param {number} length
+ * @param {number} charW
+ * @param {number} gap
+ * @returns {boolean}
+ */
+export function ticksFit(ticks, domain, length, charW, gap) {
+  if (ticks.length < 2) return true;
+  const spacing = (length * Math.abs(ticks[1].value - ticks[0].value)) / Math.abs(domain[1] - domain[0]);
+  return Math.max(...ticks.map((k) => k.label.length)) * charW + gap <= spacing;
+}
+
+/**
  * The value `t` of the way from `a` to `b`: `a + (b - a) * t`, and exactly `b` when `t` is 1, so the last frame of a
  * played change writes the value a jump writes. When either end is missing (`null` or undefined) there is nothing
  * to blend: the result is `b`, so a mark that appears is drawn where it ends and one whose value goes missing has none.

@@ -416,8 +416,45 @@ test("duplicate categories and unknown category ids are element errors naming th
   });
 });
 
+// A negative bar's value label points away from zero, towards the category labels: it must not land on one.
+test("negative bars: no value label overprints a category label, horizontal or vertical", async () => {
+  const overlaps = (page) =>
+    page.evaluate(() => {
+      const el = document.querySelector('[data-el="bars"]');
+      const boxes = (sel) => [...el.querySelectorAll(sel)].filter((n) => getComputedStyle(n).visibility === "visible" && n.textContent).map((n) => ({ text: n.textContent, r: n.getBoundingClientRect() }));
+      const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      const found = [];
+      for (const v of boxes(".sd-bar-label")) for (const c of boxes(".sd-band-label")) if (hit(v.r, c.r)) found.push(`${v.text} on ${c.text}`);
+      return found;
+    });
+  await withPage({ root, url: pages.url("negative", "step=after") }, async (page, ctx) => {
+    for (const [slide, step] of [["negative", "after"], ["negative", "before"], ["sign-change", "before"], ["sign-change", "after"]]) {
+      await ctx.open(pages.url(slide, `step=${step}`));
+      assert.deepEqual(await overlaps(page), [], `${slide}/${step}`);
+    }
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "negative", steps: ["after", "before"], id: "bars" });
+  });
+});
+
+test("large values: labels keep every digit, and the tick labels of a horizontal axis never run into each other", async () => {
+  await withPage({ root, url: pages.url("large") }, async (page) => {
+    const got = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="bars"]');
+      const tickBoxes = [...el.querySelectorAll(".sd-axis-value .tick text")].map((n) => n.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      return {
+        labels: [...el.querySelectorAll(".sd-bar-label")].map((n) => n.textContent),
+        ticks: [...el.querySelectorAll(".sd-axis-value .tick text")].map((n) => n.textContent),
+        gaps: tickBoxes.slice(1).map((b, i) => b.left - tickBoxes[i].right),
+      };
+    });
+    assert.deepEqual(got.labels, ["12.345.678", "8.000.000", "1.234.567"], "es: every digit, grouped");
+    assert.ok(got.ticks.length >= 2 && got.ticks.length < 8, `fewer ticks than the 8 d3 gives: ${got.ticks.join(" ")}`);
+    assert.ok(got.gaps.every((g) => g > 4), `tick labels apart: ${got.gaps.map((g) => g.toFixed(1)).join(", ")} (${got.ticks.join(" ")})`);
+  });
+});
+
 test("check is clean on the bar slides", async () => {
-  for (const slide of ["shrink", "reveal", "interval", "vertical", "long", "decimal"]) {
+  for (const slide of ["shrink", "reveal", "interval", "vertical", "long", "decimal", "sign-change", "negative", "large"]) {
     const problems = await check(deck, { slide });
     assert.deepEqual(problems.map(formatProblem), [], slide);
   }

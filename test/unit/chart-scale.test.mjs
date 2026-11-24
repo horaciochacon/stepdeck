@@ -222,3 +222,12 @@ test("legend labels use the format", () => {
   assert.deepEqual(colorScale({ domain: [1, 1000], log: true }, palettes, { format }).legend.labels, ["1%", "1000%"], "log: the formatted values");
   assert.deepEqual(colorScale({ domain: [0, 80] }, palettes).legend.labels, ["0", "80"], "String by default");
 });
+
+test("colorScale: classes must be in increasing order, with no break twice", () => {
+  assert.throws(() => colorScale({ classes: [10, 5, 20] }, palettes), { message: "`classes` must be in increasing order (got 10, 5, 20)" });
+  assert.throws(() => colorScale({ classes: [5, 5, 20] }, palettes), { message: "`classes` must be in increasing order (got 5, 5, 20)" });
+  assert.throws(() => colorScale({ classes: [5, NaN] }, palettes), /`classes` must be in increasing order/);
+  assert.throws(() => colorScale({ classes: [20, 10], midpoint: 10 }, palettes), /increasing order/, "before the midpoint check");
+  assert.doesNotThrow(() => colorScale({ classes: [5] }, palettes));
+  assert.doesNotThrow(() => colorScale({ classes: [-1, 0, 0.5] }, palettes));
+});

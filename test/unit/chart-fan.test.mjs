@@ -106,3 +106,18 @@ test("loadDraws: the column checks of loadTable, on the draws file", async () =>
   const plain = { "d.csv": [{ year: 2000, rate: 1, draw: 1 }] };
   assert.equal((await loadDraws({ x: "year", y: "rate", draws: { data: "d.csv", id: "draw", shown: 1 } }, { data: async (p) => plain[p] })).length, 1);
 });
+
+test("fanModel: a file's draws are read once per columns; `draws.shown` is checked on every call", () => {
+  const rows = [row(2000, "north", 1, 1), row(2005, "north", 2, 1), row(2000, "north", 3, 2), row(2005, "north", 4, 2)];
+  const first = fanModel(rows, props(1), cols);
+  assert.equal(fanModel(rows, props(2), cols), first, "the same rows and columns: the kept model, whatever `shown`");
+  assert.throws(() => fanModel(rows, props(3), cols), /`draws\.shown` is 3 but data\/draws\.csv has only 2 draws/);
+  assert.equal(fanModel(rows, props(2), cols), first, "a failed `shown` does not drop it");
+  const other = fanModel(rows, props(1), { ...cols, y: "year" });
+  assert.notEqual(other, first, "another column is another model");
+  assert.deepEqual(other.bySeries.get("north").get("1"), [[2000, 2000], [2005, 2005]]);
+  assert.deepEqual(first.bySeries.get("north").get("1"), [[2000, 1], [2005, 2]], "and leaves the first as it was");
+  const copy = rows.map((r) => ({ ...r }));
+  assert.notEqual(fanModel(copy, props(1), cols), first, "other rows are read again");
+  assert.deepEqual(fanModel(copy, props(1), cols), first, "to the same model");
+});

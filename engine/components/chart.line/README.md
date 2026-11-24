@@ -6,8 +6,8 @@ annotations fade in, changing `y` morphs every line point by point, point marker
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
-| `data` | string | (required) | snap | CSV path relative to the deck root. |
-| `x` | string | (required) | snap | Numeric x column. |
+| `data` | string | (required) | tween | CSV path relative to the deck root. A change to another file morphs the lines like a change of `y` (points keyed by series and x). |
+| `x` | string | (required) | snap | Numeric x column (a year, a day number, any quantity): the x axis is linear. There is no date or category axis: a column with no numbers (dates such as `2020-01-01`, month names) is an element error, so add a numeric column. When every x is a whole number, so is every tick. |
 | `y` | string | (required) | tween | Numeric y column. A change morphs the lines (keyed by series and x) and rescales the y axis. |
 | `series` | string | none | snap | Column naming each row's series. Without it there is one line, keyed `all`. |
 | `series_shown` | string[] | all series | draw | Series to draw. Newly shown series draw along their length; removed ones fade out. |
@@ -15,7 +15,7 @@ annotations fade in, changing `y` morphs every line point by point, point marker
 | `annotate` | `{x, label}`[] | `[]` | fade | Vertical dashed rules with a label. |
 | `axes` | `{x?, y?}` | (required) | snap | Axis titles: x under the axis, y above the plot. |
 | `format` | `{x?, y?}` | step precision | snap | d3-format specs for tick labels, localized by the deck language. |
-| `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). |
+| `types` | `{column: type}` | guessed | snap | CSV column types for the loader (`string`, `number`, `date`). `x`, `y` and the interval columns must be numbers: a `date` column stays an ISO string, which the chart cannot place on an axis. |
 | `interval` | `{lower, upper}` | none | tween | Shaded band between two columns around each series. |
 | `points` | boolean | `false` | fade | A dot on every data point of every shown series; dots after `forecast.from` are hollow and slightly larger. |
 | `forecast` | `{from, label?}` | none | fade | From the x value `from` on, each line is dotted, its points hollow and its band lighter; the plot from there to its end is shaded, with a labelled divider (`label`, default the deck language's "Forecast"). |
@@ -35,8 +35,11 @@ Behaviour:
   series and x, ticks by value, annotations by x. With `info.animate` it interpolates from the
   previous state; all motion runs through `ctx.animate` bound to `info.signal`, so an aborted
   step snaps to its end state.
-- **Scales.** The y domain covers every series in the data (not only the shown ones) and includes 0,
-  so the axis does not jump when a series appears. It changes only when `y` changes.
+- **Scales.** The y domain covers every series in the data (not only the shown ones), its `interval` columns and
+  every draw a step of the slide can show, and always includes 0 (data that is all negative ends at 0), so the axis
+  does not jump when a series or the fan appears. It changes when `y`, `interval`, `draws` or `data` change, and then it
+  tweens. The x domain is the extent of the x column; when every x is a whole number the x ticks are whole numbers too
+  (no `2020.5`, and no year printed twice under `format.x: "d"`).
 - **Forecast and points.** `forecast.from` cuts every series at that x. When it falls between two data points the cut
   adds a boundary point (interpolated, including the band), shared by both parts, so the solid line ends exactly where
   the dotted one starts; a data point exactly at `from` is observed and is not drawn twice. Before the first x the whole
@@ -67,7 +70,9 @@ Behaviour:
   dark background) until it reaches the 4.5:1 that `check` requires. Neutral colors and text sizes come from theme tokens;
   tick, label and axis text use `--sd-font-size-label` (at least `--min-audience-font`).
 - **Errors.** A column that the data does not have fails the element with
-  `column '<name>' not found in <data> (columns: …)`, shown on the slide; so does a column the draws file lacks. A fan
+  `column '<name>' not found in <data> (columns: …)`, shown on the slide; so does a column the draws file lacks. An `x`
+  column with no numbers fails with ``chart.line needs a numeric `x`: column '<x>' of <data> has no numbers``, and a
+  file with a header and no rows with `<data> has no rows`. A fan
   fails with `` `draws.shown` is <n> but <data> has only <m> draws ``, `<data> has <m> draws (at most 2000)` or
   `<data> has <k> x values for series '<s>' (at most 500)`.
 - `anchor("series:<name>")` returns the canvas-pixel box `{x, y, w, h}` of a shown series, else `null`.

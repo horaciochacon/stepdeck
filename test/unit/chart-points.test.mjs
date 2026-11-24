@@ -443,3 +443,41 @@ test("focus unknown id errors", () => {
   assert.deepEqual(x1.rows.map((r) => r.points.filter((q) => q.focus).map((q) => q.id)), [["x1"], ["x1"], ["x1"]]);
   assert.ok(x1.rows.every((r) => r.points.every((q) => q.dim === (q.id !== "x1"))));
 });
+
+test("pointsModel: default value labels are as precise as the data, not rounded to 6 digits", () => {
+  const rows = [
+    { region: "A", rate: 1234567 }, { region: "B", rate: 12345678.9 }, { region: "C", rate: 0.1 + 0.2 },
+    { region: "D", rate: 2.5 }, { region: "E", rate: 0.123456789 },
+  ];
+  const m = pointsModel(rows, { data: "data/big.csv", x: "region", y: "rate" }, env());
+  assert.deepEqual(m.rows.map((r) => r.text), ["1,234,567", "12,345,678.9", "0.3", "2.5", "0.123456789"]);
+});
+
+test("pointsModel: tick labels too wide for their spacing are thinned; the domain and the plot's width per step stay", () => {
+  const rows = [{ region: "Alpha", value: 12345678, small: 3 }, { region: "Beta", value: 8000000, small: 2 }, { region: "Gamma", value: 1234567, small: 1 }];
+  const props = { data: "data/big.csv", x: "region", y: "value" };
+  const clear = (m) => {
+    const px = (v) => ((v - m.domain[0]) / (m.domain[1] - m.domain[0])) * m.pw;
+    for (let i = 1; i < m.ticks.length; i++) {
+      const [a, b] = [m.ticks[i - 1], m.ticks[i]];
+      const room = px(b.value) - px(a.value) - ((a.label.length + b.label.length) / 2) * m.charW;
+      assert.ok(room >= m.font * 0.5 - 1e-9, `'${a.label}' and '${b.label}' are ${room.toFixed(1)}px apart`);
+    }
+  };
+  const narrow = pointsModel(rows, props, env({ w: 900 }));
+  assert.deepEqual(narrow.domain, [0, 14000000], "the domain is the niced one, whatever the ticks");
+  assert.deepEqual(narrow.ticks.map((k) => k.value), [0, 5000000, 10000000]);
+  clear(narrow);
+  assert.equal(narrow.margin.left + narrow.pw + narrow.margin.right, 900);
+
+  const wide = pointsModel(rows, props, env({ w: 1900 }));
+  assert.equal(wide.ticks.length, 8, "with room, every tick stays");
+  clear(wide);
+
+  // Every step counts: the step that reads the small column lays out as the wide one does, so the plot keeps its size.
+  const steps = [props, { ...props, y: "small", domain: [0, 4] }];
+  const [a, b] = [pointsModel(rows, steps[0], env({ w: 900, stepProps: steps })), pointsModel(rows, steps[1], env({ w: 900, stepProps: steps }))];
+  assert.deepEqual(a.margin, b.margin);
+  clear(a);
+  clear(b);
+});

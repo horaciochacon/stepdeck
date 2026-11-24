@@ -9,5 +9,5 @@ export default {
   title: "Line story fixture",
   lang: "en",
   theme: "modern",
-  slides: ["forecast", "points", "forecast-early", "forecast-late", "sweep", "story", "clash", "fan", "fan-sweep", "single", "blank"],
+  slides: ["forecast", "points", "forecast-early", "forecast-late", "sweep", "story", "clash", "fan", "fan-sweep", "single", "blank", "below"],
 };

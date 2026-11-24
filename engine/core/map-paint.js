@@ -69,16 +69,16 @@ function dotPath(g, ratio, v, [cx, cy]) {
   return true;
 }
 
-/**
- * The hatch as a canvas pattern for a context drawn at `ratio`: a square tile of one period along the axes (the stripes
- * are `HATCH_PERIOD` apart across, so the tile is that times the square root of two), built from the two colours of
- * the scene. `at(scale, tx, ty)` is the pattern for a user space that is `scale` times the CSS pixels, moved by
- * (`tx`, `ty`): the tile is pinned to the canvas, so stripes keep their size and place when the view changes. Each
- * pattern is built once per call of `hatchPattern` and reused by every fill that has the same transform.
- */
-function hatchPattern(g, doc, { line, background }, ratio) {
-  const side = HATCH_PERIOD * Math.SQRT2;
-  const n = Math.max(1, Math.round(side * ratio));
+const tiles = new WeakMap(); // document -> Map("line|background|n" -> the tile canvas)
+/** The most tiles a document keeps: the two colours are the theme's, so a deck has one or two. */
+const TILES_MAX = 16;
+
+/** The hatch tile of `n` px for the two colours, drawn once per document and kept: every frame of a map paints with it. */
+function hatchTile(doc, line, background, n, side) {
+  let kept = tiles.get(doc);
+  if (!kept) tiles.set(doc, (kept = new Map()));
+  const key = `${line}|${background}|${n}`;
+  if (kept.has(key)) return kept.get(key);
   const tile = doc.createElement("canvas");
   tile.width = tile.height = n;
   const t = tile.getContext("2d");
@@ -92,6 +92,23 @@ function hatchPattern(g, doc, { line, background }, ratio) {
     t.lineTo(c + 2 * n, 2 * n);
   }
   t.stroke();
+  if (kept.size >= TILES_MAX) kept.clear();
+  kept.set(key, tile);
+  return tile;
+}
+
+/**
+ * The hatch as a canvas pattern for a context drawn at `ratio`: a square tile of one period along the axes (the stripes
+ * are `HATCH_PERIOD` apart across, so the tile is that times the square root of two), built from the two colours of
+ * the scene. `at(scale, tx, ty)` is the pattern for a user space that is `scale` times the CSS pixels, moved by
+ * (`tx`, `ty`): the tile is pinned to the canvas, so stripes keep their size and place when the view changes. The tile
+ * is drawn once (`hatchTile`); each pattern is built once per call of `hatchPattern` and reused by every fill that has
+ * the same transform.
+ */
+function hatchPattern(g, doc, { line, background }, ratio) {
+  const side = HATCH_PERIOD * Math.SQRT2;
+  const n = Math.max(1, Math.round(side * ratio));
+  const tile = hatchTile(doc, line, background, n, side);
   const made = new Map();
   return (scale, tx, ty) => {
     const key = `${scale}|${tx}|${ty}`;
@@ -235,8 +252,36 @@ function landMask([w, h], land, at) {
   const g = canvas.getContext("2d", { willReadFrequently: true });
   g.setTransform(at.k, 0, 0, at.k, at.x, at.y);
   g.fill(land);
-  const rgba = g.getImageData(0, 0, w, h).data;
-  return Uint8Array.from({ length: w * h }, (_, p) => (rgba[p * 4 + 3] >= LAND_COVER ? 1 : 0));
+  return coverMask(g.getImageData(0, 0, w, h).data, w * h);
+}
+
+/** 1 for each of the `n` pixels of `rgba` whose alpha is at least `LAND_COVER`, else 0. Exported for the tests. */
+export function coverMask(rgba, n) {
+  const mask = new Uint8Array(n);
+  for (let p = 0; p < n; p++) if (rgba[p * 4 + 3] >= LAND_COVER) mask[p] = 1;
+  return mask;
+}
+
+/**
+ * Writes the pixels of `rasterImage` into `out` (RGBA, clear to begin with), `w` pixels a row: the colour of each
+ * pixel's cell from `lutData`, or `stripe(x, y, out, at)` where there is no data on land. Exported for the tests.
+ */
+export function rasterPixels(out, w, table, grid, lutData, stripe, landCells, mask, clip) {
+  const { data, levels } = grid;
+  for (let p = 0; p < table.length; p++) {
+    const cell = table[p];
+    if (clip && cell >= 0 && !mask[p]) continue;
+    if (cell >= 0 && data[cell]) {
+      const from = levels[cell] * 4;
+      const at = p * 4;
+      out[at] = lutData[from];
+      out[at + 1] = lutData[from + 1];
+      out[at + 2] = lutData[from + 2];
+      out[at + 3] = lutData[from + 3];
+    } else if (stripe && (cell >= 0 ? landCells?.[cell] : mask?.[p])) {
+      stripe((p % w) + 0.5, Math.floor(p / w) + 0.5, out, p * 4);
+    }
+  }
 }
 
 /**
@@ -249,17 +294,7 @@ function landMask([w, h], land, at) {
 function rasterImage([w, h], table, grid, lutData, hatch, landCells, mask, clip) {
   if (table.length !== w * h) throw new Error(`paintRaster: the lookup table has ${table.length} cells, not ${w}×${h}`);
   const pixels = new ImageData(w, h);
-  const out = pixels.data;
-  const stripe = hatch ? hatchAt(hatch) : null;
-  for (let p = 0; p < table.length; p++) {
-    const cell = table[p];
-    if (clip && cell >= 0 && !mask[p]) continue;
-    if (cell >= 0 && grid.data[cell]) {
-      out.set(lutData.subarray(grid.levels[cell] * 4, grid.levels[cell] * 4 + 4), p * 4);
-    } else if (stripe && (cell >= 0 ? landCells?.[cell] : mask?.[p])) {
-      stripe((p % w) + 0.5, Math.floor(p / w) + 0.5, out, p * 4);
-    }
-  }
+  rasterPixels(pixels.data, w, table, grid, lutData, hatch ? hatchAt(hatch) : null, landCells, mask, clip);
   const image = scratchCanvas(w, h);
   image.getContext("2d").putImageData(pixels, 0, 0);
   return image;

@@ -48,6 +48,21 @@ export function loadDraws(props, ctx) {
  */
 export function fanModel(rows, props, { x, y, series }) {
   const { data, id, shown } = props.draws;
+  // The draws of a file are the same at every step that reads the same columns: kept per rows array (the loader
+  // gives one per file and types), so an update does not walk every row again. Nobody writes into a kept model.
+  const key = JSON.stringify([data, id, x, y, series ?? null]);
+  let kept = models.get(rows);
+  if (!kept) models.set(rows, (kept = new Map()));
+  if (!kept.has(key)) kept.set(key, readDraws(rows, { data, id }, { x, y, series })); // a file past its limits throws, and is read again
+  const model = kept.get(key);
+  if (shown > model.count) throw new Error(`\`draws.shown\` is ${shown} but ${data} has only ${model.count} draws`);
+  return model;
+}
+
+const models = new WeakMap(); // rows -> Map(columns key -> { ids, bySeries, count })
+
+/** The draws of `rows`, read once: `fanModel` without the `draws.shown` check. */
+function readDraws(rows, { data, id }, { x, y, series }) {
   const ids = [];
   const known = new Set();
   const bySeries = new Map();
@@ -73,6 +88,5 @@ export function fanModel(rows, props, { x, y, series }) {
     if (xs.size > FAN_MAX_X) throw new Error(`${data} has ${xs.size} x values for series '${name}' (at most ${FAN_MAX_X})`);
     for (const points of draws.values()) points.sort((a, b) => a[0] - b[0]);
   }
-  if (shown > ids.length) throw new Error(`\`draws.shown\` is ${shown} but ${data} has only ${ids.length} draws`);
   return { ids, bySeries, count: ids.length };
 }

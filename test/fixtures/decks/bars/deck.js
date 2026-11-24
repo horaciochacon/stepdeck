@@ -3,5 +3,5 @@ export default {
   title: "Bars fixture",
   lang: "es",
   theme: "academic-light",
-  slides: ["shrink", "reveal", "interval", "vertical", "long", "decimal", "sign-change", "missing-column"],
+  slides: ["shrink", "reveal", "interval", "vertical", "long", "decimal", "sign-change", "negative", "large", "missing-column"],
 };

@@ -286,7 +286,11 @@ async function decodeImage(url, name, first) {
   return { cols, rows, levels, data };
 }
 
-/** The decoders of the rasters `loadRaster` made: `rasterGaps` reads frames through them without touching a raster's own cache. */
+/**
+ * How `rasterGaps` reads the frames of a raster `loadRaster` made, without touching the raster's own cache: `held(i)` is
+ * the grid of a frame the raster holds decoded now (its place in the cache's order is left alone), `decode(i)` reads
+ * the image again.
+ */
 const decoders = new WeakMap();
 
 async function readRaster(path, ctx) {
@@ -350,7 +354,7 @@ async function readRaster(path, ctx) {
       return entry.grid;
     },
   };
-  decoders.set(raster, decode);
+  decoders.set(raster, { decode, held: (i) => cache.get(i)?.grid });
   return raster;
 }
 
@@ -419,6 +423,23 @@ export function lut(raster, colorOf) {
 }
 
 /** The polygons of `features` as ring lists, whatever each feature's geometry type. */
+/**
+ * The item of `items` with the largest `measure(item)`, the first of them when several tie, measuring each item once
+ * (a region of many islands asks for the projected area of each). Not part of `ctx.map`.
+ * @template T
+ * @param {T[]} items at least one
+ * @param {(item: T) => number} measure
+ * @returns {T}
+ */
+export function largestBy(items, measure) {
+  let [best, most] = [items[0], measure(items[0])];
+  for (let i = 1; i < items.length; i++) {
+    const size = measure(items[i]);
+    if (size > most) [best, most] = [items[i], size];
+  }
+  return best;
+}
+
 const polygonsOf = (features) => features.flatMap(({ geometry }) => (geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates));
 
 const landGrids = new WeakMap();
@@ -478,7 +499,8 @@ export function landCells({ bounds, size }, features) {
  * Whether some land has no data in `raster`: true when a land cell (see `landCells`) has no data in one of `frames`
  * (frame indexes; every frame by default), or when any of the land lies outside the raster's bounds. These are the
  * places a painter hatches, so a legend shows its "No data" row exactly when there is hatch to explain. A coastal cell
- * whose centre is in the sea is not a gap. Frames are decoded one at a time, apart from the raster's cache, and the
+ * whose centre is in the sea is not a gap. A frame the raster holds decoded is read from there; the others are decoded
+ * one at a time, apart from the raster's cache (which keeps its frames and their order either way), and the
  * search stops at the first gap; it costs a pass over each frame it looks at, so a caller keeps the answer. A map
  * that shows a few frames of a long time-lapse names them, rather than decoding them all.
  * @param {{ path: string, bounds: number[], size: [number, number], frames: any[] }} raster a raster from `loadRaster`
@@ -488,8 +510,8 @@ export function landCells({ bounds, size }, features) {
  * @throws {Error} `data/a.json: there is no frame 9` for an index outside the frames
  */
 export async function rasterGaps(raster, features, { frames } = {}) {
-  const decode = decoders.get(raster);
-  if (!decode) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
+  const reader = decoders.get(raster);
+  if (!reader) throw new Error("rasterGaps: the raster must be one `loadRaster` returned");
   const indexes = frames ?? raster.frames.map((_, i) => i);
   for (const i of indexes) {
     if (!Number.isInteger(i) || i < 0 || i >= raster.frames.length) throw new Error(`${raster.path}: there is no frame ${i}`);
@@ -509,7 +531,7 @@ export async function rasterGaps(raster, features, { frames } = {}) {
 
   const land = landCells(raster, features);
   for (const i of indexes) {
-    const { data } = await decode(i);
+    const { data } = reader.held(i) ?? await reader.decode(i); // a frame the raster holds is not fetched and decoded again
     for (let p = 0; p < data.length; p++) if (land[p] && !data[p]) return true;
   }
   return false;

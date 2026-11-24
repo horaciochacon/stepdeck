@@ -8,7 +8,7 @@ bars extend left and right of a centre rule, as in a population pyramid (see Bac
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
-| `data` | string | (required) | snap | CSV path relative to the deck root. One row per category; with `mode: "back-to-back"`, one row per category and group. |
+| `data` | string | (required) | tween | CSV path relative to the deck root. One row per category; with `mode: "back-to-back"`, one row per category and group. A change to another file with the same categories tweens the bars like a change of `y` (bars keyed by category); with other categories it snaps. |
 | `x` | string | (required) | snap | Category column. Its text labels the band. A category may appear in one row only, except in back-to-back, where it has one row per group. |
 | `y` | string | (required) | tween | Numeric value column. A change tweens every bar to its new length. |
 | `interval` | `{lower, upper}` | none | tween | Columns of a whisker at each bar's end (e.g. an uncertainty interval). Drawn after its bar. |
@@ -29,7 +29,7 @@ bars extend left and right of a centre rule, as in a population pyramid (see Bac
 Behaviour:
 - **Fixed value axis.** With `domain` the axis is exactly that. Without it the axis spans
   `[min(0, every y and interval value), max(...)]` over **every row** of the data, shown or not, rounded outward to
-  tick values. It moves only when `y`, `interval` or `domain` change, and then it tweens. (A waterfall's axis covers
+  tick values. It moves only when `y`, `interval`, `domain` or `data` change, and then it tweens. (A waterfall's axis covers
   its running totals instead: see Waterfall.) For "weeks shrinking to
   days", keep both durations in one unit in two columns, switch `y` between them and set `domain` so the shrink is visible.
 - **Sorting.** `sort` orders the bands (`rank` in `core/chart.js`): `"none"` keeps the data order; `"value"` runs by
@@ -120,15 +120,19 @@ Behaviour:
   - Motion goes through `ctx.animate.tween` bound to `info.signal`: an aborted step snaps to its end state.
 - **Idempotent.** Every `update` ends by writing the target state from props and rows alone; the component writes
   attributes only (never inline styles), so the markup after playing equals the markup after jumping.
-- **Labels.** Value labels sit past the bar's end (past the whisker when there is one). Without `format.y` they show
-  the value as it is, and ticks use a fixed precision from the tick step. Category labels sit on the band axis; long
+- **Labels.** Value labels sit past the bar's end (past the whisker when there is one); a negative bar's points the
+  other way (left, or down), into room kept between the plot and the category labels whenever the axis goes below
+  zero, so it never lands on a category label. Without `format.y` they show the value as it is (every digit of the
+  data, up to 12 significant ones, with a thousands separator: `1,234,567`, `0.3`), and ticks use a fixed precision
+  from the tick step. `format.y` formats the ticks and the value labels alike; omit it to get ticks at a fixed precision from the tick step (whole numbers for a whole step) with labels as precise as the data.
+  Tick labels on a horizontal value axis that would run into each other are thinned: fewer ticks (d3's for a count of 5, then 3, then 2) over the same domain, which never moves. Category labels sit on the band axis; long
   names wrap inside it. Everything is at least `--sd-min-audience-font` (it uses `--sd-font-size-label`). Margins come
   from character counts, not measured text; the room kept for value labels comes from the widest label over every
   numeric column but the category (and the domain ends), not from the current `y`, so switching `y` never resizes the plot.
-- **Colors.** Bars use the first color of `ctx.palette("categorical")` (a waterfall's, the diverging palette's roles; back-to-back, its first two). Dimmed bars use `--sd-color-dim` (`--sd-color-rule` in a
+- **Colors.** Bars use the first color of `ctx.palette("categorical")` (a waterfall's, the diverging palette's roles; back-to-back, its first two). Every plain bar takes one colour, the first colour of the theme's categorical palette (`--sd-color-accent` in a theme without one): there is no per-category colour option and no colour column. To single a bar out, use `highlight`, which dims the others; a waterfall colours by sign and back-to-back by group. Dimmed bars use `--sd-color-dim` (`--sd-color-rule` in a
   theme without it), dimmed labels `--sd-color-muted`; ink, grid and axis colors are theme tokens.
 - **Errors.** Each of these fails the element with a message that names it, shown on the slide: a column the data
-  lacks (`column '<name>' not found in <data> (columns: …)`), a category that appears in two rows, a category in
+  lacks (`column '<name>' not found in <data> (columns: …)`), a file with a header and no rows (`<data> has no rows`), a category that appears in two rows, a category in
   `shown`, `highlight` or a `sort` list that the data does not have, a `sort` column the data lacks, a `sort` of no
   valid form, a `domain` that is not `[min, max]` with min < max, an empty value in a waterfall, and a category named
   `__total` in a chart with a total. Back-to-back adds: `` `group` column '<g>' has <n> values (back-to-back needs

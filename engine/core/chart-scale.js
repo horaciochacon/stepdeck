@@ -83,6 +83,8 @@ export function colorScale(spec, palettes, { format = String } = {}) {
 
   if (spec.classes) {
     const breaks = spec.classes;
+    // Each break is the lower bound of a class: out of order, the classes and their legend labels mean nothing.
+    if (!breaks.every((v, i) => Number.isFinite(v) && (i === 0 || v > breaks[i - 1]))) throw new Error(`\`classes\` must be in increasing order (got ${breaks.join(", ")})`);
     const n = breaks.length + 1;
     let below;
     if (mid !== undefined) {

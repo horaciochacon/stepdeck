@@ -425,3 +425,33 @@ test("landCells: holes stay holes, polygons join, a raster reaching only part of
   assert.equal(rowsOf(grid([two])), ["00000111", "00000111", "00000111", "00000000", "00000000", "11100000", "11100000", "11100000"].join("\n"));
   assert.equal(rowsOf(grid([two], [0, 0, 4, 4])), ["00000000", "00000000", ...Array(6).fill("11111100")].join("\n"), "cells of half a degree over the first square only");
 });
+
+test("largestBy: the item a reduce over the measure picks (the first of a tie), measuring each item once", async () => {
+  const { largestBy } = await import("#engine/core/map.js");
+  let seed = 5;
+  const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32);
+  for (let k = 0; k < 200; k++) {
+    const items = Array.from({ length: 1 + Math.floor(rnd() * 12) }, (_, i) => ({ i, area: rnd() < 0.1 ? NaN : Math.floor(rnd() * 6) }));
+    let calls = 0;
+    const got = largestBy(items, (item) => { calls += 1; return item.area; });
+    assert.equal(got, items.reduce((a, b) => (b.area > a.area ? b : a)), `case ${k}`);
+    assert.equal(calls, items.length, "one measure per item");
+  }
+  assert.equal(mapKit.largestBy, undefined, "not part of ctx.map");
+});
+
+test("blend (components/map/colors.js): d3.interpolateRgb with the ends themselves, the same past the cache's bound", async () => {
+  const { blend } = await import("#engine/components/map/colors.js");
+  assert.equal(blend("#ff0000", "#0000ff", 0), "#ff0000");
+  assert.equal(blend("#ff0000", "#0000ff", 1), "#0000ff");
+  assert.equal(blend("red", "red", 0.5), "red");
+  const hex = (n) => `#${n.toString(16).padStart(6, "0")}`;
+  // 5,000 pairs, more than the cache keeps, each asked twice with the first pair asked again in between.
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < 5000; i++) {
+      const [a, b] = [hex(i * 3301), hex(0xffffff - i * 1777)];
+      assert.equal(blend(a, b, 0.3), d3.interpolateRgb(a, b)(0.3));
+      if (i % 997 === 0) assert.equal(blend("#ff0000", "#0000ff", 0.5), "rgb(128, 0, 128)");
+    }
+  }
+});
