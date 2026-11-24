@@ -43,7 +43,7 @@ jobs:
       - name: Site smoke test
         run: node --test test/browser/site.test.mjs
 
-  # The map writers users copy (R and NumPy; engine/components/map/writers). Their tests skip when R or NumPy is
+  # The map writers users copy (R and NumPy; docs/guide/maps/). Their tests skip when R or NumPy is
   # missing, as in the unit job, so this job installs both and fails if any test was skipped. A status check; it does
   # not gate the deploy.
   writers:
