@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "markdown",
-  "description": "Markdown text: paragraphs, headings, lists, emphasis, code and links. Raw HTML is shown as text, never run. {{color:<role>}} names a palette color in the deck language.",
+  "description": "Markdown text: paragraphs, headings, lists, task items, tables, rules, emphasis, code and links. Raw HTML is shown as text, never run. {{color:<role>}} names a palette color in the deck language.",
   "type": "object",
   "additionalProperties": false,
   "required": ["md"],

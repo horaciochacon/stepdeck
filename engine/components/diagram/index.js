@@ -360,7 +360,9 @@ export default {
       // band is reserved is structure, the same at every step of the slide.
       const compact = props.compact === true;
       const band = compact && [props, ...(ctx.stepProps ?? [])].some(captioned) ? legendH + compactPad : 0;
-      const next = JSON.stringify([w, h, props.cols, props.rows, props.nodes, props.edges ?? [], props.groups ?? [], compact, band]);
+      // Whether the element is laid out is part of the signature: a build while it is collapsed (display: none)
+      // measures no label, so the first update after it shows builds again.
+      const next = JSON.stringify([w, h, el.offsetWidth > 0, props.cols, props.rows, props.nodes, props.edges ?? [], props.groups ?? [], compact, band]);
       const kindColor = kindColors(props);
       const rebuilt = next !== signature;
       if (rebuilt) {
@@ -403,8 +405,9 @@ export default {
         // The previous state, read before it is overwritten (only when there is motion to play). A drawn
         // entrance builds from nothing: no part is shown yet.
         const paintOf = (p) => {
-          const cs = getComputedStyle(dimmable(p));
-          return { stroke: cs.stroke, fill: cs.fill, stripe: p.stripe ? getComputedStyle(p.stripe).fill : null, text: p.text ? getComputedStyle(p.text).color : null };
+          const computed = (node) => doc.defaultView.getComputedStyle(node);
+          const cs = computed(dimmable(p));
+          return { stroke: cs.stroke, fill: cs.fill, stripe: p.stripe ? computed(p.stripe).fill : null, text: p.text ? computed(p.text).color : null };
         };
         // How a part looks: dimmed, plain, or (a node of a highlighted compact diagram) lit.
         const lookOf = (p, dim) => (dim ? "dim" : p.kind === "node" && svg.dataset.compact === "true" && svg.dataset.highlight === "true" ? "lit" : "plain");

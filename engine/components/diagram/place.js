@@ -57,7 +57,7 @@
 //   The svg path data of a routed edge: the points joined by straight segments, each corner rounded by a
 //   quadratic curve of radius min(radius, half of each segment that meets there).
 //
-// diagramProblems(props, { gap, pad } = {}) -> [{ rule, id, message, limit, fix }]
+// diagramProblems(props, { gap, pad } = {}) -> [{ rule, id, message, limit, fix, severity? }]
 //   rule "diagram-id":      an id in edges (from, to), groups[].contains, shown or highlight that names
 //                           nothing; a duplicate id; a group that contains itself (a cycle).
 //   rule "diagram-overlap": sibling groups (same parent group, or both top-level) whose cell rectangles
@@ -65,8 +65,13 @@
 //                           rectangle (groups already in a sibling overlap are skipped); and gap < 2 x pad
 //                           when both numbers are given. With `props.compact` the fix names the compact
 //                           tokens instead.
-//   `id` is the offending id (null for the gap rule); `message` names it. `validate` maps each item to a
-//   Problem (measured = message) and the component throws on the first "diagram-id" item.
+//                           Also, with `severity: "warning"` on the item: two nodes that are not `text`
+//                           whose cell rectangles intersect (they are drawn over each other).
+//   rule "diagram-grid":    a node whose cells reach outside the grid (col + colspan > cols, or row + rowspan >
+//                           rows; cells are 0-based), when `cols` and `rows` are integers.
+//   `id` is the offending id (null for the gap rule); `message` names it. An item is an error unless it carries
+//   `severity: "warning"`. `validate` maps each item to a Problem (measured = message) and the component throws
+//   on the first "diagram-id" item.
 
 export const edgeId = (edge) => edge?.id ?? `${edge?.from}->${edge?.to}`;
 
@@ -397,6 +402,43 @@ export function diagramProblems(props, { gap, pad } = {}) {
 
   for (const key of ["shown", "highlight"]) {
     for (const id of list(props?.[key])) if (!all.has(id)) unknown(id, key, allText);
+  }
+
+  // Every node sits inside the grid: its cells end at or before `cols` and `rows` (cells are 0-based).
+  const [cols, rows] = [props?.cols, props?.rows];
+  if (Number.isInteger(cols) && Number.isInteger(rows)) {
+    for (const n of nodes) {
+      if (typeof n?.id !== "string") continue;
+      const c = cellsOf(n);
+      if (c.c0 >= 0 && c.r0 >= 0 && c.c1 <= cols && c.r1 <= rows) continue;
+      const spans = c.c1 - c.c0 > 1 || c.r1 - c.r0 > 1;
+      out.push({
+        rule: "diagram-grid",
+        id: n.id,
+        message: `node '${n.id}' at col ${c.c0}, row ${c.r0}${spans ? ` (spanning ${c.c1 - c.c0} x ${c.r1 - c.r0} cells)` : ""} is outside the ${cols} x ${rows} grid`,
+        limit: `col + colspan <= ${cols} and row + rowspan <= ${rows} (col and row are 0-based: 0 to ${cols - 1}, 0 to ${rows - 1})`,
+        fix: `move '${n.id}' into the grid, or raise \`cols\` or \`rows\``,
+      });
+    }
+  }
+
+  // Two drawn nodes in the same cells cover each other (a `text` node has no outline and may sit on another). A
+  // warning: it is sometimes meant.
+  const drawn = nodes.filter((n) => typeof n?.id === "string" && n.shape !== "text");
+  for (let i = 0; i < drawn.length; i++) {
+    for (let j = i + 1; j < drawn.length; j++) {
+      const [p, q] = [cellsOf(drawn[i]), cellsOf(drawn[j])];
+      if (!overlaps(p, q)) continue;
+      const [c0, r0] = [Math.max(p.c0, q.c0), Math.max(p.r0, q.r0)];
+      out.push({
+        rule: "diagram-overlap",
+        severity: "warning",
+        id: drawn[j].id,
+        message: `nodes '${drawn[i].id}' and '${drawn[j].id}' share a cell (col ${c0}, row ${r0})`,
+        limit: "one drawn node per cell (a `text` node may share one)",
+        fix: `move '${drawn[i].id}' or '${drawn[j].id}' to a free cell, or make one of them shape \"text\"`,
+      });
+    }
   }
 
   // Sibling groups must not share cells.

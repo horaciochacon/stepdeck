@@ -44,7 +44,7 @@
       "type": "string",
       "enum": ["horizontal"],
       "default": "horizontal",
-      "description": "The track's direction. Only `horizontal` is supported for now, so this prop changes nothing; it is accepted so a slide may state it.",
+      "description": "A one-value prop: `horizontal` is the only value, and there is no vertical timeline. Setting it changes nothing (the component never reads it), so leave it out; any other value is a validate error.",
       "examples": ["horizontal"],
       "x-transition": "snap"
     },

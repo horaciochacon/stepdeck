@@ -1,7 +1,8 @@
 # diagram
 
-Nodes, arrows and nested groups on an explicit grid, appearing by step. Labels are inline Markdown and wrap
-inside their node.
+Nodes, arrows and nested groups on an explicit grid, appearing by step. Labels are inline Markdown. A label wraps to its node's width; one with more lines than the cell holds overflows it
+downward (never shrunk or clipped). `card` fills its cell and reads from the back of the room; `box` and `pill`
+are label-sized.
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|
@@ -42,8 +43,7 @@ Behaviour:
 - **Cards and kinds.** A `card` is a rounded rectangle that is its cell (it is not sized to its label), with a
   stripe `--sd-diagram-stripe` wide (a grid unit) on its left edge, clipped to its corners. The label is
   left- and top-aligned at the note size in the strong weight, the sub under it at the label size in muted, both
-  inside the card padded by `--sd-diagram-pad`, with the stripe's width added on the left; a label too long for
-  its card overflows it, as elsewhere. A `kind` is any string: each distinct kind takes the next colour of
+  inside the card padded by `--sd-diagram-pad`, with the stripe's width added on the left. A `kind` is any string: each distinct kind takes the next colour of
   `ctx.palette("categorical")` in order of first appearance in `nodes`, whatever `shown` says, so every step
   agrees. It colours a card's stripe (ink without a kind) and the outline of a box, pill or circle; a `text` node
   ignores it. A dimmed node's stripe and outline turn `--sd-color-dim` with the rest of it. More kinds than the
@@ -107,13 +107,15 @@ Behaviour:
   and 0.25 × `--sd-space`. The gap must be at least twice the pad so neighbouring group boxes never touch;
   `validate` checks the theme's values, the compact pair for a compact diagram.
 - **Text.** Node labels are the note size, subs, edge labels and group labels the label size, all at least
-  `--sd-min-audience-font`. A label too long for its node is never shrunk: it overflows the node (no
-  clipping), so `check` reports it if it leaves the region. Labels that collide inside one diagram are not
+  `--sd-min-audience-font`. `check` reports an overflowing label only if it leaves the region. Labels that collide inside one diagram are not
   seen by `check` (it compares elements), so look at a screenshot.
 - **Errors.** An id in `edges`, `groups[].contains`, `shown` or `highlight` that names nothing, a duplicate
   id or a group that contains itself is an element error naming the id, and a `diagram-id` problem in
   `validate`. Sibling groups that share cells, and a gap below twice the pad, are `diagram-overlap`
   problems in `validate`, and so is a node sitting in a group's cells without being a member; the diagram
-  still renders. A `caption` without `compact: true` is a `diagram-caption-unused` warning.
+  still renders. A node whose cells reach outside the grid (`col + colspan` above `cols`, or
+  `row + rowspan` above `rows`; `col` and `row` are 0-based) is a `diagram-grid` problem, and two nodes
+  that are not `text` in the same cell are a `diagram-overlap` warning. A `caption` without
+  `compact: true` is a `diagram-caption-unused` warning.
 
 See `example.js` for a slide that uses it.

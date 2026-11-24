@@ -97,6 +97,7 @@
     },
     "compact": {
       "type": "boolean",
+      "default": false,
       "description": "Draw the same definition small, as a second view: shapes only, no label text, each shape filling its cell, inside the theme's second-view frame, with the compact gap and pad. `text` nodes and the edges that touch them are left out. Ids mean the same as in the full view, so `shown` and `highlight` read the same on both.",
       "examples": [true],
       "x-transition": "snap"

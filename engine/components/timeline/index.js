@@ -48,7 +48,7 @@ export default {
     const rule = num(T["--sd-rule-width"], 2);
 
     const svg = svgEl("svg", { class: "sd-timeline" }, el);
-    let signature = null; // what the current svg was built from: stops and width
+    let signature = null; // what the current svg was built from: stops, width and whether the element was laid out
     let parts = []; // [{ stop: circle, label: div, at }] in stop order
     let fill = null;
     let geometry = null; // { x0, length } the track
@@ -104,7 +104,9 @@ export default {
         if (current < 0) throw new Error(`timeline \`current\` names '${props.current}', which is not a stop id (${states.map((s) => `'${s.id}'`).join(", ")})`);
       }
       const w = measureWidth(el, ctx);
-      const next = JSON.stringify([w, states.map((s) => [s.id, s.label, s.sub ?? null, s.at])]);
+      // Whether the element is laid out is part of the signature: a build while it is collapsed (display: none)
+      // measures no label, so the first update after it shows builds again.
+      const next = JSON.stringify([w, el.offsetWidth > 0, states.map((s) => [s.id, s.label, s.sub ?? null, s.at])]);
       const rebuilt = next !== signature;
       if (rebuilt) {
         build(states, w);

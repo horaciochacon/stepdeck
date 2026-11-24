@@ -355,3 +355,21 @@ test("both themes declare the six motion tokens, with the stagger, enter and dis
     for (const [name, value] of Object.entries(expected)) assert.equal(tokens[name], value, `${theme} ${name}`);
   }
 });
+
+test("the body weight token is live: the canvas reads --sd-font-weight-body, and both themes keep it at 400", () => {
+  const core = readFileSync(new URL("../../engine/core/stepdeck.css", import.meta.url), "utf8");
+  const canvas = /\n\.sd-canvas \{([^}]*)\}/.exec(core)?.[1] ?? "";
+  assert.match(canvas, /font-weight:\s*var\(--sd-font-weight-body, 400\)/, "core's canvas rule sets the body weight from the token");
+  assert.equal(modern["--sd-font-weight-body"], "400");
+  assert.equal(academic["--sd-font-weight-body"], "400");
+});
+
+test("theme.css restates none of core's text-role rules: the lede and the badge come from core, fed by the tokens", () => {
+  const core = readFileSync(new URL("../../engine/core/stepdeck.css", import.meta.url), "utf8");
+  for (const role of ["lede", "badge"]) assert.ok(core.includes(`.sd-text.sd-role-${role}`), `core styles .sd-role-${role}`);
+  for (const [name, url] of [["modern", modernUrl], ["academic-light", academicUrl]]) {
+    const css = read(url, "theme.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(css, /\.sd-role-(lede|badge)/, `${name}/theme.css repeats a text-role rule`);
+  }
+  for (const t of [modern, academic]) for (const name of ["--sd-font-size-lede", "--sd-font-size-label", "--sd-font-weight-strong", "--sd-line-height-tight", "--sd-color-accent", "--sd-color-muted"]) assert.ok(t[name], `${name} is declared`);
+});

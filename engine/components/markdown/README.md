@@ -1,8 +1,11 @@
 # markdown
 
-Markdown text (paragraphs, headings, lists, emphasis, code, links, tables), rendered inside
+Markdown text (paragraphs, headings, lists, task items, emphasis, code, links, tables, rules), rendered inside
 `<div class="sd-markdown">`. Body text uses the theme tokens (`--sd-font-size-body`, 40px by default; code uses
-the label size, 28px).
+the label size, 28px). `#` is the title size; `##` to `######` are all one size (1.2 × the body size). A table is
+as wide as its content, with a rule under every row and a strong header; a column is left-aligned unless its
+delimiter row says `--:` (right) or `:-:` (centre). A task item (`- [ ]`, `- [x]`) shows an empty or a filled
+box in place of its bullet.
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|

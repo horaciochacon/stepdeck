@@ -3,11 +3,11 @@
 The plain alternative theme: restrained and academic. White canvas, near-black ink, one blue accent, a
 vermillion alert, hairline greys for rules. No gradients, shadows or decorative shapes; hierarchy
 comes from size, weight and the muted color. Sizes are set for the 1920×1080 canvas and for an
-audience that watches at roughly 1000–1300 px (spec §3): nothing on screen goes below 28px.
+audience that watches at roughly 1000–1300 px: nothing on screen goes below 28px.
 
 Files: `tokens.css` (custom properties and `@font-face`), `theme.css` (rules for the published hooks:
-today's title weight, a plain muted kicker, the muted subtitle, the message line (`.sd-role-lede`) and the
-badge pill (`.sd-role-badge`); loaded in the `sd-theme` cascade layer),
+today's title weight, a plain muted kicker and the muted subtitle; loaded in the `sd-theme` cascade layer; the
+message line (`.sd-role-lede`) and the badge pill (`.sd-role-badge`) are core's rules, fed by this theme's tokens),
 `palettes.json`, `fonts/` (vendored woff2).
 
 ## Tokens (`tokens.css`)
@@ -54,14 +54,14 @@ markdown element names the color the audience sees ("blue", "azul").
 | `--sd-font-size-kicker` | `28px` | The kicker. Optional: falls back to `--sd-font-size-label`. Same value as label here. |
 | `--sd-font-size-lede` | `32px` | The message line under a title (`role: "lede"`, the slide's `lede`). |
 | `--sd-font-size-source` | `28px` | Source lines (`role: "source"`). |
-| `--sd-font-weight-body` | `400` | Body weight. |
+| `--sd-font-weight-body` | `400` | Body weight: the canvas's `font-weight`, which all text inherits unless a rule sets its own. |
 | `--sd-font-weight-title` | `600` | Titles, big numbers. |
 | `--sd-font-weight-strong` | `600` | Bold inside text. |
 | `--sd-line-height` | `1.3` | Body leading. |
 | `--sd-line-height-tight` | `1.15` | Titles and headings. |
 | `--sd-letter-spacing-title` | `normal` | Title tracking. Optional: falls back to `normal`. |
 | `--sd-letter-spacing-cover` | `normal` | Cover title tracking. Optional: falls back to `normal`. |
-| `--sd-measure` | `34em` | Comfortable line length for long text. |
+| `--sd-measure` | `34em` | Reserved, unused: no rule of the engine reads it (text is as wide as its region). Declared so a deck's own `style` may use it as a line length (`max-width: var(--sd-measure)`). |
 
 ### Minimum audience font
 

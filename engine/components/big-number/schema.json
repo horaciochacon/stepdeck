@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "big-number",
-  "description": "One large figure with an optional label and 95% interval. A change of `value` counts up when the step animates. Bind `value` to a data file so no figure is typed by hand.",
+  "description": "One large figure with an optional label and 95% interval. A change of `value` counts up when the step animates. Bind `value` to a data file so no figure is typed by hand. It is left-aligned in every layout (the `statement` layout centres only text and markdown) and has no alignment prop: to centre it, set the slide's `style` to `[data-el=\"<id>\"] { text-align: center; }`.",
   "x-enter": "own",
   "type": "object",
   "additionalProperties": false,
@@ -19,9 +19,9 @@
     "format": {
       "type": "string",
       "minLength": 1,
-      "description": "d3-format specifier for the figure and the interval, localized by the deck language (decimal comma in `es`).",
+      "description": "d3-format specifier for the figure and the interval, localized by the deck language (decimal comma in `es`). A change fades the figure line (prefix, figure and suffix) in.",
       "examples": [",.0f", ".1%", "~s"],
-      "x-transition": "snap"
+      "x-transition": "fade"
     },
     "label": {
       "type": "string",
@@ -42,13 +42,13 @@
       "type": "string",
       "description": "Text before the figure, such as a currency sign. Not applied to the interval.",
       "examples": ["~"],
-      "x-transition": "snap"
+      "x-transition": "fade"
     },
     "suffix": {
       "type": "string",
       "description": "Text after the figure, such as a unit. Not applied to the interval.",
       "examples": [" %", " people"],
-      "x-transition": "snap"
+      "x-transition": "fade"
     }
   }
 }

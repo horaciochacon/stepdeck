@@ -7,7 +7,8 @@
 // A badge's `tone` picks its colour from the categorical palette (ctx.palette). The pill's border takes that
 // colour (inline `border-color`); the text takes it darkened (lightened on a dark background) until it reads at
 // 4.5:1 on the theme's --sd-color-background (inline `color`, textColor in core/color.js), so every tone passes
-// `check`. A change of tone while the badge is on screen fades both colours over the same time. Without a tone
+// `check`. A change of tone while the badge is on screen fades both colours over the same time; a change of
+// `role` or of `accent` alone never animates (the class, the colours and the phrase swap at once). Without a tone
 // the theme's accent colour applies to both (the theme draws the border in currentColor).
 // With `accent: true` (a slide title) the text's `*phrase*` renders as
 // <em class="sd-accent">phrase</em>, built from DOM nodes (never innerHTML). The engine escapes values from data
@@ -25,6 +26,8 @@ export default {
     const p = doc.createElement("p");
     el.appendChild(p);
     let shown = null; // key of what p holds
+    let shownText = null; // the `text` p was written from
+    let shownRole = null; // the role p carries
     let shownColor = null; // the palette colour p carries (null: the theme's own)
     const background = ctx.tokens?.["--sd-color-background"];
     /** A palette colour's inks: the border as it is, the text darkened to text contrast; null for the theme's own. */
@@ -36,7 +39,7 @@ export default {
       const parts = props.accent === true ? parseAccent(text) : [{ text, accent: false }];
       const tone = role === "badge" && Number.isInteger(props.tone) && props.tone >= 0 ? props.tone : null;
       const color = tone === null ? null : (ctx.palette?.("categorical")?.colors?.[tone] ?? null);
-      return { role, parts, color, key: JSON.stringify(parts) };
+      return { role, text, parts, color, key: JSON.stringify(parts) };
     };
     /** The text and border colours on screen for a palette colour, or for the theme's own (null). */
     const resolved = (color) => {
@@ -62,8 +65,10 @@ export default {
         p.style.borderColor = ink.border;
       }
     };
-    const write = ({ role, parts, key }) => {
+    const write = ({ role, text, parts, key }) => {
       p.className = `sd-text sd-role-${role}`;
+      shownRole = role;
+      shownText = text;
       if (key === shown) return;
       shown = key;
       p.replaceChildren(...parts.map((part) => {
@@ -80,10 +85,11 @@ export default {
     return {
       async update(props, info) {
         const next = read(props);
-        // Only a change of what shows, on an element that was already visible, crossfades.
+        // Only a change of `text`, on an element that was already visible, crossfades; `accent` alone swaps at
+        // once. Only a badge that stays a badge tweens its colours: a change of `role` swaps them with the class.
         const playing = info.animate && !info.entered && !info.signal?.aborted;
-        const crossfade = playing && next.key !== shown;
-        const recolor = playing && next.color !== shownColor;
+        const crossfade = playing && next.text !== shownText;
+        const recolor = playing && next.color !== shownColor && next.role === shownRole;
         try {
           if (crossfade || recolor) {
             // transition.duration is the whole crossfade; without it each half is the theme's fast duration.
@@ -93,6 +99,7 @@ export default {
             const fade = async () => {
               await ctx.animate.tween(1, 0, (v) => (p.style.opacity = String(v)), opts);
               write(next);
+              if (!recolor) paint(next.color); // colours that are not tweened swap with the text
               await ctx.animate.tween(0, 1, (v) => (p.style.opacity = String(v)), opts);
             };
             // The colours move over the whole crossfade, or over one fast duration when only the colour changes.

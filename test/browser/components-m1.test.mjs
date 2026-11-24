@@ -4,7 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { withPage } from "../../cli/browser.js";
-import { checkPlayed } from "../../cli/check.js";
+import { check, checkPlayed } from "../../cli/check.js";
+import { formatProblem } from "../../cli/problems.js";
 import { deckPages, elementHtml, htmlAfterJump, expectJumpEqualsPlayed, expectInterruptEqualsJump, sampleFrames } from "./helpers.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -104,6 +105,46 @@ test("markdown text is theme-sized (>= 28px) and appears with the step", async (
     await goTo(page, "md", "more");
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('[data-el="more"]')).visibility), "visible");
   });
+});
+
+test("markdown tables, small headings, rules and task items are styled from the tokens; check is clean", async () => {
+  await withPage({ root, url: url("mdblocks", "") }, async (page) => {
+    const r = await page.evaluate(() => {
+      const css = (sel) => getComputedStyle(document.querySelector(sel));
+      const px = (v) => parseFloat(v);
+      const canvas = getComputedStyle(document.querySelector(".sd-canvas"));
+      const token = (name) => canvas.getPropertyValue(name).trim();
+      const [th, right, center] = [...document.querySelectorAll('[data-el="table"] th')].map((e) => getComputedStyle(e));
+      const td = css('[data-el="table"] td');
+      const table = document.querySelector('[data-el="table"] table');
+      const box = css('[data-el="small"] li input');
+      const items = [...document.querySelectorAll('[data-el="small"] li')];
+      return {
+        space: px(token("--sd-space")), rule: px(token("--sd-rule-width")), min: px(token("--sd-min-audience-font")), body: px(token("--sd-font-size-body")),
+        pad: [px(td.paddingLeft), px(td.paddingTop)], border: px(td.borderBottomWidth), collapse: css('[data-el="table"] table').borderCollapse,
+        align: [th.textAlign, right.textAlign, center.textAlign], weight: Number(th.fontWeight),
+        tableGap: document.querySelector('[data-el="table"] p').getBoundingClientRect().top - table.getBoundingClientRect().bottom,
+        headings: ["h5", "h6"].map((h) => px(css(`[data-el="small"] ${h}`).fontSize)),
+        hr: [px(css('[data-el="table"] hr').borderTopWidth), px(css('[data-el="table"] hr').marginBottom), css('[data-el="table"] hr').borderTopStyle],
+        bullets: items.map((li) => getComputedStyle(li).listStyleType),
+        box: [px(box.width), px(box.height), box.appearance],
+      };
+    });
+    assert.deepEqual(r.pad, [r.space, r.space / 4], "cells are padded, so they never touch");
+    assert.equal(r.border, r.rule, "a rule under every row");
+    assert.equal(r.collapse, "collapse");
+    assert.deepEqual(r.align, ["left", "right", "center"], "a column keeps the alignment its Markdown gave it");
+    assert.ok(r.weight >= 600, `the header is strong (${r.weight})`);
+    assert.ok(Math.abs(r.tableGap - r.space) < 1, `a table is followed by one --sd-space (${r.tableGap})`);
+    assert.ok(r.headings.every((s) => s >= r.min && s === r.body * 1.2), `h5 and h6 are the heading size (${r.headings})`);
+    assert.deepEqual(r.hr, [r.rule, r.space, "solid"]);
+    assert.deepEqual(r.bullets, ["none", "none", "disc"], "a task item has no bullet; a plain item keeps its own");
+    assert.ok(r.box[0] >= 20 && r.box[0] === r.box[1] && r.box[2] === "none", `the task box is sized with the text, not the browser's control (${r.box})`);
+  });
+  for (const theme of ["academic-light", "modern"]) {
+    const problems = await check(fixture, { slide: "mdblocks", theme });
+    assert.deepEqual(problems, [], problems.map(formatProblem).join("\n"));
+  }
 });
 
 test("markdown: played equals jumped (check --played, fade leaves no residue)", async () => {

@@ -1,5 +1,7 @@
 // Example slide for __NAME__: `stage` advances one item per step. To try it, copy this file to
 // slides/__ID__.js and add "__ID__" to `slides` in deck.js, then run the CLI's `check --played` on the deck.
+// In `full-bleed` a deck component is only as tall as its content; to make it fill, use a region with the
+// only-child rule (`main` of `figure-notes`, a `halves` half) or give the element a `box`.
 export default {
   id: "__ID__",
   layout: "full-bleed",

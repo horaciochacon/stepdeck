@@ -126,3 +126,22 @@ test("text: played equals jumped, and an interrupted crossfade lands on the fina
     await clean(page, ctx);
   });
 });
+
+test("a change of `accent` alone, or of `role` alone, swaps at once: no crossfade, no colour tween", async () => {
+  await withPage({ root, url: pages.url("words", "step=slow&motion=full") }, async (page, ctx) => {
+    const { frames, end } = await playSampled(page, "plain", ["mark", "tag"]);
+    const mark = frames.map((f) => f[0]);
+    assert.ok(mark.every((f) => f.opacity === 1 && f.inline === null), `the paragraph never fades (${mark.map((f) => f.opacity).slice(0, 12)})`);
+    assert.equal(end[0].text, "The *marked* words", "without accent the asterisks show as written");
+    // The badge keeps its tone's two colours until its role changes, then has none: nothing in between.
+    const tag = frames.map((f) => f[1]);
+    const inlines = [...new Set(tag.map((f) => f.inline))];
+    assert.ok(inlines.length <= 2 && inlines.at(-1) === null, `the colours are never tweened (${JSON.stringify(inlines.slice(0, 4))})`);
+    assert.ok(tag.every((f) => f.opacity === 1));
+    assert.equal(end[1].inline, null);
+    await clean(page, ctx);
+  });
+  await withPage({ root, url: pages.url("words", "step=start") }, async (page, ctx) => {
+    for (const id of ["mark", "tag"]) await expectJumpEqualsPlayed(ctx, page, { pages, slide: "words", steps: ["slow", "plain"], id });
+  });
+});

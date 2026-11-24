@@ -230,7 +230,7 @@ test("sibling overlap", () => {
     cols: 2,
     rows: 2,
     nodes: [
-      { id: "a", label: "A", shape: "box", col: 0, row: 0 },
+      { id: "a", label: "A", shape: "box", col: 1, row: 0 },
       { id: "b", label: "B", shape: "box", col: 0, row: 0 },
       { id: "c", label: "C", shape: "box", col: 1, row: 1 },
     ],
@@ -562,4 +562,23 @@ test("routePath: straight segments with rounded corners, radius capped at half a
   // A zero-length segment (a self-loop's run) leaves its corners square, with no NaN.
   assert.equal(routePath([[5, 10], [5, 2], [5, 2], [5, 10]], 8), "M5,10 L5,2 L5,2 L5,10");
   assert.equal(routePath([[0.123456, 1], [2, 1]], 8), "M0.12,1 L2,1", "coordinates are written to a hundredth");
+});
+
+test("a node outside the grid is a diagram-grid problem naming it; the last cell is cols - 1, rows - 1", () => {
+  const node = (id, col, row, extra = {}) => ({ id, label: id, shape: "box", col, row, ...extra });
+  const inside = { cols: 3, rows: 1, nodes: [node("a", 0, 0), node("b", 2, 0), node("wide", 1, 0, { shape: "text", colspan: 2 })] };
+  assert.deepEqual(diagramProblems(inside), []);
+  const p = diagramProblems({ cols: 3, rows: 1, nodes: [node("a", 0, 0), node("off", 3, 0), node("low", 1, 1), node("span", 2, 0, { shape: "text", colspan: 2 })] });
+  assert.deepEqual(p.map((x) => [x.rule, x.id, x.severity]), [["diagram-grid", "off", undefined], ["diagram-grid", "low", undefined], ["diagram-grid", "span", undefined]]);
+  assert.match(p[0].message, /^node 'off' at col 3, row 0 is outside the 3 x 1 grid$/);
+  assert.match(p[0].limit, /0-based: 0 to 2, 0 to 0/);
+  assert.match(p[2].message, /spanning 2 x 1 cells/);
+});
+
+test("two drawn nodes in one cell are a diagram-overlap warning; a text node may share a cell", () => {
+  const node = (id, shape, col, extra = {}) => ({ id, label: id, shape, col, row: 0, ...extra });
+  const p = diagramProblems({ cols: 3, rows: 1, nodes: [node("a", "box", 0), node("b", "pill", 0), node("note", "text", 0), node("c", "card", 1, { colspan: 2 }), node("d", "circle", 2)] });
+  assert.deepEqual(p.map((x) => [x.rule, x.severity, x.id]), [["diagram-overlap", "warning", "b"], ["diagram-overlap", "warning", "d"]]);
+  assert.equal(p[0].message, "nodes 'a' and 'b' share a cell (col 0, row 0)");
+  assert.equal(p[1].message, "nodes 'c' and 'd' share a cell (col 2, row 0)");
 });

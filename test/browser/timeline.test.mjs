@@ -355,3 +355,17 @@ test("the start state is written before update awaits; a shown element without a
     assert.ok(r.elapsed >= 570 && r.elapsed < 3000, `the fill takes the theme's --sd-duration, 600 ms (${r.elapsed.toFixed(0)} ms)`);
   });
 });
+
+test("a collapsed timeline whose stops change before it shows is measured when it shows: jump equals played", async () => {
+  await withPage({ root, url: pages.url("collapsed", "step=start") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "collapsed", steps: ["start", "rename", "show"], id: "tl" });
+    const r = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="tl"]');
+      const label = el.querySelector(".sd-timeline-label").getBoundingClientRect();
+      const after = document.querySelector('[data-el="after"]').getBoundingClientRect();
+      return { fo: Number(el.querySelector(".sd-timeline-label-box").getAttribute("height")), labelBottom: label.bottom, afterTop: after.top };
+    });
+    assert.ok(r.fo > 1, `the label boxes have their measured height (${r.fo})`);
+    assert.ok(r.labelBottom <= r.afterTop + 0.5, `the labels end above the next element (${JSON.stringify(r)})`);
+  });
+});

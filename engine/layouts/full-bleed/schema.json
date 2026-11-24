@@ -2,7 +2,7 @@
   "name": "full-bleed",
   "description": "One main region filling the canvas, with an optional title band on top.",
   "regions": [
-    { "name": "title", "description": "Optional title band; collapses to zero height when the slide has no title." },
+    { "name": "title", "description": "Optional title band. Without a title it holds no text but keeps its top padding (the canvas margin, 96px), so the first element in `main` starts at y = 120, not at the canvas edge." },
     { "name": "main", "description": "Everything else: elements stack vertically in the order listed." }
   ],
   "variables": [

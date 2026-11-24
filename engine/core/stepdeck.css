@@ -30,6 +30,7 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
   color: var(--sd-color-ink);
   font-family: var(--sd-font-body);
   font-size: var(--sd-font-size-body);
+  font-weight: var(--sd-font-weight-body, 400);
   line-height: var(--sd-line-height);
 }
 .sd-canvas *, .sd-canvas *::before, .sd-canvas *::after { box-sizing: border-box; }
@@ -49,6 +50,9 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
    important declaration in an earlier layer beats every later layer, so no theme.css, layout or slide
    rule can show a hidden element (or hide a failed one). */
 .sd-el.sd-hidden { visibility: hidden !important; }
+/* Its descendants too: a child that sets `visibility: visible` would otherwise show through (visibility is inherited,
+   not enforced). The ghost placeholder and a failed element's error stay visible. */
+.sd-el.sd-hidden:not(.sd-failed) :not(.sd-ghost, .sd-ghost *) { visibility: hidden !important; }
 .sd-el.sd-collapsed { display: none !important; }
 
 /* Ghost placeholder (an element's `ghost`): while its element is hidden, a dashed frame over the element's box
@@ -116,11 +120,36 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 .sd-markdown > :first-child { margin-top: 0; }
 .sd-markdown > :last-child { margin-bottom: 0; }
 .sd-markdown p, .sd-markdown ul, .sd-markdown ol, .sd-markdown blockquote, .sd-markdown pre { margin: 0 0 var(--sd-space); }
-.sd-markdown h1, .sd-markdown h2, .sd-markdown h3, .sd-markdown h4 { margin: 0 0 var(--sd-space); font-weight: var(--sd-font-weight-title); line-height: 1.15; }
+.sd-markdown h1, .sd-markdown h2, .sd-markdown h3, .sd-markdown h4, .sd-markdown h5, .sd-markdown h6 { margin: 0 0 var(--sd-space); font-weight: var(--sd-font-weight-title); line-height: var(--sd-line-height-tight); }
 .sd-markdown h1 { font-size: var(--sd-font-size-title); }
-.sd-markdown h2, .sd-markdown h3, .sd-markdown h4 { font-size: calc(var(--sd-font-size-body) * 1.2); }
+/* Every heading below h1 is one size: a slide has no room for six levels, and none may go under the audience minimum. */
+.sd-markdown h2, .sd-markdown h3, .sd-markdown h4, .sd-markdown h5, .sd-markdown h6 { font-size: calc(var(--sd-font-size-body) * 1.2); }
 .sd-markdown ul, .sd-markdown ol { padding-left: 1.2em; }
 .sd-markdown li { margin-bottom: calc(var(--sd-space) / 2); }
+/* A task item (`- [ ] …`): no bullet; its box sits in the list's 1.2em indent (0.7em, a 0.25em margin and the
+   space that follows it), drawn from the tokens rather than as the browser's control: empty when open, filled
+   when done. */
+.sd-markdown li:has(> input[type="checkbox"]), .sd-markdown li:has(> p:first-child > input[type="checkbox"]) { list-style: none; }
+.sd-markdown li input[type="checkbox"] {
+  appearance: none;
+  box-sizing: border-box;
+  font: inherit; /* so its em is the text's */
+  width: 0.7em;
+  height: 0.7em;
+  margin: 0 0.25em 0 -1.2em;
+  vertical-align: baseline;
+  border: var(--sd-rule-width) solid var(--sd-color-muted);
+  border-radius: calc(var(--sd-grid) / 2);
+}
+.sd-markdown li input[type="checkbox"]:checked { border-color: var(--sd-color-accent); background: var(--sd-color-accent); box-shadow: inset 0 0 0 var(--sd-rule-width) var(--sd-color-background); }
+/* A table: as wide as its content, a rule under every row, the header in the strong weight. A column's alignment
+   comes from the Markdown (`:--`, `--:`, `:-:`, written by the renderer as an align attribute). */
+.sd-markdown table { border-collapse: collapse; margin: 0 0 var(--sd-space); }
+.sd-markdown th, .sd-markdown td { padding: calc(var(--sd-space) / 4) var(--sd-space); text-align: left; border-bottom: var(--sd-rule-width) solid var(--sd-color-rule); }
+.sd-markdown th { font-weight: var(--sd-font-weight-strong, 600); }
+.sd-markdown th[align="right"], .sd-markdown td[align="right"] { text-align: right; }
+.sd-markdown th[align="center"], .sd-markdown td[align="center"] { text-align: center; }
+.sd-markdown hr { margin: 0 0 var(--sd-space); border: 0; border-top: var(--sd-rule-width) solid var(--sd-color-rule); }
 /* Inline Markdown (core/inline.js) in every component that shows author text. */
 .sd-markdown code, .sd-list-text code, .sd-list-sub code, .sd-chat-text code { font-family: var(--sd-font-mono); font-size: var(--sd-font-size-label); background: var(--sd-color-surface); padding: 0 0.2em; border-radius: 4px; }
 .sd-diagram code, .sd-timeline code, .sd-image-caption code { font-family: var(--sd-font-mono); }
@@ -132,7 +161,7 @@ body { overflow: hidden; background: var(--sd-color-letterbox, var(--sd-color-ba
 
 /* big-number: the figure in the display size, label and interval in the note size. */
 .sd-big-number-value { font-size: var(--sd-font-size-display); font-weight: var(--sd-font-weight-title); line-height: var(--sd-line-height-tight); font-variant-numeric: tabular-nums; color: var(--sd-color-accent); }
-.sd-big-number-suffix { font-size: 0.4em; font-weight: 500; }
+.sd-big-number-suffix { font-size: 0.4em; font-weight: 500; letter-spacing: normal; }
 .sd-big-number-label, .sd-big-number-ci { margin: 0; font-size: var(--sd-font-size-note); line-height: var(--sd-line-height); }
 .sd-big-number-label { margin-top: calc(var(--sd-space) / 2); color: var(--sd-color-ink); }
 .sd-big-number-ci { color: var(--sd-color-muted); }

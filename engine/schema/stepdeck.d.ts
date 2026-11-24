@@ -30,6 +30,7 @@ export type MotionName = "fade" | "rise" | "wipe" | "pop" | "draw" | "none";
 export type EnterExit = MotionName | { motion: MotionName; delay?: number; duration?: number };
 
 export interface DeckSpec {
+  /** The deck title: the browser tab title once the deck has loaded. */
   title: string;
   /** Deck language; engine strings and number formats follow it. Built in: "en", "es". */
   lang?: string;
@@ -37,7 +38,7 @@ export interface DeckSpec {
   theme?: string;
   /** Palette name; must belong to the theme's validated set. */
   palette?: string;
-  /** "Section · n" footer. */
+  /** Reserved; draws nothing. */
   sections?: boolean;
   /** Deck components, in components/<name>/ (index.js + schema.json). Names may contain dots. */
   components?: string[];
@@ -158,6 +159,11 @@ export interface ComponentSchema {
   $schema?: string;
   title: string;
   description: string;
+  /**
+   * Who plays the element's entrance: "own" (the component builds itself; see UpdateInfo.entrance) or "box" (the
+   * engine moves the element's box). Absent means "box".
+   */
+  "x-enter"?: "own" | "box";
   type: "object";
   additionalProperties?: boolean;
   required?: string[];
@@ -239,7 +245,8 @@ export interface UpdateInfo<P extends Props = Props> {
   animate: boolean;
   /** Aborted when a newer navigation supersedes this one: snap to the end state. Shared by the step's elements. */
   signal: AbortSignal;
-  transition?: Transition;
+  /** The step's `transition`, as written in the slide; null when the step has none. Always present. */
+  transition: Transition | null;
   /**
    * Set only for a component whose schema.json declares `"x-enter": "own"`, in the update where its element
    * becomes visible on an animating step (the engine has already held it to its stagger slot); null otherwise.
@@ -805,7 +812,10 @@ export interface Stepdeck {
   readonly errors: string[];
   /** Resolves when navigation and every update finished; never rejects. */
   settled(): Promise<void>;
-  /** Same-slide steps go straight to the controller (abort the running one); slide changes queue. Never rejects. */
+  /**
+   * Same-slide steps go straight to the controller (abort the running one); slide changes queue. Never rejects.
+   * `step` is a step id or a 0-based index; an all-digit string is the step index.
+   */
   goTo(slide: string, step?: StepRef): Promise<void>;
   state(): SlideState | null;
   readonly flags: StepdeckFlags;

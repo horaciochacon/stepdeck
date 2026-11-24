@@ -29,6 +29,8 @@ Behaviour:
   state is always the full text.
 - **Idempotent.** Every `update` writes the state straight from the props first and removes the inline styles the
   motion used, so the markup after playing equals the markup after jumping. An interrupted step snaps to its end.
+- **No colour words.** `{{color:<role>}}` is resolved only by the `markdown` component; in a message's `text` it
+  shows as written. Use a `markdown` element to name a palette colour.
 - **Layout.** Long messages wrap inside the box. Text is the body size and `label` the label size, both at least
   `--sd-min-audience-font` (28 px); colors and borders come from theme tokens.
 

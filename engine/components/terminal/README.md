@@ -1,7 +1,9 @@
 # terminal
 
-A terminal window that replays a recorded agent session: a typed command, an activity log, a task
-list and a file list. It carries no product names or logos; the title bar shows only the script's `title`.
+A terminal window that replays a recorded shell or agent session: a typed command, an activity log, a task
+list and a file list. `tasks` is optional. The side panel (520px wide, with its "Tasks" and "Files" headings) stays
+even when both lists are empty; a slide `style` of `.sd-terminal-side { display: none; }` hides it. Log lines and
+the command never wrap: long text is cut with an ellipsis. It carries no product names or logos; the title bar shows only the script's `title`.
 
 | Prop | Type | Default | Transition | Meaning |
 |---|---|---|---|---|

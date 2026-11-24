@@ -1,6 +1,6 @@
 # modern
 
-A neutral modern theme: Geist and Geist Mono, a deep blue accent, a rose alert, near-black titles with tight tracking, and a large cover title. White canvas, zinc greys for secondary text and rules. Colour and type carry the identity: no gradients, shadows or decorative shapes. Sizes are set for the 1920×1080 canvas and for an audience that watches at roughly 1000–1300 px (spec §3): nothing on screen goes below 28px.
+A neutral modern theme: Geist and Geist Mono, a deep blue accent, a rose alert, near-black titles with tight tracking, and a large cover title. White canvas, zinc greys for secondary text and rules. Colour and type carry the identity: no gradients, shadows or decorative shapes. Sizes are set for the 1920×1080 canvas and for an audience that watches at roughly 1000–1300 px: nothing on screen goes below 28px.
 
 Files: `tokens.css` (custom properties and `@font-face`), `theme.css` (hook rules, in the `sd-theme`
 cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff2).
@@ -46,16 +46,21 @@ cascade layer; see "Hook rules" below), `palettes.json`, `fonts/` (vendored woff
 | `--sd-font-size-kicker` | `28px` | The kicker. Optional: falls back to `--sd-font-size-label`. |
 | `--sd-font-size-lede` | `36px` | The message line under a title (`role: "lede"`, the slide's `lede`). |
 | `--sd-font-size-source` | `28px` | Source lines. |
-| `--sd-font-weight-body` | `400` | Body weight. |
+| `--sd-font-weight-body` | `400` | Body weight: the canvas's `font-weight`, which all text inherits unless a rule sets its own. |
 | `--sd-font-weight-title` | `600` | Titles, big numbers. |
 | `--sd-font-weight-strong` | `600` | Bold inside text. |
 | `--sd-line-height` | `1.3` | Body leading. |
 | `--sd-line-height-tight` | `1.15` | Titles and headings. |
 | `--sd-letter-spacing-title` | `-0.03em` | Title tracking. Optional: falls back to `normal`. |
 | `--sd-letter-spacing-cover` | `-0.05em` | Cover title tracking. Optional: falls back to `normal`. |
-| `--sd-measure` | `34em` | Comfortable line length for long text. |
+| `--sd-measure` | `34em` | Reserved, unused: no rule of the engine reads it (text is as wide as its region). Declared so a deck's own `style` may use it as a line length (`max-width: var(--sd-measure)`). |
 
 The minimum audience font, spacing and canvas tokens are the same as in `academic-light` (`--min-audience-font: 28px` with its alias, `--sd-grid`, `--sd-space`, `--sd-region-gap`, `--sd-canvas-margin`, `--sd-rule-width`, `--sd-diagram-gap`, `--sd-diagram-pad`, `--sd-diagram-stripe`, `--sd-diagram-compact-gap`, `--sd-diagram-compact-pad`) and so are the second-view tokens (`--sd-inset-stroke`, `--sd-inset-stroke-width`, `--sd-inset-fill`, `--sd-inset-radius`, `--sd-compact-tint`) and the period of a flowing edge (`--sd-flow-period`, in the Motion table below). See that README for the table.
+
+| Token | Value | Meaning |
+|---|---|---|
+| `--min-audience-font` | `28px` | Spec name (§7), enforced by `stepdeck check`. Edit this one. |
+| `--sd-min-audience-font` | `var(--min-audience-font)` | An alias under the theme prefix (used by error boxes and read by `check`). |
 
 ### Motion
 
@@ -99,14 +104,17 @@ cover's author line.
 
 | Selector | What it does |
 |---|---|
-| `.sd-title :is(.sd-text, .sd-markdown)` | Title weight (`--sd-font-weight-title`), tracking (`--sd-letter-spacing-title`) and colour (`--sd-color-title`). A markdown title gets the same type as a text title. |
-| `[data-kind="cover"] .sd-title :is(.sd-text, .sd-markdown)` | Cover tracking (`--sd-letter-spacing-cover`). The size is not set here: core picks `--sd-font-size-cover`, or `--sd-font-size-cover-figure` when the `figure` region holds an element, and a `font-size` in theme.css would override both. |
+| `.sd-title` | Title weight (`--sd-font-weight-title`), tracking (`--sd-letter-spacing-title`) and colour (`--sd-color-title`). A markdown title gets the same type as a text title. |
+| `[data-kind="cover"] .sd-title` | Cover tracking (`--sd-letter-spacing-cover`). The size is not set here: core picks `--sd-font-size-cover`, or `--sd-font-size-cover-figure` when the `figure` region holds an element, and a `font-size` in theme.css would override both. |
 | `.sd-accent` | The accent phrase (`*phrase*` in a title): `--sd-color-accent`, `font-style: normal` (upright, not italic). |
-| `.sd-kicker .sd-text` | The kicker: `--sd-font-size-kicker`, 0.12em tracking, uppercase, `--sd-color-kicker`. The line height is restated because the size is set on the text, not inherited from the wrapper. |
-| `.sd-role-lede` | The message line under a title: `--sd-font-size-lede`, tight leading, `--sd-color-muted`. |
-| `.sd-role-badge` | A `text` badge: an inline pill, `--sd-font-size-label`, strong weight, 0.12em tracking, uppercase, `--sd-color-accent` (a `tone` overrides both colours inline: the border in the palette colour, the text in that colour darkened to 4.5:1), with a 2px border in `currentColor` and fully rounded corners. |
+| `.sd-kicker` | The kicker: `--sd-font-size-kicker`, 0.12em tracking, uppercase, `--sd-color-kicker`. |
 | `.sd-region.sd-meta` | The author line's accent rule: a 4px `border-inline-start` along the whole meta block, transparent until a meta element is visible (`:has(> .sd-el:not(.sd-hidden, .sd-collapsed))`), so the meta text never moves. It is on the region only: core also puts `.sd-meta` on every wrapper inside it, and a border on the bare class would draw one rule per line. |
 | `.sd-big-number-value` | Tracking `-0.04em`. |
+
+The message line (`.sd-role-lede`: `--sd-font-size-lede`, tight leading, `--sd-color-muted`) and the badge
+(`.sd-role-badge`: an inline pill, `--sd-font-size-label`, strong weight, 0.12em tracking, uppercase,
+`--sd-color-accent`, a 2px border in `currentColor`, fully rounded; a `tone` sets both colours inline) are
+core's rules (`core/stepdeck.css`), fed by this theme's tokens; `theme.css` does not restate them.
 
 The rule depends on `:has()` and on the engine state classes `.sd-hidden` and `.sd-collapsed`, which are stable
 published class names.

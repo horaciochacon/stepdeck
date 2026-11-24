@@ -30,7 +30,10 @@ Behaviour:
 - **Layout.** Hidden items keep their space (`visibility`), so nothing reflows between steps. Long text wraps inside
   the item. Item text is the body size and `sub` the note size, both at least `--sd-min-audience-font`; colors come
   from theme tokens.
+- **No colour words.** `{{color:<role>}}` is resolved only by the `markdown` component; in an item's `text` or
+  `sub` it shows as written. Use a `markdown` element to name a palette colour.
 - **Checklists** draw a box (an SVG) instead of a text marker; `done` as a number ticks the first n items, as a list
-  it ticks the named ids. For other markers `done` has no effect.
+  it ticks the named ids. For other markers a valid `done` draws nothing, but a `done` list is still checked:
+  an id that names no item is an element error whatever the marker.
 
 See `example.js` for a slide that uses it.

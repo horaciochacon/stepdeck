@@ -8,7 +8,7 @@ connector between two parts of a story ("agent's report -> our study"). Labels a
 | `stops` | `[{ id?, label, sub?, at? }]` | (required) | snap | At least 2 stops. `label` and `sub` are inline Markdown (emphasis, code, links); raw HTML is shown as text. `id` is unique and defaults to the index as a string. `at` (0 to 1, increasing) places a stop; it defaults to the even position `index / (stops - 1)`. |
 | `progress` | number 0..1 | (required) | tween | How far the fill has gone, as a position on the track from 0 to 1, the same scale as a stop's `at` (not a count of stops). With evenly spaced stops 0 is the first stop and 1 the last. A stop is lit once `progress >= at`. |
 | `dashed` | boolean | `false` | snap | The unfilled track is dashed; the fill stays solid. |
-| `orient` | `"horizontal"` | `"horizontal"` | snap | The track's direction. Only `horizontal` is supported, so the prop changes nothing; it is accepted so a slide may state it. |
+| `orient` | `"horizontal"` | `"horizontal"` | snap | A one-value prop: `horizontal` is the only value, and there is no vertical timeline. Setting it changes nothing (the component never reads it), so leave it out; any other value is a `validate` error. |
 | `current` | string | none | fade | The id of one stop to emphasise: a larger circle and a bold label. An unknown id is an element error naming it. |
 
 Behaviour:
@@ -29,6 +29,12 @@ Behaviour:
 - **Look.** The track uses the theme's rule color and the fill its accent color. Stops are circles on the track: filled
   with the accent once reached, hollow before. Labels sit under the track at the note size, subs at the label size,
   both at least `--sd-min-audience-font`.
+- **Size.** The timeline is as wide as its element (its region, or a `box`) and as tall as its content; it has no
+  size prop. What sets the rest: the stop radius is 1.5 × `--sd-grid` (2.25 × for the `current` stop), the track
+  and fill are 2 × `--sd-rule-width` thick, labels are `--sd-font-size-note` and subs `--sd-font-size-label`. To
+  make one timeline larger, set those tokens in the slide's `style`. The radii are read from the canvas, so
+  `--sd-grid` must be set on `:scope` (it then applies to the whole slide); the others may be set on the element:
+  `style: ':scope { --sd-grid: 16px; --sd-rule-width: 4px; } [data-el="<id>"] { --sd-font-size-note: 48px; --sd-font-size-label: 36px; }'`.
 - **Layout.** Each stop gets a label slot as wide as the closest pair of stops allows, and the track is inset by half a
   slot at both ends, so the first and last labels stay inside the element. Long labels wrap inside their slot; the
   element is as tall as its tallest label (measured bold, so nothing moves when `current` changes).

@@ -12,6 +12,8 @@ One paragraph of plain text, rendered as `<p class="sd-text sd-role-<role>">`. W
 
 Behaviour:
 - `update` is idempotent: it renders exactly the props it is given.
+- **No colour words.** `{{color:<role>}}` is resolved only by the `markdown` component; here it shows as
+  written (`{{color:accent}}` stays `{{color:accent}}` on the slide). Use a `markdown` element to name a palette colour.
 - **Motion.** An element that appears is moved by its box (the engine's entrance), never by the paragraph itself.
   When `text` changes while the element stays visible and the engine animates (`info.animate`), the paragraph
   crossfades: the old text fades out over `--sd-duration-fast`, the text swaps, and the new text fades in over

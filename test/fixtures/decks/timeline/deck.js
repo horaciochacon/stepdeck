@@ -3,5 +3,5 @@ export default {
   title: "Timeline fixture",
   lang: "en",
   theme: "academic-light",
-  slides: ["fill", "dashed", "long", "spaced", "bad"],
+  slides: ["fill", "dashed", "long", "spaced", "collapsed", "bad"],
 };

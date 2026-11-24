@@ -353,14 +353,18 @@ test("chart grid lines read --sd-color-grid", async () => {
   }
 });
 
-test("check --theme: the session really uses the theme, and kit and spike check clean under both themes", async () => {
+// Each deck under its own theme is checked elsewhere (kit in kit.test.mjs, spike in check.test.mjs), so only the
+// other theme is checked here.
+const OWN_THEME = { "examples/kit": "modern", "examples/spike": "academic-light" };
+
+test("check --theme: the session really uses the theme, and kit and spike check clean under the other theme", async () => {
   for (const theme of THEMES) {
     const fam = await withDeck(join(repo, "examples/kit"), { slide: "cover", theme }, async (s) => {
       await s.open("cover", 0);
       return s.page.evaluate(() => getComputedStyle(document.querySelector('[data-el="title"] .sd-text')).fontFamily);
     });
     assert.equal(firstFamily(fam), FAMILY[theme].body, `withDeck({ theme: ${theme} })`);
-    for (const deck of ["examples/kit", "examples/spike"]) {
+    for (const deck of Object.keys(OWN_THEME).filter((d) => OWN_THEME[d] !== theme)) {
       const run = await runCheck(join(repo, deck), { theme });
       assert.equal(run.problems.length, 0, `${deck} under ${theme}:\n${show(run.problems)}`);
     }

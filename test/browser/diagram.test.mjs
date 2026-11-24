@@ -1274,3 +1274,16 @@ test("a compact routed edge: jump equals played, and check is clean in both them
     assert.deepEqual(problems.map(formatProblem), [], theme);
   }
 });
+
+test("a collapsed diagram whose nodes change before it shows is laid out when it shows: jump equals played", async () => {
+  await withPage({ root, url: pages.url("collapsed", "step=start") }, async (page, ctx) => {
+    await expectJumpEqualsPlayed(ctx, page, { pages, slide: "collapsed", steps: ["start", "rename", "show"], id: "flow" });
+    // Sized to its label, not to its cell (a build with no size draws whole cells).
+    const box = await page.evaluate(() => {
+      const el = document.querySelector('[data-el="flow"]');
+      const shape = el.querySelector('[data-id="a"] .sd-diagram-shape');
+      return { w: Number(shape.getAttribute("width")), h: Number(shape.getAttribute("height")), el: el.offsetWidth };
+    });
+    assert.ok(box.w > 0 && box.w < box.el / 4 && box.h < 200, `the box is sized to its label (${JSON.stringify(box)})`);
+  });
+});
