@@ -1,9 +1,19 @@
 name: ci
 
+# A push to main, every pull request, and a manual run. A branch push with no pull request runs nothing: before, a
+# push to a pull request's branch ran the whole workflow twice (once as `push`, once as `pull_request`).
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+# A new push to a pull request (or a new manual run on a branch) cancels the run it supersedes. Runs on main never
+# share a group (the run id is in it), so none waits for or cancels another: each push is tested and its deploy
+# starts at once, as before; the deploy job's own `pages` group keeps deploys one at a time.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.run_id) || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Read-only by default; the Pages jobs ask for the permissions they need.
 permissions:
@@ -11,14 +21,15 @@ permissions:
 
 env:
   # Playwright is installed on the runner only (not a project dependency) and drives the runner's Google Chrome.
-  PLAYWRIGHT_VERSION: 1.58.0
+  # `npm run playwright` installs it with `--no-save`; the version is pinned in that script (package.json).
   STEPDECK_PLAYWRIGHT: ${{ github.workspace }}/node_modules/playwright
 
 jobs:
-  # Fast gate: unit tests (with validate on the example and gallery decks) and the site smoke test. The deploy waits
-  # only for this job and for the upload.
+  # Fast gate: unit tests (with validate on the spike, kit and gallery decks) and the site smoke test. The deploy
+  # waits only for this job and for the upload.
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,18 +39,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm install --no-save --no-audit --no-fund playwright@$PLAYWRIGHT_VERSION
+      - run: npm run playwright
       - name: Site smoke test
         run: node --test test/browser/site.test.mjs
 
-  # The full browser suite on six runners (each runs its files one at a time): the status check; it does not gate
-  # the deploy.
-  browser:
+  # The map writers users copy (R and NumPy; engine/components/map/writers). Their tests skip when R or NumPy is
+  # missing, as in the unit job, so this job installs both and fails if any test was skipped. A status check; it does
+  # not gate the deploy.
+  writers:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,9 +56,83 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm install --no-save --no-audit --no-fund playwright@$PLAYWRIGHT_VERSION
-      - name: Browser tests (shard ${{ matrix.shard }} of 6)
-        run: node --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/6 'test/browser/**/*.test.mjs'
+      - name: Install R (png, jsonlite) and NumPy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends r-base-core r-cran-png r-cran-jsonlite python3-numpy
+      - name: Map writer tests, none skipped
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap test/unit/map-writers.test.mjs | tee writers.tap
+          if ! grep -qx '# skipped 0' writers.tap; then
+            echo "::error::map-writers.test.mjs skipped tests: R (png, jsonlite) or NumPy is missing on the runner"
+            grep '# SKIP' writers.tap || true
+            exit 1
+          fi
+
+  # The full browser suite on six runners (each runs its files one at a time): the status check; it does not gate
+  # the deploy.
+  #
+  # BROWSER_GROUPS deals the slow files out by their measured time on a runner, so that the six runners finish
+  # together (about 5 to 6 minutes each): map 348 s; gallery 286; chart-points 269; chart-bar-modes 158; diagram
+  # about 158; chart-line-story 148; check 65; chart-bar about 64; theme-modern 57; played 56; every other file 3 to
+  # 48 s. One line per group, `<group>: <files>`, each file the name of test/browser/<name>.test.mjs. The group
+  # `rest` has no line: it runs every test file no line names, so a new test file is never left out. site.test.mjs
+  # runs in the unit job and in no group. `matrix.group` must list every group name and `rest`; the step fails when
+  # the two disagree, when a line names a file that does not exist, or when a file is named twice.
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [map, gallery, points, lines, diagram, rest]
+    env:
+      BROWSER_GROUPS: |
+        map: map
+        gallery: gallery check
+        points: chart-points theme-modern kit
+        lines: chart-bar-modes chart-line-story map-kit
+        diagram: diagram chart-bar played motion-box kicker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run playwright
+      - name: Browser tests (${{ matrix.group }})
+        env:
+          GROUP: ${{ matrix.group }}
+          JOB_TOTAL: ${{ strategy.job-total }}
+        # To see what a group would run without running it: DRY_RUN=1, with GROUP, JOB_TOTAL and BROWSER_GROUPS set.
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          groups=$(printf '%s\n' "$BROWSER_GROUPS" | sed '/^[[:space:]]*$/d')
+          count=$(printf '%s\n' "$groups" | wc -l | tr -d ' ')
+          [ "$JOB_TOTAL" -eq $((count + 1)) ] || fail "matrix.group has $JOB_TOTAL entries; BROWSER_GROUPS has $count groups, plus 'rest'"
+          named=$(printf '%s\n' "$groups" | cut -d: -f2- | tr -s ' ' '\n' | sed '/^$/d')
+          dupes=$(printf '%s\n' "$named" | sort | uniq -d | tr '\n' ' ')
+          [ -z "$dupes" ] || fail "BROWSER_GROUPS names a file twice: $dupes"
+          for name in $named; do
+            [ "$name" != site ] || fail "site.test.mjs runs in the unit job; take it out of BROWSER_GROUPS"
+            [ -f "test/browser/$name.test.mjs" ] || fail "BROWSER_GROUPS names test/browser/$name.test.mjs, which does not exist"
+          done
+          if [ "$GROUP" = rest ]; then
+            files=$(find test/browser -name '*.test.mjs' | sort | while read -r file; do
+              name=${file#test/browser/}; name=${name%.test.mjs}
+              [ "$name" = site ] || printf '%s\n' "$named" | grep -qxF -- "$name" || printf '%s\n' "$file"
+            done)
+          else
+            line=$(printf '%s\n' "$groups" | grep -E "^$GROUP:") || fail "matrix group '$GROUP' has no line in BROWSER_GROUPS"
+            files=$(for name in ${line#*:}; do printf 'test/browser/%s.test.mjs\n' "$name"; done)
+          fi
+          [ -n "$files" ] || fail "group '$GROUP' has no test files"
+          echo "Group $GROUP:"; printf '  %s\n' $files
+          [ -z "${DRY_RUN:-}" ] || exit 0
+          node --test --test-concurrency=1 $files
 
   # Upload the repository tree as it is (no build step), in parallel with the gate. Upload and deploy are separate
   # jobs, as in GitHub's starter workflows: the artifact has registered before the deploy job asks for it.
