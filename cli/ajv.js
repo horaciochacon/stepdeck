@@ -5,8 +5,9 @@
 //   stepdeck schemas use (`x-transition` on props, `x-enter` at the top level, and any other `x-*` found in
 //   a schema passed to compile()) are registered as no-op keywords, so strict mode still rejects real typos.
 // compile(ajv, schema) -> validate function; registers the schema's `x-*` keywords first.
-// readSchema(name) -> parsed engine/schema/<name>.schema.json ("deck", "slide", "layout").
-import { readFileSync } from "node:fs";
+// readSchema(name, engine = ENGINE) -> parsed <engine>/schema/<name>.schema.json ("deck", "slide", "layout"): the
+//   schema of the engine the deck loads (its copy when it has one), else this repository's.
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { ENGINE } from "./engine.js";
@@ -44,6 +45,8 @@ export function compile(ajv, schema) {
   return ajv.compile(schema);
 }
 
-export function readSchema(name) {
-  return JSON.parse(readFileSync(join(ENGINE, "schema", `${name}.schema.json`), "utf8"));
+export function readSchema(name, engine = ENGINE) {
+  const own = join(engine, "schema", `${name}.schema.json`);
+  // An engine copy made before schema/ was copied has none: this repository's schema then.
+  return JSON.parse(readFileSync(existsSync(own) ? own : join(ENGINE, "schema", `${name}.schema.json`), "utf8"));
 }

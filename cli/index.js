@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 // stepdeck command line (spec §10). Dev tooling only; nothing here is needed to present.
 //
-//   stepdeck <command> [deckDir] [--slide id] [--step ref] [--size n] [--theme name] [--json] [--played]
+//   stepdeck <command> [deckDir] [--slide id] [--step ref] [--size n] [--theme name] [--json] [--played] [--version]
 //   stepdeck new <dir> [--template talk] | new-component <name> [deckDir] | catalog [name] [deckDir]
 //   stepdeck boundaries <ISO3> <ADM0-ADM5> [--deck dir] [--out path] [--full] [--precision n]
 //   stepdeck serve [deckDir] [--port n]
 //
 // deckDir defaults to the current directory. Exit codes: 0 no problems, 1 problems found,
 // 2 usage error or a run that could not complete (deck not found, browser missing, …).
-// Every command accepts --json (machine output on stdout).
+// Every command accepts --json (machine output on stdout; console.log of a deck module goes to stderr then). An
+// option a command does not read is refused (OPTIONS), and --name=value is --name value.
 // Only `validate` needs the repo's dependencies (Ajv). It is imported when that command runs, so
 // `--help`, `new` and the rest work before `npm install`; without Ajv, validate says to run it (exit 2).
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { catalog, buildCatalog, catalogTarget, formatEntry, isCatalogTarget } from "./catalog.js";
-import { newDeck, newComponent, cli } from "./new.js";
+import { newDeck, newComponent, cli, shellPath, shownPath } from "./new.js";
 import { boundaries, displayPath } from "./boundaries.js";
 import { serve } from "./serve.js";
-import { deckTarget } from "./browser.js";
-import { REPO } from "./engine.js";
+import { assertDeck, deckTarget } from "./browser.js";
+import { REPO, readJSON } from "./engine.js";
 import { suggest } from "#engine/core/registry.js";
 import { dump, formatDump } from "./dump.js";
 import { runCheck } from "./check.js";
@@ -41,9 +42,11 @@ const USAGE = `usage: stepdeck <command> [deckDir] [options]
 commands:
   new <dir>             a new deck from a template (--template, default talk), with the engine copied
                         into <dir>/stepdeck/
-  new-component <name>  components/<name>/ in the deck from the component template; name namespaced
+  new-component <name> [deckDir]
+                        components/<name>/ in the deck from the component template; name namespaced
                         (my.thing); added to deck.js components
-  catalog [name]        write catalog/ (index.json + <name>.json) for the deck or the engine; with a
+  catalog [name] [folder]
+                        write catalog/ (index.json + <name>.json) for the deck or the engine; with a
                         name, print that entry
   boundaries <ISO3> <ADM0-ADM5>
                         open admin boundaries for a country from geoBoundaries, into the deck's data/
@@ -54,9 +57,10 @@ commands:
   check    in headless Chrome, per step: text outside canvas or region, overlapping text, text under
            the audience minimum, contrast, console/network/render errors, step 0 showing everything
   shoot    a PNG per step in <deck>/shots/<size>/ (default size 960)
+  help     this text (also -h, --help)
 
-options:
-  --slide <id>   one slide
+options (a value is given as --name value or --name=value):
+  --slide <id>   one slide: validate, dump, check, shoot
   --step <ref>   one step (id or number; needs --slide): dump, check, shoot
   --size <n>     viewport width in px (height n·9/16); boxes stay in canvas pixels.
                  shoot: 1920|1280|960 (default 960)
@@ -68,41 +72,86 @@ options:
   --full         boundaries: the full-resolution geometry, not the simplified one
   --precision <n> boundaries: decimals kept in coordinates, 0 to 10 (default 4)
   --port <n>     serve: port (default 8000; 0 picks a free one)
-  --json         machine output
+  --json         machine output on stdout (a run that fails: { "error": "…" })
+  --version      print the version
+  A command refuses an option it does not use (exit 2).
+
+exit codes:
+  0  ran, nothing to fail on      1  ran, problems found (validate: errors; check: any; dump: step errors)
+  2  usage error, or a run that could not complete (no deck.js, unknown slide or step, no browser, …)
+
+environment (dump, check, shoot):
+  STEPDECK_PLAYWRIGHT  a playwright package folder (default: \`playwright\` as Node resolves it from the
+                       stepdeck folder; \`npm run playwright\` there installs it)
+  STEPDECK_CHANNEL     the browser channel to launch (default chrome, the system Chrome)
+  STEPDECK_WORKERS     pages driven at once (default min(4, half the cores); 1 = one page, in turn)
+
+every command, output and rule: ${join(REPO, "docs", "reference", "cli.md")} and rules.md beside it
 `;
 
 class UsageError extends Error {}
 
+const COMMANDS = ["help", "new", "new-component", "catalog", "boundaries", "serve", "validate", "dump", "check", "shoot"];
+
+/** The options each command reads, by their name in parseArgs' result (--json and --help are read by all). */
+const OPTIONS = {
+  new: ["template"],
+  "new-component": [],
+  catalog: [],
+  boundaries: ["deck", "out", "full", "precision"],
+  serve: ["port"],
+  validate: ["slide"],
+  dump: ["slide", "step", "size", "theme"],
+  check: ["slide", "step", "size", "theme", "played"],
+  shoot: ["slide", "step", "size", "theme"],
+};
+
+/** "dump, check and shoot do" / "serve does": the commands that take `option`. */
+function takers(option) {
+  const names = Object.keys(OPTIONS).filter((c) => OPTIONS[c].includes(option));
+  return names.length === 1 ? `${names[0]} does` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} do`;
+}
+
 export function parseArgs(argv) {
-  const out = { command: undefined, deckDir: undefined, positionals: [], slide: undefined, step: undefined, size: undefined, template: undefined, theme: undefined, port: undefined, json: false, played: false, deck: undefined, out: undefined, full: false, precision: undefined };
-  const value = (i, name) => {
-    const v = argv[i + 1];
-    if (v === undefined || v.startsWith("--")) throw new UsageError(`${name} needs a value`);
-    return v;
-  };
+  const out = { command: undefined, deckDir: undefined, positionals: [], slide: undefined, step: undefined, size: undefined, template: undefined, theme: undefined, port: undefined, json: false, played: false, deck: undefined, out: undefined, full: false, precision: undefined, version: false, given: [] };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--json") out.json = true;
-    else if (a === "--played") out.played = true;
-    else if (a === "--full") out.full = true;
-    else if (a === "--deck") out.deck = value(i++, a);
-    else if (a === "--out") out.out = value(i++, a);
-    else if (a === "--precision") out.precision = Number(value(i++, a));
-    else if (a === "--slide") out.slide = value(i++, a);
-    else if (a === "--step") out.step = value(i++, a);
-    else if (a === "--template") out.template = value(i++, a);
-    else if (a === "--theme") out.theme = value(i++, a);
+    // --name=value is --name value.
+    const eq = argv[i].startsWith("--") ? argv[i].indexOf("=") : -1;
+    const a = eq === -1 ? argv[i] : argv[i].slice(0, eq);
+    const inline = eq === -1 ? undefined : argv[i].slice(eq + 1);
+    const value = () => {
+      if (inline !== undefined) return inline;
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("--")) throw new UsageError(`${a} needs a value`);
+      return v;
+    };
+    const flag = () => {
+      if (inline !== undefined) throw new UsageError(`${a} takes no value`);
+      return true;
+    };
+    if (a.startsWith("--") && a.length > 2) out.given.push(a.slice(2));
+    if (a === "--json") out.json = flag();
+    else if (a === "--played") out.played = flag();
+    else if (a === "--full") out.full = flag();
+    else if (a === "--version") out.version = flag();
+    else if (a === "--deck") out.deck = value();
+    else if (a === "--out") out.out = value();
+    else if (a === "--precision") out.precision = Number(value());
+    else if (a === "--slide") out.slide = value();
+    else if (a === "--step") out.step = value();
+    else if (a === "--template") out.template = value();
+    else if (a === "--theme") out.theme = value();
     else if (a === "--port") {
-      const n = Number(value(i++, a));
+      const n = Number(value());
       if (!Number.isInteger(n) || n < 0 || n > 65535) throw new UsageError("--port must be a port number, e.g. 8000");
       out.port = n;
     }
     else if (a === "--size") {
-      const n = Number(value(i++, a));
+      const n = Number(value());
       if (!Number.isInteger(n) || n < 160) throw new UsageError("--size must be a width in pixels, e.g. 960");
       out.size = n;
     } else if (a === "-h" || a === "--help") out.command = "help";
-    else if (a.startsWith("-")) throw new UsageError(`unknown option ${a}`);
+    else if (a.startsWith("-")) throw new UsageError(`unknown option ${argv[i]}`);
     else if (out.command === undefined) out.command = a;
     else if (out.positionals.length < 2) out.positionals.push(a);
     else throw new UsageError(`unexpected argument ${a}`);
@@ -123,6 +172,8 @@ async function main(argv) {
     process.stderr.write(`stepdeck: ${e.message}\n\n${USAGE}`);
     return 2;
   }
+  // Under --json stdout holds the JSON alone: what a deck module logs while it is imported goes to stderr.
+  if (args.json) console.log = console.info = console.debug = console.error;
   try {
     return await run(args);
   } catch (e) {
@@ -135,14 +186,23 @@ async function main(argv) {
 
 async function run(args) {
   const deckDir = args.deckDir ?? process.cwd();
-  // --step scopes the per-step commands only; anywhere else it would be silently ignored.
-  if (args.step !== undefined && !["dump", "check", "shoot", "help", undefined].includes(args.command)) {
+  if (args.version && args.command !== "help") {
+    process.stdout.write(`${readJSON(join(REPO, "package.json")).version}\n`);
+    return 0;
+  }
+  // An option the command does not read is refused, not ignored: `validate --theme x` would look as if the theme
+  // had been checked.
+  const reads = OPTIONS[args.command];
+  const stray = reads ? args.given.find((name) => !["json", "help", "version", ...reads].includes(name)) : undefined;
+  if (stray !== undefined) {
     throw new UsageError(
-      args.command === "validate"
+      args.command === "validate" && stray === "step"
         ? "validate does not take --step: it folds and checks every step of a slide; use --slide <id>"
-        : `${args.command} does not take --step (dump, check and shoot do)`,
+        : `${args.command} does not take --${stray} (${takers(stray)})`,
     );
   }
+  // SIGTERM while a browser runs: leave at once (Playwright closes the browser on exit), with no error printed.
+  if (["dump", "check", "shoot"].includes(args.command)) process.once("SIGTERM", () => process.exit(143));
   const emit = (data) => process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
   const n = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
@@ -154,7 +214,7 @@ async function run(args) {
       if (args.deckDir === undefined) throw new UsageError("new needs a folder: stepdeck new <dir>");
       const made = await newDeck(args.deckDir, { template: args.template ?? "talk" });
       if (args.json) emit(made);
-      else process.stdout.write(`created ${relative(process.cwd(), made.dir) || "."} (template ${made.template}; engine copied to stepdeck/)\n\nnext:\n${made.next.map((l) => `  ${l}`).join("\n")}\n`);
+      else process.stdout.write(`created ${shownPath(made.dir)} (template ${made.template}; engine copied to stepdeck/)\n\nnext:\n${made.next.map((l) => `  ${l}`).join("\n")}\n`);
       return 0;
     }
     case "new-component": {
@@ -163,11 +223,12 @@ async function run(args) {
       const made = await newComponent(dir ?? process.cwd(), name);
       if (args.json) emit(made);
       else {
-        const rel = relative(process.cwd(), made.dir);
+        const rel = shownPath(made.dir);
         process.stdout.write(`created ${rel}/ (${made.files.map((f) => f.slice(made.dir.length + 1)).join(", ")})\n`);
         process.stdout.write(made.deckUpdated ? `added "${made.name}" to components in deck.js\n` : `deck.js not edited: ${made.line}\n`);
         const deck = resolve(dir ?? process.cwd());
-        process.stdout.write(`try it: copy ${rel}/example.js to slides/, add its id to slides in deck.js, then\n  ${cli("validate", deck)}\n  ${cli("check", deck)} --played\n`);
+        const [from, to] = [join(made.dir, "example.js"), join(deck, "slides", `${made.id}.js`)].map((p) => shellPath(shownPath(p)));
+        process.stdout.write(`try it: the example slide's id is "${made.id}", so copy it to slides/${made.id}.js and add "${made.id}" to slides in deck.js, then\n  cp ${from} ${to}\n  ${cli("validate", deck)}\n  ${cli("check", deck)} --played\n`);
       }
       return 0;
     }
@@ -193,7 +254,7 @@ async function run(args) {
       else {
         for (const p of built.problems) process.stdout.write(`warning: ${formatProblem(p)}\n`);
         const count = (kind) => built.entries.filter((e) => e.kind === kind).length;
-        process.stdout.write(`catalog: ${n(count("component"), "component")}, ${n(count("layout"), "layout")}, ${n(count("theme"), "theme")} -> ${relative(process.cwd(), built.outDir) || "."}/index.json\n`);
+        process.stdout.write(`catalog: ${n(count("component"), "component")}, ${n(count("layout"), "layout")}, ${n(count("theme"), "theme")} -> ${shownPath(join(built.outDir, "index.json"))}\n`);
       }
       return 0;
     }
@@ -212,8 +273,13 @@ async function run(args) {
       return 0;
     }
     case "serve": {
+      assertDeck(deckDir);
       const target = deckTarget(deckDir);
-      const server = await serve({ root: target.root, port: args.port ?? 8000 });
+      const port = args.port ?? 8000;
+      const server = await serve({ root: target.root, port }).catch((e) => {
+        if (e.code === "EADDRINUSE") throw new Error(`port ${port} is in use; pass --port 0 for a free port, or another --port`, { cause: e });
+        throw e;
+      });
       const page = relative(target.root, resolve(deckDir)).split("\\").join("/");
       const url = `${server.url}${page ? `${page}/` : ""}`;
       if (args.json) emit({ url, root: target.root, port: server.port });
@@ -253,7 +319,7 @@ async function run(args) {
         let played = "";
         if (report.played) {
           const counts = Object.values(report.played);
-          played = `, ${counts.reduce((s, c) => s + c.fromPrev + c.fromNext, 0)} played arrivals compared`;
+          played = `, ${n(counts.reduce((s, c) => s + c.fromPrev + c.fromNext, 0), "played arrival")} compared`;
         }
         process.stdout.write(`check: ${n(report.slides, "slide")}, ${n(report.steps, "step")}${played}, ${n(problems.length, "problem")}\n`);
       }
@@ -267,13 +333,19 @@ async function run(args) {
       }
       const paths = await shoot(deckDir, { slide: args.slide, step: args.step, size, theme: args.theme });
       if (args.json) emit(paths);
-      else process.stdout.write(`${paths.map((p) => relative(process.cwd(), p)).join("\n")}\nshoot: ${n(paths.length, "PNG")} at ${size}×${(size * 9) / 16}\n`);
+      else process.stdout.write(`${paths.map((p) => shownPath(p)).join("\n")}\nshoot: ${n(paths.length, "PNG")} at ${size}×${(size * 9) / 16}\n`);
       return 0;
     }
-    default:
-      process.stderr.write(`${args.command ? `stepdeck: unknown command '${args.command}'\n\n` : ""}${USAGE}`);
+    default: {
+      const close = args.command ? suggest(args.command, COMMANDS) : null;
+      process.stderr.write(`${args.command ? `stepdeck: unknown command '${args.command}'${close ? `; did you mean '${close}'?` : ""}\n\n` : ""}${USAGE}`);
       return 2;
+    }
   }
 }
 
-main(process.argv.slice(2)).then((code) => (process.exitCode = code));
+// Exit once stdout has drained, without waiting for what a run left behind (a browser that is slow to close).
+main(process.argv.slice(2)).then((code) => {
+  process.exitCode = code;
+  process.stdout.write("", () => process.exit(code));
+});

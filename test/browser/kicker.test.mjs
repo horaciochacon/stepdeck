@@ -17,7 +17,6 @@ import { dump, formatDump } from "../../cli/dump.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const spike = fileURLToPath(new URL("../../examples/spike/", import.meta.url));
 const THEMES = ["academic-light", "modern"];
 const TITLE = "Response by *dose and regimen*";
 const body = [{ id: "body", region: "main", type: "text", props: { text: "Body text." } }];
@@ -212,9 +211,8 @@ test("raw title strings shown outside the element carry no asterisks: placeholde
   assert.match(text, /kicker\s+text\s+.*"Methods"/, text);
 });
 
-test("check is clean on spike, and on the kicker deck (played too, both themes are covered by the styling test)", async () => {
-  const s = await runCheck(spike, { played: true });
-  assert.equal(s.problems.length, 0, s.problems.map(formatProblem).join("\n"));
+// examples/spike is checked with --played in check.test.mjs.
+test("check is clean on the kicker deck (played too, both themes are covered by the styling test)", async () => {
   const k = await runCheck(deck.root, { played: true });
   assert.equal(k.problems.length, 0, k.problems.map(formatProblem).join("\n"));
 });

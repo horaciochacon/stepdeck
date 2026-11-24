@@ -3,7 +3,8 @@
 // buildCatalog(rootDirs) -> Promise<{ entries, details: Map<name, detail>, problems }>
 // catalog(rootDirs, { outDir }) -> Promise<{ entries, details, problems, outDir }>
 //   Writes <outDir>/index.json (entries) and <outDir>/<name>.json (one detail each). outDir defaults
-//   to <last root>/catalog/. Stale *.json files in outDir are removed first; nothing else is touched.
+//   to <last root>/catalog/. What the previous run wrote there is removed first (the entries its index.json
+//   lists, and index.json); any other file, a *.json of the user's included, is left alone.
 // catalogTarget(dir) -> { roots, outDir }   what `stepdeck catalog` reads and writes for a folder
 // isCatalogTarget(dir) -> boolean            whether catalogTarget accepts it
 //
@@ -33,7 +34,7 @@
 // a top-level description, or a prop without description, examples or x-transition (spec §6.3); an
 // unreadable file; two entries of different kinds with one name ("catalog-name"). A top-level x-enter
 // other than "own" or "box" is a "catalog-schema" problem too.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { problem } from "./problems.js";
 import { engineFor, importDeck, isObject, listDirs, readBuiltins, readJSON } from "./engine.js";
@@ -209,7 +210,14 @@ export async function catalog(rootDirs, { outDir } = {}) {
   const built = await buildCatalog(rootDirs);
   const out = resolve(outDir ?? join(rootDirs[rootDirs.length - 1], "catalog"));
   mkdirSync(out, { recursive: true });
-  for (const f of readdirSync(out)) if (f.endsWith(".json")) rmSync(join(out, f));
+  // Remove what the previous run wrote, and nothing else: the entries its index.json lists, and index.json.
+  let previous = [];
+  try {
+    previous = readJSON(join(out, "index.json")).map((e) => e?.name).filter((name) => typeof name === "string" && !/[\\/]/.test(name));
+  } catch {
+    // no index.json, or not one of ours: nothing to remove
+  }
+  for (const name of previous) rmSync(join(out, `${name}.json`), { force: true });
   writeFileSync(join(out, "index.json"), `${JSON.stringify(built.entries, null, 2)}\n`);
   for (const [name, detail] of built.details) writeFileSync(join(out, `${name}.json`), `${JSON.stringify(detail, null, 2)}\n`);
   return { ...built, outDir: out };

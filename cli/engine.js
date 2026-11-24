@@ -32,6 +32,9 @@ export const hasEngineCopy = (deck) => existsSync(resolve(deck, "stepdeck", "cor
 /** The engine a deck uses: its copied engine (<deck>/stepdeck/) when there is one, else this repo's engine/. */
 export const engineFor = (deckDir) => (hasEngineCopy(deckDir) ? resolve(deckDir, "stepdeck") : ENGINE);
 
+/** A path for a printed shell command: single-quoted when it holds anything but safe characters. */
+export const shellPath = (p) => (/^[\w./+-]+$/.test(p) ? p : `'${p.replaceAll("'", "'\\''")}'`);
+
 export const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 export const readJSON = (file) => JSON.parse(readFileSync(file, "utf8"));
 

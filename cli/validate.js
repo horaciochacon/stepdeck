@@ -12,26 +12,31 @@
 //             with a built-in; every component schema.json (deck and engine) compiles and every engine
 //             layout schema.json matches schema/layout.schema.json, used or not.
 //   slide     the file exists in that exact case and imports; its id matches; slide.schema.json with
-//             did-you-mean on unknown keys; unique element and step ids; no digits-only step ids;
+//             did-you-mean on unknown keys; unique element and step ids; no digits-only step ids; step ids of
+//             letters, digits, `_` and `-` (step-id-chars, a warning);
 //             slide.style holds no remote URL (http(s):// or //host; spec §3) and no @import (the
 //             runtime parses it with CSSStyleSheet.replaceSync, which drops @import);
 //             layout and regions exist; from / at / advance.start name real steps; advance fits.
 //   per step  every patch names known elements (reported at the step that names them); then the slide is
 //             folded with stateAt at every step k up to the first step whose set/replace/show/hide names an
 //             unknown element (a bad `only` skips its own step; a bad from/at/advance ref skips folding), and at each k every element's props must be an object,
-//             hold no remote URL (http(s):// or //host, R20) and no hex color, have bindings whose file,
+//             hold no remote URL (http(s):// or //host, R20; in running text, a string with spaces and no `](`,
+//             `src=` or `url(`, an http(s) URL is a warning and a //host needs a dot) and no hex color (digits
+//             only, #123, pass in running text), have bindings whose file,
 //             pointer and format exist, name CSV columns (x, y, id, from, series, interval.lower/upper, and group in
 //             back-to-back) that exist,
-//             point at files that exist in that exact case, and, with bindings resolved, match the
+//             point at files that exist in that exact case (fileRef: `./`, `?query` and `#fragment` are not part
+//             of the path, and a path may hold spaces after its first folder), and, with bindings resolved, match the
 //             component schema; a `diagram` that matches its schema must also pass diagramProblems
-//             (components/diagram/place.js: diagram-id, diagram-overlap; the gap and pad come from the
+//             (components/diagram/place.js: diagram-id, diagram-grid, diagram-overlap, each with the severity the
+//             item carries (two drawn nodes in one cell are a warning); the gap and pad come from the
 //             theme's tokens.css, the compact pair for a compact diagram) and not set `caption` without
 //             `compact: true` (diagram-caption-unused, a warning), and every element goes through chartProblems (core/chart-rules.js:
 //             chart-prop-unused, a warning; chart-orient, an error); a compact `map` must not set what it does not
 //             draw (map-compact-ignored, a warning per prop: `labels`, `legend` other than false, `numbers`,
 //             `inset`); a `map` that matches its schema goes through
 //             mapProblems (core/map-rules.js, with each layer's raster JSON and the headers of its PNGs read from the
-//             deck: map-layer, map-frame, map-raster, errors; map-prop-unused, a warning). A map's layers name CSV
+//             deck: map-layer, map-classes, map-frame, map-raster, errors; map-prop-unused, a warning). A map's layers name CSV
 //             columns too: areas key (else the map's id) and value, points lon, lat, id, size, and a color that is
 //             neither a column nor a theme colour role. Each problem is reported once, at the first step where it
 //             appears.
@@ -75,8 +80,6 @@ import { pngInfo } from "./png.js";
 import { createAjv, compile, readSchema } from "./ajv.js";
 import { THEME_NAME, engineFor, exactCase, findTheme, importDeck, isObject, listDirs, readBuiltins } from "./engine.js";
 
-export { exactCase };
-
 
 const REMOTE = /https?:\/\/[^\s"')\]>]*/i;
 const PROTOCOL_RELATIVE = /(?:^|[\s("'=[<])(\/\/[a-z0-9][a-z0-9.-]*[^\s"')\]>]*)/i;
@@ -87,7 +90,25 @@ const remoteUrls = (s) => [
 const CSS_IMPORT = /@import\s+[^;]*;?/gi;
 const HEX = /(?:^|[^\w&#])(#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4}))(?![\w-])/i;
 const BRACES = /\{\{[^{}]*\}\}/g;
-const FILE_REF = /^(?![/.])(?!.*\.\.)[\w./-]+\.(json|geojson|csv|png|jpe?g|gif|svg|webp|avif|mp4|webm|mp3|wav|ogg)$/i;
+const FILE_REF = /^(?![/.])(?!.*\.\.)[\w./ -]+\.(json|geojson|csv|png|jpe?g|gif|svg|webp|avif|mp4|webm|mp3|wav|ogg)$/i;
+// Step ids name PNGs and URL fragments: letters, digits, `_` and `-`, starting with a letter or digit (as slide ids).
+const STEP_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * The deck file a string prop names, or null when it is not a file reference. A leading `./` and a `?query` or
+ * `#fragment` are not part of the path (`./assets/a.png`, `assets/a.png?v=2`). A path may hold spaces
+ * (`assets/my photo.png`) when its first folder does not: a string with spaces and no folder, or with words before
+ * the folder, is a sentence that ends in a file name ("The answer is in results.csv"), not a path.
+ */
+function fileRef(s) {
+  const path = s.replace(/[?#].*$/, "").replace(/^(?:\.\/)+/, "");
+  if (!FILE_REF.test(path) || path !== path.trim()) return null;
+  if (/\s/.test(path) && !/^[^\s/]+\//.test(path)) return null;
+  return path;
+}
+
+/** A string that reads as running text and loads nothing: it has spaces, and no `](`, `src=` or `url(`. */
+const isProse = (s) => /\s/.test(s.trim()) && !/\]\(|src\s*=|url\(/i.test(s);
 const RESERVED_IDS = ["kicker"];
 const FIGURE = (type) => /^chart\./.test(type) || type === "map" || /^map\./.test(type) || type === "big-number";
 // An element settles within the controller's 10 s watchdog, its hold and entrance included; validate warns
@@ -191,7 +212,7 @@ function schemaErrors(errors, data) {
       const close = typeof value === "string" ? didYouMean(value, e.params.allowedValues.filter((v) => typeof v === "string")) : null;
       out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: `one of ${allowed.join(", ")}`, fix: close ? `set ${at} to "${close}"` : `set ${at} to one of ${allowed.join(", ")}` });
     } else if (e.keyword === "type") {
-      out.push({ rule: "invalid", path, measured: `${at} = ${shown}`, limit: `must be ${e.params.type}`, fix: `make ${at} ${article(String(e.params.type))}` });
+      out.push({ rule: "invalid", path, pointer: e.instancePath, expected: e.params.type, measured: `${at} = ${shown}`, limit: `must be ${e.params.type}`, fix: `make ${at} ${article(String(e.params.type))}` });
     } else if (e.keyword === "anyOf" || e.keyword === "oneOf") {
       const list = e.schema ?? [];
       const branches = list.map(describe);
@@ -314,14 +335,14 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   try {
     deck = await importDeck(deckFile);
   } catch (e) {
-    add({ rule: "deck-load", measured: `deck.js throws: ${e.message}`, limit: "importable in plain Node", fix: "make deck.js a plain object export with no DOM, fetch or top-level await" });
+    add({ rule: "deck-load", measured: `deck.js throws: ${e.message}`, limit: "importable in plain Node", fix: e instanceof SyntaxError ? "syntax error; run `node --check deck.js` for the line" : "make deck.js a plain object export with no DOM, fetch or top-level await" });
     return { problems, slides: [] };
   }
   if (!isObject(deck)) {
     add({ rule: "deck-load", measured: "deck.js has no default object export", limit: "export default { title, slides }", fix: "add `export default { title: \"…\", slides: [\"…\"] }` to deck.js" });
     return { problems, slides: [] };
   }
-  const deckSchema = compile(ajv, readSchema("deck"));
+  const deckSchema = compile(ajv, readSchema("deck", engine));
   if (!deckSchema(deck)) {
     for (const e of schemaErrors(deckSchema.errors, deck)) {
       add({ rule: e.rule === "unknown" ? "unknown-key" : "spec-invalid", measured: `deck.js: ${e.measured}`, limit: e.limit, fix: `${e.fix} in deck.js` });
@@ -431,7 +452,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   // engine's layout descriptors (validated against schema/layout.schema.json).
   for (const name of deckComponents) await validatorFor(name);
   for (const name of builtins) await validatorFor(name);
-  const layoutDescriptor = compile(ajv, readSchema("layout"));
+  const layoutDescriptor = compile(ajv, readSchema("layout", engine));
   for (const name of listDirs(join(engine, "layouts"))) {
     const file = `layouts/${name}/schema.json`;
     let descriptor;
@@ -476,7 +497,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
   const ids = Array.isArray(deck.slides) ? deck.slides.filter((s) => typeof s === "string") : [];
   if (only !== undefined && !ids.includes(only)) throw new Error(`unknown slide '${only}' (slides: ${ids.join(", ")})`);
   const selected = only === undefined ? ids : [only];
-  const slideSchema = compile(ajv, readSchema("slide"));
+  const slideSchema = compile(ajv, readSchema("slide", engine));
   const load = createDataLoader({ root: deckRoot, read: (p) => readFile(p) });
   const layouts = new Map();
 
@@ -491,7 +512,7 @@ export async function runValidate(deckDir, { slide: only } = {}) {
     try {
       spec = (await import(pathToFileURL(join(deckRoot, "slides", `${id}.js`)).href)).default;
     } catch (e) {
-      add({ slide: id, rule: "slide-load", measured: `import throws: ${e.message}`, limit: "importable in plain Node", fix: `fix slides/${id}.js: no DOM, fetch or top-level await; JSON-only props` });
+      add({ slide: id, rule: "slide-load", measured: `import throws: ${e.message}`, limit: "importable in plain Node", fix: e instanceof SyntaxError ? `syntax error; run \`node --check slides/${id}.js\` for the line` : `fix slides/${id}.js: no DOM, fetch or top-level await; JSON-only props` });
       continue;
     }
     if (!isObject(spec)) {
@@ -587,6 +608,7 @@ async function validateSlide(spec, env) {
   steps.forEach((s, i) => {
     if (typeof s.id !== "string") return;
     if (/^\d+$/.test(s.id)) add({ slide, step: s.id, rule: "step-id-numeric", measured: `step id '${s.id}'`, limit: "not digits only (digits mean a step number)", fix: `rename step '${s.id}' to a word, e.g. 'step-${s.id}', and update its references` });
+    else if (!STEP_ID.test(s.id)) add({ slide, step: s.id, rule: "step-id-chars", measured: `step id ${JSON.stringify(s.id)}`, limit: "letters, digits, _ and -, starting with a letter or digit", fix: `rename step ${i} to such an id (e.g. '${s.id.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^[^A-Za-z0-9]+|-+$/g, "") || `step-${i}`}') and update its references; shoot writes other characters as _ in the PNG's name` }, "warning");
     if (seenSteps.has(s.id)) add({ slide, step: s.id, rule: "duplicate-step-id", measured: `step id '${s.id}' used twice`, limit: "unique per slide", fix: `rename step ${i} to a new id` });
     seenSteps.add(s.id);
   });
@@ -811,12 +833,18 @@ async function validateSlide(spec, env) {
     let bindingFailed = false;
     const fileChecks = [];
     walkStrings(props, "", (s, path) => {
-      const remote = (REMOTE.exec(s)?.[0] ?? PROTOCOL_RELATIVE.exec(s)?.[1])?.replace(/[.,;:!?]+$/, "");
-      if (remote) {
+      // Running text loads nothing: a URL cited in it is a warning, and `//word` there is not a host without a dot.
+      const prose = isProse(s);
+      const relative = PROTOCOL_RELATIVE.exec(s)?.[1];
+      const remote = (REMOTE.exec(s)?.[0] ?? (prose && !/^\/\/[^/]*\./.test(relative ?? "") ? undefined : relative))?.replace(/[.,;:!?]+$/, "");
+      if (remote && prose) {
+        report(`${id}|remote|${path}|${s}`, { slide, element: id, step, rule: "remote-url", measured: `${path} has ${remote} in running text`, limit: "nothing remote is loaded when presenting (a URL in text is only shown)", fix: `keep it if it is a citation to read; if the slide should show what is there, copy it into the deck (e.g. assets/) and use a relative path` }, "warning");
+      } else if (remote) {
         report(`${id}|remote|${path}|${s}`, { slide, element: id, step, rule: "remote-url", measured: `${path} has ${remote}`, limit: "relative, same-origin paths only", fix: `copy the resource into the deck (e.g. assets/) and use a relative path, or drop the link from ${path}` });
       }
+      // In running text a `#` and digits alone is a number (issue #123), not a colour.
       const hex = HEX.exec(s)?.[1];
-      if (hex) {
+      if (hex && !(prose && /^#\d{3,4}$/.test(hex))) {
         report(`${id}|hex|${path}|${s}`, { slide, element: id, step, rule: "hex-color", measured: `${path} has ${hex}`, limit: "no hex colors in props", fix: `remove ${hex} from ${path}; colors come from the theme palette (use {{color:accent}} words in text)` });
       }
       for (const m of s.matchAll(BRACES)) {
@@ -828,7 +856,8 @@ async function validateSlide(spec, env) {
           report(`${id}|binding|${m[0]}`, { slide, element: id, step, ...p });
         }));
       }
-      if (FILE_REF.test(s)) fileChecks.push(Promise.resolve(checkFile(env, s, path)).then((p) => p && report(`${id}|file|${s}`, { slide, element: id, step, ...p })));
+      const file = fileRef(s);
+      if (file !== null) fileChecks.push(Promise.resolve(checkFile(env, file, path, s)).then((p) => p && report(`${id}|file|${s}`, { slide, element: id, step, ...p })));
     });
     await Promise.all(fileChecks);
 
@@ -854,7 +883,7 @@ async function validateSlide(spec, env) {
     }
     if (validate(resolved)) {
       if (type === "diagram") {
-        for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item));
+        for (const item of diagramProblems(resolved, resolved.compact === true ? env.compactSpacing : env.spacing)) report(`${id}|${item.rule}|${item.message}`, componentProblem({ slide, element: id, step }, item), item.severity);
         if (resolved.caption !== undefined && resolved.compact !== true) {
           const item = { rule: "diagram-caption-unused", message: "`caption` does nothing without `compact: true`", limit: "`caption` together with `compact: true`", fix: "set `compact: true`, or remove `caption`" };
           report(`${id}|${item.rule}`, componentProblem({ slide, element: id, step }, item), "warning");
@@ -875,7 +904,15 @@ async function validateSlide(spec, env) {
     }
     for (const e of schemaErrors(validate.errors, resolved)) {
       const rule = e.rule === "unknown" ? "unknown-prop" : "prop-invalid";
-      report(`${id}|${rule}|${e.measured}|${e.limit}`, { slide, element: id, step, rule, measured: e.measured.replace(/^key /, "prop "), limit: e.rule === "unknown" ? `props of ${type}: ${e.limit.replace(/^allowed: /, "")}` : e.limit, fix: `${e.fix} (props of ${type})` });
+      // A number where a string is expected, from a prop that is exactly a binding: a format makes it a string.
+      let format = "";
+      if (e.expected === "string" && e.pointer) {
+        const written = lookupPointer(props, e.pointer).value;
+        const b = typeof written === "string" && /^\{\{[^{}]*\}\}$/.test(written.trim()) ? parseBinding(written.trim()) : null;
+        const value = lookupPointer(resolved, e.pointer).value;
+        if (b && b.format === null && typeof value === "number") format = `, or add a format to the binding to get a string: {{${b.path}#${b.pointer} | ${Number.isInteger(value) ? "d" : ".1f"}}}`;
+      }
+      report(`${id}|${rule}|${e.measured}|${e.limit}`, { slide, element: id, step, rule, measured: e.measured.replace(/^key /, "prop "), limit: e.rule === "unknown" ? `props of ${type}: ${e.limit.replace(/^allowed: /, "")}` : e.limit, fix: `${e.fix}${format} (props of ${type})` });
     }
   }
 
@@ -902,11 +939,12 @@ function compactIgnored(props) {
   }));
 }
 
-function checkFile(env, rel, path) {
+/** `rel` is the deck path (fileRef) of the string `written` at prop `path`. */
+function checkFile(env, rel, path, written = rel) {
   const where = env.exact(env.deckRoot, rel);
   if (where.ok) return null;
-  if (where.actual) return { rule: "path-case", measured: `${path} = ${rel}`, limit: `on disk: ${where.actual}`, fix: `set ${path} to "${where.actual}" (or rename the file); paths are case-sensitive once published` };
-  return { rule: "file-missing", measured: `${path} = ${rel}`, limit: "a file in the deck", fix: `create ${rel} in the deck (generate data with a script under data/), or fix the path in ${path}` };
+  if (where.actual) return { rule: "path-case", measured: `${path} = ${written}`, limit: `on disk: ${where.actual}`, fix: `set ${path} to "${where.actual}" (or rename the file); paths are case-sensitive once published` };
+  return { rule: "file-missing", measured: `${path} = ${written}`, limit: "a file in the deck", fix: `create ${rel} in the deck (generate data with a script under data/), or fix the path in ${path}` };
 }
 
 /**

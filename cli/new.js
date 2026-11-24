@@ -1,16 +1,18 @@
 // stepdeck new / new-component (spec §5, §10): scaffolding. Dev tooling only.
 //
 // newDeck(dir, { template = "talk" }) -> Promise<{ dir, template, engine, next: string[] }>
-//   Refuses a folder that exists and is not empty. Copies templates/<template>/ into dir, then the
+//   Refuses a file, and a folder that holds anything but .git, .gitignore, .DS_Store or Thumbs.db. Copies templates/<template>/ into dir, then the
 //   engine (the folders of <repo>/engine/) into dir/stepdeck/: core, components, layouts, themes (fonts
 //   and OFL files included), vendor (with LICENSE files) and schema (stepdeck.d.ts included), plus
 //   LICENSE and THIRD_PARTY_NOTICES.md from the repository root. Not cli, test, docs, examples or
 //   node_modules: the deck is self-contained at presentation time (spec §3) and the CLI serves it from
 //   its own folder (ruling R15). The template's index.html maps "stepdeck/" to
 //   "./stepdeck/" (one import map). `next` says the deck works as made and lists the commands to run next, with the real CLI path
-//   (cli()), since `stepdeck` is usually not on PATH.
+//   (cli()), since `stepdeck` is usually not on PATH. When Playwright is not found (hasPlaywright), a last
+//   line says that check and shoot need it.
 //
-// newComponent(deckDir, name) -> Promise<{ dir, name, files, deckUpdated, line }>
+// newComponent(deckDir, name) -> Promise<{ dir, name, id, files, deckUpdated, line }>
+//   `id` is the id of the example slide (example.js), so the file to copy it to is slides/<id>.js.
 //   name must be namespaced ("my.thing": lowercase segments joined by dots) and not a built-in
 //   (components/index.json of the deck's engine). Copies templates/component/{index.js,
 //   schema.json, example.js, README.md} into <deck>/components/<name>/ with __NAME__ replaced by the
@@ -19,18 +21,20 @@
 //   `components` key and one `slides:` line to insert it before. The edit is checked by importing
 //   deck.js again and reverted if the result is not exactly the old deck plus the name. Otherwise
 //   deck.js is left alone and `line` says what to add.
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { REPO, copyEngine, engineFor, importDeck, keepFile, readBuiltins } from "./engine.js";
+import { REPO, copyEngine, engineFor, importDeck, keepFile, readBuiltins, shellPath } from "./engine.js";
 
 const ENGINE_FILES = ["LICENSE", "THIRD_PARTY_NOTICES.md"];
 const COMPONENT_FILES = ["index.js", "schema.json", "example.js", "README.md"];
+/** What a folder may hold and still count as empty for `new`: a fresh repository and OS litter. */
+const IGNORED = new Set([".git", ".gitignore", ".DS_Store", "Thumbs.db"]);
 const NAME = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
 
 
-/** A path for a printed shell command: single-quoted when it holds anything but safe characters. */
-export const shellPath = (p) => (/^[\w./+-]+$/.test(p) ? p : `'${p.replaceAll("'", "'\\''")}'`);
+export { shellPath };
 
 /**
  * The printed form of a CLI command, with this engine's real path, so hints are copy-pasteable
@@ -38,6 +42,23 @@ export const shellPath = (p) => (/^[\w./+-]+$/.test(p) ? p : `'${p.replaceAll("'
  */
 export function cli(command, ...args) {
   return ["node", shellPath(join(REPO, "cli", "index.js")), command, ...args.map(shellPath)].join(" ");
+}
+
+/** A path as printed for a person: relative to `from` when it is inside it, else the absolute path (never "../../…"). */
+export function shownPath(p, from = process.cwd()) {
+  const rel = relative(from, p);
+  if (rel === "") return ".";
+  return rel.startsWith("..") || isAbsolute(rel) ? p : rel;
+}
+
+/** Whether the browser commands would find Playwright (the two places cli/browser.js looks in), without loading it. */
+export function hasPlaywright() {
+  try {
+    createRequire(import.meta.url).resolve(process.env.STEPDECK_PLAYWRIGHT || "playwright");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Starter templates: folders of templates/ holding an index.html (templates/component is not one). */
@@ -54,7 +75,8 @@ export async function newDeck(dir, { template = "talk" } = {}) {
   const templates = listTemplates();
   if (!templates.includes(template)) throw new Error(`unknown template '${template}' (templates: ${templates.join(", ")})`);
   if (existsSync(target)) {
-    if (readdirSync(target).length > 0) throw new Error(`${target} is not empty; pass a new or empty folder`);
+    if (!statSync(target).isDirectory()) throw new Error(`${target} is a file; pass a new or empty folder`);
+    if (readdirSync(target).some((name) => !IGNORED.has(name))) throw new Error(`${target} is not empty; pass a new or empty folder`);
   }
   mkdirSync(target, { recursive: true });
   cpSync(join(REPO, "templates", template), target, { recursive: true, filter: keepFile });
@@ -78,6 +100,7 @@ export async function newDeck(dir, { template = "talk" } = {}) {
       `${cli("check", target)} --played  # in Chrome: layout, fonts, contrast, errors, played vs jumped`,
       `${cli("shoot", target)}  # PNGs per step in shots/960/; look at them`,
       `${cli("catalog", target)}  # what components, layouts and themes exist (catalog/index.json)`,
+      ...(hasPlaywright() ? [] : [`check and shoot need Playwright, which was not found: see ${join(REPO, "docs", "guide", "quickstart.md")}#requirements`]),
     ],
   };
 }
@@ -146,5 +169,5 @@ export async function newComponent(deckDir, name) {
     if (after && isDeepStrictEqual({ ...after }, expected)) deckUpdated = true;
     else writeFileSync(deckFile, original);
   }
-  return { dir, name, files: COMPONENT_FILES.map((f) => join(dir, f)), deckUpdated, line: deckUpdated ? null : line };
+  return { dir, name, id, files: COMPONENT_FILES.map((f) => join(dir, f)), deckUpdated, line: deckUpdated ? null : line };
 }

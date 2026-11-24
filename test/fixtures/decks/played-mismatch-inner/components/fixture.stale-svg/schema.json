@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Fixture: an svg sized on its first update only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["width"],
+  "properties": {
+    "width": { "type": "number", "description": "Width of the svg in px.", "examples": [300], "x-transition": "snap" }
+  }
+}

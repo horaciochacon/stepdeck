@@ -4,7 +4,9 @@
 // runCheck(deckDir, { slide?, step?, played?, size? }) -> Promise<{ problems, slides, steps, played }>
 //   step (id or index, needs slide): only that step is measured; step0-shows-all is skipped; with
 //   played, only the arrivals at that step (from the step before, animated, and from the step after).
-//   One browser for the whole run. Problems come in this order: page errors, layout rules,
+//   One browser for the whole run, and up to workerCount pages of it (cli/dump.js; env STEPDECK_WORKERS): the
+//   steps are measured on those pages side by side and judged afterwards in deck order, so the problems are the
+//   same with one page or four. Problems come in this order: page errors, layout rules,
 //   step0-shows-all, then (with `played`) played-mismatch.
 //   slides, steps  how many slides and steps the layout pass measured
 //   played         runPlayed's per-slide counts, or null without `played`
@@ -19,7 +21,7 @@
 // audience text and are skipped too; the error itself is reported as render-error.
 //   text-outside-canvas  text past the 1920×1080 canvas
 //   text-outside-region  text of an element placed in a region (not `box`) past the region's content
-//                        box. Glyphs may overhang their line box by the half-leading (a tall font
+//                        box (a region measured with no height gets its own fix: the figure does not fit that layout). Glyphs may overhang their line box by the half-leading (a tall font
 //                        with a tight line-height), so that overhang and 1 px are allowed.
 //   text-overlap         text of two different elements intersecting by more than 4 px in both
 //                        axes. Box-positioned elements are not exempt: there is no opt-out.
@@ -39,6 +41,11 @@
 //   step0-shows-all      a slide with more than one step whose step 0 shows the same content as
 //                        its last step: same visible set, text and resolved props (ruling R10).
 //                        Slides driven by `advance` change props, so they do not trip it.
+//   hidden-paints        an element the step hides (visibility: hidden) with a descendant whose computed
+//                        visibility is `visible` and whose box is not empty: it shows through. The ghost
+//                        placeholder and the engine's error box are meant to, and are not counted. The engine's
+//                        stylesheet hides the descendants of a hidden element, so this takes an inline
+//                        `visibility: visible !important`, or an engine copy older than that rule.
 //   A layout problem is reported once per slide, element and rule (per pair for overlaps), at
 //   its first step, with "(+N more steps)" when it persists.
 //
@@ -55,9 +62,10 @@
 //     jumped    a fresh page load at k: mount, one update, no history (the same measurement as `dump`)
 //     fromPrev  arriving at k from k−1 with animation (STEPDECK.goTo, motion on, forward by one)
 //     fromNext  arriving at k from k+1
-//   Compared per element: visibility, text content, the box rounded to 1 px (canvas pixels) and the state
+//   Compared per element: visibility, text content, the box rounded to 1 px (canvas pixels), the state
 //   of its canvas layers (`canvas` in the dump: their data-* attributes, so the draw fan's draws, seed
-//   and signature are compared without reading pixels).
+//   and signature are compared without reading pixels) and the size of each outermost <svg> and <canvas> inside
+//   it, rounded to 1 px (`inner` of measureInPage: a figure that kept its old size in a box that has the new one).
 //   Paths, cheapest true version of each: page loads at k with `?motion=full` (no capture, so
 //   animation runs) record jumped(k); goTo(k+1) records fromPrev(k+1); goTo(k) back records
 //   fromNext(k). That is one page load per step. The run fails loudly if the page reports that
@@ -176,6 +184,14 @@ function difference(jumped, arrived) {
   const j = jumped.box;
   if (a.x !== j.x || a.y !== j.y || a.w !== j.w || a.h !== j.h) return { field: "box", measured: boxText(a), limit: boxText(j) };
   if (!jsonEqual(jumped.canvas, arrived.canvas)) return { field: "canvas", ...canvasDifference(jumped.canvas, arrived.canvas) };
+  // The figure inside the box: an <svg> or <canvas> that kept another size than the one a jump gives it.
+  const [ji, ai] = [jumped.inner ?? [], arrived.inner ?? []];
+  for (let i = 0; i < Math.max(ji.length, ai.length); i++) {
+    const [f, g] = [ji[i], ai[i]];
+    if (f && g && f.tag === g.tag && f.w === g.w && f.h === g.h) continue;
+    const text = (x) => (x ? `<${x.tag}> ${x.w}×${x.h}` : "none");
+    return { field: "inner", measured: text(g), limit: text(f) };
+  }
   return null;
 }
 
@@ -205,50 +221,54 @@ export async function animateOn(session) {
   }
 }
 
-/** The played pass on an open session (see withDeck), over a slidePlan. */
+/**
+ * The played pass on an open session (see withDeck), over a slidePlan. One job per step k (every job starts with a
+ * fresh load, so the steps of a slide are independent and run on the session's worker pool): it returns the
+ * measurements it took, in order, as [{ k, as, m }] with `as` one of "jumped", "fromPrev", "fromNext" or null (a
+ * step passed through). The comparison then runs here, in plan order.
+ */
 async function playedPass(session, plan, errors) {
   const slides = {};
   const found = new Map();
+  const jobs = [];
   for (const { id, ids, only } of plan) {
     const n = ids.length;
-    const jumped = [];
-    const fromPrev = [];
-    const fromNext = [];
-    /** Measures the page as step k and notes its errors. */
-    const take = async (k) => {
-      const m = await session.measure();
-      errors.note(id, ids[k], m);
-      return m;
-    };
     // With --step k, only arrivals at k are compared: from k−1 (animated) and from k+1.
     if (only !== null) {
-      const k = only;
-      await session.open(id, k, { motion: "full" });
-      jumped[k] = await take(k);
-      if (k + 1 < n) {
-        await animateOn(session);
-        await session.goTo(id, k + 1);
-        await take(k + 1);
-        await session.goTo(id, k);
-        fromNext[k] = await take(k);
-      }
-      if (k > 0) {
-        await session.open(id, k - 1, { motion: "full" });
-        await animateOn(session);
-        await session.goTo(id, k);
-        fromPrev[k] = await take(k);
-      }
+      jobs.push({ id, k: only, n, back: true, keep: false });
+      if (only > 0) jobs.push({ id, k: only - 1, n, back: false, keep: true, jump: false });
+    } else {
+      for (let k = 0; k < n; k++) jobs.push({ id, k, n, back: true, keep: true });
     }
-    for (let k = 0; only === null && k < n; k++) {
-      await session.open(id, k, { motion: "full" });
-      jumped[k] = await take(k);
-      if (k + 1 >= n) continue;
-      await animateOn(session);
-      await session.goTo(id, k + 1);
-      fromPrev[k + 1] = await take(k + 1);
-      await session.goTo(id, k);
-      fromNext[k] = await take(k);
+  }
+  // A job: load k (the jump), play forward to k+1 (fromPrev of k+1 when `keep`), and with `back` come back to k
+  // (fromNext of k). `jump: false` loads k only to play from it.
+  const taken = await session.each(jobs, async (page, { id, k, n, back, keep, jump = true }) => {
+    const out = [];
+    const take = async (step, as) => out.push({ k: step, as, m: await page.measure({ inner: true }) });
+    await page.open(id, k, { motion: "full" });
+    if (jump) await take(k, "jumped");
+    if (k + 1 >= n) return out;
+    await animateOn(page);
+    await page.goTo(id, k + 1);
+    await take(k + 1, keep ? "fromPrev" : null);
+    if (back) {
+      await page.goTo(id, k);
+      await take(k, "fromNext");
     }
+    return out;
+  });
+  for (const { id, ids } of plan) {
+    const n = ids.length;
+    const got = { jumped: [], fromPrev: [], fromNext: [] };
+    jobs.forEach((job, at) => {
+      if (job.id !== id) return;
+      for (const { k, as, m } of taken[at]) {
+        errors.note(id, ids[k], m);
+        if (as) got[as][k] = m;
+      }
+    });
+    const { jumped, fromPrev, fromNext } = got;
     for (let k = 0; k < n; k++) {
       if (fromPrev[k]) compare(id, ids[k], jumped[k], fromPrev[k], ids[k - 1], true, found);
       if (fromNext[k]) compare(id, ids[k], jumped[k], fromNext[k], ids[k + 1], false, found);
@@ -297,7 +317,10 @@ export async function checkPlayed(deckDir, opts = {}) {
 /**
  * Runs in the page (page.evaluate(textLayoutInPage, [canvasWidth, selector])). For every element of
  * the slide on screen, the visible text it owns:
- *   { minFont, canvas: { w, h }, elements: [{ id, region, box, regionRect, items: [TextItem] }] }
+ *   { minFont, canvas: { w, h }, elements: [{ id, region, box, regionRect, paints, items: [TextItem] }] }
+ *   paints      for an element hidden with visibility: hidden, the first descendant that still shows (computed
+ *               visibility `visible`, a box that is not empty, not transparent; not the ghost or an error box):
+ *               { what: "span.badge", rect }, else null
  *   region      the region name, or null for a box-positioned element
  *   regionRect  the region's content box (canvas pixels), or null
  *   TextItem    { text, rects: [{ x, y, w, h }], slack, fontSize, source, fg: [r,g,b,a] | null, bg: [r,g,b] }
@@ -459,8 +482,23 @@ export function textLayoutInPage([canvasWidth, selector]) {
         bg: backgroundOf(parent),
       });
     }
+    let paints = null;
+    const own = getComputedStyle(node);
+    if (own.visibility === "hidden" && own.display !== "none") {
+      for (const d of node.querySelectorAll("*")) {
+        if (getComputedStyle(d).visibility !== "visible" || d.closest(".sd-ghost, .sd-error")) continue;
+        const r = toCanvas(d.getBoundingClientRect());
+        if (r.w < 0.5 || r.h < 0.5) continue;
+        let opacity = 1;
+        for (let n = d; n && n !== canvas; n = n.parentElement) opacity *= Number(getComputedStyle(n).opacity);
+        if (opacity <= 0) continue;
+        paints = { what: d.localName + [...d.classList].map((name) => `.${name}`).join(""), rect: r };
+        break;
+      }
+    }
     elements.push({
       id,
+      paints,
       region: regionEl ? regionEl.dataset.region : null,
       box: isBox,
       regionRect: regionEl ? contentBox(regionEl) : null,
@@ -503,6 +541,15 @@ export function layoutFindings(layout) {
   const { minFont } = layout;
   const canvas = { x: 0, y: 0, w: layout.canvas.w || CANVAS_W, h: layout.canvas.h || CANVAS_H };
   for (const el of layout.elements) {
+    if (el.paints) {
+      out.push({
+        element: el.id,
+        rule: "hidden-paints",
+        measured: `hidden at this step, but its <${el.paints.what}> at ${rectText(el.paints.rect)} has visibility: visible`,
+        limit: "nothing of a hidden element on screen",
+        fix: "never set visibility: visible on a child (it shows through its hidden element): remove it, or set visibility to \"\" or \"hidden\"",
+      });
+    }
     if (el.items.length === 0) continue;
     const off = el.items.flatMap((it) => outside(it.rects, canvas, it.slack));
     if (off.length) {
@@ -522,7 +569,11 @@ export function layoutFindings(layout) {
           rule: "text-outside-region",
           measured: `text at ${rectText(union(offRegion))}`,
           limit: `inside region '${el.region}' at ${rectText(el.regionRect)}`,
-          fix: "shorten the text, break long words, or give the region more room (the slide's `regions` grid variables)",
+          // A region with no height: nothing fits, and shorter text would not help. A figure (chart, diagram,
+          // map, image) takes the height its region has, which this layout does not give that region.
+          fix: Math.round(el.regionRect.h) <= 0
+            ? `region '${el.region}' has no height here: move the figure to a layout whose region has room (figure-notes, full-bleed or a half of halves)`
+            : "shorten the text or use fewer elements in this region; or give it more room: the slide's `regions` grid variables where the layout has them, or another layout",
         });
       }
     }
@@ -597,14 +648,21 @@ async function layoutPass(session, plan, errors) {
   const found = new Map();
   const step0 = [];
   let steps = 0;
+  // One job per step, on the session's worker pool; the rules then run here, in plan order.
+  const jobs = plan.flatMap(({ id, ids, only }) => ids.map((_, k) => ({ id, k })).filter(({ k }) => only === null || k === only));
+  const measured = await session.each(jobs, async (page, { id, k }) => {
+    await page.open(id, k, { capture: true });
+    const m = await page.measure();
+    const layout = await page.page.evaluate(textLayoutInPage, [CANVAS_W, BARE_CANVAS]);
+    return { m, layout };
+  });
+  let at = 0;
   for (const { id, ids, only } of plan) {
     let first = null;
     let last = null;
     for (let k = 0; k < ids.length; k++) {
       if (only !== null && k !== only) continue;
-      await session.open(id, k, { capture: true });
-      const m = await session.measure();
-      const layout = await session.page.evaluate(textLayoutInPage, [CANVAS_W, BARE_CANVAS]);
+      const { m, layout } = measured[at++];
       steps += 1;
       errors.note(id, ids[k], m);
       if (k === 0) first = m;

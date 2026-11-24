@@ -12,7 +12,7 @@ import { runValidate } from "../../cli/validate.js";
 import { formatProblem } from "../../cli/problems.js";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const cli = (args, cwd = repo) => spawnSync(process.execPath, [join(repo, "cli/index.js"), ...args], { cwd, encoding: "utf8", env: process.env });
+const cli = (args, cwd = repo, env = {}) => spawnSync(process.execPath, [join(repo, "cli/index.js"), ...args], { cwd, encoding: "utf8", env: { ...process.env, ...env } });
 const temp = () => realpathSync(mkdtempSync(join(tmpdir(), "stepdeck-new-")));
 const show = (problems) => problems.map(formatProblem).join("\n") || "(no problems)";
 const importDeck = async (dir) => (await import(`${pathToFileURL(join(dir, "deck.js")).href}?t=${Date.now()}${Math.random()}`)).default;
@@ -147,6 +147,27 @@ test("new-component: edits deck.js only when safe; otherwise prints the line to 
   }
 });
 
+test("cli new: says that check and shoot need Playwright only when it is not found", () => {
+  const root = temp();
+  try {
+    const note = /^ {2}check and shoot need Playwright, which was not found: see \S+docs\/guide\/quickstart\.md#requirements$/m;
+    const without = cli(["new", "a"], root, { STEPDECK_PLAYWRIGHT: join(root, "no-such-playwright") });
+    assert.equal(without.status, 0, without.stdout + without.stderr);
+    assert.match(without.stdout, note);
+    assert.match(cli(["new", "a2", "--json"], root, { STEPDECK_PLAYWRIGHT: join(root, "no-such-playwright") }).stdout, /check and shoot need Playwright/);
+    // A package that resolves (it is never loaded by `new`).
+    const fake = join(root, "playwright");
+    mkdirSync(fake);
+    writeFileSync(join(fake, "package.json"), '{ "name": "playwright", "main": "index.js" }\n');
+    writeFileSync(join(fake, "index.js"), 'throw new Error("new must not load Playwright");\n');
+    const found = cli(["new", "b"], root, { STEPDECK_PLAYWRIGHT: fake });
+    assert.equal(found.status, 0, found.stdout + found.stderr);
+    assert.doesNotMatch(found.stdout, /need Playwright/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("cli: new and new-component, with --json", () => {
   const root = temp();
   try {
@@ -158,9 +179,28 @@ test("cli: new and new-component, with --json", () => {
     const again = cli(["new", "talk", "--json"], root);
     assert.equal(again.status, 2);
     assert.match(JSON.parse(again.stdout).error, /not empty/);
+    // Inside the working folder the path is relative; outside it, absolute (never "../../…").
+    assert.match(made.stdout, /^created talk \(template talk; /);
+    const outside = cli(["new", join(root, "elsewhere")], join(root, "talk"));
+    assert.equal(outside.status, 0, outside.stdout + outside.stderr);
+    assert.ok(outside.stdout.startsWith(`created ${join(root, "elsewhere")} (template talk; `), outside.stdout);
     const comp = cli(["new-component", "my.meter", "--json"], join(root, "talk"));
     assert.equal(comp.status, 0, comp.stdout + comp.stderr);
-    assert.equal(JSON.parse(comp.stdout).deckUpdated, true);
+    const json = JSON.parse(comp.stdout);
+    assert.equal(json.deckUpdated, true);
+    assert.equal(json.id, "my-meter-example");
+    assert.deepEqual(Object.keys(json), ["dir", "name", "id", "files", "deckUpdated", "line"]);
+    // The hint is the exact copy: the file is named after the example slide's id, so `validate` finds it.
+    const dial = cli(["new-component", "my.dial"], join(root, "talk"));
+    assert.equal(dial.status, 0, dial.stdout + dial.stderr);
+    assert.match(dial.stdout, /^created components\/my\.dial\/ \(/);
+    assert.match(dial.stdout, /^ {2}cp components\/my\.dial\/example\.js slides\/my-dial-example\.js$/m);
+    assert.match(dial.stdout, /add "my-dial-example" to slides in deck\.js/);
+    assert.match(readFileSync(join(root, "talk/components/my.dial/example.js"), "utf8"), /id: "my-dial-example"/);
+    const far = cli(["new-component", "my.gauge", join(root, "talk")], join(root, "elsewhere"));
+    assert.equal(far.status, 0, far.stdout + far.stderr);
+    assert.ok(far.stdout.includes(`\n  cp ${join(root, "talk/components/my.gauge/example.js")} ${join(root, "talk/slides/my-gauge-example.js")}\n`), far.stdout);
+    assert.doesNotMatch(far.stdout, /\.\.\//);
     const bare = cli(["new-component", "meter"], join(root, "talk"));
     assert.equal(bare.status, 2);
     assert.match(bare.stderr, /needs a namespace/);

@@ -31,6 +31,7 @@ const cases = {
   "remote-fetch": { element: null, step: "0", rule: "network-error" },
   "render-error": { element: null, step: "0" },
   "step0-shows-all": { element: null, step: "first" },
+  "hidden-paints": { element: "late", step: "first" },
 };
 
 for (const [name, where] of Object.entries(cases)) {
@@ -65,12 +66,8 @@ test("check: a remote request is blocked and named as remote (spec §3: no remot
   assert.match(fetched.measured, /^remote https:\/\/stepdeck-remote\.invalid\/data\.json \(blocked/);
 });
 
-test("spike deck checks clean at 1920", async () => {
-  const problems = await check(spike);
-  assert.deepEqual(problems, [], show(problems));
-});
-
-test("spike deck checks clean with --played (one run, both passes)", async () => {
+// One run covers both: --played runs the layout pass first, then the played pass (runCheck in cli/check.js).
+test("spike deck checks clean at 1920, with --played (one run, both passes)", async () => {
   const problems = await check(spike, { played: true });
   assert.deepEqual(problems, [], show(problems));
 });
